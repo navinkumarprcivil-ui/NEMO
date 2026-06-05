@@ -489,9 +489,16 @@ function redeemPoints(uid, pts, redemptionId){
 }
 
 /* ── Customer Tank Showcase ── */
+const SHOWCASE_TTL = 24*60*60*1000; // photos auto-expire 24h after upload
+function showcaseExpired(x, now){ const exp = x.expiresAt || (x.createdAt ? new Date(x.createdAt).getTime()+SHOWCASE_TTL : 0); return exp>0 && now>exp; }
 async function loadShowcase(){
-  if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("showcase").get(),6000); if(s){ const v=s.val(); if(v) return Object.values(v).filter(x=>x&&x.id).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")); } }catch(e){} }
-  const r=await dbGet("nemo-showcase"); return r?JSON.parse(r):[];
+  let arr=[];
+  if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("showcase").get(),6000); if(s){ const v=s.val(); if(v) arr=Object.values(v).filter(x=>x&&x.id); } }catch(e){} }
+  if(!arr.length){ const r=await dbGet("nemo-showcase"); if(r) arr=JSON.parse(r); }
+  const now=Date.now();
+  // Best-effort cleanup: delete expired entries from the cloud (rules permit deleting expired ones).
+  if(FB_OK){ arr.filter(x=>showcaseExpired(x,now)).forEach(x=>{ try{ FB_DB.ref("showcase/"+x.id).remove(); }catch(e){} }); }
+  return arr.filter(x=>!showcaseExpired(x,now)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
 }
 async function addShowcasePhoto(item){
   await dbSet("nemo-showcase",JSON.stringify([item])); // local
@@ -500,6 +507,28 @@ async function addShowcasePhoto(item){
 async function deleteShowcasePhoto(id){
   if(FB_OK){ try{ await FB_DB.ref("showcase/"+id).remove(); }catch(e){} }
   const r=await dbGet("nemo-showcase"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-showcase",JSON.stringify(arr.filter(x=>x.id!==id)));
+}
+
+/* ── Visitor analytics (built-in, free — counts unique sessions in Firebase) ── */
+async function trackVisit(){
+  try{ if(sessionStorage.getItem("nemo-visited")) return; sessionStorage.setItem("nemo-visited","1"); }catch(e){}
+  if(!FB_OK || typeof firebase==="undefined") return;
+  try{
+    const inc=firebase.database.ServerValue.increment(1); // no read needed — safe for anon visitors
+    FB_DB.ref("analytics/total").set(inc);
+    FB_DB.ref("analytics/daily/"+new Date().toISOString().slice(0,10)).set(inc);
+  }catch(e){}
+}
+async function loadAnalytics(){
+  if(!FB_OK) return null;
+  try{ const s=await withTimeout(FB_DB.ref("analytics").get(),5000); return (s&&s.exists())?s.val():{total:0,daily:{}}; }catch(e){ return null; }
+}
+/* Optional Google Analytics 4 — only loads if the admin set a Measurement ID (G-XXXX) in Settings. */
+let GA_DONE=false;
+function injectGA(gaId){
+  if(GA_DONE || !gaId || !/^G-/.test(gaId)) return; GA_DONE=true;
+  const s=document.createElement("script"); s.async=true; s.src="https://www.googletagmanager.com/gtag/js?id="+encodeURIComponent(gaId); document.head.appendChild(s);
+  window.dataLayer=window.dataLayer||[]; function gtag(){ window.dataLayer.push(arguments); } window.gtag=gtag; gtag("js",new Date()); gtag("config",gaId);
 }
 
 /* ── Restock alerts ── */
@@ -1089,6 +1118,9 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
   },[user?.name]);
   if(!settings.showcaseEnabled)return null;
   if(!showcase.length&&!user)return null;
+  const now=Date.now();
+  const liveShowcase=(showcase||[]).filter(s=>!showcaseExpired(s,now));
+  const mine=user&&liveShowcase.find(s=>s.userUid===user.uid);
   const handleFile=async file=>{
     if(!file)return;
     setNote("Processing…");
@@ -1099,7 +1131,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
     if(!imgData){setNote("⚠ Please select a photo");return;}
     const finalName=(user?.name||ownerName||"Aquarist").trim();
     setUploading(true);
-    await onSubmit({id:uid("sc"),imgData,ownerName:finalName,caption:caption.trim(),createdAt:new Date().toISOString(),userUid:user?userKey(user):""});
+    await onSubmit({id:user?.uid||uid("sc"),imgData,ownerName:finalName,caption:caption.trim(),createdAt:new Date().toISOString(),expiresAt:Date.now()+SHOWCASE_TTL,userUid:user?.uid||(user?userKey(user):"")});
     setImgData(null);setPreview(null);setCaption("");setOwnerName(user?.name||"");setNote("🎉 Your tank is live!");setUploading(false);
     setTimeout(()=>setNote(""),3500);
   };
@@ -1107,11 +1139,11 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
     <div style={{marginBottom:26}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
         <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>🪸 Customer Tanks</span>
-        {showcase.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{showcase.length} shared</span>}
+        {liveShowcase.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{liveShowcase.length} shared · 24h</span>}
       </div>
-      {showcase.length>0&&(
+      {liveShowcase.length>0&&(
         <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,marginBottom:12}}>
-          {showcase.map(s=>(
+          {liveShowcase.map(s=>(
             <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:130,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
               <div style={{height:100,overflow:"hidden"}}>
                 <img src={s.imgData} alt={s.ownerName} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
@@ -1126,7 +1158,8 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
       )}
       {user&&(
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:10}}>📸 Share Your Tank!</div>
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Update Your Tank":"Share Your Tank!"}</div>
+          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>One photo per customer · auto-removed after 24 hours</div>
           {preview?(
             <div style={{position:"relative",borderRadius:12,overflow:"hidden",marginBottom:8}}>
               <img src={preview} alt="preview" style={{width:"100%",height:110,objectFit:"cover"}}/>
@@ -1149,7 +1182,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
           {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:note[0]==="🎉"?C.success:C.primary,fontWeight:600,marginBottom:6}}>{note}</div>}
           <button className="press" onClick={submit} disabled={uploading}
             style={{width:"100%",background:uploading?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
-            {uploading?"Uploading…":"Share My Tank 🐠"}
+            {uploading?"Uploading…":(mine?"Update My Tank 🐠":"Share My Tank 🐠")}
           </button>
         </div>
       )}
@@ -3648,6 +3681,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [editProduct,setEditProduct]=useState(null);
   const [viewOrder,setViewOrder]=useState(null);
   const [cleanMonths,setCleanMonths]=useState(6);
+  const [visitStats,setVisitStats]=useState(null);
+  useEffect(()=>{ loadAnalytics().then(setVisitStats); },[]);
   const [orderFilter,setOrderFilter]=useState("All");
   const [csvFrom,setCsvFrom]=useState("");
   const [csvTo,setCsvTo]=useState("");
@@ -3755,6 +3790,20 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── ORDERS TAB ── */}
       {tab==="orders"&&(
         <div style={{padding:"16px 16px 100px"}}>
+          {/* Visitor analytics */}
+          <div style={{background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+              <span style={{fontSize:16}}>📈</span>
+              <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800}}>Store Visitors</span>
+            </div>
+            {(()=>{
+              const d=(visitStats&&visitStats.daily)||{}; const today=new Date().toISOString().slice(0,10);
+              let last7=0; for(let i=0;i<7;i++){ last7+=d[new Date(Date.now()-i*86400000).toISOString().slice(0,10)]||0; }
+              const cell=(n,l)=>(<div style={{flex:1,textAlign:"center"}}><div style={{fontFamily:PRICE_FONT,fontSize:22,fontWeight:800}}>{n}</div><div style={{fontSize:10.5,opacity:.85,fontWeight:600}}>{l}</div></div>);
+              return <div style={{display:"flex",gap:8}}>{cell(d[today]||0,"Today")}{cell(last7,"Last 7 days")}{cell((visitStats&&visitStats.total)||0,"All time")}</div>;
+            })()}
+            <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {settings.gaId?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
+          </div>
           {/* Status filter */}
           <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:14}}>
             {["All",...ALL_STATUSES].map(s=>(
@@ -4234,6 +4283,13 @@ function SettingsPanel({settings,onSave}){
         {field("EmailJS Service ID","emailjsService","service_xxxxxxx")}
         {field("EmailJS Template ID","emailjsTemplate","template_xxxxxxx")}
         {field("EmailJS Public Key","emailjsKey","xxxxxxxxxxxxxxxx")}
+      </div>
+
+      {/* Visitor analytics */}
+      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📈 Visitor Analytics</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Basic visit counts already appear on your Orders dashboard — no setup needed. For detailed reports (traffic sources, devices, locations), create a free Google Analytics 4 property and paste its Measurement ID here.</div>
+        {field("Google Analytics ID (optional)","gaId","G-XXXXXXXXXX","From analytics.google.com → Admin → Data Streams → your web stream.")}
       </div>
 
       {/* Admin security */}
@@ -5058,6 +5114,14 @@ function NemoStore(){
     return()=>window.removeEventListener("nemo-fb-ready",cloudSync);
   },[]);
 
+  // Visitor analytics: count one visit per session, once Firebase is ready
+  useEffect(()=>{
+    if(FB_OK) trackVisit(); else window.addEventListener("nemo-fb-ready",trackVisit,{once:true});
+    return()=>window.removeEventListener("nemo-fb-ready",trackVisit);
+  },[]);
+  // Optional Google Analytics, if the admin pasted a Measurement ID in Settings
+  useEffect(()=>{ if(settings.gaId) injectGA(settings.gaId); },[settings.gaId]);
+
   const prevPageRef = useRef("shop");
 
   const nav=(pg,product=null)=>{
@@ -5151,7 +5215,7 @@ function NemoStore(){
   };
   const handleShowcaseSubmit=async(item)=>{
     await addShowcasePhoto(item);
-    setShowcase(s=>[item,...s]);
+    setShowcase(s=>[item,...s.filter(x=>x.id!==item.id)]); // one per customer — replaces their previous photo
     showToast("🐠 Your tank is live on the showcase!");
   };
   const handleRestock=(prod)=>{

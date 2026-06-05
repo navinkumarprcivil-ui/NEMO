@@ -6,6 +6,20 @@
 <title>Nemo Aqua Store</title>
 <meta name="theme-color" content="#0b6e72"/>
 <meta name="description" content="Premium aquarium fish, plants & accessories — delivered with care."/>
+<!-- Social share preview (WhatsApp / Instagram / Facebook) -->
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="Nemo Aqua Store"/>
+<meta property="og:title" content="Nemo Aqua Store — Premium Aquarium Fish, Plants & Accessories"/>
+<meta property="og:description" content="Hand-picked healthy fish, live plants & quality accessories — delivered with care across India."/>
+<meta property="og:url" content="https://www.nemoaquastore.in/"/>
+<meta property="og:image" content="https://www.nemoaquastore.in/assets/share-banner.png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="Nemo Aqua Store"/>
+<meta name="twitter:description" content="Premium aquarium fish, plants & accessories — delivered with care."/>
+<meta name="twitter:image" content="https://www.nemoaquastore.in/assets/share-banner.png"/>
+<link rel="canonical" href="https://www.nemoaquastore.in/"/>
 <link rel="manifest" href="manifest.webmanifest"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
@@ -46,8 +60,8 @@
 <!-- React 18 production builds — ~3× smaller & faster to parse than development builds -->
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
-<!-- Babel standalone (needed for JSX transform in-browser) -->
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<!-- Babel is loaded LAZILY by the app loader below — only on the first visit (to compile once).
+     Repeat visits use the cached compiled code and never download/run Babel. -->
 <!-- Firebase (Realtime Database + Auth) — async so a slow/blocked CDN never hangs the app -->
 <script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
@@ -66,16 +80,57 @@
   <div class="spin"></div>
 </div>
 <div id="root"></div>
-<script type="text/babel" src="app.jsx"></script>
-<script type="text/babel" data-presets="env,react">
-  ReactDOM.createRoot(document.getElementById("root")).render(<NemoStore/>);
-  // Fade out the splash once the first paint lands
-  requestAnimationFrame(function(){
-    setTimeout(function(){
-      var s=document.getElementById("splash");
-      if(s){ s.classList.add("hide"); setTimeout(function(){ s.remove(); },450); }
-    }, 60);
-  });
+<!-- ── App loader: compile JSX once, cache the result, skip Babel on every repeat visit ──
+     First visit: fetch app.jsx → load Babel → compile (JSX only) → store in Cache API → run.
+     Repeat visits: fetch (from cache) → read compiled code from Cache API → run instantly (no Babel download).
+     Cache key is a hash of app.jsx, so any code change auto-recompiles. Cache API is used (not
+     localStorage) because the app already uses localStorage for image caching. -->
+<script>
+(function(){
+  function fadeSplash(){ requestAnimationFrame(function(){ setTimeout(function(){ var s=document.getElementById("splash"); if(s){ s.classList.add("hide"); setTimeout(function(){ s.remove(); },450); } }, 60); }); }
+  function run(code){
+    var s=document.createElement("script");
+    s.text=code+"\n;try{ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(NemoStore));}catch(e){console.error('render failed',e);}";
+    document.body.appendChild(s);
+    fadeSplash();
+  }
+  function cacheGet(key){
+    if(!window.caches) return Promise.resolve(null);
+    return caches.open("nemo-compiled").then(function(c){ return c.match(key); })
+      .then(function(r){ return r?r.text():null; }).catch(function(){ return null; });
+  }
+  function cachePut(key,code){
+    if(!window.caches) return;
+    try{ caches.open("nemo-compiled").then(function(c){ c.put(key, new Response(code,{headers:{"Content-Type":"application/javascript"}})); }).catch(function(){}); }catch(e){}
+  }
+  function compileWithBabel(src,key){
+    var b=document.createElement("script");
+    b.src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js";
+    b.crossOrigin="anonymous";
+    b.onload=function(){
+      try{
+        var code=Babel.transform(src,{presets:["react"]}).code; // JSX only — output is modern JS, no runtime deps
+        cachePut(key,code);
+        run(code);
+      }catch(e){ console.error("compile failed",e); }
+    };
+    b.onerror=function(){ console.error("Babel failed to load"); };
+    document.head.appendChild(b);
+  }
+  function hash(s){ var h=5381,i=s.length; while(i){ h=(h*33)^s.charCodeAt(--i); } return (h>>>0).toString(36); }
+  fetch("app.jsx").then(function(r){return r.text();}).then(function(src){
+    var key="/__nemo_compiled__/"+hash(src);
+    cacheGet(key).then(function(cached){
+      if(cached){
+        run(cached);
+        // Safety net: if the cached build somehow didn't define the app, recompile fresh.
+        setTimeout(function(){ if(typeof NemoStore==="undefined"){ compileWithBabel(src,key); } }, 500);
+      } else {
+        compileWithBabel(src,key);
+      }
+    });
+  }).catch(function(e){ console.error("Could not load app.jsx",e); });
+})();
 </script>
 <script>
   if ('serviceWorker' in navigator) {

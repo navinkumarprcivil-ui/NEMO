@@ -52,14 +52,22 @@
 
     "requests": {
       ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
-      ".write": "auth != null"
+      "$id": {
+        ".write": "auth != null && (!data.exists() || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+      }
     },
 
     "showcase": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && (!data.exists() || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+        ".write": "auth != null && ( !data.exists() || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === data.child('userUid').val() || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )"
       }
+    },
+
+    "analytics": {
+      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+      "total": { ".write": "auth != null", ".validate": "newData.isNumber()" },
+      "daily": { "$d": { ".write": "auth != null", ".validate": "newData.isNumber()" } }
     },
 
     "loyalty": {
