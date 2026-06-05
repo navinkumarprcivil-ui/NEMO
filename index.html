@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Nemo Aqua Store</title>
+<meta name="theme-color" content="#0b6e72"/>
+<meta name="description" content="Premium aquarium fish, plants & accessories — delivered with care."/>
+<link rel="manifest" href="manifest.webmanifest"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="Nemo"/>
+<link rel="icon" type="image/png" href="assets/nemo-logo.png"/>
+<link rel="apple-touch-icon" href="assets/nemo-logo.png"/>
+<!-- Preload logo so it appears instantly when React mounts -->
+<link rel="preload" as="image" href="assets/nemo-logo.png"/>
+<!-- Preload app code so Babel can compile it the moment the page is interactive -->
+<link rel="preload" href="app.jsx" as="fetch" crossorigin/>
+<!-- Analytics (optional): uncomment & set your domain to track visits with Plausible -->
+<!-- <script defer data-domain="nemoaquastore.vercel.app" src="https://plausible.io/js/script.js"></script> -->
+<!-- Speed: DNS pre-connect for every external CDN we use -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="preconnect" href="https://unpkg.com" crossorigin/>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin/>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin/>
+<link rel="dns-prefetch" href="https://firebasedatabase.app"/>
+<link rel="dns-prefetch" href="https://firebaseio.com"/>
+<!-- Fonts: load async (media=print trick), won't block first paint -->
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"/>
+<style>
+  html,body,#root{height:100%;margin:0;padding:0;background:#eef9fa;}
+  body{font-family:'Nunito',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  /* Instant splash — shown before React mounts, removed on first render */
+  #splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:linear-gradient(160deg,#0b8f96,#085f63);z-index:9999;transition:opacity .4s ease;}
+  #splash.hide{opacity:0;pointer-events:none;}
+  #splash .logo{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;animation:bob 1.6s ease-in-out infinite;overflow:hidden;padding:10px;box-sizing:border-box;}
+  #splash .logo img{width:100%;height:100%;object-fit:contain;display:block;}
+  #splash .logo .emoji-fallback{font-size:48px;display:none;}
+  #splash .ttl{color:#fff;font-family:'Baloo 2','Nunito',sans-serif;font-weight:800;font-size:22px;letter-spacing:1px;}
+  #splash .sub{color:rgba(255,255,255,.8);font-size:13px;margin-top:-8px;}
+  #splash .spin{width:26px;height:26px;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+<!-- React 18 production builds — ~3× smaller & faster to parse than development builds -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<!-- Babel standalone (needed for JSX transform in-browser) -->
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<!-- Firebase (Realtime Database + Auth) — async so a slow/blocked CDN never hangs the app -->
+<script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+<!-- EmailJS (customer confirmation emails) -->
+<script async src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+</head>
+<body>
+<div id="splash">
+  <div class="logo">
+    <img src="assets/nemo-logo.png" alt="Nemo" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"/>
+    <span class="emoji-fallback">🐠</span>
+  </div>
+  <div class="ttl">NEMO AQUA STORE</div>
+  <div class="sub">Bring Colour to Your Life</div>
+  <div class="spin"></div>
+</div>
+<div id="root"></div>
+<script type="text/babel" src="app.jsx"></script>
+<script type="text/babel" data-presets="env,react">
+  ReactDOM.createRoot(document.getElementById("root")).render(<NemoStore/>);
+  // Fade out the splash once the first paint lands
+  requestAnimationFrame(function(){
+    setTimeout(function(){
+      var s=document.getElementById("splash");
+      if(s){ s.classList.add("hide"); setTimeout(function(){ s.remove(); },450); }
+    }, 60);
+  });
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+</script>
+</body>
+</html>

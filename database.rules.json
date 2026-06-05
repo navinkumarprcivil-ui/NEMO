@@ -1,0 +1,83 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "products": {
+      ".read": true,
+      ".write": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'",
+      "$id": {
+        "stockCount": {
+          ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.val() <= data.val())",
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        }
+      }
+    },
+
+    "guides":   { ".read": true, ".write": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'" },
+    "settings": { ".read": true, ".write": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'" },
+    "media":    { ".read": true, ".write": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'" },
+
+    "reviews": {
+      ".read": true,
+      "$pid": {
+        ".write": "auth != null"
+      }
+    },
+
+    "orders": {
+      ".read": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'",
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43')",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43')"
+      }
+    },
+
+    "favorites": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43')",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "interest": {
+      ".read": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'",
+      "$pid": {
+        ".read": true,
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+
+    "requests": {
+      ".read": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'",
+      ".write": "auth != null"
+    },
+
+    "showcase": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null && (!data.exists() || auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43')"
+      }
+    },
+
+    "loyalty": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43')",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "restock": {
+      ".read": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'",
+      "$pid": {
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+
+    "__ping": { ".read": true, ".write": "auth != null" }
+  }
+}
