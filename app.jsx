@@ -413,6 +413,11 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   referralDiscount: 50,
   /* Customer tank showcase */
   showcaseEnabled: true,
+  /* Which customer emails to auto-send (saves EmailJS quota — rest you can do on WhatsApp) */
+  emailPlaced: true,      // order received + bill
+  emailConfirmed: false,  // payment confirmed (WhatsApp instead)
+  emailShipped: true,     // shipped + tracking
+  emailDelivered: false,  // delivered (WhatsApp instead)
 };
 async function loadSettings(){
   if(FB_OK){ const o=await fbGetObj("settings"); if(o) return normalizeSettings({...DEFAULT_SETTINGS,...o}); }
@@ -679,6 +684,9 @@ function sendCustomerEmail(order, settings, event){
   if(typeof emailjs==="undefined") return;
   if(event && event!=="placed" && order.waUpdates===false) return; // respect opt-out for status updates
   const ev=event||"placed";
+  // Respect the admin's per-event email switches (to conserve EmailJS quota)
+  const evFlag={placed:"emailPlaced",confirmed:"emailConfirmed",shipped:"emailShipped",delivered:"emailDelivered"}[ev];
+  if(evFlag && s[evFlag]===false) return;
   const items=order.items.map(i=>`${i.name}${i.variantLabel?" ("+i.variantLabel+")":""} x${i.qty} - Rs.${i.price*i.qty}`).join("\n");
   const grand=order.amountDue??(order.total+order.fee);
   const addr=order.address||{};
@@ -694,7 +702,12 @@ function sendCustomerEmail(order, settings, event){
     shipped:`Your order is on the way!${order.trackingNumber?" Tracking: "+order.trackingNumber:""}`,
     delivered:"Your order has been delivered. We hope your aquatic friends settle in happily!",
   };
-  const careReminder="💡 Before adding livestock, please read our Care & Acclimatization Guide in the app (Guides tab) — float the bag 15–20 min, add tank water gradually, lights off for a few hours, and wait 24h before feeding.";
+  const cats=new Set((order.items||[]).map(i=>i.category));
+  const careReminder = cats.has("Live Fish")
+    ? "💡 Before adding your fish, please read our Care & Acclimatization Guide in the app (Guides tab): float the sealed bag 15–20 min, add a little tank water every 5 min for 20–30 min, then gently net the fish in. Keep lights off for a few hours and wait 24h before the first feeding."
+    : cats.has("Plants")
+    ? "💡 For your live plants, please read our Care Guide in the app (Guides tab): rinse gently, remove any rockwool/pot, and plant or attach as directed for healthy growth."
+    : "💡 New to the hobby? Explore our Care Guides in the app (Guides tab) for easy setup and maintenance tips.";
   const params={
     to_email: to,
     to_name: addr.name || "Customer",
@@ -1977,7 +1990,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,border:"none",borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left",color:"white"}}>
             <span style={{fontSize:28}}>📖</span>
             <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,lineHeight:1.2}}>Care Guides</div>
-            <div style={{fontSize:11,opacity:.85,lineHeight:1.4}}>Tips & how-tos for a healthy tank</div>
+            <div style={{fontSize:11,opacity:.85,lineHeight:1.4}}>Tips &amp; guides for a healthy tank</div>
           </button>
           <button className="press" onClick={()=>nav("request")}
             style={{background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left"}}>
@@ -2714,15 +2727,25 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Submitted! 🎉</div>
           {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
           <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,marginBottom:20,maxWidth:320}}>Thank you! We'll <b style={{color:C.text}}>verify your payment</b> and confirm your order within <b style={{color:C.text}}>1–2 days</b>. You can track status anytime under <b style={{color:C.text}}>Orders</b>.</div>
-          {/* Care-guide reminder — important for live fish/plants */}
-          <button className="press" onClick={()=>nav("guides")}
-            style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,textAlign:"left",cursor:"pointer"}}>
-            <span style={{fontSize:30,flexShrink:0}}>📖</span>
-            <div>
-              <div style={{fontSize:13.5,fontWeight:800,color:"#065f46",marginBottom:2}}>Please read the Care Guide</div>
-              <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5}}>Acclimatize your fish &amp; plants the right way for a safe, happy arrival. Tap to read →</div>
-            </div>
-          </button>
+          {/* Care-guide reminder — tailored to what was purchased */}
+          {placed&&(()=>{
+            const cats=new Set((placed.items||[]).map(i=>i.category));
+            const hasFish=cats.has("Live Fish"), hasPlants=cats.has("Plants");
+            if(!hasFish&&!hasPlants) return null; // dry goods only — no acclimatization needed
+            const sub=hasFish
+              ? "Acclimatize your fish the right way for a safe, happy arrival. Tap to read →"
+              : "Settle your new plants in correctly for healthy growth. Tap to read →";
+            return(
+              <button className="press" onClick={()=>nav("guides")}
+                style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,textAlign:"left",cursor:"pointer"}}>
+                <span style={{fontSize:30,flexShrink:0}}>📖</span>
+                <div>
+                  <div style={{fontSize:13.5,fontWeight:800,color:"#065f46",marginBottom:2}}>Please read the Care Guide</div>
+                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5}}>{sub}</div>
+                </div>
+              </button>
+            );
+          })()}
           {/* Loyalty points earned */}
           {settings.loyaltyEnabled&&placed&&(()=>{
             const pph=Number(settings.loyaltyPointsPerHundred||10);
@@ -3386,10 +3409,10 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
                       <input type="number" min="0" value={v.price} onChange={e=>setVar(v.id,"price",e.target.value)} placeholder="0"
                         style={{flex:1,border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",gap:3,width:82,background:C.bg,borderRadius:9,padding:"0 8px",border:`1.5px solid ${C.border}`}} title="Packing weight for this variant (kg) — used for shipping">
-                      <span style={{fontSize:10,color:C.textSub,fontWeight:700,whiteSpace:"nowrap"}}>kg</span>
+                    <div style={{display:"flex",alignItems:"center",gap:4,width:104,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="Packing weight for this variant (kg) — used for shipping">
                       <input type="number" step="0.05" min="0" value={v.packagingWeight??""} onChange={e=>setVar(v.id,"packagingWeight",e.target.value===''?null:Number(e.target.value))} placeholder="wt"
-                        style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:12,fontFamily:"'Nunito',sans-serif"}}/>
+                        style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:"'Nunito',sans-serif"}}/>
+                      <span style={{fontSize:11,color:C.textSub,fontWeight:700,whiteSpace:"nowrap"}}>kg</span>
                     </div>
                     <button className="press" onClick={()=>setVar(v.id,"soldOut",!v.soldOut)}
                       style={{flexShrink:0,padding:"8px 12px",borderRadius:9,border:`1.5px solid ${v.soldOut?C.danger:C.border}`,background:v.soldOut?"#fee2e2":"transparent",color:v.soldOut?C.danger:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
@@ -3409,12 +3432,24 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
         {fld("Description","desc","text","Describe the product…",{textarea:true})}
 
         {/* Packaging weight + special delivery suggestion */}
+        {form.category==="Live Fish" ? (
+          /* Live fish weight is set per-variant (type-wise) above — no single packaging-weight field needed */
+          <div style={{marginBottom:16}}>
+            <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",userSelect:"none",background:C.bg,borderRadius:10,padding:"12px 14px",border:`1.5px solid ${C.border}`}}>
+              <input type="checkbox" checked={!!form.suggestSpecialDelivery} onChange={e=>f("suggestSpecialDelivery",e.target.checked)} style={{width:16,height:16,accentColor:C.primary,flexShrink:0,marginTop:2}}/>
+              <div>
+                <div style={{fontSize:11.5,fontWeight:700,color:C.text}}>suggest special delivery</div>
+                <div style={{fontSize:10,color:C.textSub,marginTop:2,lineHeight:1.4}}>Highlight special delivery at checkout. Parcel weight comes from each type's <b>kg</b> set above.</div>
+              </div>
+            </label>
+          </div>
+        ) : (
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5}}>packaging weight (kg)</div>
             <input type="number" step="0.1" min="0" value={form.packagingWeight} onChange={e=>f("packagingWeight",e.target.value)} placeholder="e.g. 0.2"
               style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Weight of product + packaging in kg. For live fish, set per-variant above for accuracy (pair vs single etc).</div>
+            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Weight of product + packaging in kg, used for shipping.</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-start",paddingTop:4}}>
             <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",userSelect:"none"}}>
@@ -3426,6 +3461,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             </label>
           </div>
         </div>
+        )}
 
         {/* Photos — up to 4, from device */}
         <div style={{marginBottom:16}}>
@@ -4321,6 +4357,22 @@ function SettingsPanel({settings,onSave}){
         {field("EmailJS Service ID","emailjsService","service_xxxxxxx")}
         {field("EmailJS Template ID","emailjsTemplate","template_xxxxxxx")}
         {field("EmailJS Public Key","emailjsKey","xxxxxxxxxxxxxxxx")}
+        {/* Per-event switches — save your free email quota; use WhatsApp for the rest */}
+        <div style={{borderTop:`1px solid ${C.border}`,marginTop:14,paddingTop:12}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:4}}>Which emails to send automatically</div>
+          <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Free EmailJS = 200 emails/month. Turn off the ones you'd rather send by WhatsApp.</div>
+          {[
+            ["emailPlaced","🧾 Order received + bill","Sent when a customer places an order"],
+            ["emailConfirmed","✅ Payment confirmed","When you verify their payment"],
+            ["emailShipped","🚚 Shipped + tracking","When you mark the order Shipped"],
+            ["emailDelivered","🎉 Delivered","When you mark the order Delivered"],
+          ].map(([key,label,desc])=>(
+            <label key={key} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:9,cursor:"pointer",userSelect:"none"}}>
+              <input type="checkbox" checked={f[key]!==false} onChange={e=>set(key,e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
+              <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>{label}</span><br/><span style={{fontSize:11,color:C.textSub}}>{desc}</span></span>
+            </label>
+          ))}
+        </div>
       </div>
 
       {/* Visitor analytics */}
