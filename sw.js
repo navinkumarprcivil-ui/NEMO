@@ -1,5 +1,5 @@
 /* Nemo Aqua Store — service worker (offline shell + faster reloads) */
-const CACHE = 'nemo-v1';
+const CACHE = 'nemo-v2';
 const ASSETS = ['./index.html', './app.jsx', './assets/nemo-logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
@@ -17,16 +17,20 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // Never cache Firebase / Google / fonts — always go to network
-  if (/gstatic|googleapis|firebaseio|firebasedatabase|google|unpkg/.test(url.host)) return;
+  if (/gstatic|googleapis|firebaseio|firebasedatabase|google|unpkg|jsdelivr/.test(url.host)) return;
   if (e.request.method !== 'GET') return;
-  // Network-first for our own app files so updates show; fall back to cache offline
+  // Stale-while-revalidate for our own app shell: serve cache INSTANTLY (fast repeat loads),
+  // then refresh the cache in the background so the next load gets any update.
   e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
-        return res;
-      })
-      .catch(() => caches.match(e.request))
+    caches.match(e.request).then((cached) => {
+      const network = fetch(e.request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => cached);
+      return cached || network;
+    })
   );
 });

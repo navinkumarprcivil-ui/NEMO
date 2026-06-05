@@ -5,7 +5,7 @@
 
     "products": {
       ".read": true,
-      ".write": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'",
+      ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
       "$id": {
         "stockCount": {
           ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.val() <= data.val())",
@@ -14,9 +14,9 @@
       }
     },
 
-    "guides":   { ".read": true, ".write": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'" },
-    "settings": { ".read": true, ".write": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'" },
-    "media":    { ".read": true, ".write": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'" },
+    "guides":   { ".read": true, ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'" },
+    "settings": { ".read": true, ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'" },
+    "media":    { ".read": true, ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'" },
 
     "reviews": {
       ".read": true,
@@ -26,22 +26,22 @@
     },
 
     "orders": {
-      ".read": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'",
+      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43')",
-        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43')"
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
       }
     },
 
     "favorites": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43')",
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
         ".write": "auth != null && auth.uid === $uid"
       }
     },
 
     "interest": {
-      ".read": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'",
+      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
       "$pid": {
         ".read": true,
         "$uid": {
@@ -51,26 +51,26 @@
     },
 
     "requests": {
-      ".read": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'",
+      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
       ".write": "auth != null"
     },
 
     "showcase": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && (!data.exists() || auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43')"
+        ".write": "auth != null && (!data.exists() || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
       }
     },
 
     "loyalty": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43')",
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
         ".write": "auth != null && auth.uid === $uid"
       }
     },
 
     "restock": {
-      ".read": "auth != null && auth.uid === 'mrHgAj6WNwe9tlIXS4ui1jq3mS43'",
+      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
       "$pid": {
         "$uid": {
           ".write": "auth != null && auth.uid === $uid"

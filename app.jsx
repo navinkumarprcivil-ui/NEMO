@@ -11,8 +11,9 @@ const C = {
 const STORE_NAME     = "Nemo";
 const PRICE_FONT     = "'Space Grotesk','Baloo 2',sans-serif"; // distinct font for prices / amounts
 const ADMIN_PASSWORD = "#nemoaquastore.31";
-const ADMIN_UID      = "mrHgAj6WNwe9tlIXS4ui1jq3mS43"; // your Google account — must match Firebase rules
+const ADMIN_UID      = "cI2HmMt6FdR7fO7uUnugH85GeZt2"; // your Google account — must match Firebase rules
 const BUSINESS_WA    = "919360921030"; // ← change to your WhatsApp number
+const BUSINESS_EMAIL = "nemoaquastore@gmail.com"; // store email — used for order alerts + admin OTP when Settings email is blank
 const SECRET_TAPS    = 10;             // tap logo this many times to open admin
 // Guaranteed-present inline logo (used only if both the uploaded logo and the bundled file fail to load)
 const NEMO_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%230b8f96'/%3E%3Cstop offset='1' stop-color='%23085f63'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='100' cy='100' r='100' fill='url(%23g)'/%3E%3Cpath d='M70 100c0-20 20-34 44-34 14 0 26 6 33 14l18-14v68l-18-14c-7 8-19 14-33 14-24 0-44-14-44-34z' fill='%23ff8c3b'/%3E%3Ccircle cx='86' cy='92' r='5' fill='%23fff'/%3E%3Cpath d='M70 100l-22-16v32z' fill='%23ffd9b8'/%3E%3C/svg%3E";
@@ -829,6 +830,26 @@ function exportOrdersCSV(orders, from="", to="", settings={}){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   return list.length;
+}
+
+/* Download a COMPLETE copy of the store as one JSON file (admin only — includes orders).
+   Mirrors the Firebase structure so it can be re-imported via Firebase Console → Import JSON. */
+async function downloadFullBackup(){
+  const out={};
+  const nodes=["products","guides","settings","showcase","reviews","media","orders","requests"];
+  if(FB_OK){
+    for(const n of nodes){
+      try{ const s=await FB_DB.ref(n).get(); if(s&&s.exists()) out[n]=s.val(); }catch(e){ /* unreadable node — skip */ }
+    }
+  }
+  const payload={ _backup:{ store:STORE_NAME, exportedAt:new Date().toISOString(), version:1 }, ...out };
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download=`nemo-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+  return Object.keys(out);
 }
 
 /* ═══════════════════ GLOBAL STYLES ═══════════════════ */
@@ -2606,8 +2627,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       redeemPoints(uid2, ptsUsed, id);
     }
     // Email a copy to the owner (free, via FormSubmit) if configured
-    sendOrderEmail(order, settings.orderEmail);
-    // Send confirmation email to the customer (via EmailJS) if configured
+    sendOrderEmail(order, settings.orderEmail||BUSINESS_EMAIL);
     sendCustomerEmail(order, settings);
     // Root app handles state + storage + stock decrement
     onOrderPlaced(order);
@@ -3402,7 +3422,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
 }
 
 /* ═══════════════════ ADMIN ORDER DETAIL (Phase 4) ═══════════════════ */
-function AdminOrderDetail({order:o,onBack,onUpdateOrder,showToast,settings={}}){
+function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,settings={}}){
   const [status,setStatus]=useState(o.status);
   const [tracking,setTracking]=useState(o.trackingNumber||"");
   const [verified,setVerified]=useState(o.paymentStatus==="Verified");
@@ -3605,18 +3625,29 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,showToast,settings={}}){
             🧾 View / Print Bill
           </button>
         </div>
+
+        {/* Delete this order (also removes its payment screenshot) */}
+        {onDeleteOrder&&(
+          <div style={{marginTop:14}}>
+            <button className="press" onClick={()=>{ if(window.confirm(`Delete order ${orderId(o.id)} permanently?\n\nThis also removes its payment screenshot and cannot be undone.`)) onDeleteOrder(o); }}
+              style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              🗑 Delete This Order
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},onSaveProd,onDeleteProd,onUpdateOrder,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   const [editGuide,setEditGuide]=useState(null);
   const [guideFormOpen,setGuideFormOpen]=useState(false);
   const [editProduct,setEditProduct]=useState(null);
   const [viewOrder,setViewOrder]=useState(null);
+  const [cleanMonths,setCleanMonths]=useState(6);
   const [orderFilter,setOrderFilter]=useState("All");
   const [csvFrom,setCsvFrom]=useState("");
   const [csvTo,setCsvTo]=useState("");
@@ -3656,7 +3687,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   );
   if(tab==="orderDetail"&&viewOrder)return(
     <AdminOrderDetail order={viewOrder} showToast={showToast} settings={settings}
-      onBack={()=>setTab("orders")}
+      onBack={()=>setTab("orders")} onDeleteOrder={async(ord)=>{await onDeleteOrder(ord);setViewOrder(null);setTab("orders");showToast("Order deleted");}}
       onUpdateOrder={async(updated)=>{await onUpdateOrder(updated);setViewOrder(updated);}}/>
   );
 
@@ -3768,6 +3799,34 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               style={{width:"100%",background:"#107c41",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               ⬇ Download Excel (CSV){(csvFrom||csvTo)?" — selected range":" — all orders"}
             </button>
+          </div>
+
+          {/* Clean up old orders — frees Firebase space (also removes their payment screenshots) */}
+          <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <span style={{fontSize:16}}>🧹</span>
+              <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Clean Up Old Orders</span>
+            </div>
+            <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Permanently deletes <b>Delivered</b> &amp; <b>Cancelled</b> orders (and their payment screenshots) older than the chosen age — frees Firebase space. Active &amp; recent orders are kept. 💡 Download a backup first (Settings → Data &amp; Backup).</div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <select value={cleanMonths} onChange={e=>setCleanMonths(Number(e.target.value))}
+                style={{flexShrink:0,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px",fontSize:12.5,background:"white",fontFamily:"'Nunito',sans-serif",color:C.text}}>
+                <option value={3}>Older than 3 months</option>
+                <option value={6}>Older than 6 months</option>
+                <option value={12}>Older than 1 year</option>
+              </select>
+              <button className="press" onClick={async()=>{
+                const cutoff=Date.now()-cleanMonths*30*24*60*60*1000;
+                const due=orders.filter(o=>(o.status==="Delivered"||o.status==="Cancelled")&&new Date(o.placedAt||0).getTime()<cutoff).length;
+                if(!due){ showToast("No old orders to delete","error"); return; }
+                if(!window.confirm(`Delete ${due} delivered/cancelled order(s) older than ${cleanMonths} months?\n\nThis also removes their payment screenshots and cannot be undone.`)) return;
+                const n=await onCleanupOrders(cleanMonths);
+                showToast(n?`Deleted ${n} old order${n!==1?"s":""} ✓`:"Nothing deleted");
+              }}
+                style={{flex:1,background:"#b91c1c",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+                🗑 Delete Old Orders
+              </button>
+            </div>
           </div>
 
           {filteredOrders.length===0?(
@@ -4033,6 +4092,7 @@ function SettingsPanel({settings,onSave}){
   const [npw,setNpw]=useState("");
   const [npw2,setNpw2]=useState("");
   const [pwMsg,setPwMsg]=useState("");
+  const [backupMsg,setBackupMsg]=useState("");
   const adminOk=isAdminSignedIn();
 
   /* ── OTP-gated sensitive changes (WhatsApp number + admin password) ──
@@ -4053,7 +4113,7 @@ function SettingsPanel({settings,onSave}){
     String(nf.ownerWhatsapp||"")!==String(settings.ownerWhatsapp||"") ||
     String(nf.adminPassHash||"")!==String(settings.adminPassHash||"")
   );
-  const adminEmail=()=>((settings.orderEmail||"").trim() || (FB_OK&&FB_AUTH?.currentUser?.email)||"");
+  const adminEmail=()=>((settings.orderEmail||"").trim() || BUSINESS_EMAIL || (FB_OK&&FB_AUTH?.currentUser?.email)||"");
   const startSave=async(nf)=>{
     // No sensitive change → save normally.
     if(!sensitiveChanged(nf)){ onSave(nf); return; }
@@ -4234,6 +4294,21 @@ function SettingsPanel({settings,onSave}){
             6. In Firebase Console → Realtime Database → Rules, paste the updated <code style={{fontSize:10.5,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 5px"}}>database_rules.json</code> and click Publish
           </div>
         </div>
+      </div>
+
+      {/* Data & Backup */}
+      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💾 Data &amp; Backup</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Download a complete copy of your store — products, orders, settings, reviews and photos — as one file. Keep it safe (email it to yourself or save to Google Drive). To restore, use Firebase Console → Realtime Database → ⋮ → Import JSON.</div>
+        {adminOk ? (
+          <button className="press" onClick={async()=>{ setBackupMsg("Preparing backup…"); try{ const keys=await downloadFullBackup(); setBackupMsg("✓ Backup downloaded ("+keys.length+" sections)"); }catch(e){ setBackupMsg("⚠ Backup failed — try again"); } }}
+            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+            ⬇ Download Full Backup (JSON)
+          </button>
+        ) : (
+          <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",fontSize:12,color:"#9a3412",lineHeight:1.5}}>🔒 Sign in with your Google admin account to download the full backup (it includes orders, which only you can read).</div>
+        )}
+        {backupMsg&&<div style={{fontSize:11.5,color:backupMsg[0]==="✓"?C.success:backupMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8}}>{backupMsg}</div>}
       </div>
 
       {/* About & Policies content */}
@@ -5160,6 +5235,18 @@ function NemoStore(){
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
   };
+  const deleteOrderHandler=async order=>{
+    setOrders(prev=>prev.filter(o=>o.id!==order.id));
+    const r=await dbGet("nemo-orders"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-orders",JSON.stringify(arr.filter(x=>x.id!==order.id)));
+    // Removing the order also removes its payment screenshot (stored on the order) — frees Firebase space.
+    if(FB_OK&&order.userUid){ try{ await FB_DB.ref("orders/"+order.userUid+"/"+order.id).remove(); }catch(e){} }
+  };
+  const cleanupOldOrders=async months=>{
+    const cutoff=Date.now()-months*30*24*60*60*1000;
+    const old=orders.filter(o=>(o.status==="Delivered"||o.status==="Cancelled") && new Date(o.placedAt||0).getTime()<cutoff);
+    for(const o of old){ await deleteOrderHandler(o); }
+    return old.length;
+  };
 
   // Keep each product's rating/count in sync with its REAL reviews
   const recomputeProductRating=(pid, reviews)=>{
@@ -5208,7 +5295,7 @@ function NemoStore(){
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
     // Notify owner (email copy) + WhatsApp handled in the panel optionally
-    sendOrderEmail(updated, settings.orderEmail);
+    sendOrderEmail(updated, settings.orderEmail||BUSINESS_EMAIL);
     return updated;
   };
 
@@ -5317,7 +5404,7 @@ function NemoStore(){
         {page==="about"    &&<AboutPage nav={nav} settings={settings}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}}
-          onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
+          onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
       </div>
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
     </div>

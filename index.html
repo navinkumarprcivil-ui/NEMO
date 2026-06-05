@@ -13,7 +13,7 @@
 <link rel="icon" type="image/png" href="assets/nemo-logo.png"/>
 <link rel="apple-touch-icon" href="assets/nemo-logo.png"/>
 <!-- Preload logo so it appears instantly when React mounts -->
-<link rel="preload" as="image" href="assets/nemo-logo.png"/>
+<link rel="preload" as="image" href="assets/nemo-logo.png" fetchpriority="high"/>
 <!-- Preload app code so Babel can compile it the moment the page is interactive -->
 <link rel="preload" href="app.jsx" as="fetch" crossorigin/>
 <!-- Analytics (optional): uncomment & set your domain to track visits with Plausible -->
@@ -34,7 +34,7 @@
   /* Instant splash — shown before React mounts, removed on first render */
   #splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:linear-gradient(160deg,#0b8f96,#085f63);z-index:9999;transition:opacity .4s ease;}
   #splash.hide{opacity:0;pointer-events:none;}
-  #splash .logo{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;animation:bob 1.6s ease-in-out infinite;overflow:hidden;padding:10px;box-sizing:border-box;}
+  #splash .logo{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.12) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M18 50c0-12 15-22 35-22 15 0 27 5 35 15l9-10v34l-9-10c-8 10-20 15-35 15-20 0-35-10-35-22z' fill='%23ffffff' opacity='.92'/%3E%3Ccircle cx='44' cy='44' r='3.5' fill='%230b6e72'/%3E%3C/svg%3E") center/58% no-repeat;display:flex;align-items:center;justify-content:center;animation:bob 1.6s ease-in-out infinite;overflow:hidden;padding:10px;box-sizing:border-box;}
   #splash .logo img{width:100%;height:100%;object-fit:contain;display:block;}
   #splash .logo .emoji-fallback{font-size:48px;display:none;}
   #splash .ttl{color:#fff;font-family:'Baloo 2','Nunito',sans-serif;font-weight:800;font-size:22px;letter-spacing:1px;}
@@ -58,7 +58,7 @@
 <body>
 <div id="splash">
   <div class="logo">
-    <img src="assets/nemo-logo.png" alt="Nemo" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"/>
+    <img src="assets/nemo-logo.png" alt="Nemo" fetchpriority="high" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"/>
     <span class="emoji-fallback">🐠</span>
   </div>
   <div class="ttl">NEMO AQUA STORE</div>
