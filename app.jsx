@@ -114,6 +114,30 @@ const DEFAULT_SHIPPING_RATES = {
     "5-10kg":    { TN:600, SouthIndia:750, CentralIndia:900, NorthIndia:1200 },
   },
 };
+/* Canonical weight tiers shared by dry goods AND live fish. */
+const SHIP_TIERS = ["Up to 500g","500g-1kg","1-2kg","2-5kg","5-10kg"];
+/* Migrate any legacy shipping brackets (e.g. old Small/Medium/Large live-fish keys) to the
+   weight tiers above, preserving prices for any tier that already matches. */
+function normalizeShippingRates(rates){
+  if(!rates || typeof rates!=="object") return rates;
+  const fixType=(obj,def)=>{
+    const keys=Object.keys(obj||{});
+    const clean = keys.length===SHIP_TIERS.length && SHIP_TIERS.every(t=>keys.includes(t));
+    if(clean) return obj; // already weight-based
+    const out={};
+    SHIP_TIERS.forEach(t=>{ out[t]={...def[t], ...((obj&&obj[t])?obj[t]:{})}; });
+    return out;
+  };
+  return { ...rates,
+    dryGoods: fixType(rates.dryGoods, DEFAULT_SHIPPING_RATES.dryGoods),
+    liveFish: fixType(rates.liveFish, DEFAULT_SHIPPING_RATES.liveFish) };
+}
+/* Normalize a whole settings object loaded from storage (currently just shipping rates). */
+function normalizeSettings(s){
+  if(!s) return s;
+  if(s.shippingRates) return {...s, shippingRates: normalizeShippingRates(s.shippingRates)};
+  return s;
+}
 const ZONE_LABELS = { TN:"Tamil Nadu", SouthIndia:"South India", CentralIndia:"Central India", NorthIndia:"North India" };
 const ZONE_KEYS   = Object.keys(ZONE_LABELS);
 function pincodeToZone(pin){
@@ -390,8 +414,8 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   showcaseEnabled: true,
 };
 async function loadSettings(){
-  if(FB_OK){ const o=await fbGetObj("settings"); if(o) return {...DEFAULT_SETTINGS,...o}; }
-  const r=await dbGet("nemo-settings"); return r?{...DEFAULT_SETTINGS,...JSON.parse(r)}:{...DEFAULT_SETTINGS};
+  if(FB_OK){ const o=await fbGetObj("settings"); if(o) return normalizeSettings({...DEFAULT_SETTINGS,...o}); }
+  const r=await dbGet("nemo-settings"); return r?normalizeSettings({...DEFAULT_SETTINGS,...JSON.parse(r)}):{...DEFAULT_SETTINGS};
 }
 async function saveSettings(s){ await dbSet("nemo-settings",JSON.stringify(s)); if(FB_OK) await fbSetObj("settings",s); }
 
@@ -546,7 +570,7 @@ function localProducts(){ const r=localStorage.getItem("nemo-products"); return 
 function localOrders(){ const r=localStorage.getItem("nemo-orders"); return r?JSON.parse(r):[]; }
 function localRequests(){ const r=localStorage.getItem("nemo-requests"); return r?JSON.parse(r):[]; }
 function localGuidesData(){ const r=localStorage.getItem("nemo-guides"); return r?JSON.parse(r):null; }
-function localSettingsData(){ const r=localStorage.getItem("nemo-settings"); return r?{...DEFAULT_SETTINGS,...JSON.parse(r)}:{...DEFAULT_SETTINGS}; }
+function localSettingsData(){ const r=localStorage.getItem("nemo-settings"); return r?normalizeSettings({...DEFAULT_SETTINGS,...JSON.parse(r)}):{...DEFAULT_SETTINGS}; }
 const GUIDE_CATEGORIES = ["Fish Care","Water & Tank","Feeding","Equipment","Plants","Health"];
 const DEFAULT_GUIDES = [
   { id:"g1", title:"Betta Fish Care Basics", category:"Fish Care", hasImg:false,
@@ -779,16 +803,22 @@ async function shareProduct(p, showToast){
 }
 
 /* Export orders to a CSV file (opens in Excel/Sheets). Optional [from,to] ISO-date range (inclusive). */
-function exportOrdersCSV(orders, from="", to=""){
+function exportOrdersCSV(orders, from="", to="", settings={}){
   const esc=v=>{ const s=String(v==null?"":v).replace(/"/g,'""'); return `"${s}"`; };
   let list=[...orders];
   if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
-  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Special Delivery","Live Guarantee","Coupon","Coupon Discount","Grand Total","Tracking","Customer Summary","WhatsApp Updates"];
+  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Special Delivery","Live Guarantee","Coupon","Coupon Discount","Loyalty Reward Used (Rs.)","Points Redeemed","Points Earned","Grand Total","Tracking","Customer Summary","WhatsApp Updates","Customer ID"];
+  const pph=Number(settings?.loyaltyPointsPerHundred||10);
+  const rupeePerPoint=Number(settings?.loyaltyRedeemValue||1);
   const rows=list.map(o=>{
     const items=o.items.map(i=>`${i.name}${i.variantLabel?" ("+i.variantLabel+")":""} x${i.qty} = Rs.${i.price*i.qty}`).join(" | ");
-    return [orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",o.amountDue??(o.total+o.fee),o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.coupon||"",o.couponDiscount||0,(o.amountDue??(o.total+o.fee)),o.trackingNumber||"",o.summary||"",o.waUpdates===false?"No":"Yes"].map(esc).join(",");
+    const grand=o.amountDue??(o.total+o.fee);
+    const loyaltyUsed=Number(o.loyaltyDiscount||0);
+    const ptsRedeemed=loyaltyUsed>0?Math.round(loyaltyUsed/(rupeePerPoint||1)):0;
+    const ptsEarned=settings?.loyaltyEnabled?Math.floor((grand/100)*pph):0;
+    return [orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.coupon||"",o.couponDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,grand,o.trackingNumber||"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||""].map(esc).join(",");
   });
   const csv="\uFEFF"+[head.map(esc).join(","),...rows].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -1046,9 +1076,9 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
   };
   const submit=async()=>{
     if(!imgData){setNote("⚠ Please select a photo");return;}
-    if(!ownerName.trim()){setNote("⚠ Add your name");return;}
+    const finalName=(user?.name||ownerName||"Aquarist").trim();
     setUploading(true);
-    await onSubmit({id:uid("sc"),imgData,ownerName:ownerName.trim(),caption:caption.trim(),createdAt:new Date().toISOString(),userUid:user?userKey(user):""});
+    await onSubmit({id:uid("sc"),imgData,ownerName:finalName,caption:caption.trim(),createdAt:new Date().toISOString(),userUid:user?userKey(user):""});
     setImgData(null);setPreview(null);setCaption("");setOwnerName(user?.name||"");setNote("🎉 Your tank is live!");setUploading(false);
     setTimeout(()=>setNote(""),3500);
   };
@@ -1088,8 +1118,11 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
               <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>handleFile(e.target.files?.[0])}/>
             </label>
           )}
-          <input value={ownerName} onChange={e=>setOwnerName(e.target.value)} placeholder="Your name"
-            style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6}}/>
+          <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,background:C.bg,marginBottom:6,color:C.text}}>
+            <span style={{fontSize:14}}>🐠</span>
+            <span style={{fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user.name||"Aquarist"}</span>
+            <span style={{marginLeft:"auto",fontSize:10,color:C.textSub,fontWeight:600,flexShrink:0}}>from your Google account</span>
+          </div>
           <input value={caption} onChange={e=>setCaption(e.target.value.slice(0,100))} placeholder="Describe your tank… (optional)"
             style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6}}/>
           {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:note[0]==="🎉"?C.success:C.primary,fontWeight:600,marginBottom:6}}>{note}</div>}
@@ -3731,7 +3764,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               ))}
               {(csvFrom||csvTo)&&<button className="press" onClick={()=>{setCsvFrom("");setCsvTo("");}} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:16,padding:"5px 12px",fontSize:11,fontWeight:700,color:C.textSub,fontFamily:"'Nunito',sans-serif"}}>Clear</button>}
             </div>
-            <button className="press" onClick={()=>{const n=exportOrdersCSV(orders,csvFrom,csvTo);showToast(n?`Exported ${n} order${n!==1?"s":""} to Excel`:"No orders in that range","error");}}
+            <button className="press" onClick={()=>{const n=exportOrdersCSV(orders,csvFrom,csvTo,settings);showToast(n?`Exported ${n} order${n!==1?"s":""} to Excel`:"No orders in that range","error");}}
               style={{width:"100%",background:"#107c41",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               ⬇ Download Excel (CSV){(csvFrom||csvTo)?" — selected range":" — all orders"}
             </button>
@@ -4917,7 +4950,7 @@ function NemoStore(){
     // Settings — seed if missing
     const stObj=await fbGetObj("settings");
     if(stObj===null && FB_OK){ const local=localSettingsData(); await saveSettings(local); setSettings(local); }
-    else if(stObj){ setSettings({...DEFAULT_SETTINGS,...stObj}); }
+    else if(stObj){ setSettings(normalizeSettings({...DEFAULT_SETTINGS,...stObj})); }
     // Showcase
     loadShowcase().then(sc=>{ if(sc&&sc.length) setShowcase(sc); });
   };
