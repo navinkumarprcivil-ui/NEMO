@@ -5,9 +5,14 @@ _Status: ready to publish once the ✅ "Must do" items below are done._
 ---
 
 ## ⚡ Performance (done in this build)
-- **Compile-once, then cache:** the app now compiles in the browser only on the *first* visit and caches the result. Repeat visits load instantly and skip the ~3 MB Babel download entirely.
-- **Logo:** 1.36 MB → **197 KB**, loads with high priority; a branded placeholder shows instantly.
+- **Render-blocking fixed:** React scripts now use `defer`, so the splash + logo paint **instantly** instead of waiting 2–3s for React to download. (This was the real cause of the slow logo.)
+- **Compile-once, then cache:** the app compiles in the browser only on the *first* visit and caches the result. Repeat visits load instantly and skip the ~3 MB Babel download entirely.
+- **Logo:** 1.36 MB → **197 KB**; `app.jsx` is UTF-8 (365 KB, was 705 KB).
 - **Service worker** serves the app shell from cache immediately (stale-while-revalidate), updates in the background.
+- _For genuinely instant FIRST loads, a local precompile build step is the only further gain — optional, ask if you want the recipe._
+
+## 📧 Customer emails (EmailJS — set keys in Settings to enable)
+The app now emails the customer on: **order placed** (with a bill summary + care-guide reminder), **payment confirmed**, **shipped** (with tracking), and **delivered** — but only if they ticked "Notify me" at checkout. Requires EmailJS Service/Template/Public keys in Admin → Settings. Your EmailJS template should use these variables: `to_email, to_name, email_subject, email_headline, order_no, order_status, order_items, order_subtotal, order_shipping, order_total, payment_status, tracking_number, ship_name, ship_phone, ship_address, care_reminder, store_name, store_whatsapp`.
 - **Net effect:** first load ~1–2s (one-time), every later load is near-instant.
 
 > The only thing faster would be a desktop "build step" (precompiling on your computer). The in-browser caching above gets you ~95% of that benefit with zero tooling.

@@ -57,9 +57,9 @@
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
   @keyframes spin{to{transform:rotate(360deg)}}
 </style>
-<!-- React 18 production builds — ~3× smaller & faster to parse than development builds -->
-<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<!-- React 18 production builds — `defer` so they DON'T block the splash/logo from painting instantly -->
+<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <!-- Babel is loaded LAZILY by the app loader below — only on the first visit (to compile once).
      Repeat visits use the cached compiled code and never download/run Babel. -->
 <!-- Firebase (Realtime Database + Auth) — async so a slow/blocked CDN never hangs the app -->
@@ -89,6 +89,8 @@
 (function(){
   function fadeSplash(){ requestAnimationFrame(function(){ setTimeout(function(){ var s=document.getElementById("splash"); if(s){ s.classList.add("hide"); setTimeout(function(){ s.remove(); },450); } }, 60); }); }
   function run(code){
+    // React is loaded with `defer`; make sure it's ready before we render.
+    if(typeof React==="undefined" || typeof ReactDOM==="undefined"){ return setTimeout(function(){ run(code); }, 30); }
     var s=document.createElement("script");
     s.text=code+"\n;try{ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(NemoStore));}catch(e){console.error('render failed',e);}";
     document.body.appendChild(s);

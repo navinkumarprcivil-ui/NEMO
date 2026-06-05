@@ -389,9 +389,9 @@ async function deleteReview(pid,rid){ const list=await loadReviews(pid); const n
 /* Store settings (WhatsApp numbers, payment) — shared via Firebase */
 const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
-  deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Contact us on WhatsApp to confirm delivery to your location.",
-  liveArrivalGuarantee:"We offer a Live Arrival Guarantee on all live fish. Fish are packed with oxygen and insulation for safe transit. If a fish arrives deceased, send us a clear unboxing photo/video within 2 hours of delivery for a free replacement or refund.",
-  returnPolicy:"Live fish & plants are non-returnable once delivered safely (covered instead by our Live Arrival Guarantee). Accessories and equipment can be returned within 3 days if unused and in original packaging. Damaged-on-arrival items are replaced free — just share a photo.",
+  deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
+  liveArrivalGuarantee:"We offer a Live Arrival Guarantee on live fish. Fish are packed with oxygen and insulation for safe transit. To claim, you must send ONE clear, continuous, unedited unboxing video that starts with the sealed, unopened package and clearly shows the affected fish, within 2 hours of delivery. The guarantee covers a free replacement (or store credit) equal to the price of the affected fish only — delivery charges are non-refundable. It does not apply if the unboxing video is missing/edited, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed/refused deliveries, or losses after the fish has been placed in your tank.",
+  returnPolicy:"Live fish & plants are non-returnable and non-refundable once delivered safely (they are covered instead by our Live Arrival Guarantee above). Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect. Refunds (where applicable) are issued as store credit or to the original payment method within 5–7 working days after we receive and inspect the item. Orders cannot be cancelled once a live order has been packed or dispatched.",
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   shippingRates: null,
   specialDeliveryPrice: 200,
@@ -670,22 +670,51 @@ function waStatusMsg(order, status, tracking=""){
 
 function openWA(number, msg){ window.open(`https://wa.me/${number}?text=${msg}`,"_blank"); }
 
-/* Send a confirmation email to the CUSTOMER via EmailJS (needs keys set in admin Settings). */
-function sendCustomerEmail(order, settings){
+/* Send an email to the CUSTOMER via EmailJS (needs keys set in admin Settings).
+   `event` controls the message: "placed" | "confirmed" | "shipped" | "delivered". */
+function sendCustomerEmail(order, settings, event){
   const s=settings||{};
   const to=order.userEmail||"";
   if(!to || !s.emailjsService || !s.emailjsTemplate || !s.emailjsKey) return;
   if(typeof emailjs==="undefined") return;
+  if(event && event!=="placed" && order.waUpdates===false) return; // respect opt-out for status updates
+  const ev=event||"placed";
   const items=order.items.map(i=>`${i.name}${i.variantLabel?" ("+i.variantLabel+")":""} x${i.qty} - Rs.${i.price*i.qty}`).join("\n");
+  const grand=order.amountDue??(order.total+order.fee);
+  const addr=order.address||{};
+  const subjects={
+    placed:`🐠 Order ${order.orderNo||""} received — ${STORE_NAME}`,
+    confirmed:`✅ Payment confirmed — Order ${order.orderNo||""} — ${STORE_NAME}`,
+    shipped:`🚚 Your order ${order.orderNo||""} has shipped — ${STORE_NAME}`,
+    delivered:`🎉 Delivered — Order ${order.orderNo||""} — ${STORE_NAME}`,
+  };
+  const headlines={
+    placed:"Thanks for your order! We've received it and will verify your payment within 1–2 days.",
+    confirmed:"Your payment is confirmed and your order is now being prepared. 🐟",
+    shipped:`Your order is on the way!${order.trackingNumber?" Tracking: "+order.trackingNumber:""}`,
+    delivered:"Your order has been delivered. We hope your aquatic friends settle in happily!",
+  };
+  const careReminder="💡 Before adding livestock, please read our Care & Acclimatization Guide in the app (Guides tab) — float the bag 15–20 min, add tank water gradually, lights off for a few hours, and wait 24h before feeding.";
   const params={
     to_email: to,
-    to_name: order.address?.name || "Customer",
+    to_name: addr.name || "Customer",
+    email_subject: subjects[ev]||subjects.placed,
+    email_headline: headlines[ev]||headlines.placed,
     order_no: order.orderNo || order.id,
+    order_status: order.status||"",
     order_items: items,
-    order_total: "Rs."+(order.amountDue??(order.total+order.fee)),
-    payment_method: order.paymentMethod==="online"?"Online":"Pay on delivery",
+    order_subtotal: "Rs."+order.total,
+    order_shipping: "Rs."+(order.fee||0),
+    order_total: "Rs."+grand,
+    order_total_amount: grand,
+    payment_status: order.paymentStatus||"",
+    tracking_number: order.trackingNumber||"",
+    ship_name: addr.name||"",
+    ship_phone: addr.phone||"",
+    ship_address: `${addr.address||""}, ${addr.city||""} ${addr.pincode||""}`.trim(),
+    care_reminder: careReminder,
     store_name: STORE_NAME,
-    store_whatsapp: s.ownerWhatsapp||"",
+    store_whatsapp: s.ownerWhatsapp||BUSINESS_WA,
   };
   try{ emailjs.send(s.emailjsService, s.emailjsTemplate, params, {publicKey:s.emailjsKey}).catch(()=>{}); }catch(e){}
 }
@@ -2685,6 +2714,15 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Submitted! 🎉</div>
           {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
           <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,marginBottom:20,maxWidth:320}}>Thank you! We'll <b style={{color:C.text}}>verify your payment</b> and confirm your order within <b style={{color:C.text}}>1–2 days</b>. You can track status anytime under <b style={{color:C.text}}>Orders</b>.</div>
+          {/* Care-guide reminder — important for live fish/plants */}
+          <button className="press" onClick={()=>nav("guides")}
+            style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,textAlign:"left",cursor:"pointer"}}>
+            <span style={{fontSize:30,flexShrink:0}}>📖</span>
+            <div>
+              <div style={{fontSize:13.5,fontWeight:800,color:"#065f46",marginBottom:2}}>Please read the Care Guide</div>
+              <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5}}>Acclimatize your fish &amp; plants the right way for a safe, happy arrival. Tap to read →</div>
+            </div>
+          </button>
           {/* Loyalty points earned */}
           {settings.loyaltyEnabled&&placed&&(()=>{
             const pph=Number(settings.loyaltyPointsPerHundred||10);
@@ -2832,7 +2870,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           {inp("WhatsApp Number","whatsapp","tel","9876543210 (if different)",false,true)}
           <label style={{display:"flex",alignItems:"center",gap:10,background:C.accentLight,borderRadius:12,padding:"12px 14px",marginBottom:14,cursor:"pointer",userSelect:"none"}}>
             <input type="checkbox" checked={addr.waUpdates} onChange={e=>f("waUpdates",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
-            <span style={{fontSize:12.5,color:C.primaryDark,fontWeight:500,lineHeight:1.45}}>💬 Send me order updates on WhatsApp (confirmed, shipped, delivered)</span>
+            <span style={{fontSize:12.5,color:C.primaryDark,fontWeight:500,lineHeight:1.45}}>💬 Notify me about my order (payment confirmed, shipped, delivered) on WhatsApp &amp; email</span>
           </label>
           {inp("Street Address","address","text","123, Main Street")}
           <div style={{display:"flex",gap:12}}>
@@ -5123,16 +5161,37 @@ function NemoStore(){
   useEffect(()=>{ if(settings.gaId) injectGA(settings.gaId); },[settings.gaId]);
 
   const prevPageRef = useRef("shop");
+  const pageRef = useRef("home");
 
   const nav=(pg,product=null)=>{
     if(pg!=="detail") setReviewIntent(null);
     // Remember where we came from so DetailPage back button works for any origin
     if(pg==="detail") prevPageRef.current = page;
+    // Hardware-back trap: when leaving Home for a deeper page, push a history entry
+    // so the phone's Back button returns to Home instead of closing the app.
+    if(pageRef.current==="home" && pg!=="home"){ try{ history.pushState({nemo:1},""); }catch(e){} }
+    pageRef.current = pg;
     setPage(pg);
     if(product)setSelProduct(product);
     // Instant jump to top on page change feels snappier than smooth on a full swap
     requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0,behavior:"auto"}));
   };
+
+  // Phone Back button: from any inner page → go Home; from Home → allow normal exit.
+  useEffect(()=>{
+    const onPop=()=>{
+      if(pageRef.current!=="home"){
+        setReviewIntent(null);
+        pageRef.current="home";
+        setPage("home");
+        try{ history.pushState({nemo:1},""); }catch(e){}   // re-arm the trap
+        requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0,behavior:"auto"}));
+      }
+      // already Home — let the browser go back / exit naturally
+    };
+    window.addEventListener("popstate",onPop);
+    return()=>window.removeEventListener("popstate",onPop);
+  },[]);
 
   // Secret admin tap handler
   const handleSecretTap=()=>{
@@ -5296,8 +5355,15 @@ function NemoStore(){
     showToast("Product deleted");
   };
   const updateOrderHandler=async updated=>{
-    setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
+    let prevStatus="";
+    setOrders(prev=>{ const old=prev.find(o=>o.id===updated.id); prevStatus=old?old.status:""; return prev.map(o=>o.id===updated.id?updated:o); });
     await saveOneOrder(updated);
+    // Notify the customer by email when the order moves to a new milestone (if they opted in)
+    if(updated.status!==prevStatus){
+      const evMap={Confirmed:"confirmed",Shipped:"shipped",Delivered:"delivered"};
+      const ev=evMap[updated.status];
+      if(ev) sendCustomerEmail(updated, settings, ev);
+    }
   };
   const deleteOrderHandler=async order=>{
     setOrders(prev=>prev.filter(o=>o.id!==order.id));
