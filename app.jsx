@@ -1622,7 +1622,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
 }
 
 /* ═══════════════════ ORDER HISTORY PAGE ═══════════════════ */
-function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, settings={}}){
+function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, settings={}, favorites=[]}){
   const uk = userKey(user);
   const [payOpen,setPayOpen]=useState(null);
   const myOrders = orders.filter(o =>
@@ -1659,7 +1659,16 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
       </div>
 
       <div style={{padding:"16px 16px 100px"}}>
-        {/* Review request prompt — shown when delivered items await a rating */}
+        {/* Saved / Favorites — lives here under the signed-in account */}
+        <button className="press" onClick={()=>nav("saved")}
+          style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:16,cursor:"pointer",textAlign:"left"}}>
+          <span style={{fontSize:22,color:C.coral}}>♥</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:800,color:C.text,fontFamily:"'Baloo 2',sans-serif"}}>Saved Items</div>
+            <div style={{fontSize:11.5,color:C.textSub}}>{favorites.length>0?`${favorites.length} item${favorites.length!==1?"s":""} saved`:"Your wishlist is empty"}</div>
+          </div>
+          <span style={{fontSize:18,color:C.textSub}}>›</span>
+        </button>
         {toReview.length>0&&(
           <div style={{background:`linear-gradient(140deg,${C.primary},${C.accent})`,borderRadius:20,padding:"18px",marginBottom:16,color:"white",position:"relative",overflow:"hidden"}}>
             <div style={{position:"absolute",top:-24,right:-16,width:90,height:90,borderRadius:"50%",background:"rgba(255,255,255,.12)"}}/>
@@ -1878,10 +1887,6 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
         {/* Account chip */}
         <div style={{position:"absolute",top:46,right:16,display:"flex",alignItems:"center",gap:8}}>
-          <button className="press" onClick={()=>nav("saved")} aria-label="Saved items"
-            style={{width:38,height:38,borderRadius:"50%",background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:17,backdropFilter:"blur(8px)",cursor:"pointer",position:"relative"}}>
-            ♥{favorites.length>0&&<span style={{position:"absolute",top:-4,right:-4,background:C.coral,color:"white",fontSize:9,fontWeight:800,minWidth:16,height:16,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{favorites.length}</span>}
-          </button>
           <button className="press" onClick={()=>nav("orders")}
             style={{display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",borderRadius:30,padding:"6px 12px 6px 6px",color:"white",fontFamily:"'Nunito',sans-serif",backdropFilter:"blur(8px)",cursor:"pointer"}}>
             <span style={{width:26,height:26,borderRadius:"50%",background:"rgba(255,255,255,.9)",color:C.primary,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>
@@ -5064,15 +5069,8 @@ function RequestPage({nav,user,onSubmit,myRequests}){
           </div>
         </div>
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Reference Link <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
-          <input value={form.link} onChange={e=>f("link",e.target.value)} placeholder="Paste a product link if you have one"
-            style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white"}}/>
-        </div>
-        <MediaUploader label="Reference Photo (optional)" accept="image/*" preview={imgPrev} previewType="image"
-          onChange={handleImg} onClear={()=>{setImgB64(null);setImgPrev(null);setImgNote("");}} note={imgNote||"A photo helps us identify exactly what you want"}/>
-        <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Notes <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
-          <textarea value={form.notes} onChange={e=>f("notes",e.target.value)} rows={3} placeholder="Size, colour, variant, budget…"
+          <textarea value={form.notes} onChange={e=>f("notes",e.target.value)} rows={3} placeholder="Size, colour, variant, budget, or paste a product link here…"
             style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:"white"}}/>
         </div>
         <div style={{height:1,background:C.border,margin:"4px 0 16px"}}/>
@@ -5237,6 +5235,8 @@ function NemoStore(){
 
   // Phone Back button: from any inner page → go Home; from Home → warn before leaving.
   useEffect(()=>{
+    // Seed one history entry so the FIRST back press is captured (even on a fresh Home load).
+    try{ history.pushState({nemo:1},""); }catch(e){}
     const onPop=()=>{
       if(pageRef.current!=="home"){
         setReviewIntent(null);
@@ -5590,7 +5590,7 @@ function NemoStore(){
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} user={user} settings={settings} orders={orders}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
         {page==="orders"   &&(user
-          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} settings={settings}/>
+          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} settings={settings} favorites={favorites}/>
           : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("orders");}} onBack={()=>nav("home")}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={()=>nav("home")}/>}
         {page==="request"  &&<RequestPage nav={nav} user={user} onSubmit={submitRequest}/>}
