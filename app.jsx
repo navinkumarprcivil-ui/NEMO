@@ -396,6 +396,16 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   shippingRates: null,
   specialDeliveryPrice: 200,
+  /* Business / legal identity (shown on About page + invoice). No PAN/personal data is ever displayed. */
+  legalName: "NEMO AQUA STORE",
+  legalEntity: "Proprietorship · Udyam-registered Micro Enterprise",
+  legalActivity: "Trading — aquarium fish, plants & accessories",
+  legalCity: "Salem, Tamil Nadu, India",
+  legalAddress: "",          // optional full address for the invoice; leave blank to show only the city
+  gstin: "",                  // add once registered → invoice becomes a GST "Tax Invoice"
+  jurisdiction: "Salem, Tamil Nadu",
+  termsPolicy: "By placing an order you agree to these terms. "+STORE_NAME+" Aqua Store is a home-based proprietary micro-enterprise (Udyam-registered) trading in aquarium livestock and supplies. All orders are subject to stock availability and our acceptance of your payment. Prices are in INR and inclusive of applicable taxes. We are currently a small enterprise not registered under GST, so no GST is charged at present; this notice and your invoice will be updated automatically once we are GST-registered. Live animals are perishable goods sold under our Live Arrival Guarantee, which is your sole and exclusive remedy for any transit loss. To the maximum extent permitted by law, our total liability for any order is limited to the amount actually paid for that order; we are not liable for indirect, incidental or consequential losses, nor for any loss arising after livestock has been introduced to your tank or system. We are not responsible for delays or failures caused by courier partners, weather, power/water conditions at your premises, or other events beyond our reasonable control. These terms are governed by the laws of India and subject to the exclusive jurisdiction of the courts at Salem, Tamil Nadu.",
+  privacyPolicy: "We collect only the details needed to fulfil your order — your name, contact number, delivery address and email. This information is used solely to process, deliver and provide support for your orders. We do not sell your data or share it with anyone except our delivery partners and payment provider, and only as needed to complete your order. Payments are processed through your own UPI app or our secure payment gateway; we never see or store your card, UPI PIN or bank credentials. You can ask us to delete your stored account data at any time by messaging us on WhatsApp.",
   liveGuaranteePrice: 150,
   freeDeliveryThreshold: 0,
   coupons: [],
@@ -863,9 +873,11 @@ function generateBillHTML(order, settings){
   const addr=o.address||{};
   const billingAddr=o.billingAddress||addr;
   const items=(o.items||[]);
-  const storeName=STORE_NAME+" Aqua Store";
-  const storeAddr=s.storeAddress||"";
+  const storeName=s.legalName||(STORE_NAME+" Aqua Store");
+  const storeAddr=s.legalAddress||s.storeAddress||s.legalCity||"";
   const storeWA=(s.ownerWhatsapp||BUSINESS_WA);
+  const gstin=(s.gstin||"").trim();
+  const docLabel=gstin?"TAX INVOICE":"INVOICE / BILL";
   const dateStr=o.placedAt?new Date(o.placedAt).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
   const subtotal=o.total||0;
   const shipping=o.fee||0;
@@ -893,10 +905,11 @@ function generateBillHTML(order, settings){
 <style>*{box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;background:#eef9fa;margin:0;padding:16px}.page{max-width:560px;margin:0 auto;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(11,110,114,.15)}.hdr{background:linear-gradient(135deg,#0b6e72,#12b5bc);padding:24px;color:#fff}.hdr h1{margin:0 0 2px;font-size:22px;font-weight:800}.hdr .sub{font-size:12px;opacity:.92;margin-top:2px;color:#ffffff}.badge{display:inline-block;background:rgba(255,255,255,.2);border-radius:20px;padding:4px 14px;font-size:11px;font-weight:700;margin-top:8px}.body{padding:20px 22px 28px}.r2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}.box{background:#f5fdfe;border:1px solid #cce8ea;border-radius:12px;padding:12px 14px}.box h4{margin:0 0 6px;font-size:10px;font-weight:800;color:#0b6e72;text-transform:uppercase;letter-spacing:.8px}.box p{margin:0 0 3px;font-size:12.5px;color:#0a2426;font-weight:600;line-height:1.5}.sub{font-size:11px;color:#5a8085;font-weight:400}table{width:100%;border-collapse:collapse}th{background:#0b6e72;color:#fff;padding:9px 10px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.5px}th:last-child{text-align:right}.footer{margin-top:20px;padding-top:14px;border-top:1px dashed #cce8ea;font-size:11.5px;color:#5a8085;text-align:center;line-height:1.8}@media print{body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0}.np{display:none!important}}</style></head>
 <body><div class="page">
 <div class="hdr">
-  <div style="font-size:11px;opacity:.7;letter-spacing:1px">INVOICE / BILL</div>
+  <div style="font-size:11px;opacity:.7;letter-spacing:1px">${docLabel}</div>
   <h1>${storeName}</h1>
   ${storeAddr?`<div style="font-size:12px;color:#ffffff;opacity:.95;margin-top:4px">📍 ${storeAddr}</div>`:""}
   <div style="font-size:12px;color:#ffffff;opacity:.95;margin-top:2px">📞 ${storeWA}</div>
+  ${gstin?`<div style="font-size:12px;color:#ffffff;opacity:.95;margin-top:2px">GSTIN: ${gstin}</div>`:""}
   <div><span class="badge">${o.orderNo||orderId(o.id||"")}</span></div>
   <div style="font-size:11px;opacity:.75;margin-top:6px">📅 ${dateStr}</div>
 </div>
@@ -933,8 +946,10 @@ function generateBillHTML(order, settings){
   <div style="text-align:right;margin-top:14px"><button class="np" onclick="window.print()" style="background:#0b6e72;color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save PDF</button></div>
   <div class="footer">
     ${o.liveGuarantee?`<p>🛡️ <b>Live Arrival Guarantee</b> applies. Send an unboxing photo/video within 2 hours of delivery to WhatsApp ${storeWA} if any fish arrive unwell.</p>`:""}
+    <p>${gstin?"Prices are inclusive of GST.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this is a Bill of Supply."}</p>
     <p>Thank you for shopping at <b>${storeName}</b> 🐠</p>
     <p>Support: WhatsApp ${storeWA}</p>
+    <p style="font-size:10px;color:#9bb3b4">This is a computer-generated invoice. Goods sold under our published Terms &amp; Live Arrival Guarantee. Subject to ${s.jurisdiction||"India"} jurisdiction.</p>
   </div>
 </div></div></body></html>`;
 }
@@ -3690,6 +3705,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const [proofZoom,setProofZoom]=useState(false);
   const [saving,setSaving]=useState(false);
   const [rejectConfirm,setRejectConfirm]=useState(false);
+  const [delOrderConfirm,setDelOrderConfirm]=useState(false);
   const custWA="91"+(o.address.whatsapp||o.address.phone).replace(/\D/g,"");
 
   const handleUpdate=async()=>{
@@ -3903,10 +3919,23 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         {/* Delete this order (also removes its payment screenshot) */}
         {onDeleteOrder&&(
           <div style={{marginTop:14}}>
-            <button className="press" onClick={()=>{ if(window.confirm(`Delete order ${orderId(o.id)} permanently?\n\nThis also removes its payment screenshot and cannot be undone.`)) onDeleteOrder(o); }}
+            {delOrderConfirm?(
+              <div style={{background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"14px"}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.danger,marginBottom:4,textAlign:"center"}}>Delete order {orderId(o.id)} permanently?</div>
+                <div style={{fontSize:11,color:"#7f1d1d",marginBottom:10,textAlign:"center",lineHeight:1.5}}>This also removes its payment screenshot and can't be undone.</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <button className="press" onClick={()=>setDelOrderConfirm(false)}
+                    style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
+                  <button className="press" onClick={()=>{setDelOrderConfirm(false);onDeleteOrder(o);}}
+                    style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Yes, delete</button>
+                </div>
+              </div>
+            ):(
+            <button className="press" onClick={()=>setDelOrderConfirm(true)}
               style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
               🗑 Delete This Order
             </button>
+            )}
           </div>
         )}
       </div>
@@ -3922,6 +3951,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [editProduct,setEditProduct]=useState(null);
   const [viewOrder,setViewOrder]=useState(null);
   const [cleanMonths,setCleanMonths]=useState(6);
+  const [cleanConfirm,setCleanConfirm]=useState(false);
   const [visitStats,setVisitStats]=useState(null);
   useEffect(()=>{ loadAnalytics().then(setVisitStats); },[]);
   const [orderFilter,setOrderFilter]=useState("All");
@@ -4117,24 +4147,42 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             </div>
             <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Permanently deletes <b>Delivered</b> &amp; <b>Cancelled</b> orders (and their payment screenshots) older than the chosen age — frees Firebase space. Active &amp; recent orders are kept. 💡 Download a backup first (Settings → Data &amp; Backup).</div>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <select value={cleanMonths} onChange={e=>setCleanMonths(Number(e.target.value))}
+              <select value={cleanMonths} onChange={e=>{setCleanMonths(Number(e.target.value));setCleanConfirm(false);}}
                 style={{flexShrink:0,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px",fontSize:12.5,background:"white",fontFamily:"'Nunito',sans-serif",color:C.text}}>
                 <option value={3}>Older than 3 months</option>
                 <option value={6}>Older than 6 months</option>
                 <option value={12}>Older than 1 year</option>
               </select>
-              <button className="press" onClick={async()=>{
+              <button className="press" onClick={()=>{
                 const cutoff=Date.now()-cleanMonths*30*24*60*60*1000;
                 const due=orders.filter(o=>(o.status==="Delivered"||o.status==="Cancelled")&&new Date(o.placedAt||0).getTime()<cutoff).length;
                 if(!due){ showToast("No old orders to delete","error"); return; }
-                if(!window.confirm(`Delete ${due} delivered/cancelled order(s) older than ${cleanMonths} months?\n\nThis also removes their payment screenshots and cannot be undone.`)) return;
-                const n=await onCleanupOrders(cleanMonths);
-                showToast(n?`Deleted ${n} old order${n!==1?"s":""} ✓`:"Nothing deleted");
+                setCleanConfirm(true);
               }}
                 style={{flex:1,background:"#b91c1c",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
                 🗑 Delete Old Orders
               </button>
             </div>
+            {cleanConfirm&&(()=>{
+              const cutoff=Date.now()-cleanMonths*30*24*60*60*1000;
+              const due=orders.filter(o=>(o.status==="Delivered"||o.status==="Cancelled")&&new Date(o.placedAt||0).getTime()<cutoff).length;
+              return(
+                <div style={{marginTop:10,background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
+                  <div style={{fontSize:12.5,fontWeight:700,color:C.danger,marginBottom:4,lineHeight:1.5}}>Permanently delete {due} delivered/cancelled order{due!==1?"s":""} older than {cleanMonths} months?</div>
+                  <div style={{fontSize:11,color:"#7f1d1d",marginBottom:10,lineHeight:1.5}}>This also removes their payment screenshots and <b>cannot be undone</b>. Download a backup or CSV first if you want to keep the records.</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <button className="press" onClick={()=>setCleanConfirm(false)}
+                      style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
+                    <button className="press" onClick={async()=>{
+                      setCleanConfirm(false);
+                      const n=await onCleanupOrders(cleanMonths);
+                      showToast(n?`Deleted ${n} old order${n!==1?"s":""} ✓`:"Nothing deleted");
+                    }}
+                      style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Yes, delete</button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {filteredOrders.length===0?(
@@ -4652,15 +4700,30 @@ function SettingsPanel({settings,onSave}){
         {area("Live Arrival Guarantee","liveArrivalGuarantee")}
         {area("Returns & DOA Policy","returnPolicy")}
         {area("Acclimatization Guide","acclimatizationTips")}
+        {area("Terms & Conditions","termsPolicy")}
+        {area("Privacy Policy","privacyPolicy")}
+      </div>
+
+      {/* Business / legal identity */}
+      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🏛️ Business &amp; Legal Info</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Shown on the About page and your invoices for legitimacy. <b>Never enter PAN or other private data here</b> — only business-level details customers may see.</div>
+        {field("Registered Business Name","legalName","NEMO AQUA STORE")}
+        {field("Entity Type","legalEntity","Proprietorship · Udyam-registered Micro Enterprise")}
+        {field("Main Activity","legalActivity","Trading — aquarium fish, plants & accessories")}
+        {field("City / State (public)","legalCity","Salem, Tamil Nadu, India")}
+        {field("Full Address (invoice only, optional)","legalAddress","Leave blank to show only city","Appears on invoices for legal completeness. Optional.")}
+        {field("GSTIN (add once registered)","gstin","22AAAAA0000A1Z5","When set, invoices become a proper GST 'Tax Invoice'. Leave blank until you have it.")}
+        {field("Legal Jurisdiction","jurisdiction","Salem, Tamil Nadu")}
       </div>
 
       {/* Payment */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💳 Online Payment</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Fill either to offer "Pay Online". Leave both blank for cash/UPI on delivery only.</div>
-        {field("UPI ID","upiId","yourname@oksbi","Customers pay you directly via any UPI app.")}
+        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Two ways to collect payment — use either or both:<br/><b>1. UPI ID</b> — direct to your phone (good while starting out; this is temporary).<br/><b>2. Payment Gateway link</b> — once your current account &amp; gateway (Razorpay etc.) are ready, paste the link below and it takes over. To stop UPI later, clear the UPI ID field and Save.</div>
+        {field("UPI ID","upiId","yourname@oksbi","Direct UPI collection. Clear this field + Save to remove it once your gateway is live.")}
         {field("UPI Display Name","upiName","Nemo Aqua Store")}
-        {field("Razorpay / Payment Link","razorpayLink","https://rzp.io/i/xxxx","Optional — paste a Razorpay Payment Link or Page URL for card/netbanking.")}
+        {field("Payment Gateway / Razorpay Link","razorpayLink","https://rzp.io/i/xxxx","Paste your Razorpay Payment Link / Page (or any gateway checkout URL) for card, netbanking & UPI. This is the long-term option once you have a current account.")}
       </div>
 
       {/* Drive removed — photos are uploaded directly from device in the product form */}
@@ -5179,6 +5242,20 @@ function AboutPage({nav,settings={}}){
         <Section icon="🛡️" title="Live Arrival Guarantee" body={s.liveArrivalGuarantee} accent="#dcfce7"/>
         <Section icon="↩️" title="Returns & DOA Policy" body={s.returnPolicy} accent="#fef3c7"/>
         <Section icon="💧" title="Acclimatization Guide" body={s.acclimatizationTips} accent="#e0f2fe"/>
+        <Section icon="📜" title="Terms & Conditions" body={s.termsPolicy} accent="#ede9fe"/>
+        <Section icon="🔒" title="Privacy Policy" body={s.privacyPolicy} accent="#f1f5f9"/>
+        {/* Business information — legitimacy, no personal/PAN data */}
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px",marginTop:6}}>
+          <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Business Information</div>
+          <div style={{fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>{s.legalName||(STORE_NAME+" Aqua Store")}</div>
+          {s.legalEntity&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>{s.legalEntity}</div>}
+          {s.legalActivity&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>{s.legalActivity}</div>}
+          {(s.legalAddress||s.legalCity)&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6,marginTop:4}}>📍 {s.legalAddress||s.legalCity}</div>}
+          {s.gstin&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>GSTIN: {s.gstin}</div>}
+          {s.orderEmail&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>✉ {s.orderEmail}</div>}
+          {s.ownerWhatsapp&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>💬 +{s.ownerWhatsapp.replace(/\D/g,"")}</div>}
+          <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.6,marginTop:8,fontStyle:"italic"}}>Jurisdiction: {s.jurisdiction||"India"}. © {new Date().getFullYear()} {s.legalName||STORE_NAME}. All rights reserved.</div>
+        </div>
         <div style={{textAlign:"center",marginTop:18}}>
           {s.ownerWhatsapp&&(
             <a href={`https://wa.me/${s.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
