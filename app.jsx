@@ -789,39 +789,69 @@ function sendCustomerEmail(order, settings, event){
   }catch(e){ console.error("[Email] threw:", e); }
 }
 
-/* Email an order copy to the owner via FormSubmit (free, no backend). Fire-and-forget. */
-function sendOrderEmail(order, email){
-  if(!email) return;
+/* Email an order copy to the OWNER via EmailJS (reuses the customer template). Fire-and-forget. */
+function sendOrderEmail(order, email, settings){
+  const s=settings||{};
+  if(!email || !s.emailjsService || !s.emailjsTemplate || !s.emailjsKey) return;
+  if(typeof emailjs==="undefined") return;
   const items=order.items.map(i=>`${i.name}${i.variantLabel?" ("+i.variantLabel+")":""} x${i.qty} = Rs.${i.price*i.qty}`).join("\n");
-  const body=`New order ${order.orderNo||order.id}\n\nCustomer: ${order.address?.name} (${order.address?.phone})\nAddress: ${order.address?.address}, ${order.address?.city} ${order.address?.pincode}${order.shippingZoneLabel?"\nShipping Zone: "+order.shippingZoneLabel:""}\nPayment: Prepaid (UPI) — Status: ${order.status} — Txn: ${order.txnId||"awaiting"}\n\nItems:\n${items}\n\nSubtotal: Rs.${order.total}\nShipping: Rs.${order.fee||0}${order.specialDelivery?" (Special Delivery)":""}${order.liveGuarantee?"\nLive Guarantee: Rs."+order.liveGuaranteeFee:""}${order.coupon?"\nCoupon ("+order.coupon+"): -Rs."+order.couponDiscount:""}\nTotal: Rs.${order.amountDue??(order.total+order.fee)}\n${order.summary?"\nCustomer note: "+order.summary:""}`;
-  try{
-    fetch("https://formsubmit.co/ajax/"+encodeURIComponent(email),{
-      method:"POST",
-      headers:{"Content-Type":"application/json","Accept":"application/json"},
-      body:JSON.stringify({_subject:`🐠 New Order ${order.orderNo||""} — ${STORE_NAME}`, Order:body})
-    }).catch(()=>{});
-  }catch(e){}
+  const grand=order.amountDue??(order.total+order.fee);
+  const addr=order.address||{};
+  const params={
+    to_email: email,
+    to_name: "Admin",
+    email_subject: `🐠 NEW ORDER ${order.orderNo||""} — ${STORE_NAME}`,
+    email_headline: `New order from ${addr.name||"a customer"} — please verify payment.`,
+    order_no: order.orderNo || order.id,
+    order_status: order.status||"",
+    order_items: items,
+    order_subtotal: "Rs."+order.total,
+    order_shipping: "Rs."+(order.fee||0),
+    order_total: "Rs."+grand,
+    order_total_amount: grand,
+    payment_status: order.paymentStatus||order.status||"",
+    tracking_number: order.txnId?("Txn: "+order.txnId):"awaiting payment",
+    ship_name: addr.name||"",
+    ship_phone: addr.phone||"",
+    ship_address: `${addr.address||""}, ${addr.city||""} ${addr.pincode||""}`.trim() + (order.shippingZoneLabel?` (${order.shippingZoneLabel})`:""),
+    care_reminder: order.summary?("Customer note: "+order.summary):"",
+    store_name: STORE_NAME,
+    store_whatsapp: s.ownerWhatsapp||BUSINESS_WA,
+  };
+  try{ emailjs.send(s.emailjsService, s.emailjsTemplate, params, {publicKey:s.emailjsKey}).catch(()=>{}); }catch(e){}
 }
 
 /* ── Bill / Invoice generator ──────────────────────────────────────────────
    Returns an HTML string that can be opened in a new tab for printing or sharing. */
-/* Email a one-time 6-digit security code to the admin email via FormSubmit (free, no backend).
-   Confirms sensitive changes (WhatsApp number / admin password). Returns true on a confirmed send. */
-async function sendOtpEmail(email, code){
-  if(!email) return false;
+/* Email a one-time 6-digit security code to the admin email via EmailJS (reuses the customer template).
+   Confirms sensitive changes (WhatsApp / email / admin password). Returns true on a confirmed send. */
+async function sendOtpEmail(email, code, settings){
+  const s=settings||{};
+  if(!email || !s.emailjsService || !s.emailjsTemplate || !s.emailjsKey) return false;
+  if(typeof emailjs==="undefined") return false;
+  const params={
+    to_email: email,
+    to_name: "Admin",
+    email_subject: `${STORE_NAME} admin security code: ${code}`,
+    email_headline: `Your security code is ${code}`,
+    order_no: code,
+    order_status: "Security verification",
+    order_items: `Your one-time code: ${code}`,
+    order_subtotal: "",
+    order_shipping: "",
+    order_total: "",
+    payment_status: "",
+    tracking_number: "",
+    ship_name: "",
+    ship_phone: "",
+    ship_address: "",
+    care_reminder: "Enter this code in the app to confirm a change to your WhatsApp number, email, or admin password. It expires in 5 minutes. If you did not request this, ignore this email and change your admin password.",
+    store_name: STORE_NAME,
+    store_whatsapp: s.ownerWhatsapp||BUSINESS_WA,
+  };
   try{
-    const res=await fetch("https://formsubmit.co/ajax/"+encodeURIComponent(email),{
-      method:"POST",
-      headers:{"Content-Type":"application/json","Accept":"application/json"},
-      body:JSON.stringify({
-        _subject:STORE_NAME+" Admin security code: "+code,
-        Security_Code:code,
-        Note:"Enter this code in the app to confirm a change to your WhatsApp number or admin password. It expires in 5 minutes. If you did not request this, ignore this email and consider changing your admin password."
-      })
-    });
-    let ok=res.ok;
-    try{ const j=await res.json(); if(j && (j.success===true||j.success==="true")) ok=true; }catch(_){}
-    return ok;
+    await emailjs.send(s.emailjsService, s.emailjsTemplate, params, {publicKey:s.emailjsKey});
+    return true;
   }catch(e){ return false; }
 }
 /* Mask an email for display: jo***@gmail.com */
@@ -2810,8 +2840,8 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       const ptsUsed=Math.ceil(loyaltyDiscount/loyaltyVal);
       redeemPoints(uid2, ptsUsed, id);
     }
-    // Email a copy to the owner (free, via FormSubmit) if configured
-    sendOrderEmail(order, settings.orderEmail||BUSINESS_EMAIL);
+    // Email a copy to the owner (via EmailJS) if configured
+    sendOrderEmail(order, settings.orderEmail||BUSINESS_EMAIL, settings);
     sendCustomerEmail(order, settings);
     // Claim the friend's referral code so it can never be reused
     if(refApplied&&refInput.trim()) claimReferral(refInput.trim(), userKey(user));
@@ -4411,14 +4441,14 @@ function SettingsPanel({settings,onSave}){
     setOtpCode(code); setOtpExp(Date.now()+5*60*1000); setOtpEmail(email);
     setOtpInput(""); setOtpMsg(""); setOtpTries(0); setPendingSave(nf);
     setOtpOpen(true); setOtpBusy(true);
-    const ok=await sendOtpEmail(email, code);
+    const ok=await sendOtpEmail(email, code, settings);
     setOtpBusy(false);
-    setOtpMsg(ok ? ("✓ Code sent to "+maskEmail(email)) : ("⚠ Couldn't confirm the send. Check "+maskEmail(email)+" (and that FormSubmit is activated for it), or tap Resend."));
+    setOtpMsg(ok ? ("✓ Code sent to "+maskEmail(email)) : ("⚠ Couldn't send. Check your EmailJS keys (Settings) and that "+maskEmail(email)+" is correct, or tap Resend."));
   };
   const resendOtp=async()=>{
     const code=genCode(); setOtpCode(code); setOtpExp(Date.now()+5*60*1000);
     setOtpTries(0); setOtpInput(""); setOtpBusy(true); setOtpMsg("");
-    const ok=await sendOtpEmail(otpEmail, code); setOtpBusy(false);
+    const ok=await sendOtpEmail(otpEmail, code, settings); setOtpBusy(false);
     setOtpMsg(ok ? ("✓ New code sent to "+maskEmail(otpEmail)) : "⚠ Couldn't confirm the send. Try again.");
   };
   const verifyOtp=()=>{
@@ -4503,7 +4533,7 @@ function SettingsPanel({settings,onSave}){
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Shown at the bottom of the home page for customers.</div>
         {field("Store Address","storeAddress","e.g. 12 Lake View Rd, Chennai 600001")}
         {field("Opening Hours (optional)","storeHours","e.g. Mon–Sat, 10am–8pm")}
-        {field("Order Notification Email (optional)","orderEmail","you@example.com","Get an email for each new order. First order triggers a one-time FormSubmit confirmation email — click it once to activate.","email")}
+        {field("Order Notification Email (optional)","orderEmail","you@example.com","Where new-order alerts and your admin security codes are sent. Delivered via EmailJS (set the keys below). Changing this needs an email security code.","email")}
       </div>
 
       {/* Customer confirmation emails (EmailJS) */}
@@ -5665,8 +5695,8 @@ function NemoStore(){
     const updated={...order,...pay,status:"Payment Review",paymentStatus:"Submitted",paidAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
-    // Notify owner (email copy) + WhatsApp handled in the panel optionally
-    sendOrderEmail(updated, settings.orderEmail||BUSINESS_EMAIL);
+    // Notify owner (email copy via EmailJS) + WhatsApp handled in the panel optionally
+    sendOrderEmail(updated, settings.orderEmail||BUSINESS_EMAIL, settings);
     return updated;
   };
 
