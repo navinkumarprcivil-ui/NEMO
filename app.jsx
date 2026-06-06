@@ -5234,24 +5234,30 @@ function NemoStore(){
     requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0,behavior:"auto"}));
   };
 
-  // Phone Back button: from any inner page → go Home; from Home → warn before leaving.
+  // Phone Back button: from any inner page → go Home; on Home → "press back again to exit".
+  const exitArmRef = useRef(0);
   useEffect(()=>{
     // Seed one history entry so the FIRST back press is captured (even on a fresh Home load).
     try{ history.pushState({nemo:1},""); }catch(e){}
     const onPop=()=>{
       if(pageRef.current!=="home"){
+        // Any inner page → return to Home instead of exiting
         setReviewIntent(null);
         pageRef.current="home";
         setPage("home");
         try{ history.pushState({nemo:1},""); }catch(e){}   // re-arm the trap
         requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0,behavior:"auto"}));
       } else {
-        // On Home — confirm before actually leaving the app
-        if(window.confirm("Leave "+STORE_NAME+" Aqua Store?")){
+        // On Home: classic mobile "press back again to exit" (window.confirm is blocked
+        // inside popstate on most phones, so we use a toast warning instead).
+        const now=Date.now();
+        if(now - exitArmRef.current < 2500){
           window.removeEventListener("popstate",onPop);
-          history.back();   // allow the real exit
+          history.back();           // second press within 2.5s → actually leave
         } else {
-          try{ history.pushState({nemo:1},""); }catch(e){}  // stay put
+          exitArmRef.current = now;
+          try{ history.pushState({nemo:1},""); }catch(e){}   // stay in the app
+          showToast("Press back again to exit "+STORE_NAME,"error");
         }
       }
     };
