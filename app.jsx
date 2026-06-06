@@ -3403,22 +3403,28 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
                     <button className="press" onClick={()=>removeVariant(v.id)} title="Remove"
                       style={{flexShrink:0,width:30,height:30,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
                   </div>
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:4,flex:1,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}}>
-                      <span style={{fontSize:13,color:C.textSub,fontWeight:700}}>₹</span>
-                      <input type="number" min="0" value={v.price} onChange={e=>setVar(v.id,"price",e.target.value)} placeholder="0"
-                        style={{flex:1,border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                    <div>
+                      <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>PRICE</div>
+                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}}>
+                        <span style={{fontSize:13,color:C.textSub,fontWeight:700}}>₹</span>
+                        <input type="number" min="0" value={v.price} onChange={e=>setVar(v.id,"price",e.target.value)} placeholder="0"
+                          style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
+                      </div>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",gap:4,width:104,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="Packing weight for this variant (kg) — used for shipping">
-                      <input type="number" step="0.05" min="0" value={v.packagingWeight??""} onChange={e=>setVar(v.id,"packagingWeight",e.target.value===''?null:Number(e.target.value))} placeholder="wt"
-                        style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:"'Nunito',sans-serif"}}/>
-                      <span style={{fontSize:11,color:C.textSub,fontWeight:700,whiteSpace:"nowrap"}}>kg</span>
+                    <div>
+                      <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>PACKING WEIGHT</div>
+                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="Packing weight for this type (kg) — used for shipping">
+                        <input type="number" step="0.05" min="0" value={v.packagingWeight??""} onChange={e=>setVar(v.id,"packagingWeight",e.target.value===''?null:Number(e.target.value))} placeholder="0.20"
+                          style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
+                        <span style={{fontSize:12,color:C.textSub,fontWeight:700,whiteSpace:"nowrap"}}>kg</span>
+                      </div>
                     </div>
-                    <button className="press" onClick={()=>setVar(v.id,"soldOut",!v.soldOut)}
-                      style={{flexShrink:0,padding:"8px 12px",borderRadius:9,border:`1.5px solid ${v.soldOut?C.danger:C.border}`,background:v.soldOut?"#fee2e2":"transparent",color:v.soldOut?C.danger:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
-                      {v.soldOut?"Sold out":"In stock"}
-                    </button>
                   </div>
+                  <button className="press" onClick={()=>setVar(v.id,"soldOut",!v.soldOut)}
+                    style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${v.soldOut?C.danger:C.border}`,background:v.soldOut?"#fee2e2":"transparent",color:v.soldOut?C.danger:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+                    {v.soldOut?"Sold out":"In stock"}
+                  </button>
                 </div>
               ))}
             </div>
@@ -5229,7 +5235,7 @@ function NemoStore(){
     requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0,behavior:"auto"}));
   };
 
-  // Phone Back button: from any inner page → go Home; from Home → allow normal exit.
+  // Phone Back button: from any inner page → go Home; from Home → warn before leaving.
   useEffect(()=>{
     const onPop=()=>{
       if(pageRef.current!=="home"){
@@ -5238,8 +5244,15 @@ function NemoStore(){
         setPage("home");
         try{ history.pushState({nemo:1},""); }catch(e){}   // re-arm the trap
         requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0,behavior:"auto"}));
+      } else {
+        // On Home — confirm before actually leaving the app
+        if(window.confirm("Leave "+STORE_NAME+" Aqua Store?")){
+          window.removeEventListener("popstate",onPop);
+          history.back();   // allow the real exit
+        } else {
+          try{ history.pushState({nemo:1},""); }catch(e){}  // stay put
+        }
       }
-      // already Home — let the browser go back / exit naturally
     };
     window.addEventListener("popstate",onPop);
     return()=>window.removeEventListener("popstate",onPop);

@@ -1,5 +1,5 @@
 /* Nemo Aqua Store — service worker (offline shell + faster reloads) */
-const CACHE = 'nemo-v3';
+const CACHE = 'nemo-v4';
 const ASSETS = ['./index.html', './app.jsx', './assets/nemo-logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
