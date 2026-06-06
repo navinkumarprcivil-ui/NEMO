@@ -399,7 +399,9 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   liveGuaranteePrice: 150,
   freeDeliveryThreshold: 0,
   coupons: [],
+  showCouponField: true,   // master switch: show the coupon entry box at checkout
   /* First-order coupon */
+  welcomeCouponEnabled: true,
   welcomeCoupon: "WELCOME100",
   welcomeCouponAmount: 100,
   welcomeCouponMinOrder: 500,
@@ -411,7 +413,9 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   loyaltyRedeemMin: 100,        // minimum points to redeem
   loyaltyRedeemValue: 1,        // ₹ value per point
   /* Referral */
+  referralEnabled: true,
   referralDiscount: 50,
+  referralMinOrder: 0,    // min order value before a referral code is issued (0 = always)
   /* Customer tank showcase */
   showcaseEnabled: true,
   /* Which customer emails to auto-send (saves EmailJS quota — rest you can do on WhatsApp) */
@@ -425,6 +429,49 @@ async function loadSettings(){
   const r=await dbGet("nemo-settings"); return r?normalizeSettings({...DEFAULT_SETTINGS,...JSON.parse(r)}):{...DEFAULT_SETTINGS};
 }
 async function saveSettings(s){ await dbSet("nemo-settings",JSON.stringify(s)); if(FB_OK) await fbSetObj("settings",s); }
+
+/* ── Referral codes (6-digit, one-time-use, tracked in Firebase) ── */
+function genRefCode(){ return String(Math.floor(100000 + Math.random()*900000)); } // 6 digits
+/* Get this customer's stable referral code, creating it once if needed. */
+async function getMyReferralCode(uid){
+  if(!uid) return null;
+  if(FB_OK){
+    try{
+      const ref=FB_DB.ref("userrefs/"+uid);
+      const snap=await ref.get();
+      if(snap&&snap.exists()) return snap.val();
+      // create a fresh, unused code
+      let code=genRefCode();
+      await ref.set(code);
+      await FB_DB.ref("referrals/"+code).set({owner:uid,used:false,createdAt:Date.now()});
+      return code;
+    }catch(e){ return null; }
+  }
+  // offline fallback — local only
+  let code=localStorage.getItem("nemo-myref-"+uid);
+  if(!code){ code=genRefCode(); localStorage.setItem("nemo-myref-"+uid,code); }
+  return code;
+}
+/* Validate a referral code at checkout. Returns {ok, msg}. */
+async function validateReferral(code, uid){
+  const c=(code||"").trim();
+  if(!/^\d{6}$/.test(c)) return {ok:false, msg:"Referral codes are 6 digits"};
+  if(!FB_OK) return {ok:false, msg:"Referral check unavailable right now"};
+  try{
+    const snap=await FB_DB.ref("referrals/"+c).get();
+    if(!snap||!snap.exists()) return {ok:false, msg:"Invalid referral code"};
+    const r=snap.val();
+    if(r.owner===uid) return {ok:false, msg:"You can't use your own referral code"};
+    if(r.used) return {ok:false, msg:"This referral code has already been used"};
+    return {ok:true};
+  }catch(e){ return {ok:false, msg:"Couldn't verify code — try again"}; }
+}
+/* Mark a referral code as claimed so it can never be reused. */
+async function claimReferral(code, uid){
+  const c=(code||"").trim();
+  if(!FB_OK || !/^\d{6}$/.test(c)) return;
+  try{ await FB_DB.ref("referrals/"+c).update({used:true, claimedBy:uid||"", claimedAt:Date.now()}); }catch(e){}
+}
 
 /* Auth — Google (Firebase) with demo fallback. User is {name,email,phone,uid,method,loginAt} */
 async function loadUser(){ const r=await dbGet("nemo-user"); return r?JSON.parse(r):null; }
@@ -730,7 +777,16 @@ function sendCustomerEmail(order, settings, event){
     store_name: STORE_NAME,
     store_whatsapp: s.ownerWhatsapp||BUSINESS_WA,
   };
-  try{ emailjs.send(s.emailjsService, s.emailjsTemplate, params, {publicKey:s.emailjsKey}).catch(()=>{}); }catch(e){}
+  // Surface failures to the console so the admin can diagnose (EmailJS errors are otherwise silent)
+  if(!s.emailjsService || !s.emailjsTemplate || !s.emailjsKey){
+    console.warn("[Email] Skipped — EmailJS keys not set in Admin → Settings.");
+    return;
+  }
+  try{
+    emailjs.send(s.emailjsService, s.emailjsTemplate, params, {publicKey:s.emailjsKey})
+      .then(()=>console.log("[Email] Sent '"+ev+"' to "+to))
+      .catch(err=>console.error("[Email] FAILED:", err && (err.text||err.message||err)));
+  }catch(e){ console.error("[Email] threw:", e); }
 }
 
 /* Email an order copy to the owner via FormSubmit (free, no backend). Fire-and-forget. */
@@ -804,13 +860,13 @@ function generateBillHTML(order, settings){
   const billAddrLine=`${billingAddr.address||""}, ${billingAddr.city||""} — ${billingAddr.pincode||""}`;
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Invoice ${o.orderNo||orderId(o.id||"")}</title>
-<style>*{box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;background:#eef9fa;margin:0;padding:16px}.page{max-width:560px;margin:0 auto;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(11,110,114,.15)}.hdr{background:linear-gradient(135deg,#0b6e72,#12b5bc);padding:24px;color:#fff}.hdr h1{margin:0 0 2px;font-size:22px;font-weight:800}.hdr .sub{font-size:12px;opacity:.85;margin-top:2px}.badge{display:inline-block;background:rgba(255,255,255,.2);border-radius:20px;padding:4px 14px;font-size:11px;font-weight:700;margin-top:8px}.body{padding:20px 22px 28px}.r2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}.box{background:#f5fdfe;border:1px solid #cce8ea;border-radius:12px;padding:12px 14px}.box h4{margin:0 0 6px;font-size:10px;font-weight:800;color:#0b6e72;text-transform:uppercase;letter-spacing:.8px}.box p{margin:0 0 3px;font-size:12.5px;color:#0a2426;font-weight:600;line-height:1.5}.sub{font-size:11px;color:#5a8085;font-weight:400}table{width:100%;border-collapse:collapse}th{background:#0b6e72;color:#fff;padding:9px 10px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.5px}th:last-child{text-align:right}.footer{margin-top:20px;padding-top:14px;border-top:1px dashed #cce8ea;font-size:11.5px;color:#5a8085;text-align:center;line-height:1.8}@media print{body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0}.np{display:none!important}}</style></head>
+<style>*{box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;background:#eef9fa;margin:0;padding:16px}.page{max-width:560px;margin:0 auto;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(11,110,114,.15)}.hdr{background:linear-gradient(135deg,#0b6e72,#12b5bc);padding:24px;color:#fff}.hdr h1{margin:0 0 2px;font-size:22px;font-weight:800}.hdr .sub{font-size:12px;opacity:.92;margin-top:2px;color:#ffffff}.badge{display:inline-block;background:rgba(255,255,255,.2);border-radius:20px;padding:4px 14px;font-size:11px;font-weight:700;margin-top:8px}.body{padding:20px 22px 28px}.r2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}.box{background:#f5fdfe;border:1px solid #cce8ea;border-radius:12px;padding:12px 14px}.box h4{margin:0 0 6px;font-size:10px;font-weight:800;color:#0b6e72;text-transform:uppercase;letter-spacing:.8px}.box p{margin:0 0 3px;font-size:12.5px;color:#0a2426;font-weight:600;line-height:1.5}.sub{font-size:11px;color:#5a8085;font-weight:400}table{width:100%;border-collapse:collapse}th{background:#0b6e72;color:#fff;padding:9px 10px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.5px}th:last-child{text-align:right}.footer{margin-top:20px;padding-top:14px;border-top:1px dashed #cce8ea;font-size:11.5px;color:#5a8085;text-align:center;line-height:1.8}@media print{body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0}.np{display:none!important}}</style></head>
 <body><div class="page">
 <div class="hdr">
   <div style="font-size:11px;opacity:.7;letter-spacing:1px">INVOICE / BILL</div>
   <h1>${storeName}</h1>
-  ${storeAddr?`<div class="sub">📍 ${storeAddr}</div>`:""}
-  <div class="sub">📞 ${storeWA}</div>
+  ${storeAddr?`<div style="font-size:12px;color:#ffffff;opacity:.95;margin-top:4px">📍 ${storeAddr}</div>`:""}
+  <div style="font-size:12px;color:#ffffff;opacity:.95;margin-top:2px">📞 ${storeWA}</div>
   <div><span class="badge">${o.orderNo||orderId(o.id||"")}</span></div>
   <div style="font-size:11px;opacity:.75;margin-top:6px">📅 ${dateStr}</div>
 </div>
@@ -1075,6 +1131,7 @@ function WelcomeBanner({settings,orders=[]}){
   const amt=settings.welcomeCouponAmount||100;
   const min=settings.welcomeCouponMinOrder||500;
   const hasRealOrder=orders.some(o=>!["Cancelled"].includes(o.status));
+  if(settings.welcomeCouponEnabled===false)return null;
   if(hasRealOrder||!code)return null;
   return(
     <div style={{background:"linear-gradient(135deg,#ff5a40 0%,#ff8c3b 100%)",borderRadius:18,padding:"14px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:12,boxShadow:"0 6px 24px rgba(255,90,64,.25)"}}>
@@ -1804,6 +1861,12 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
       <span style={{fontSize:16,lineHeight:1,color:isFav?C.coral:"#9ca3af"}}>{isFav?"♥":"♡"}</span>
     </button>
   ) : null;
+  const ShareBtn = (
+    <button className="press" onClick={e=>{e.stopPropagation();shareProduct(p);}} aria-label="Share"
+      style={{position:"absolute",top:8,right:onFav?44:8,width:30,height:30,borderRadius:"50%",border:"none",background:"rgba(255,255,255,.9)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,.18)"}}>
+      <span style={{fontSize:14,lineHeight:1}}>🔗</span>
+    </button>
+  );
   return(
     <div className="lift" onClick={()=>onPress(p)}
       style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`,cursor:"pointer"}}>
@@ -1814,6 +1877,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
         {p.tag&&<span style={{position:"absolute",top:8,left:8,background:"rgba(0,0,0,.32)",color:"white",fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,backdropFilter:"blur(4px)"}}>{p.tag}</span>}
         {onSale&&!soon&&<span style={{position:"absolute",bottom:8,left:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:20}}>-{p.discountPct}%</span>}
         {Heart}
+        {ShareBtn}
         {soon&&<div style={{position:"absolute",inset:0,background:"rgba(8,54,64,.55)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"white",fontSize:12,fontWeight:800,letterSpacing:1,background:"rgba(0,0,0,.3)",padding:"4px 12px",borderRadius:20}}>COMING SOON</span></div>}
         {!soon&&oos&&<div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"white",fontSize:12,fontWeight:700}}>Sold Out</span></div>}
       </div>
@@ -2126,7 +2190,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
 }
 
 /* ═══════════════════ DETAIL PAGE ═══════════════════ */
-function DetailPage({product:p,media={images:[],video:null},addToCart,nav,prevPage="shop",user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
+function DetailPage({product:p,media={images:[],video:null},addToCart,cart=[],nav,prevPage="shop",user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
   const [qty,setQty]           = useState(1);
   const [selVarId,setSelVarId] = useState(null);
   const [tab,setTab]           = useState("desc");
@@ -2164,6 +2228,9 @@ function DetailPage({product:p,media={images:[],video:null},addToCart,nav,prevPa
   const baseEff = effectivePrice(p);
   const unitPrice = selVar ? variantEffPrice(p, selVar) : baseEff;
   const maxQty = Math.max(1, Math.min(stk, MAX_PER_ORDER));
+  // How many of THIS product + selected variant are already in the cart (same key format as addToCart)
+  const cartKey = p.id + (selVar?("|"+selVar.id):"");
+  const inCart = (cart.find(i=>i.key===cartKey)?.qty) || 0;
   const canReview = user && hasPurchased(orders, user, p.id);
 
   // Live rating from real reviews only
@@ -2370,15 +2437,26 @@ function DetailPage({product:p,media={images:[],video:null},addToCart,nav,prevPa
             style={{flex:1,background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:14,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
             {isInterested?"✓ We'll notify you when it's in!":"🔔 Coming Soon — I'm Interested"}
           </button>
-        ) : (<>
+        ) : inCart>0 ? (<>
+          {/* Already in cart — the stepper edits the cart quantity directly; no duplicate adds */}
+          <div style={{display:"flex",alignItems:"center",gap:14,background:C.bg,borderRadius:12,padding:"8px 14px",border:`1.5px solid ${C.border}`}}>
+            <button className="press" onClick={()=>addToCart(p,-1,selVar)} style={{background:"none",border:"none",fontSize:20,color:C.primary,fontWeight:700,lineHeight:1}}>−</button>
+            <span style={{fontSize:16,fontWeight:700,color:C.text,minWidth:18,textAlign:"center"}}>{inCart}</span>
+            <button className="press" onClick={()=>{if(inCart<maxQty)addToCart(p,1,selVar);}} disabled={inCart>=maxQty} style={{background:"none",border:"none",fontSize:20,color:inCart>=maxQty?C.textSub:C.primary,fontWeight:700,lineHeight:1,opacity:inCart>=maxQty?.5:1}}>+</button>
+          </div>
+          <button className="press" onClick={()=>nav("cart")}
+            style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:14,padding:"14px 12px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+            ✓ In Cart · View Cart →
+          </button>
+        </>) : (<>
         <div style={{display:"flex",alignItems:"center",gap:14,background:C.bg,borderRadius:12,padding:"8px 14px",border:`1.5px solid ${C.border}`}}>
           <button className="press" onClick={()=>setQty(q=>Math.max(1,q-1))} style={{background:"none",border:"none",fontSize:20,color:C.primary,fontWeight:700,lineHeight:1}}>−</button>
           <span style={{fontSize:16,fontWeight:700,color:C.text,minWidth:18,textAlign:"center"}}>{qty}</span>
           <button className="press" onClick={()=>setQty(q=>Math.min(maxQty,q+1))} disabled={qty>=maxQty} style={{background:"none",border:"none",fontSize:20,color:qty>=maxQty?C.textSub:C.primary,fontWeight:700,lineHeight:1,opacity:qty>=maxQty?.5:1}}>+</button>
         </div>
-        <button className="press" onClick={()=>{if(!oos){addToCart(p,qty,selVar);setJustAdded(true);setTimeout(()=>setJustAdded(false),1600);}}} disabled={oos}
-          style={{flex:1,background:oos?"#9ca3af":justAdded?C.success:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px 12px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",transition:"background .25s"}}>
-          {oos?"Out of Stock":justAdded?"✓ Added to Cart":`Add to Cart · ₹${unitPrice*qty}`}
+        <button className="press" onClick={()=>{if(!oos){addToCart(p,qty,selVar);}}} disabled={oos}
+          style={{flex:1,background:oos?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"14px 12px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",transition:"background .25s"}}>
+          {oos?"Out of Stock":`Add to Cart · ₹${unitPrice*qty}`}
         </button>
         </>)}
       </div>
@@ -2622,11 +2700,26 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   const [submitted,setSubmitted]=useState(false);
   const [sentWA,setSentWA]=useState(false);
   const [referralCopied,setReferralCopied]=useState(false);
+  const [myRefCode,setMyRefCode]=useState(null);
+  // Fetch this customer's real 6-digit referral code once an order is placed & meets the min-order threshold
+  useEffect(()=>{
+    if(!placed||!user) return;
+    if(settings.referralEnabled===false){ setMyRefCode(null); return; }
+    const orderVal=placed.amountDue??(placed.total+placed.fee);
+    const minOrder=Number(settings.referralMinOrder||0);
+    if(orderVal < minOrder){ setMyRefCode(null); return; }
+    let alive=true;
+    getMyReferralCode(user.uid).then(code=>{ if(alive) setMyRefCode(code); });
+    return ()=>{alive=false;};
+  },[placed,user,settings.referralMinOrder]);
   const [specialDelivery,setSpecialDelivery]=useState(false);
   const [liveGuarantee,setLiveGuarantee]=useState(false);
   const [couponCode,setCouponCode]=useState("");
   const [couponApplied,setCouponApplied]=useState(null);
   const [couponMsg,setCouponMsg]=useState({text:"",ok:false});
+  const [refInput,setRefInput]=useState("");
+  const [refApplied,setRefApplied]=useState(false);
+  const [refMsg,setRefMsg]=useState({text:"",ok:false});
   const [useSameBilling,setUseSameBilling]=useState(true);
   const [billing,setBilling]=useState({...BLANK_ADDR});
   const [showRates,setShowRates]=useState(false);
@@ -2647,8 +2740,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   const shippingFee=calcShipping(cart,zone,specialDelivery,settings);
   const lgPrice=hasLiveFish&&liveGuarantee?Number(settings.liveGuaranteePrice||150):0;
   const couponDiscount=couponApplied?Math.min(couponApplied.type==="percent"?Math.round(total*couponApplied.discount/100):Number(couponApplied.discount||0),total+lgPrice):0;
+  const refDiscount=refApplied?Math.min(Number(settings.referralDiscount||50),Math.max(0,total+lgPrice-couponDiscount)):0;
   const fee=shippingFee??0;
-  const grand=Math.max(0,total+fee+lgPrice-couponDiscount-loyaltyDiscount);
+  const grand=Math.max(0,total+fee+lgPrice-couponDiscount-refDiscount-loyaltyDiscount);
   const f=(k,v)=>setAddr(a=>({...a,[k]:v}));
   const fb=(k,v)=>setBilling(a=>({...a,[k]:v}));
   const anySuggestSpecial=cart.some(i=>i.suggestSpecialDelivery);
@@ -2658,6 +2752,14 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     setCouponApplied(r.coupon);
     const saved=r.coupon.type==="percent"?Math.round(total*r.coupon.discount/100):Number(r.coupon.discount||0);
     setCouponMsg({text:`✓ Coupon applied — saves ₹${saved}!`,ok:true});
+  };
+
+  const applyReferral=async()=>{
+    if(settings.referralEnabled===false){ setRefMsg({text:"Referral program is currently off",ok:false}); return; }
+    const r=await validateReferral(refInput,user?.uid);
+    if(!r.ok){ setRefMsg({text:r.msg,ok:false}); setRefApplied(false); return; }
+    setRefApplied(true);
+    setRefMsg({text:`✓ Referral applied — ₹${Number(settings.referralDiscount||50)} off!`,ok:true});
   };
 
   const submitPaymentHere=async(order,pay)=>{
@@ -2688,6 +2790,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       specialDelivery,specialDeliveryFee:specialDelivery?Number(settings.specialDeliveryPrice||0):0,
       liveGuarantee:hasLiveFish&&liveGuarantee,liveGuaranteeFee:lgPrice,
       coupon:couponApplied?couponCode.trim():"",couponDiscount,
+      referralCode:refApplied?refInput.trim():"", referralDiscount:refDiscount,
       loyaltyDiscount:loyaltyRedeemed?loyaltyDiscount:0,
       status:"Awaiting Payment",trackingNumber:"",
       paymentMethod:"online",
@@ -2710,6 +2813,8 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     // Email a copy to the owner (free, via FormSubmit) if configured
     sendOrderEmail(order, settings.orderEmail||BUSINESS_EMAIL);
     sendCustomerEmail(order, settings);
+    // Claim the friend's referral code so it can never be reused
+    if(refApplied&&refInput.trim()) claimReferral(refInput.trim(), userKey(user));
     // Root app handles state + storage + stock decrement
     onOrderPlaced(order);
     setPlaced(order);
@@ -2766,11 +2871,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               </div>
             ):null;
           })()}
-          {/* Referral hint */}
-          {placed&&(()=>{
-            const phone=(placed.address?.phone||user?.phone||"xxxx");
-            const last4=normalizePhone(phone).slice(-4)||"xxxx";
-            const refCode=`NEMO-${last4}`;
+          {/* Referral hint — uses the customer's real 6-digit one-time code; hidden if order is below the admin's min */}
+          {placed&&myRefCode&&(()=>{
+            const refCode=myRefCode;
             const refAmt=settings.referralDiscount||50;
             return(
               <div style={{background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:16,padding:"14px 16px",marginBottom:14,width:"100%",maxWidth:340,textAlign:"left",boxShadow:"0 6px 20px rgba(124,58,237,.25)"}}>
@@ -2789,19 +2892,6 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               </div>
             );
           })()}
-          {/* Optional WhatsApp — only after payment submitted */}
-          {placed&&(
-            <button className="press" onClick={()=>{openWA((settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,""),waOrderMsg(placed));setSentWA(true);}}
-              style={{width:"100%",maxWidth:340,background:sentWA?"#dcfce7":"#25D366",color:sentWA?"#15803d":"white",border:"none",borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              💬 {sentWA?"✓ Sent on WhatsApp":"Send order details on WhatsApp (optional)"}
-            </button>
-          )}
-          {supWA && settings.supporterEnabled && placed && (
-            <button className="press" onClick={()=>openWA(supWA,waOrderMsg(placed))}
-              style={{width:"100%",maxWidth:340,background:"#25D366",color:"white",border:"none",borderRadius:14,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              💬 Also notify support team
-            </button>
-          )}
           <div style={{display:"flex",gap:10,width:"100%",maxWidth:340}}>
             <button className="press" onClick={()=>nav("home")}
               style={{flex:1,background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Home</button>
@@ -2934,11 +3024,12 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <LoyaltyWidget points={loyaltyPts} settings={settings} redeemApplied={loyaltyRedeemed} onRedeem={()=>setLoyaltyRedeemed(true)}/>
           )}
           {/* Coupon code */}
+          {settings.showCouponField!==false && (
           <div style={{marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>🎟 Coupon Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
-            {/* Show available coupon hints */}
+            {/* Show available coupon hints — secret coupons are never listed here */}
             {(()=>{
-              const active=(settings.coupons||[]).filter(c=>c.active!==false&&c.code);
+              const active=(settings.coupons||[]).filter(c=>c.active!==false&&c.code&&!c.secret);
               if(!active.length) return null;
               return(
                 <div style={{marginBottom:8,display:"flex",flexDirection:"column",gap:5}}>
@@ -2975,6 +3066,23 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             </div>
             {couponMsg.text&&<div style={{fontSize:11.5,color:couponMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{couponMsg.text}</div>}
           </div>
+          )}
+          {/* Referral code — a friend's 6-digit code, one-time use */}
+          {settings.referralEnabled!==false && (
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>💜 Referral Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+            <div style={{display:"flex",gap:8}}>
+              <input value={refInput} onChange={e=>{setRefInput(e.target.value.replace(/\D/g,"").slice(0,6));setRefMsg({text:"",ok:false});setRefApplied(false);}}
+                inputMode="numeric" placeholder="6-digit friend's code"
+                style={{flex:1,borderRadius:12,border:`1.5px solid ${refMsg.ok?"#22c55e":refMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",letterSpacing:2,fontFamily:"monospace"}}/>
+              <button className="press" onClick={applyReferral} disabled={refInput.length!==6}
+                style={{background:refInput.length===6?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                Apply
+              </button>
+            </div>
+            {refMsg.text&&<div style={{fontSize:11.5,color:refMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{refMsg.text}</div>}
+          </div>
+          )}
           {/* Billing address */}
           <label style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"11px 14px",marginBottom:12,cursor:"pointer",userSelect:"none",border:`1px solid ${C.border}`}}>
             <input type="checkbox" checked={useSameBilling} onChange={e=>setUseSameBilling(e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
@@ -3041,6 +3149,10 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             {couponApplied&&couponDiscount>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:13,color:C.success}}>🎟 Coupon ({couponCode.toUpperCase()})</span>
               <span style={{fontSize:13,fontWeight:600,color:C.success}}>-₹{couponDiscount}</span>
+            </div>}
+            {refApplied&&refDiscount>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontSize:13,color:"#7c3aed"}}>💜 Referral ({refInput})</span>
+              <span style={{fontSize:13,fontWeight:600,color:"#7c3aed"}}>-₹{refDiscount}</span>
             </div>}
             {loyaltyRedeemed&&loyaltyDiscount>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:13,color:"#7c3aed"}}>⭐ Loyalty Reward</span>
@@ -3547,6 +3659,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const [verified,setVerified]=useState(o.paymentStatus==="Verified");
   const [proofZoom,setProofZoom]=useState(false);
   const [saving,setSaving]=useState(false);
+  const [rejectConfirm,setRejectConfirm]=useState(false);
   const custWA="91"+(o.address.whatsapp||o.address.phone).replace(/\D/g,"");
 
   const handleUpdate=async()=>{
@@ -3648,12 +3761,24 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             <div style={{fontSize:12,color:C.textSub,marginBottom:10,fontStyle:"italic"}}>No payment screenshot uploaded yet.</div>
           )}
           {(o.status==="Payment Review"||o.status==="Awaiting Payment")&&(
+            rejectConfirm?(
+              <div style={{background:"#fee2e2",borderRadius:12,padding:"12px",border:`1.5px solid ${C.danger}`}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:C.danger,marginBottom:10,textAlign:"center"}}>Reject this payment &amp; cancel the order? This can't be undone.</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <button className="press" onClick={()=>setRejectConfirm(false)} disabled={saving}
+                    style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Keep order</button>
+                  <button className="press" onClick={()=>{setRejectConfirm(false);verifyPayment(false);}} disabled={saving}
+                    style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Yes, reject</button>
+                </div>
+              </div>
+            ):(
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <button className="press" onClick={()=>verifyPayment(true)} disabled={saving}
                 style={{background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>✓ Verify &amp; Confirm</button>
-              <button className="press" onClick={()=>verifyPayment(false)} disabled={saving}
+              <button className="press" onClick={()=>setRejectConfirm(true)} disabled={saving}
                 style={{background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>✕ Reject / Cancel</button>
             </div>
+            )
           )}
           {verified&&<div style={{fontSize:11.5,color:C.success,fontWeight:600,marginTop:8}}>Payment verified — order confirmed &amp; moved to processing.</div>}
         </div>
@@ -3770,6 +3895,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [visitStats,setVisitStats]=useState(null);
   useEffect(()=>{ loadAnalytics().then(setVisitStats); },[]);
   const [orderFilter,setOrderFilter]=useState("All");
+  const [orderSearch,setOrderSearch]=useState("");
   const [csvFrom,setCsvFrom]=useState("");
   const [csvTo,setCsvTo]=useState("");
   const [catFilter,setCatFilter]=useState("All");
@@ -3798,7 +3924,16 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
     showToast("Review deleted");
   };
 
-  const filteredOrders=orders.filter(o=>orderFilter==="All"||o.status===orderFilter);
+  const filteredOrders=orders.filter(o=>{
+    if(orderFilter!=="All" && o.status!==orderFilter) return false;
+    const q=orderSearch.trim().toLowerCase();
+    if(!q) return true;
+    // Match on order number, name, or phone
+    return (o.orderNo||orderId(o.id)||"").toLowerCase().includes(q)
+      || (o.address?.name||"").toLowerCase().includes(q)
+      || (o.address?.phone||"").includes(q)
+      || (o.address?.whatsapp||"").includes(q);
+  });
 
   if(tab==="form")return(
     <ProductForm product={editProduct} showToast={showToast} settings={settings}
@@ -3889,6 +4024,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               return <div style={{display:"flex",gap:8}}>{cell(d[today]||0,"Today")}{cell(last7,"Last 7 days")}{cell((visitStats&&visitStats.total)||0,"All time")}</div>;
             })()}
             <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {settings.gaId?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
+          </div>
+          {/* Search orders by number / name / phone */}
+          <div style={{position:"relative",marginBottom:12}}>
+            <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:.5}}>🔍</span>
+            <input value={orderSearch} onChange={e=>setOrderSearch(e.target.value)}
+              placeholder="Search order # / name / phone…"
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 36px 11px 36px",fontSize:13.5,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif"}}/>
+            {orderSearch&&<button className="press" onClick={()=>setOrderSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,color:C.textSub,cursor:"pointer"}}>×</button>}
           </div>
           {/* Status filter */}
           <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:14}}>
@@ -4246,6 +4389,7 @@ function SettingsPanel({settings,onSave}){
   const genCode=()=>String(Math.floor(100000+Math.random()*900000));
   const sensitiveChanged=(nf)=>(
     String(nf.ownerWhatsapp||"")!==String(settings.ownerWhatsapp||"") ||
+    String(nf.orderEmail||"")!==String(settings.orderEmail||"") ||
     String(nf.adminPassHash||"")!==String(settings.adminPassHash||"")
   );
   const adminEmail=()=>((settings.orderEmail||"").trim() || BUSINESS_EMAIL || (FB_OK&&FB_AUTH?.currentUser?.email)||"");
@@ -4579,7 +4723,12 @@ function SettingsPanel({settings,onSave}){
       {/* Coupon codes */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎟 Coupon Codes</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Each code is usable once per Google account. Set a <b style={{color:C.text}}>Min ₹</b> to require a minimum cart value before the coupon applies (leave 0 for no minimum). Customers enter it at checkout.</div>
+        {/* Master switch: show/hide the coupon box at checkout */}
+        <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none",background:C.bg,borderRadius:12,padding:"11px 13px",border:`1.5px solid ${C.border}`}}>
+          <input type="checkbox" checked={f.showCouponField!==false} onChange={e=>set("showCouponField",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
+          <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>Show coupon box at checkout</span><br/><span style={{fontSize:11,color:C.textSub}}>Off = no coupon field shown to anyone. Secret codes still work only if you turn this on.</span></span>
+        </label>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Each code is usable once per Google account. Set a <b style={{color:C.text}}>Min ₹</b> to require a minimum cart value (0 = none). Tick <b style={{color:C.text}}>Secret</b> to keep a code hidden from the public list — it still works when a customer types it, perfect for codes you share privately.</div>
         {(f.coupons||[]).map((c,i)=>(
           <div key={i} style={{display:"flex",gap:8,alignItems:"center",marginBottom:8,background:C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${C.border}`}}>
             <div style={{flex:1}}>
@@ -4606,13 +4755,17 @@ function SettingsPanel({settings,onSave}){
                   <input type="checkbox" checked={c.active!==false} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],active:e.target.checked};set("coupons",arr);}} style={{accentColor:C.primary}}/>
                   Active
                 </label>
+                <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11.5,color:c.secret?"#b45309":C.text,cursor:"pointer",fontWeight:c.secret?700:400}} title="Hidden from the public coupon list — still works when typed">
+                  <input type="checkbox" checked={!!c.secret} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],secret:e.target.checked};set("coupons",arr);}} style={{accentColor:"#d97706"}}/>
+                  🤫 Secret
+                </label>
               </div>
             </div>
             <button className="press" onClick={()=>{const arr=(f.coupons||[]).filter((_,j)=>j!==i);set("coupons",arr);}}
               style={{flexShrink:0,width:28,height:28,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
           </div>
         ))}
-        <button className="press" onClick={()=>set("coupons",[...(f.coupons||[]),{code:"",type:"flat",discount:0,active:true}])}
+        <button className="press" onClick={()=>set("coupons",[...(f.coupons||[]),{code:"",type:"flat",discount:0,active:true,secret:false}])}
           style={{width:"100%",background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginTop:4}}>
           ＋ Add Coupon Code
         </button>
@@ -4621,7 +4774,11 @@ function SettingsPanel({settings,onSave}){
       {/* Welcome coupon */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎉 First-Order Welcome Coupon</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Shown to customers who have never ordered. Automatically appears on the home page banner.</div>
+        <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
+          <input type="checkbox" checked={f.welcomeCouponEnabled!==false} onChange={e=>set("welcomeCouponEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
+          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Show welcome coupon banner</span>
+        </label>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Shown to customers who have never ordered. Turn off to hide it (e.g. when you'd rather run a Festival Banner below).</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Coupon Code</div>
@@ -4710,12 +4867,24 @@ function SettingsPanel({settings,onSave}){
 
       {/* Referral discount */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>💜 Referral Hint</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.5}}>After a successful order, customers see: "Share NEMO-[last4] and both get ₹X off!"</div>
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Discount amount (₹)</div>
-          <input type="number" min="0" value={f.referralDiscount||50} onChange={e=>set("referralDiscount",Number(e.target.value))}
-            style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>💜 Referral Program</div>
+        <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
+          <input type="checkbox" checked={f.referralEnabled!==false} onChange={e=>set("referralEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
+          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable referral program</span>
+        </label>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>After an order at/above the minimum, customers get a unique <b>6-digit code</b> to share. A friend enters it at checkout for ₹X off — each code works <b>once</b>, then is permanently used.</div>
+        <div style={{display:"flex",gap:12}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Discount (₹)</div>
+            <input type="number" min="0" value={f.referralDiscount||50} onChange={e=>set("referralDiscount",Number(e.target.value))}
+              style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+          </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min order to issue (₹)</div>
+            <input type="number" min="0" value={f.referralMinOrder||0} onChange={e=>set("referralMinOrder",Number(e.target.value))}
+              style={{width:"130px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = always issue a code</div>
+          </div>
         </div>
       </div>
 
@@ -5591,7 +5760,7 @@ function NemoStore(){
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
         {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
-        {page==="detail"   &&<DetailPage product={selProduct} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
+        {page==="detail"   &&<DetailPage product={selProduct} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav}/>}
         {page==="checkout" &&(user
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} user={user} settings={settings} orders={orders}/>

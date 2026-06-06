@@ -86,6 +86,21 @@
       }
     },
 
+    "userrefs": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && !data.exists()"
+      }
+    },
+
+    "referrals": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.hasChild('owner') && (!data.exists() || data.child('owner').val() === newData.child('owner').val())"
+      }
+    },
+
     "__ping": { ".read": true, ".write": "auth != null" }
   }
 }
