@@ -5,7 +5,7 @@
 
     "products": {
       ".read": true,
-      ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE')",
       "$id": {
         "stockCount": {
           ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.val() <= data.val())",
@@ -14,9 +14,9 @@
       }
     },
 
-    "guides":   { ".read": true, ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'" },
-    "settings": { ".read": true, ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'" },
-    "media":    { ".read": true, ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'" },
+    "guides":   { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE')" },
+    "settings": { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE')" },
+    "media":    { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE')" },
 
     "reviews": {
       ".read": true,
@@ -26,22 +26,22 @@
     },
 
     "orders": {
-      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE')",
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
-        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE'))",
+        ".write": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE'))"
       }
     },
 
     "favorites": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE'))",
         ".write": "auth != null && auth.uid === $uid"
       }
     },
 
     "interest": {
-      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE')",
       "$pid": {
         ".read": true,
         "$uid": {
@@ -51,34 +51,34 @@
     },
 
     "requests": {
-      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE')",
       "$id": {
-        ".write": "auth != null && (!data.exists() || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+        ".write": "auth != null && (!data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE'))"
       }
     },
 
     "showcase": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && ( !data.exists() || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === data.child('userUid').val() || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )"
+        ".write": "auth != null && ( !data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE') || auth.uid === data.child('userUid').val() || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )"
       }
     },
 
     "analytics": {
-      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE')",
       "total": { ".write": "auth != null", ".validate": "newData.isNumber()" },
       "daily": { "$d": { ".write": "auth != null", ".validate": "newData.isNumber()" } }
     },
 
     "loyalty": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE'))",
         ".write": "auth != null && auth.uid === $uid"
       }
     },
 
     "restock": {
-      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE')",
       "$pid": {
         "$uid": {
           ".write": "auth != null && auth.uid === $uid"
