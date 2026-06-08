@@ -415,7 +415,7 @@ async function deleteReview(pid,rid){ const list=await loadReviews(pid); const n
 const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
-  liveArrivalGuarantee:"Every genuine customer is covered. If live fish arrive Dead on Arrival (DOA) because of a fault on our side — not a courier delay — we will replace them free of cost, or refund the fish amount (delivery/shipping charges are not refunded) if the same stock isn't available, for a first-time genuine claim. To process any DOA claim you must send ONE clear, continuous, unedited unboxing video that starts with the sealed, unopened package and clearly shows the affected fish, within 2 hours of delivery, to our WhatsApp. We review the video and approve a replacement or refund.\n\nOpting in to the Live Guarantee at checkout protects you additionally: Live Guarantee customers receive a replacement — or a refund of the fish amount if stock isn't available — on confirmation of a valid DOA video, no questions asked. The guarantee covers the price of the affected fish only; delivery charges are non-refundable. It does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed/refused deliveries, or losses after the fish has been placed in your tank.",
+  liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Special / Fast & Safe parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
   returnPolicy:"Live fish & plants are non-returnable and non-refundable once delivered safely (they are covered instead by our Live Arrival Guarantee above). Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect. Refunds (where applicable) are issued as store credit or to the original payment method within 5–7 working days after we receive and inspect the item. Orders cannot be cancelled once a live order has been packed or dispatched.",
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   shippingRates: null,
@@ -732,7 +732,7 @@ function waOrderMsg(order){
     `📦 *Items:*`, items, ``,
     `💰 Subtotal: ₹${order.total}`,
     `🚚 Delivery: ${order.fee===0?"Free":"₹"+order.fee}`,
-    order.liveGuaranteeFee?`🛡️ Live Guarantee: ₹${order.liveGuaranteeFee}`:"",
+    order.liveGuarantee?`🛡️ Live Arrival Guarantee: ${order.liveGuaranteeFee>0?"₹"+order.liveGuaranteeFee:"Included"}`:"",
     order.couponDiscount?`🎟 Coupon (${order.coupon}): -₹${order.couponDiscount}`:"",
     `💵 *Grand Total: ₹${order.amountDue??(order.total+order.fee)}*`, ``,
     order.txnId?`✅ *Paid via UPI* — Txn: ${order.txnId}`:`⏳ Payment pending`,``,
@@ -965,14 +965,14 @@ function generateBillHTML(order, settings){
     <tbody>
       ${trow("Subtotal","₹"+fmt(subtotal))}
       ${trow(`Shipping${o.shippingZoneLabel?" ("+o.shippingZoneLabel+")":""}${o.specialDelivery?" + Special":""}`,`₹${fmt(shipping)}`)}
-      ${lgFee>0?trow("🛡️ Live Arrival Guarantee",`₹${fmt(lgFee)}`):""}
+      ${o.liveGuarantee?trow("🛡️ Live Arrival Guarantee",lgFee>0?`₹${fmt(lgFee)}`:"Included"):""}
       ${couponOff>0?trow(`🎟 Coupon${o.coupon?" ("+o.coupon+")":""}`,`-₹${fmt(couponOff)}`,false,"#16a34a"):""}
       <tr style="background:#eef9fa"><td colspan="3" style="padding:10px;font-size:15px;font-weight:800;color:#0b6e72;border-top:2px solid #0b6e72">Grand Total</td><td style="text-align:right;padding:10px;font-size:17px;font-weight:800;color:#0b6e72;border-top:2px solid #0b6e72">₹${fmt(grand)}</td></tr>
     </tbody>
   </table>
   <div style="text-align:right;margin-top:14px"><button class="np" onclick="window.print()" style="background:#0b6e72;color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save PDF</button></div>
   <div class="footer">
-    ${o.liveGuarantee?`<p>🛡️ <b>Live Arrival Guarantee</b> applies. Send an unboxing photo/video within 2 hours of delivery to WhatsApp ${storeWA} if any fish arrive unwell.</p>`:""}
+    ${o.liveGuarantee?`<p>🛡️ <b>Live Arrival Guarantee</b> applies (included with your Special / Fast &amp; Safe parcel). Send a continuous unboxing video within 2 hours of delivery to WhatsApp ${storeWA} if any fish arrives Dead on Arrival. One approved claim is resolved by replacement, store credit, or refund of the fish amount.</p>`:""}
     <p>${gstin?"Prices are inclusive of GST.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this is a Bill of Supply."}</p>
     <p>Thank you for shopping at <b>${storeName}</b> 🐠</p>
     <p>Support: WhatsApp ${storeWA}</p>
@@ -1785,7 +1785,8 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
     "Requested":"Received — please send your unboxing video on WhatsApp so we can review it.",
     "Under Review":"Your DOA video is under review by our team.",
     "Approved - Replacement":"Approved ✓ — a replacement is being arranged.",
-    "Approved - Refund":"Approved ✓ — a refund is being processed.",
+    "Approved - Store Credit":"Approved ✓ — store credit equal to the fish value is being issued.",
+    "Approved - Refund":"Approved ✓ — a refund of the fish amount is being processed.",
     "Declined":"Reviewed — this DOA request was not approved.",
   };
   return(
@@ -1984,7 +1985,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                   ):doaOpen===o.id?(
                     <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px"}}>
                       <div style={{fontSize:12.5,fontWeight:800,color:"#9a3412",marginBottom:6}}>Report Dead on Arrival (DOA)</div>
-                      <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.6,marginBottom:10}}>If a fish arrived dead, send us ONE clear, unedited unboxing video (starting from the sealed package) on WhatsApp. We'll review it and approve a replacement or a refund if stock isn't available.</div>
+                      <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.6,marginBottom:10}}>If a fish arrived dead, send us ONE clear, unedited unboxing video (starting from the sealed package) on WhatsApp within 2 hours of delivery. We'll review it and, if approved, make it right <b>one time</b> — a replacement, store credit, or a refund of the fish amount.</div>
                       <div style={{display:"flex",gap:8}}>
                         <button className="press" onClick={()=>{ openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${orderId(o.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`)); onReportDoa&&onReportDoa(o); setDoaOpen(null); }}
                           style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>💬 Share video on WhatsApp</button>
@@ -2876,7 +2877,6 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     return ()=>{alive=false;};
   },[placed,user,settings.referralMinOrder]);
   const [specialDelivery,setSpecialDelivery]=useState(false);
-  const [liveGuarantee,setLiveGuarantee]=useState(false);
   const [couponCode,setCouponCode]=useState("");
   const [couponApplied,setCouponApplied]=useState(null);
   const [couponMsg,setCouponMsg]=useState({text:"",ok:false});
@@ -2901,8 +2901,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   // Dynamic shipping
   const zone=pincodeToZone(addr.pincode);
   const shippingFee=calcShipping(cart,zone,specialDelivery,settings);
-  const lgUnit=liveGuaranteePriceForZone(zone,settings); // zone-based opt-in fee (TN / South / Rest of India)
-  const lgPrice=hasLiveFish&&liveGuarantee?lgUnit:0;
+  // Live Arrival Guarantee is now INCLUDED FREE with the recommended (Special / Fast & Safe) parcel — no separate charge.
+  const guaranteeActive=hasLiveFish&&specialDelivery;
+  const lgPrice=0;
   const couponDiscount=couponApplied?Math.min(couponApplied.type==="percent"?Math.round(total*couponApplied.discount/100):Number(couponApplied.discount||0),total+lgPrice):0;
   const refDiscount=refApplied?Math.min(Number(settings.referralDiscount||50),Math.max(0,total+lgPrice-couponDiscount)):0;
   const fee=shippingFee??0;
@@ -2952,7 +2953,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       summary:addr.summary||"",
       total,fee,shippingZone:zone||"",shippingZoneLabel:zone?ZONE_LABELS[zone]:"Unknown",
       specialDelivery,specialDeliveryFee:specialDelivery?Number(settings.specialDeliveryPrice||0):0,
-      liveGuarantee:hasLiveFish&&liveGuarantee,liveGuaranteeFee:lgPrice,
+      liveGuarantee:guaranteeActive,liveGuaranteeFee:0,
       coupon:couponApplied?couponCode.trim():"",couponDiscount,
       referralCode:refApplied?refInput.trim():"", referralDiscount:refDiscount,
       loyaltyDiscount:loyaltyRedeemed?loyaltyDiscount:0,
@@ -3132,20 +3133,12 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <span style={{fontSize:20}}>🛡️</span>
                 <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:"#15803d"}}>Live Arrival Guarantee</span>
               </div>
-              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Your live fish are packed with oxygen &amp; care for safe transit. If any fish arrives Dead on Arrival (DOA) due to a fault on our side, we replace it free — or refund the fish amount if stock isn't available — once you send a valid unboxing video. Delivery charges are non-refundable.</div>
+              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Included free on orders shipped by our recommended <b>Special / Fast &amp; Safe</b> parcel — no separate charge. If a fish arrives Dead on Arrival (DOA), send a valid unboxing video on WhatsApp within 2 hours and we'll make it right <b>one time</b>: a replacement, store credit, or refund of the fish amount (our choice). Normal-parcel orders are not covered. Delivery charges are non-refundable.</div>
               <button className="press" onClick={()=>nav("about")}
                 style={{marginTop:8,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",textDecoration:"underline"}}>
                 📖 Read our acclimatization guide →
               </button>
             </div>
-            {/* Live guarantee opt-in toggle */}
-            <label style={{display:"flex",alignItems:"flex-start",gap:12,background:liveGuarantee?"#f0fdf4":"#fff",borderRadius:14,padding:"13px 14px",marginBottom:16,cursor:"pointer",userSelect:"none",border:`1.5px solid ${liveGuarantee?"#22c55e":C.border}`}}>
-              <input type="checkbox" checked={liveGuarantee} onChange={e=>setLiveGuarantee(e.target.checked)} style={{width:20,height:20,accentColor:"#22c55e",flexShrink:0,marginTop:1}}/>
-              <div>
-                <div style={{fontSize:13,fontWeight:800,color:"#15803d"}}>🛡️ Opt in — Live Arrival Guarantee</div>
-                <div style={{fontSize:11.5,color:"#166534",marginTop:2,lineHeight:1.45}}>Extra protection: replacement — or refund of the fish amount if stock isn't available — on a valid DOA unboxing video, no questions asked. Adds <b>{zone?<>₹{lgUnit} ({liveGuaranteeZoneLabel(zone)})</>:<>from ₹{liveGuaranteeMinPrice(settings)} — set by your delivery pincode</>}</b>.</div>
-              </div>
-            </label>
             </>
           )}
           {inp("Full Name","name","text","John Doe")}
@@ -3173,13 +3166,14 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:"white"}}/>
             <div style={{fontSize:11,color:C.textSub,marginTop:4}}>📝 Tell us anything special about your order — we'll see it with your order.</div>
           </div>
-          {/* Special delivery */}
-          {anySuggestSpecial&&(
+          {/* Special delivery — recommended parcel that carries the Live Arrival Guarantee for live fish */}
+          {(anySuggestSpecial||hasLiveFish)&&(
             <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"#eff6ff":"#fff",borderRadius:14,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
               <input type="checkbox" checked={specialDelivery} onChange={e=>setSpecialDelivery(e.target.checked)} style={{width:20,height:20,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
               <div>
-                <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ Special / Fast &amp; Safe Delivery</div>
-                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile or live items. Adds <b>₹{settings.specialDeliveryPrice||200}</b> to shipping.</div>
+                <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ {hasLiveFish?"Recommended — ":""}Special / Fast &amp; Safe Delivery</div>
+                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile or live items.{hasLiveFish?<> <b>Includes the Live Arrival Guarantee</b> for your live fish.</>:""} Adds <b>₹{settings.specialDeliveryPrice||200}</b> to shipping.</div>
+                {hasLiveFish&&!specialDelivery&&<div style={{fontSize:11,color:"#9a3412",marginTop:4,lineHeight:1.4}}>Prefer a normal parcel for your area/weather? That's fine — but live arrival won't be guaranteed.</div>}
               </div>
             </label>
           )}
@@ -3303,12 +3297,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <button className="press" onClick={()=>setSpecialDelivery(false)} title="Remove" style={{width:22,height:22,borderRadius:"50%",background:"#dbeafe",color:"#1d4ed8",border:"none",fontSize:14,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
               </span>
             </div>}
-            {hasLiveFish&&liveGuarantee&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
-              <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Guarantee</span>
-              <span style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:13,fontWeight:600,color:"#15803d"}}>+₹{lgPrice}</span>
-                <button className="press" onClick={()=>setLiveGuarantee(false)} title="Remove" style={{width:22,height:22,borderRadius:"50%",background:"#dcfce7",color:"#15803d",border:"none",fontSize:14,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
-              </span>
+            {guaranteeActive&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
+              <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Arrival Guarantee</span>
+              <span style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Included</span>
             </div>}
             {couponApplied&&couponDiscount>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:13,color:C.success}}>🎟 Coupon ({couponCode.toUpperCase()})</span>
@@ -4067,7 +4058,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             {[
               {l:"Subtotal",v:`₹${o.total}`},
               {l:`Shipping${o.shippingZoneLabel?" ("+o.shippingZoneLabel+")":""}${o.specialDelivery?" + Special":""}`,v:`₹${o.fee||0}`},
-              ...(o.liveGuarantee?[{l:"Live Guarantee",v:`₹${o.liveGuaranteeFee||0}`,color:"#15803d"}]:[]),
+              ...(o.liveGuarantee?[{l:"Live Arrival Guarantee",v:o.liveGuaranteeFee>0?`₹${o.liveGuaranteeFee}`:"Included",color:"#15803d"}]:[]),
               ...(o.coupon&&o.couponDiscount?[{l:`Coupon (${o.coupon})`,v:`-₹${o.couponDiscount}`,color:"#16a34a"}]:[]),
             ].map((r,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
@@ -4123,7 +4114,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>💬 Message customer on WhatsApp</button>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Outcome</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-              {["Under Review","Approved - Replacement","Approved - Refund","Declined"].map(s=>(
+              {["Under Review","Approved - Replacement","Approved - Store Credit","Approved - Refund","Declined"].map(s=>(
                 <button key={s} className="press" onClick={()=>setDoaStatus(s)}
                   style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${doaStatus===s?C.primary:C.border}`,background:doaStatus===s?C.primary:"transparent",color:doaStatus===s?"white":C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{s.replace("Approved - ","✓ ")}</button>
               ))}
