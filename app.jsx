@@ -150,6 +150,30 @@ function pincodeToZone(pin){
   if((p>=400000&&p<=445999)||(p>=450000&&p<=497999)||(p>=360000&&p<=396999)||(p>=403000&&p<=403999))return "CentralIndia";
   return "NorthIndia";
 }
+/* Live Arrival Guarantee opt-in fee varies by destination: Inside TN / South India / Rest of India (North).
+   Central India + anything unknown is grouped under "North" (rest of India). Falls back to the flat price. */
+function liveGuaranteeZoneKey(zone){
+  if(zone==="TN") return "TN";
+  if(zone==="SouthIndia") return "South";
+  return "North"; // NorthIndia + CentralIndia + unknown
+}
+function liveGuaranteeZoneLabel(zone){
+  const k=liveGuaranteeZoneKey(zone);
+  return k==="TN"?"Inside Tamil Nadu":k==="South"?"South India":"Rest of India";
+}
+function liveGuaranteePriceForZone(zone, settings){
+  const flat=Number(settings.liveGuaranteePrice||150);
+  const map={ TN:settings.liveGuaranteePriceTN, South:settings.liveGuaranteePriceSouth, North:settings.liveGuaranteePriceNorth };
+  const v=map[liveGuaranteeZoneKey(zone)];
+  return (v===0||v) ? Number(v) : flat;
+}
+/* Lowest of the three zone prices — used to show a "from ₹X" hint before an address is entered. */
+function liveGuaranteeMinPrice(settings){
+  const vals=["liveGuaranteePriceTN","liveGuaranteePriceSouth","liveGuaranteePriceNorth"]
+    .map(k=>settings[k]).filter(v=>v===0||v).map(Number);
+  if(!vals.length) return Number(settings.liveGuaranteePrice||150);
+  return Math.min(...vals);
+}
 /* Live fish uses the same 5-tier weight brackets as dry goods so rates are directly comparable */
 function getLiveFishWeightBracket(kg){
   if(kg<=0.5)return "Up to 500g";
@@ -391,7 +415,7 @@ async function deleteReview(pid,rid){ const list=await loadReviews(pid); const n
 const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
-  liveArrivalGuarantee:"We offer a Live Arrival Guarantee on live fish. Fish are packed with oxygen and insulation for safe transit. To claim, you must send ONE clear, continuous, unedited unboxing video that starts with the sealed, unopened package and clearly shows the affected fish, within 2 hours of delivery. The guarantee covers a free replacement (or store credit) equal to the price of the affected fish only — delivery charges are non-refundable. It does not apply if the unboxing video is missing/edited, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed/refused deliveries, or losses after the fish has been placed in your tank.",
+  liveArrivalGuarantee:"Every genuine customer is covered. If live fish arrive Dead on Arrival (DOA) because of a fault on our side — not a courier delay — we will replace them free of cost, or refund the fish amount (delivery/shipping charges are not refunded) if the same stock isn't available, for a first-time genuine claim. To process any DOA claim you must send ONE clear, continuous, unedited unboxing video that starts with the sealed, unopened package and clearly shows the affected fish, within 2 hours of delivery, to our WhatsApp. We review the video and approve a replacement or refund.\n\nOpting in to the Live Guarantee at checkout protects you additionally: Live Guarantee customers receive a replacement — or a refund of the fish amount if stock isn't available — on confirmation of a valid DOA video, no questions asked. The guarantee covers the price of the affected fish only; delivery charges are non-refundable. It does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed/refused deliveries, or losses after the fish has been placed in your tank.",
   returnPolicy:"Live fish & plants are non-returnable and non-refundable once delivered safely (they are covered instead by our Live Arrival Guarantee above). Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect. Refunds (where applicable) are issued as store credit or to the original payment method within 5–7 working days after we receive and inspect the item. Orders cannot be cancelled once a live order has been packed or dispatched.",
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   shippingRates: null,
@@ -406,7 +430,10 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   jurisdiction: "Salem, Tamil Nadu",
   termsPolicy: "By placing an order you agree to these terms. "+STORE_NAME+" Aqua Store is a home-based proprietary micro-enterprise (Udyam-registered) trading in aquarium livestock and supplies. All orders are subject to stock availability and our acceptance of your payment. Prices are in INR and inclusive of applicable taxes. We are currently a small enterprise not registered under GST, so no GST is charged at present; this notice and your invoice will be updated automatically once we are GST-registered. Live animals are perishable goods sold under our Live Arrival Guarantee, which is your sole and exclusive remedy for any transit loss. To the maximum extent permitted by law, our total liability for any order is limited to the amount actually paid for that order; we are not liable for indirect, incidental or consequential losses, nor for any loss arising after livestock has been introduced to your tank or system. We are not responsible for delays or failures caused by courier partners, weather, power/water conditions at your premises, or other events beyond our reasonable control. These terms are governed by the laws of India and subject to the exclusive jurisdiction of the courts at Salem, Tamil Nadu.",
   privacyPolicy: "We collect only the details needed to fulfil your order — your name, contact number, delivery address and email. This information is used solely to process, deliver and provide support for your orders. We do not sell your data or share it with anyone except our delivery partners and payment provider, and only as needed to complete your order. Payments are processed through your own UPI app or our secure payment gateway; we never see or store your card, UPI PIN or bank credentials. You can ask us to delete your stored account data at any time by messaging us on WhatsApp.",
-  liveGuaranteePrice: 150,
+  liveGuaranteePrice: 150,        // legacy flat fallback
+  liveGuaranteePriceTN: 150,      // Inside Tamil Nadu
+  liveGuaranteePriceSouth: 200,   // South India
+  liveGuaranteePriceNorth: 250,   // North / rest of India (incl. Central)
   freeDeliveryThreshold: 0,
   coupons: [],
   showCouponField: true,   // master switch: show the coupon entry box at checkout
@@ -1725,7 +1752,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
 }
 
 /* ═══════════════════ ORDER HISTORY PAGE ═══════════════════ */
-function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, settings={}, favorites=[]}){
+function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, settings={}, favorites=[]}){
   const uk = userKey(user);
   const [payOpen,setPayOpen]=useState(null);
   const myOrders = orders.filter(o =>
@@ -1741,6 +1768,26 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
     const prod=products.find(p=>p.id===it.id);
     if(prod){ seen[it.id]=1; toReview.push({prod,name:it.name,category:it.category}); }
   }));
+  const hasDelivered = myOrders.some(o=>o.status==="Delivered");
+  const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
+  const [doaOpen,setDoaOpen]=useState(null);
+  const [refCode,setRefCode]=useState(null);
+  const [refCopied,setRefCopied]=useState(false);
+  const refAmt=settings.referralDiscount||50;
+  // Reveal the customer's own referral code once they have a delivered order (post-delivery reward)
+  useEffect(()=>{
+    if(settings.referralEnabled===false||!hasDelivered||!user?.uid){ setRefCode(null); return; }
+    let alive=true;
+    getMyReferralCode(user.uid).then(c=>{ if(alive) setRefCode(c); });
+    return ()=>{alive=false;};
+  },[hasDelivered,user,settings.referralEnabled]);
+  const doaStatusText={
+    "Requested":"Received — please send your unboxing video on WhatsApp so we can review it.",
+    "Under Review":"Your DOA video is under review by our team.",
+    "Approved - Replacement":"Approved ✓ — a replacement is being arranged.",
+    "Approved - Refund":"Approved ✓ — a refund is being processed.",
+    "Declined":"Reviewed — this DOA request was not approved.",
+  };
   return(
     <div className="slide-up">
       <div style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
@@ -1797,6 +1844,28 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {refCode&&(
+          <div style={{background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:18,padding:"16px",marginBottom:16,color:"white",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",top:-20,right:-14,width:84,height:84,borderRadius:"50%",background:"rgba(255,255,255,.12)"}}/>
+            <div style={{position:"relative"}}>
+              <div style={{fontSize:24,marginBottom:4}}>💜</div>
+              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Refer a friend — they save ₹{refAmt}</div>
+              <div style={{fontSize:12,opacity:.92,lineHeight:1.5,marginBottom:12}}>Thanks for shopping with us! Share your personal code — your friend gets ₹{refAmt} off their first order.</div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.5)",borderRadius:10,padding:"10px 14px",fontFamily:"monospace",fontSize:20,fontWeight:800,letterSpacing:3,textAlign:"center"}}>{refCode}</div>
+                <button className="press" onClick={()=>{
+                    try{navigator.clipboard.writeText(refCode);}catch(e){}
+                    try{navigator.share&&navigator.share({text:`Use my code ${refCode} at ${STORE_NAME} Aqua Store for ₹${refAmt} off! 🐠`});}catch(e){}
+                    setRefCopied(true);setTimeout(()=>setRefCopied(false),2000);
+                  }}
+                  style={{background:refCopied?"rgba(255,255,255,.95)":"rgba(255,255,255,.25)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"11px 16px",color:refCopied?"#7c3aed":"white",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                  {refCopied?"✓ Copied!":"Share"}
+                </button>
               </div>
             </div>
           </div>
@@ -1877,10 +1946,59 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>🔎 Payment submitted{o.txnId?` (Ref: ${o.txnId})`:""} — under verification. We'll confirm within 1–2 days.</div>
               )}
               {o.status==="Cancelled"&&(
-                <div style={{marginTop:10,background:"#fee2e2",border:`1px solid #fecaca`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>✕ {o.paymentStatus||"Cancelled"}.</div>
+                <div style={{marginTop:10}}>
+                  <div style={{background:"#fee2e2",border:`1px solid #fecaca`,borderRadius:10,padding:"10px 12px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.55}}>
+                    ✕ Your order has been cancelled.{o.cancelReason?` Reason: ${o.cancelReason}.`:o.paymentStatus&&/unpaid/i.test(o.paymentStatus)?" Payment wasn't completed in time.":""}
+                  </div>
+                  {o.refund&&o.refund.due&&(
+                    <div style={{marginTop:8,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"11px 12px",fontSize:12.5,color:"#1e3a8a",lineHeight:1.6}}>
+                      <div style={{fontWeight:800,marginBottom:3}}>💸 Refund {o.refund.status==="refunded"?"completed":o.refund.status==="processing"?"in progress":"being arranged"}</div>
+                      {o.refund.method==="gateway"?(
+                        <div>A refund of <b>₹{o.refund.amount}</b> {o.refund.status==="refunded"?"has been":"is being"} returned automatically to your original payment method. Please allow 3–7 working days for it to reflect.</div>
+                      ):(
+                        <div>A refund of <b>₹{o.refund.amount}</b> {o.refund.status==="refunded"?"has been sent":"will be sent"} to your UPI / payment account.{o.refund.refundTxnId?<> Refund Reference: <b style={{fontFamily:"monospace"}}>{o.refund.refundTxnId}</b></>:o.refund.status!=="refunded"?<> We'll share the refund reference here once it's processed.</>:null}</div>
+                      )}
+                    </div>
+                  )}
+                  {o.refund&&o.refund.due===false&&(
+                    <div style={{marginTop:8,fontSize:11.5,color:C.textSub,lineHeight:1.5}}>No payment was collected for this order, so there's nothing to refund.</div>
+                  )}
+                </div>
               )}
               {o.status==="Confirmed"&&(
                 <div style={{marginTop:10,background:"#dcfce7",border:`1px solid #bbf7d0`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#15803d",fontWeight:600,lineHeight:1.5}}>✅ Payment verified — your order is confirmed &amp; being prepared!</div>
+              )}
+              {/* Dead-on-Arrival reporting — only for delivered orders that contained live fish */}
+              {o.status==="Delivered" && o.items.some(it=>it.category==="Live Fish") && (
+                <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
+                  {o.doa?(
+                    <div style={{background:o.doa.status==="Declined"?"#fef2f2":(o.doa.status||"").startsWith("Approved")?"#ecfdf5":"#fff7ed",border:`1px solid ${o.doa.status==="Declined"?"#fecaca":(o.doa.status||"").startsWith("Approved")?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 12px"}}>
+                      <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:3}}>🐟 Dead-on-Arrival request</div>
+                      <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>{doaStatusText[o.doa.status]||"Submitted."}</div>
+                      {o.doa.note&&<div style={{fontSize:11.5,color:C.text,marginTop:6,lineHeight:1.5}}><b>Note from store:</b> {o.doa.note}</div>}
+                      {(o.doa.status==="Requested"||o.doa.status==="Under Review")&&(
+                        <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${orderId(o.id)} — here is my unboxing video.`))}
+                          style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>💬 Send video on WhatsApp</button>
+                      )}
+                    </div>
+                  ):doaOpen===o.id?(
+                    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px"}}>
+                      <div style={{fontSize:12.5,fontWeight:800,color:"#9a3412",marginBottom:6}}>Report Dead on Arrival (DOA)</div>
+                      <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.6,marginBottom:10}}>If a fish arrived dead, send us ONE clear, unedited unboxing video (starting from the sealed package) on WhatsApp. We'll review it and approve a replacement or a refund if stock isn't available.</div>
+                      <div style={{display:"flex",gap:8}}>
+                        <button className="press" onClick={()=>{ openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${orderId(o.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`)); onReportDoa&&onReportDoa(o); setDoaOpen(null); }}
+                          style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>💬 Share video on WhatsApp</button>
+                        <button className="press" onClick={()=>setDoaOpen(null)}
+                          style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
+                      </div>
+                    </div>
+                  ):(
+                    <button className="press" onClick={()=>setDoaOpen(o.id)}
+                      style={{background:"none",border:"none",padding:0,color:C.textSub,fontSize:11,fontWeight:600,fontFamily:"'Nunito',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
+                      Received a fish Dead on Arrival? Report DOA →
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ))}
@@ -2783,7 +2901,8 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   // Dynamic shipping
   const zone=pincodeToZone(addr.pincode);
   const shippingFee=calcShipping(cart,zone,specialDelivery,settings);
-  const lgPrice=hasLiveFish&&liveGuarantee?Number(settings.liveGuaranteePrice||150):0;
+  const lgUnit=liveGuaranteePriceForZone(zone,settings); // zone-based opt-in fee (TN / South / Rest of India)
+  const lgPrice=hasLiveFish&&liveGuarantee?lgUnit:0;
   const couponDiscount=couponApplied?Math.min(couponApplied.type==="percent"?Math.round(total*couponApplied.discount/100):Number(couponApplied.discount||0),total+lgPrice):0;
   const refDiscount=refApplied?Math.min(Number(settings.referralDiscount||50),Math.max(0,total+lgPrice-couponDiscount)):0;
   const fee=shippingFee??0;
@@ -3013,7 +3132,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <span style={{fontSize:20}}>🛡️</span>
                 <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:"#15803d"}}>Live Arrival Guarantee</span>
               </div>
-              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Your live fish are packed with oxygen &amp; care for safe transit. If anything arrives unwell, we'll make it right.</div>
+              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Your live fish are packed with oxygen &amp; care for safe transit. If any fish arrives Dead on Arrival (DOA) due to a fault on our side, we replace it free — or refund the fish amount if stock isn't available — once you send a valid unboxing video. Delivery charges are non-refundable.</div>
               <button className="press" onClick={()=>nav("about")}
                 style={{marginTop:8,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",textDecoration:"underline"}}>
                 📖 Read our acclimatization guide →
@@ -3024,7 +3143,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               <input type="checkbox" checked={liveGuarantee} onChange={e=>setLiveGuarantee(e.target.checked)} style={{width:20,height:20,accentColor:"#22c55e",flexShrink:0,marginTop:1}}/>
               <div>
                 <div style={{fontSize:13,fontWeight:800,color:"#15803d"}}>🛡️ Opt in — Live Arrival Guarantee</div>
-                <div style={{fontSize:11.5,color:"#166534",marginTop:2,lineHeight:1.45}}>If any fish arrives deceased, we replace or refund. Requires unboxing photo/video within 2 hrs. Adds <b>₹{settings.liveGuaranteePrice||150}</b> to your order.</div>
+                <div style={{fontSize:11.5,color:"#166534",marginTop:2,lineHeight:1.45}}>Extra protection: replacement — or refund of the fish amount if stock isn't available — on a valid DOA unboxing video, no questions asked. Adds <b>{zone?<>₹{lgUnit} ({liveGuaranteeZoneLabel(zone)})</>:<>from ₹{liveGuaranteeMinPrice(settings)} — set by your delivery pincode</>}</b>.</div>
               </div>
             </label>
             </>
@@ -3706,7 +3825,82 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const [saving,setSaving]=useState(false);
   const [rejectConfirm,setRejectConfirm]=useState(false);
   const [delOrderConfirm,setDelOrderConfirm]=useState(false);
+  const amtDue=o.amountDue??(o.total+o.fee);
+  // Was money actually collected for this order? (verified payment, a proof, a paid timestamp, or already progressed past payment)
+  const paidish=o.paymentStatus==="Verified"||!!o.paidAt||!!o.paymentProof||["Confirmed","Shipped","Delivered"].includes(o.status);
+  const [cancelOpen,setCancelOpen]=useState(false);
+  const [refundMethod,setRefundMethod]=useState(o.refund?.method&&o.refund.method!=="none"?o.refund.method:"upi");
+  const [refundTxn,setRefundTxn]=useState(o.refund?.refundTxnId||"");
+  const [refundAmt,setRefundAmt]=useState(o.refund?.amount!=null?o.refund.amount:amtDue);
+  const [refundStatus,setRefundStatus]=useState(o.refund?.status&&o.refund.status!=="none"?o.refund.status:"pending");
+  const [cancelReason,setCancelReason]=useState(o.cancelReason||"");
   const custWA="91"+(o.address.whatsapp||o.address.phone).replace(/\D/g,"");
+
+  const buildRefund=()=>{
+    if(!paidish) return { due:false, amount:0, method:"none", refundTxnId:"", status:"none", updatedAt:new Date().toISOString() };
+    return { due:true, amount:Math.max(0,Number(refundAmt)||0), method:refundMethod,
+      refundTxnId: refundMethod==="upi"?refundTxn.trim():"",
+      status: refundMethod==="gateway" ? (refundStatus==="refunded"?"refunded":"processing") : refundStatus,
+      updatedAt:new Date().toISOString() };
+  };
+  const doCancel=async()=>{
+    setSaving(true);
+    const updated={...o,status:"Cancelled",paymentStatus:"Cancelled by store",cancelReason:cancelReason.trim(),refund:buildRefund(),updatedAt:new Date().toISOString()};
+    setStatus("Cancelled");
+    await onUpdateOrder(updated);
+    showToast(paidish?"Order cancelled — refund recorded":"Order cancelled");
+    setSaving(false); setCancelOpen(false);
+  };
+  const saveRefund=async()=>{
+    setSaving(true);
+    await onUpdateOrder({...o,refund:buildRefund(),updatedAt:new Date().toISOString()});
+    showToast("Refund details saved");
+    setSaving(false);
+  };
+  const refundFld={width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif",boxSizing:"border-box"};
+  const refundEditor=()=>(
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        {[{k:"upi",l:"Manual UPI"},{k:"gateway",l:"Auto / Gateway"}].map(m=>(
+          <button key={m.k} className="press" type="button" onClick={()=>setRefundMethod(m.k)}
+            style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${refundMethod===m.k?C.primary:C.border}`,background:refundMethod===m.k?C.primary:"transparent",color:refundMethod===m.k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{m.l}</button>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Refund amount (₹)</div>
+          <input type="number" min="0" value={refundAmt} onChange={e=>setRefundAmt(Number(e.target.value))} style={refundFld}/>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Refund status</div>
+          <select value={refundStatus} onChange={e=>setRefundStatus(e.target.value)} style={refundFld}>
+            <option value="pending">Pending</option>
+            <option value="processing">Processing</option>
+            <option value="refunded">Refunded</option>
+          </select>
+        </div>
+      </div>
+      {refundMethod==="upi"?(
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Refund Transaction / UPI Ref ID</div>
+          <input value={refundTxn} onChange={e=>setRefundTxn(e.target.value)} placeholder="e.g. 4231XXXXXX98" style={refundFld}/>
+          <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.5}}>Shown to the customer on their order page so they can match the UPI refund you sent.</div>
+        </div>
+      ):(
+        <div style={{fontSize:11,color:C.textSub,lineHeight:1.5}}>Gateway refunds are returned automatically to the customer's original payment method in 3–7 working days.</div>
+      )}
+    </div>
+  );
+
+  const liveInOrder=o.items.some(it=>it.category==="Live Fish");
+  const [doaStatus,setDoaStatus]=useState(o.doa?.status&&o.doa.status!=="Requested"?o.doa.status:"Under Review");
+  const [doaNote,setDoaNote]=useState(o.doa?.note||"");
+  const saveDoa=async()=>{
+    setSaving(true);
+    await onUpdateOrder({...o,doa:{...(o.doa||{}),status:doaStatus,note:doaNote.trim(),requestedAt:o.doa?.requestedAt||new Date().toISOString(),updatedAt:new Date().toISOString()}});
+    showToast("DOA request updated");
+    setSaving(false);
+  };
 
   const handleUpdate=async()=>{
     setSaving(true);
@@ -3916,6 +4110,84 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           </button>
         </div>
 
+        {/* Dead-on-Arrival (DOA) review — for delivered live-fish orders */}
+        {liveInOrder && (o.status==="Delivered"||o.doa) && (
+          <div style={{background:C.card,borderRadius:16,padding:"16px",marginTop:14,border:`1px solid ${o.doa&&o.doa.status==="Requested"?"#fdba74":C.border}`}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>🐟 Dead-on-Arrival (DOA) Request</div>
+            {o.doa?(
+              <div style={{fontSize:12,color:C.text,marginBottom:10,lineHeight:1.55}}>Customer reported a DOA{o.doa.requestedAt?` on ${fmtDate(o.doa.requestedAt)}`:""}. Review their unboxing video on WhatsApp, then set the outcome below.</div>
+            ):(
+              <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>No DOA reported yet. You can still record an outcome here if the customer contacted you directly.</div>
+            )}
+            <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding the Dead-on-Arrival report for order ${orderId(o.id)} — please share your unboxing video so we can help.`))}
+              style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>💬 Message customer on WhatsApp</button>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Outcome</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+              {["Under Review","Approved - Replacement","Approved - Refund","Declined"].map(s=>(
+                <button key={s} className="press" onClick={()=>setDoaStatus(s)}
+                  style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${doaStatus===s?C.primary:C.border}`,background:doaStatus===s?C.primary:"transparent",color:doaStatus===s?"white":C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{s.replace("Approved - ","✓ ")}</button>
+              ))}
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Note to customer <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+            <textarea value={doaNote} onChange={e=>setDoaNote(e.target.value)} rows={2} placeholder="e.g. Replacement will ship with your next order, or refund sent to your UPI"
+              style={{...refundFld,resize:"none",lineHeight:1.5,marginBottom:10}}/>
+            <button className="press" onClick={saveDoa} disabled={saving}
+              style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",opacity:saving?.7:1}}>💾 Save DOA Outcome</button>
+          </div>
+        )}
+
+        {/* Cancellation & Refund */}
+        <div style={{background:C.card,borderRadius:16,padding:"16px",marginTop:14,border:`1px solid ${o.status==="Cancelled"?"#fecaca":C.border}`}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>✕ Cancellation &amp; Refund</div>
+          {o.status==="Cancelled"?(
+            <>
+              <div style={{background:"#fee2e2",border:"1px solid #fecaca",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>
+                This order is cancelled.{o.cancelReason?` Reason: ${o.cancelReason}`:""}
+              </div>
+              {paidish?(
+                <>
+                  <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:10}}>Refund of ₹{amtDue} is due to the customer:</div>
+                  {refundEditor()}
+                  <button className="press" onClick={saveRefund} disabled={saving}
+                    style={{width:"100%",marginTop:12,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",opacity:saving?.7:1}}>
+                    💾 Save Refund Details
+                  </button>
+                </>
+              ):(
+                <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>No payment was collected for this order, so no refund is needed.</div>
+              )}
+            </>
+          ):cancelOpen?(
+            <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:12,padding:"14px"}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Reason <span style={{fontWeight:400,textTransform:"none"}}>(optional, shown to customer)</span></div>
+              <input value={cancelReason} onChange={e=>setCancelReason(e.target.value)} placeholder="e.g. Out of stock"
+                style={{...refundFld,marginBottom:12}}/>
+              {paidish?(
+                <>
+                  <div style={{fontSize:12,fontWeight:700,color:"#b91c1c",marginBottom:8}}>₹{amtDue} was collected — record the refund:</div>
+                  {refundEditor()}
+                </>
+              ):(
+                <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:4}}>No payment was collected, so nothing needs to be refunded.</div>
+              )}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14}}>
+                <button className="press" onClick={()=>setCancelOpen(false)} disabled={saving}
+                  style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Keep order</button>
+                <button className="press" onClick={doCancel} disabled={saving}
+                  style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{saving?"Cancelling…":"Confirm cancellation"}</button>
+              </div>
+            </div>
+          ):(
+            <>
+              <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Cancel this order and record any refund owed. Stock is automatically returned, and the customer sees the cancellation &amp; refund status on their order page.</div>
+              <button className="press" onClick={()=>setCancelOpen(true)}
+                style={{width:"100%",background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+                ✕ Cancel Order
+              </button>
+            </>
+          )}
+        </div>
+
         {/* Delete this order (also removes its payment screenshot) */}
         {onDeleteOrder&&(
           <div style={{marginTop:14}}>
@@ -4057,9 +4329,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         <div style={{margin:"14px 16px 0",background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:14,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
             <span style={{fontSize:18}}>⚠️</span>
-            <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:"#9a3412"}}>Sign in to save changes</span>
+            <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:"#9a3412"}}>Sign in to load orders &amp; save changes</span>
           </div>
-          <div style={{fontSize:12.5,color:"#9a3412",lineHeight:1.55,marginBottom:10}}>You're in admin, but not signed in with your Google admin account. <b>Products, posters & settings won't sync to customers</b> until you sign in. Photos you add now may not appear for shoppers.</div>
+          <div style={{fontSize:12.5,color:"#9a3412",lineHeight:1.55,marginBottom:10}}>The admin password unlocks this screen, but for customer privacy <b>order details only load after you sign in with your Google admin account</b>. Products, posters &amp; settings also won't sync to customers until you sign in.</div>
           <button className="press" onClick={onAdminSignIn}
             style={{display:"inline-flex",alignItems:"center",gap:8,background:"white",border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif"}}>
             <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.2 35.9 26.7 37 24 37c-5.3 0-9.7-2.6-11.3-7l-6.5 5C9.2 41.4 16 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.3 5.3C41.9 35.5 45 30.2 45 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
@@ -4799,17 +5071,28 @@ function SettingsPanel({settings,onSave}){
             <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Extra charge for fast/safe courier. Shown at checkout.</div>
           </div>
           <div>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>Live Guarantee add-on (₹)</div>
-            <input type="number" min="0" value={f.liveGuaranteePrice||150} onChange={e=>set("liveGuaranteePrice",Number(e.target.value))}
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>🚚 Free Delivery above (₹)</div>
+            <input type="number" min="0" value={f.freeDeliveryThreshold||0} onChange={e=>set("freeDeliveryThreshold",Number(e.target.value))}
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Opt-in fee for Live Arrival Guarantee. Shown when cart has live fish.</div>
+            <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
           </div>
         </div>
-        <div style={{marginTop:12}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>🚚 Free Delivery above (₹) — leave 0 to hide banner</div>
-          <input type="number" min="0" value={f.freeDeliveryThreshold||0} onChange={e=>set("freeDeliveryThreshold",Number(e.target.value))}
-            style={{width:"140px",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Shows a "Free Delivery on orders above ₹X" banner on the home page. Set to 0 to hide it.</div>
+        <div style={{marginTop:14,paddingTop:14,borderTop:`1px dashed ${C.border}`}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>🛡️ Live Guarantee add-on by region (₹)</div>
+          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Opt-in fee for the Live Arrival Guarantee, charged by the customer's delivery pincode. "Rest of India" also covers Central &amp; North India.</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+            {[
+              {k:"liveGuaranteePriceTN",   lbl:"Inside Tamil Nadu", def:150},
+              {k:"liveGuaranteePriceSouth",lbl:"South India",       def:200},
+              {k:"liveGuaranteePriceNorth",lbl:"Rest of India",     def:250},
+            ].map(({k,lbl,def})=>(
+              <div key={k}>
+                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>{lbl}</div>
+                <input type="number" min="0" value={f[k]!=null?f[k]:def} onChange={e=>set(k,Number(e.target.value))}
+                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 10px",fontSize:14,outline:"none",background:"white"}}/>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -5101,6 +5384,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
   const [cat,setCat]=useState("All");
   const [openId,setOpenId]=useState(null);
   const [zoom,setZoom]=useState(null);
+  const [pz,setPz]=useState(false);
   const cats=["All",...GUIDE_CATEGORIES.filter(c=>guides.some(g=>g.category===c))];
   const list=cat==="All"?guides:guides.filter(g=>g.category===cat);
   return(
@@ -5171,11 +5455,17 @@ function CareGuidesPage({nav,guides,mediaCache}){
         })}
       </div>
 
-      {/* Fullscreen poster viewer */}
+      {/* Fullscreen poster viewer — tap image to zoom in for full detail, tap outside to close */}
       {zoom&&(
-        <div onClick={()=>setZoom(null)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",animation:"fadeIn .2s ease"}}>
-          <img src={zoom} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:8}}/>
-          <button className="press" onClick={()=>setZoom(null)} style={{position:"absolute",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22}}>✕</button>
+        <div onClick={()=>{setZoom(null);setPz(false);}} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.94)",zIndex:400,display:"flex",alignItems:pz?"flex-start":"center",justifyContent:pz?"flex-start":"center",padding:pz?0:"16px",overflow:"auto",animation:"fadeIn .2s ease"}}>
+          <img src={zoom} alt="" onClick={e=>{e.stopPropagation();setPz(z=>!z);}}
+            style={pz
+              ? {width:"auto",height:"auto",maxWidth:"none",minWidth:"100%",cursor:"zoom-out",display:"block"}
+              : {maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:8,cursor:"zoom-in"}}/>
+          <div style={{position:"fixed",bottom:18,left:0,right:0,textAlign:"center",pointerEvents:"none"}}>
+            <span style={{background:"rgba(0,0,0,.55)",color:"rgba(255,255,255,.92)",fontSize:11.5,fontWeight:700,padding:"6px 14px",borderRadius:20}}>{pz?"Tap image to fit · tap outside to close":"Tap image to zoom in · tap outside to close"}</span>
+          </div>
+          <button className="press" onClick={e=>{e.stopPropagation();setZoom(null);setPz(false);}} style={{position:"fixed",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22,zIndex:401}}>✕</button>
         </div>
       )}
     </div>
@@ -5703,8 +5993,14 @@ function NemoStore(){
     showToast("Product deleted");
   };
   const updateOrderHandler=async updated=>{
-    let prevStatus="";
-    setOrders(prev=>{ const old=prev.find(o=>o.id===updated.id); prevStatus=old?old.status:""; return prev.map(o=>o.id===updated.id?updated:o); });
+    const old=orders.find(o=>o.id===updated.id);
+    const prevStatus=old?old.status:"";
+    // Auto-restock when an active order is cancelled (first time only) so inventory frees up
+    if(updated.status==="Cancelled" && prevStatus!=="Cancelled" && !old?.restocked && !updated.restocked){
+      updated={...updated,restocked:true};
+      restock(updated);
+    }
+    setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
     // Notify the customer by email when the order moves to a new milestone (if they opted in)
     if(updated.status!==prevStatus){
@@ -5765,6 +6061,15 @@ function NemoStore(){
       else dbSet("nemo-products",JSON.stringify(next)); // local cache only; cloud handled by transaction
       return next;
     });
+  };
+
+  // Customer reports a Dead-on-Arrival fish → flags the order (best-effort cloud write) and routes them to WhatsApp
+  const reportDoa=async(order)=>{
+    if(order.doa&&order.doa.status&&order.doa.status!=="Requested") return; // don't overwrite an in-progress/resolved request
+    const updated={...order,doa:{status:"Requested",requestedAt:new Date().toISOString(),note:""}};
+    setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
+    await saveOneOrder(updated);
+    showToast("DOA request noted — please send your video on WhatsApp");
   };
 
   // Customer submits payment proof → order moves to "Payment Review"
@@ -5873,7 +6178,7 @@ function NemoStore(){
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} user={user} settings={settings} orders={orders}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
         {page==="orders"   &&(user
-          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} settings={settings} favorites={favorites}/>
+          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} settings={settings} favorites={favorites}/>
           : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("orders");}} onBack={()=>nav("home")}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={()=>nav("home")}/>}
         {page==="request"  &&<RequestPage nav={nav} user={user} onSubmit={submitRequest}/>}
