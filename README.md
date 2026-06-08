@@ -67,7 +67,11 @@ Firebase Console → **Realtime Database → Rules** → paste the contents of
 
 ## 5. Configure the store (in the app)
 
-Open your site → tap the **logo 10 times** → password **`#nemoaquastore.31`** → **⚙️ Settings**:
+Open your site → tap the **logo 10 times** → enter your admin password → **⚙️ Settings**.
+
+> 🔒 The starter password is stored in `app.jsx` only as a **non-reversible hash** (not plaintext). **Change it right after launch** under **Settings → Admin Security** so it's yours alone.
+
+In Settings, fill in:
 
 - **Your WhatsApp Number** — full international format, e.g. `919876543210` (no `+`, no spaces).
 - **Supporter's WhatsApp** — optional, toggle on to show a "notify support" button.

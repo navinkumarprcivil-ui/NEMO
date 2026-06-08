@@ -10,7 +10,7 @@ const C = {
 };
 const STORE_NAME     = "Nemo";
 const PRICE_FONT     = "'Space Grotesk','Baloo 2',sans-serif"; // distinct font for prices / amounts
-const ADMIN_PASSWORD = "#nemoaquastore.31";
+const ADMIN_PASS_HASH = "hlltu9q"; // default admin password stored as a non-reversible hash (never plaintext). Change it right after launch: tap the logo 10× → Settings → Admin Security.
 const ADMIN_UID      = "cI2HmMt6FdR7fO7uUnugH85GeZt2"; // your Google account — must match Firebase rules
 const BUSINESS_WA    = "919360921030"; // ← change to your WhatsApp number
 const BUSINESS_EMAIL = "nemoaquastore@gmail.com"; // store email — used for order alerts + admin OTP when Settings email is blank
@@ -408,15 +408,28 @@ async function loadReviews(pid){
   const r=await dbGet("nemo-rev-"+pid); return r?JSON.parse(r):[];
 }
 async function saveReviews(pid,list){ await dbSet("nemo-rev-"+pid,JSON.stringify(list)); if(FB_OK) await fbSetColl("reviews/"+pid,list); }
-async function appendReview(pid,rev){ const list=await loadReviews(pid); const next=[rev,...list]; await saveReviews(pid,next); return next; }
-async function deleteReview(pid,rid){ const list=await loadReviews(pid); const next=list.filter(r=>r.id!==rid); await saveReviews(pid,next); return next; }
+async function appendReview(pid,rev){
+  // Write ONLY this review to its own node — never overwrite the whole collection (a whole-node .set wiped concurrent reviewers' entries)
+  if(FB_OK){ try{ await FB_DB.ref("reviews/"+pid+"/"+rev.id).set(rev); }catch(e){} }
+  const list=await loadReviews(pid);
+  const next=list.some(r=>r.id===rev.id)?list:[rev,...list];
+  await dbSet("nemo-rev-"+pid,JSON.stringify(next)); // local cache only
+  return next;
+}
+async function deleteReview(pid,rid){
+  if(FB_OK){ try{ await FB_DB.ref("reviews/"+pid+"/"+rid).remove(); }catch(e){} } // remove just this review, not the whole node
+  const list=await loadReviews(pid);
+  const next=list.filter(r=>r.id!==rid);
+  await dbSet("nemo-rev-"+pid,JSON.stringify(next));
+  return next;
+}
 
 /* Store settings (WhatsApp numbers, payment) — shared via Firebase */
 const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
   liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Special / Fast & Safe parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
-  returnPolicy:"Live fish & plants are non-returnable and non-refundable once delivered safely (they are covered instead by our Live Arrival Guarantee above). Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect. Refunds (where applicable) are issued as store credit or to the original payment method within 5–7 working days after we receive and inspect the item. Orders cannot be cancelled once a live order has been packed or dispatched.",
+  returnPolicy:"NO RETURNS & NO REPLACEMENTS once live fish or plants have been received in good condition — all livestock sales are final on safe delivery. The only cover for transit loss is the Live Arrival Guarantee (DOA) above, which is one-time and limited to the cost of the fish. Live fish & plants are non-returnable and non-refundable once delivered safely. Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect. Refunds (where applicable) are issued as store credit or to the original payment method within 5–7 working days after we receive and inspect the item. Orders cannot be cancelled once a live order has been packed or dispatched.",
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   shippingRates: null,
   specialDeliveryPrice: 200,
@@ -2877,6 +2890,8 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     return ()=>{alive=false;};
   },[placed,user,settings.referralMinOrder]);
   const [specialDelivery,setSpecialDelivery]=useState(false);
+  const [placing,setPlacing]=useState(false);
+  const [placeErr,setPlaceErr]=useState("");
   const [couponCode,setCouponCode]=useState("");
   const [couponApplied,setCouponApplied]=useState(null);
   const [couponMsg,setCouponMsg]=useState({text:"",ok:false});
@@ -2944,7 +2959,25 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     return Object.keys(e).length===0;
   };
 
-  const handlePlaceOrder=()=>{
+  const handlePlaceOrder=async()=>{
+    if(placing) return;
+    setPlaceErr(""); setPlacing(true);
+    // Live stock re-check — stops the last unit being oversold when two people check out at once
+    if(FB_OK && FB_DB){
+      try{
+        const need={}; cart.forEach(it=>{ need[it.id]=(need[it.id]||0)+it.qty; });
+        const ids=Object.keys(need);
+        const snaps=await Promise.all(ids.map(id=>withTimeout(FB_DB.ref("products/"+id+"/stockCount").get(),5000)));
+        const short=[];
+        ids.forEach((id,i)=>{
+          const snap=snaps[i];
+          const v=(snap&&typeof snap.val==="function")?snap.val():null;
+          const live=(typeof v==="number")?v:null;
+          if(live!==null && live<need[id]){ const nm=(cart.find(c=>c.id===id)||{}).name||"An item"; short.push(live<=0?`${nm} just sold out`:`${nm}: only ${live} left`); }
+        });
+        if(short.length){ setPlaceErr("Stock just changed — "+short.join(" · ")+". Please adjust your cart."); setPlacing(false); return; }
+      }catch(e){ /* network hiccup — the atomic stock transaction still prevents going negative */ }
+    }
     const id=uid("ord");
     const now=Date.now();
     const order={
@@ -2984,6 +3017,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     onOrderPlaced(order);
     setPlaced(order);
     setStep(3);
+    setPlacing(false);
   };
 
   const inp=(label,key,type="text",ph="",half=false,opt=false)=>(
@@ -3133,7 +3167,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <span style={{fontSize:20}}>🛡️</span>
                 <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:"#15803d"}}>Live Arrival Guarantee</span>
               </div>
-              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Included free on orders shipped by our recommended <b>Special / Fast &amp; Safe</b> parcel — no separate charge. If a fish arrives Dead on Arrival (DOA), send a valid unboxing video on WhatsApp within 2 hours and we'll make it right <b>one time</b>: a replacement, store credit, or refund of the fish amount (our choice). Normal-parcel orders are not covered. Delivery charges are non-refundable.</div>
+              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Included free on orders shipped by our recommended <b>Special / Fast &amp; Safe</b> parcel — no separate charge. If a fish arrives Dead on Arrival (DOA), send a valid unboxing video on WhatsApp within 2 hours and we'll make it right <b>one time</b>: a replacement, store credit, or refund of the fish amount (our choice). Normal-parcel orders are not covered. Delivery charges are non-refundable. Once fish are received in good condition, all sales are final — no returns or replacements.</div>
               <button className="press" onClick={()=>nav("about")}
                 style={{marginTop:8,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",textDecoration:"underline"}}>
                 📖 Read our acclimatization guide →
@@ -3339,9 +3373,10 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <div style={{fontSize:12,color:"#1e3a8a",lineHeight:1.55}}>On the next screen, pay the <b>full amount</b> by UPI and upload your payment screenshot. We verify &amp; confirm within 1–2 days. Orders unpaid within {PAY_WINDOW_MIN} minutes are auto-cancelled.</div>
           </div>
 
-          <button className="press" onClick={handlePlaceOrder}
-            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Nunito',sans-serif",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
-            Place Order &amp; Pay ₹{grand} →
+          {placeErr&&<div style={{marginTop:14,background:"#fef2f2",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
+          <button className="press" onClick={handlePlaceOrder} disabled={placing}
+            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Nunito',sans-serif",marginTop:18,opacity:placing?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+            {placing?"Checking stock…":<>Place Order &amp; Pay ₹{grand} →</>}
           </button>
           <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:7,lineHeight:1.5}}>
             You'll complete payment on the next step to confirm your order.
@@ -3395,7 +3430,7 @@ function AdminLogin({onSuccess,onBack,settings={}}){
 
   const submit=()=>{
     const custom = settings.adminPassHash;
-    const ok = custom ? (hashPass(pw)===custom) : (pw===ADMIN_PASSWORD);
+    const ok = custom ? (hashPass(pw)===custom) : (hashPass(pw)===ADMIN_PASS_HASH);
     if(ok){onSuccess();}
     else{
       setShaking(true);setErr(true);
@@ -4348,6 +4383,19 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             })()}
             <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {settings.gaId?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
           </div>
+          {/* Payment destination — glance-check that money still routes to you */}
+          <div style={{background:(settings.upiId||settings.razorpayLink)?"#ecfdf5":"#fff7ed",border:`1px solid ${(settings.upiId||settings.razorpayLink)?"#a7f3d0":"#fed7aa"}`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:800,color:(settings.upiId||settings.razorpayLink)?"#15803d":"#9a3412",letterSpacing:.4,marginBottom:5}}>💰 PAYMENTS GO TO</div>
+            {(settings.upiId||settings.razorpayLink)?(
+              <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                {settings.upiId&&<div style={{fontSize:13,fontWeight:700,color:"#166534"}}>UPI: <span style={{fontFamily:"monospace"}}>{settings.upiId}</span>{settings.upiName?` · ${settings.upiName}`:""}</div>}
+                {settings.razorpayLink&&<div style={{fontSize:11.5,color:"#166534",wordBreak:"break-all"}}>Gateway: {settings.razorpayLink}</div>}
+                <div style={{fontSize:10.5,color:"#15803d",marginTop:3,lineHeight:1.5}}>Changing these now requires an emailed code. If this ever looks wrong, fix it in Settings → Online Payment immediately.</div>
+              </div>
+            ):(
+              <div style={{fontSize:12.5,color:"#9a3412",fontWeight:600}}>⚠ No payment method set — add your UPI ID or gateway link in Settings so customers can pay.</div>
+            )}
+          </div>
           {/* Search orders by number / name / phone */}
           <div style={{position:"relative",marginBottom:12}}>
             <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:.5}}>🔍</span>
@@ -4727,11 +4775,15 @@ function SettingsPanel({settings,onSave}){
   const [otpBusy,setOtpBusy]=useState(false);
   const [otpTries,setOtpTries]=useState(0);
   const [pendingSave,setPendingSave]=useState(null);
+  const [otpSendFailed,setOtpSendFailed]=useState(false); // true when the code email couldn't be sent — unlocks the verified-admin override
+  const [overrideText,setOverrideText]=useState("");
   const genCode=()=>String(Math.floor(100000+Math.random()*900000));
   const sensitiveChanged=(nf)=>(
     String(nf.ownerWhatsapp||"")!==String(settings.ownerWhatsapp||"") ||
     String(nf.orderEmail||"")!==String(settings.orderEmail||"") ||
-    String(nf.adminPassHash||"")!==String(settings.adminPassHash||"")
+    String(nf.adminPassHash||"")!==String(settings.adminPassHash||"") ||
+    String(nf.upiId||"")!==String(settings.upiId||"") ||
+    String(nf.razorpayLink||"")!==String(settings.razorpayLink||"")
   );
   const adminEmail=()=>((settings.orderEmail||"").trim() || BUSINESS_EMAIL || (FB_OK&&FB_AUTH?.currentUser?.email)||"");
   const startSave=async(nf)=>{
@@ -4739,7 +4791,7 @@ function SettingsPanel({settings,onSave}){
     if(!sensitiveChanged(nf)){ onSave(nf); return; }
     // Sensitive change requires the Google admin account…
     if(!isAdminSignedIn()){
-      setPwMsg("🔒 Sign in with your Google admin account (banner at the top of Admin) before changing the WhatsApp number or password.");
+      setPwMsg("🔒 Sign in with your Google admin account (banner at the top of Admin) before changing your WhatsApp number, email, password or payment details.");
       return;
     }
     // …and an email to send the code to.
@@ -4751,15 +4803,16 @@ function SettingsPanel({settings,onSave}){
     const code=genCode();
     setOtpCode(code); setOtpExp(Date.now()+5*60*1000); setOtpEmail(email);
     setOtpInput(""); setOtpMsg(""); setOtpTries(0); setPendingSave(nf);
+    setOtpSendFailed(false); setOverrideText("");
     setOtpOpen(true); setOtpBusy(true);
     const ok=await sendOtpEmail(email, code, settings);
-    setOtpBusy(false);
+    setOtpBusy(false); setOtpSendFailed(!ok);
     setOtpMsg(ok ? ("✓ Code sent to "+maskEmail(email)) : ("⚠ Couldn't send. Check your EmailJS keys (Settings) and that "+maskEmail(email)+" is correct, or tap Resend."));
   };
   const resendOtp=async()=>{
     const code=genCode(); setOtpCode(code); setOtpExp(Date.now()+5*60*1000);
     setOtpTries(0); setOtpInput(""); setOtpBusy(true); setOtpMsg("");
-    const ok=await sendOtpEmail(otpEmail, code, settings); setOtpBusy(false);
+    const ok=await sendOtpEmail(otpEmail, code, settings); setOtpBusy(false); setOtpSendFailed(!ok);
     setOtpMsg(ok ? ("✓ New code sent to "+maskEmail(otpEmail)) : "⚠ Couldn't confirm the send. Try again.");
   };
   const verifyOtp=()=>{
@@ -5280,7 +5333,7 @@ function SettingsPanel({settings,onSave}){
             <div style={{fontSize:40,textAlign:"center",marginBottom:8}}>🔐</div>
             <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text,textAlign:"center",marginBottom:6}}>Confirm with email code</div>
             <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.5,marginBottom:18}}>
-              We emailed a 6-digit code to<br/><b style={{color:C.text}}>{maskEmail(otpEmail)}</b>.<br/>Enter it to save your WhatsApp / password change.
+              We emailed a 6-digit code to<br/><b style={{color:C.text}}>{maskEmail(otpEmail)}</b>.<br/>Enter it to confirm this change (WhatsApp, email, password or payment details).
             </div>
             <input value={otpInput} onChange={e=>{setOtpInput(e.target.value.replace(/\D/g,"").slice(0,6));if(otpMsg)setOtpMsg("");}}
               onKeyDown={e=>{if(e.key==="Enter")verifyOtp();}}
@@ -5297,6 +5350,15 @@ function SettingsPanel({settings,onSave}){
               <button className="press" onClick={resendOtp} disabled={otpBusy}
                 style={{background:"none",border:"none",color:C.primary,fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",padding:"6px 4px",opacity:otpBusy?.5:1}}>Resend code</button>
             </div>
+            {otpSendFailed&&(
+              <div style={{marginTop:14,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"12px 13px"}}>
+                <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.55,marginBottom:8}}>📭 Code didn't arrive? Since you're signed in as the verified Google admin, you can save without it. Type <b>CONFIRM</b> to proceed.</div>
+                <input value={overrideText} onChange={e=>setOverrideText(e.target.value.toUpperCase())} placeholder="Type CONFIRM"
+                  style={{width:"100%",borderRadius:10,border:"1.5px solid #fed7aa",padding:"10px 12px",fontSize:13,letterSpacing:2,textAlign:"center",fontWeight:700,outline:"none",background:"white",boxSizing:"border-box",fontFamily:"'Nunito',sans-serif"}}/>
+                <button className="press" disabled={overrideText!=="CONFIRM"} onClick={()=>{ const nf=pendingSave; setOtpOpen(false); setOtpCode(""); setPendingSave(null); setOtpSendFailed(false); setOverrideText(""); onSave(nf); }}
+                  style={{width:"100%",marginTop:10,background:overrideText==="CONFIRM"?C.danger:"#e5b89a",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>Save without code</button>
+              </div>
+            )}
           </div>
         </div>
       )}
