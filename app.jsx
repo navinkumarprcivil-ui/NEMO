@@ -5121,23 +5121,6 @@ function SettingsPanel({settings,onSave}){
             <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
           </div>
         </div>
-        <div style={{marginTop:14,paddingTop:14,borderTop:`1px dashed ${C.border}`}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>🛡️ Live Guarantee add-on by region (₹)</div>
-          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Opt-in fee for the Live Arrival Guarantee, charged by the customer's delivery pincode. "Rest of India" also covers Central &amp; North India.</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-            {[
-              {k:"liveGuaranteePriceTN",   lbl:"Inside Tamil Nadu", def:150},
-              {k:"liveGuaranteePriceSouth",lbl:"South India",       def:200},
-              {k:"liveGuaranteePriceNorth",lbl:"Rest of India",     def:250},
-            ].map(({k,lbl,def})=>(
-              <div key={k}>
-                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>{lbl}</div>
-                <input type="number" min="0" value={f[k]!=null?f[k]:def} onChange={e=>set(k,Number(e.target.value))}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 10px",fontSize:14,outline:"none",background:"white"}}/>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Coupon codes */}
