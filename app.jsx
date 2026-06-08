@@ -911,12 +911,13 @@ function generateBillHTML(order, settings){
   const s=settings||{};
   const o=order||{};
   const addr=o.address||{};
+  const E=(v)=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); // HTML-escape every customer-supplied value (anti-XSS)
   const billingAddr=o.billingAddress||addr;
   const items=(o.items||[]);
-  const storeName=s.legalName||(STORE_NAME+" Aqua Store");
-  const storeAddr=s.legalAddress||s.storeAddress||s.legalCity||"";
-  const storeWA=(s.ownerWhatsapp||BUSINESS_WA);
-  const gstin=(s.gstin||"").trim();
+  const storeName=E(s.legalName||(STORE_NAME+" Aqua Store"));
+  const storeAddr=E(s.legalAddress||s.storeAddress||s.legalCity||"");
+  const storeWA=E(s.ownerWhatsapp||BUSINESS_WA);
+  const gstin=E((s.gstin||"").trim());
   const docLabel=gstin?"TAX INVOICE":"INVOICE / BILL";
   const dateStr=o.placedAt?new Date(o.placedAt).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
   const subtotal=o.total||0;
@@ -932,16 +933,16 @@ function generateBillHTML(order, settings){
 
   const itemRows=items.map((it,i)=>`<tr style="background:${i%2===0?"#fff":"#f5fdfe"}">
     <td style="padding:9px 10px;font-size:13px;color:#0a2426;font-weight:600;border-bottom:1px solid #cce8ea">${i+1}</td>
-    <td style="padding:9px 10px;font-size:13px;color:#0a2426;border-bottom:1px solid #cce8ea">${it.name}${it.variantLabel?`<br><span style="font-size:11px;color:#5a8085">${it.variantLabel}</span>`:""}</td>
-    <td style="padding:9px 10px;text-align:center;font-size:13px;color:#0a2426;border-bottom:1px solid #cce8ea">${it.qty}</td>
+    <td style="padding:9px 10px;font-size:13px;color:#0a2426;border-bottom:1px solid #cce8ea">${E(it.name)}${it.variantLabel?`<br><span style="font-size:11px;color:#5a8085">${E(it.variantLabel)}</span>`:""}</td>
+    <td style="padding:9px 10px;text-align:center;font-size:13px;color:#0a2426;border-bottom:1px solid #cce8ea">${E(it.qty)}</td>
     <td style="padding:9px 10px;text-align:right;font-size:13px;font-weight:700;color:#0b6e72;border-bottom:1px solid #cce8ea">₹${fmt(it.price*it.qty)}</td>
     </tr>`).join("");
 
-  const addrLine=`${addr.address||""}, ${addr.city||""} — ${addr.pincode||""}`;
+  const addrLine=`${E(addr.address||"")}, ${E(addr.city||"")} — ${E(addr.pincode||"")}`;
   const sameAddr=!o.billingAddress||(addr.address===billingAddr.address&&addr.city===billingAddr.city);
-  const billAddrLine=`${billingAddr.address||""}, ${billingAddr.city||""} — ${billingAddr.pincode||""}`;
+  const billAddrLine=`${E(billingAddr.address||"")}, ${E(billingAddr.city||"")} — ${E(billingAddr.pincode||"")}`;
 
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Invoice ${o.orderNo||orderId(o.id||"")}</title>
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Invoice ${E(o.orderNo||orderId(o.id||""))}</title>
 <style>*{box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;background:#eef9fa;margin:0;padding:16px}.page{max-width:560px;margin:0 auto;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(11,110,114,.15)}.hdr{background:linear-gradient(135deg,#0b6e72,#12b5bc);padding:24px;color:#fff}.hdr h1{margin:0 0 2px;font-size:22px;font-weight:800}.hdr .sub{font-size:12px;opacity:.92;margin-top:2px;color:#ffffff}.badge{display:inline-block;background:rgba(255,255,255,.2);border-radius:20px;padding:4px 14px;font-size:11px;font-weight:700;margin-top:8px}.body{padding:20px 22px 28px}.r2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}.box{background:#f5fdfe;border:1px solid #cce8ea;border-radius:12px;padding:12px 14px}.box h4{margin:0 0 6px;font-size:10px;font-weight:800;color:#0b6e72;text-transform:uppercase;letter-spacing:.8px}.box p{margin:0 0 3px;font-size:12.5px;color:#0a2426;font-weight:600;line-height:1.5}.sub{font-size:11px;color:#5a8085;font-weight:400}table{width:100%;border-collapse:collapse}th{background:#0b6e72;color:#fff;padding:9px 10px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.5px}th:last-child{text-align:right}.footer{margin-top:20px;padding-top:14px;border-top:1px dashed #cce8ea;font-size:11.5px;color:#5a8085;text-align:center;line-height:1.8}@media print{body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0}.np{display:none!important}}</style></head>
 <body><div class="page">
 <div class="hdr">
@@ -950,26 +951,26 @@ function generateBillHTML(order, settings){
   ${storeAddr?`<div style="font-size:12px;color:#ffffff;opacity:.95;margin-top:4px">📍 ${storeAddr}</div>`:""}
   <div style="font-size:12px;color:#ffffff;opacity:.95;margin-top:2px">📞 ${storeWA}</div>
   ${gstin?`<div style="font-size:12px;color:#ffffff;opacity:.95;margin-top:2px">GSTIN: ${gstin}</div>`:""}
-  <div><span class="badge">${o.orderNo||orderId(o.id||"")}</span></div>
+  <div><span class="badge">${E(o.orderNo||orderId(o.id||""))}</span></div>
   <div style="font-size:11px;opacity:.75;margin-top:6px">📅 ${dateStr}</div>
 </div>
 <div class="body">
   <div class="r2">
     <div class="box"><h4>📦 Ship To</h4>
-      <p>${addr.name||"—"}</p>
-      <p class="sub">${addr.phone||""}</p>
+      <p>${E(addr.name)||"—"}</p>
+      <p class="sub">${E(addr.phone)}</p>
       <p class="sub">${addrLine}</p>
-      ${addr.notes?`<p class="sub">Note: ${addr.notes}</p>`:""}
+      ${addr.notes?`<p class="sub">Note: ${E(addr.notes)}</p>`:""}
     </div>
     ${!sameAddr?`<div class="box"><h4>🏠 Bill To</h4>
-      <p>${billingAddr.name||addr.name||"—"}</p>
+      <p>${E(billingAddr.name)||E(addr.name)||"—"}</p>
       <p class="sub">${billAddrLine}</p>
     </div>`:
     `<div class="box"><h4>📋 Order Info</h4>
-      <p>Zone: ${o.shippingZoneLabel||"—"}</p>
-      <p class="sub">Status: ${o.status||"—"}</p>
+      <p>Zone: ${E(o.shippingZoneLabel)||"—"}</p>
+      <p class="sub">Status: ${E(o.status)||"—"}</p>
       <p class="sub">Payment: ${isPaid?'<span style="color:#16a34a;font-weight:700">✓ Verified</span>':'<span style="color:#b45309;font-weight:700">⏳ Pending</span>'}</p>
-      ${o.txnId?`<p class="sub">Txn: ${o.txnId}</p>`:""}
+      ${o.txnId?`<p class="sub">Txn: ${E(o.txnId)}</p>`:""}
     </div>`}
   </div>
   <table>
@@ -977,9 +978,9 @@ function generateBillHTML(order, settings){
     <tbody>${itemRows}</tbody>
     <tbody>
       ${trow("Subtotal","₹"+fmt(subtotal))}
-      ${trow(`Shipping${o.shippingZoneLabel?" ("+o.shippingZoneLabel+")":""}${o.specialDelivery?" + Special":""}`,`₹${fmt(shipping)}`)}
+      ${trow(`Shipping${o.shippingZoneLabel?" ("+E(o.shippingZoneLabel)+")":""}${o.specialDelivery?" + Special":""}`,`₹${fmt(shipping)}`)}
       ${o.liveGuarantee?trow("🛡️ Live Arrival Guarantee",lgFee>0?`₹${fmt(lgFee)}`:"Included"):""}
-      ${couponOff>0?trow(`🎟 Coupon${o.coupon?" ("+o.coupon+")":""}`,`-₹${fmt(couponOff)}`,false,"#16a34a"):""}
+      ${couponOff>0?trow(`🎟 Coupon${o.coupon?" ("+E(o.coupon)+")":""}`,`-₹${fmt(couponOff)}`,false,"#16a34a"):""}
       <tr style="background:#eef9fa"><td colspan="3" style="padding:10px;font-size:15px;font-weight:800;color:#0b6e72;border-top:2px solid #0b6e72">Grand Total</td><td style="text-align:right;padding:10px;font-size:17px;font-weight:800;color:#0b6e72;border-top:2px solid #0b6e72">₹${fmt(grand)}</td></tr>
     </tbody>
   </table>
@@ -989,7 +990,7 @@ function generateBillHTML(order, settings){
     <p>${gstin?"Prices are inclusive of GST.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this is a Bill of Supply."}</p>
     <p>Thank you for shopping at <b>${storeName}</b> 🐠</p>
     <p>Support: WhatsApp ${storeWA}</p>
-    <p style="font-size:10px;color:#9bb3b4">This is a computer-generated invoice. Goods sold under our published Terms &amp; Live Arrival Guarantee. Subject to ${s.jurisdiction||"India"} jurisdiction.</p>
+    <p style="font-size:10px;color:#9bb3b4">This is a computer-generated invoice. Goods sold under our published Terms &amp; Live Arrival Guarantee. Subject to ${E(s.jurisdiction||"India")} jurisdiction.</p>
   </div>
 </div></div></body></html>`;
 }
