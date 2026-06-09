@@ -1124,6 +1124,9 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
   .desk-nav{display:flex;}
   .mobile-bottom-nav{display:none !important;}
   .prod-grid{grid-template-columns:repeat(3,1fr) !important;}
+  .vh-head{padding-top:18px !important;}
+  .sheet-overlay{align-items:center !important;padding:24px !important;}
+  .sheet-panel{border-radius:20px !important;max-width:460px !important;}
 }
 .desk-link:hover{background:#eef9fa !important;}
 `;
@@ -1731,8 +1734,8 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
 function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setPriceMax, availability, setAvailability, onClear, count}){
   if(!open) return null;
   return(
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(10,36,38,.42)",zIndex:200,display:"flex",alignItems:"flex-end",animation:"fadeIn .18s ease"}}>
-      <div onClick={e=>e.stopPropagation()} className="slide-up"
+    <div onClick={onClose} className="sheet-overlay" style={{position:"fixed",inset:0,background:"rgba(10,36,38,.42)",zIndex:200,display:"flex",alignItems:"flex-end",animation:"fadeIn .18s ease"}}>
+      <div onClick={e=>e.stopPropagation()} className="slide-up sheet-panel"
         style={{background:C.card,width:"100%",maxWidth:430,margin:"0 auto",borderRadius:"22px 22px 0 0",padding:"22px 20px 28px",maxHeight:"82vh",overflowY:"auto"}}>
         <div style={{width:40,height:4,background:C.border,borderRadius:2,margin:"0 auto 16px"}}/>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
@@ -2294,10 +2297,15 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                 </button>
               ))}
               <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,margin:"14px 0 8px"}}>Policies</div>
-              {["Terms & Conditions","Privacy Policy","Returns & Refunds"].map(l=>(
-                <button key={l} className="press" onClick={()=>nav("about")}
+              {[
+                {label:"Live Guarantee",to:"policy-guarantee"},
+                {label:"Returns & Refunds",to:"policy-returns"},
+                {label:"Terms & Conditions",to:"policy-terms"},
+                {label:"Privacy Policy",to:"policy-privacy"},
+              ].map(l=>(
+                <button key={l.label} className="press" onClick={()=>nav(l.to)}
                   style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Nunito',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
-                  {l}
+                  {l.label}
                 </button>
               ))}
             </div>
@@ -2394,7 +2402,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
 
   return(
     <div className="slide-up">
-      <div style={{background:C.card,padding:"52px 16px 12px",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:10}}>
+      <div className="vh-head" style={{background:C.card,padding:"52px 16px 12px",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:10}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:12}}>Shop</div>
         <div style={{display:"flex",alignItems:"center",background:C.bg,borderRadius:14,padding:"10px 14px",gap:10,marginBottom:12,border:`1.5px solid ${C.border}`}}>
           <span style={{fontSize:16}}>🔍</span>
@@ -5542,7 +5550,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
   const list=cat==="All"?guides:guides.filter(g=>g.category===cat);
   return(
     <div className="slide-up">
-      <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 22px",color:"white",position:"relative",overflow:"hidden"}}>
+      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 22px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
         <button className="press" onClick={()=>nav("home")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
@@ -5630,7 +5638,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
   const saved=products.filter(p=>favorites.includes(p.id));
   return(
     <div className="slide-up">
-      <div style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
+      <div className="vh-head" style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>♥ Saved Items</div>
         <div style={{fontSize:12.5,color:C.textSub,marginTop:2}}>{saved.length} item{saved.length!==1?"s":""} saved for later</div>
       </div>
@@ -5673,20 +5681,38 @@ function AboutPage({nav,settings={}}){
   );
   return(
     <div className="slide-up">
-      <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
+      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
         <button className="press" onClick={()=>nav("home")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>About &amp; Policies</div>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>About Us</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>Who we are, how we deliver, and our promises to you.</div>
       </div>
       <div style={{padding:"18px 16px 100px"}}>
         <Section icon="🐠" title={`Our Story`} body={s.aboutStory} accent="#ffe9d6"/>
         <Section icon="🚚" title="Delivery Areas" body={s.deliveryAreas} accent="#d4f4f5"/>
-        <Section icon="🛡️" title="Live Arrival Guarantee" body={s.liveArrivalGuarantee} accent="#dcfce7"/>
-        <Section icon="↩️" title="Returns & DOA Policy" body={s.returnPolicy} accent="#fef3c7"/>
-        <Section icon="💧" title="Acclimatization Guide" body={s.acclimatizationTips} accent="#e0f2fe"/>
-        <Section icon="📜" title="Terms & Conditions" body={s.termsPolicy} accent="#ede9fe"/>
-        <Section icon="🔒" title="Privacy Policy" body={s.privacyPolicy} accent="#f1f5f9"/>
+        {/* Policies — each opens its own focused page */}
+        <div style={{background:C.card,borderRadius:18,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <div style={{width:38,height:38,borderRadius:11,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📋</div>
+            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>Our Policies</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {[
+              {icon:"🛡️",label:"Live Arrival Guarantee",to:"policy-guarantee"},
+              {icon:"↩️",label:"Returns & Refunds",to:"policy-returns"},
+              {icon:"💧",label:"Acclimatization Guide",to:"policy-acclimatize"},
+              {icon:"📜",label:"Terms & Conditions",to:"policy-terms"},
+              {icon:"🔒",label:"Privacy Policy",to:"policy-privacy"},
+            ].map(l=>(
+              <button key={l.to} className="press" onClick={()=>nav(l.to)}
+                style={{display:"flex",alignItems:"center",gap:11,width:"100%",textAlign:"left",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
+                <span style={{fontSize:18}}>{l.icon}</span>
+                <span style={{flex:1,fontSize:13.5,fontWeight:700,color:C.text}}>{l.label}</span>
+                <span style={{color:C.textSub,fontSize:17}}>›</span>
+              </button>
+            ))}
+          </div>
+        </div>
         {/* Business information — legitimacy, no personal/PAN data */}
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px",marginTop:6}}>
           <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Business Information</div>
@@ -5707,6 +5733,51 @@ function AboutPage({nav,settings={}}){
             </a>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════ SINGLE POLICY PAGE ═══════════════════ */
+const POLICY_META = {
+  guarantee:   { icon:"🛡️", title:"Live Arrival Guarantee", key:"liveArrivalGuarantee", sub:"Our promise on every live order." },
+  returns:     { icon:"↩️", title:"Returns & Refunds",       key:"returnPolicy",         sub:"Returns, DOA claims & refunds." },
+  acclimatize: { icon:"💧", title:"Acclimatization Guide",   key:"acclimatizationTips",  sub:"Settle your new arrivals in safely." },
+  terms:       { icon:"📜", title:"Terms & Conditions",      key:"termsPolicy",          sub:"The terms you agree to when ordering." },
+  privacy:     { icon:"🔒", title:"Privacy Policy",          key:"privacyPolicy",        sub:"How we handle your information." },
+  delivery:    { icon:"🚚", title:"Delivery Areas",          key:"deliveryAreas",        sub:"Where and how we deliver." },
+};
+function PolicyPage({nav,settings={},which}){
+  const s={...DEFAULT_SETTINGS,...settings};
+  const meta=POLICY_META[which]||POLICY_META.terms;
+  const others=Object.keys(POLICY_META).filter(k=>k!==which);
+  return(
+    <div className="slide-up">
+      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
+        <button className="press" onClick={()=>nav("about")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>{meta.icon} {meta.title}</div>
+        <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>{meta.sub}</div>
+      </div>
+      <div style={{padding:"18px 16px 100px"}}>
+        <div style={{background:C.card,borderRadius:18,padding:"20px",border:`1px solid ${C.border}`,fontSize:13.5,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{s[meta.key]}</div>
+        <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,margin:"22px 4px 10px"}}>More policies</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+          {others.map(k=>(
+            <button key={k} className="press" onClick={()=>nav("policy-"+k)}
+              style={{display:"inline-flex",alignItems:"center",gap:7,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+              <span>{POLICY_META[k].icon}</span>{POLICY_META[k].title}
+            </button>
+          ))}
+        </div>
+        {s.ownerWhatsapp&&(
+          <div style={{textAlign:"center",marginTop:22}}>
+            <a href={`https://wa.me/${s.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
+              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:"white",borderRadius:14,padding:"13px 24px",fontSize:14,fontWeight:700,textDecoration:"none"}}>
+              💬 Questions? Chat with us
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -6353,6 +6424,7 @@ function NemoStore(){
         {page==="guides"   &&<CareGuidesPage nav={nav} guides={guides} mediaCache={mediaCache}/>}
         {page==="saved"    &&<SavedPage nav={nav} products={products} mediaCache={mediaCache} favorites={favorites} addToCart={addToCart} cartMap={cartMap} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} user={user} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="about"    &&<AboutPage nav={nav} settings={settings}/>}
+        {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
