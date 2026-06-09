@@ -429,7 +429,7 @@ async function deleteReview(pid,rid){
 }
 
 /* Store settings (WhatsApp numbers, payment) — shared via Firebase */
-const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"",
+const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
   liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Special / Fast & Safe parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
@@ -1117,6 +1117,15 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
 .points-pop{animation:pointsPop .35s cubic-bezier(.22,1,.36,1) both;}
 @keyframes showcaseSlide{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
 .showcase-slide{animation:showcaseSlide .3s ease both;}
+/* ── Desktop layout (≥1000px) ── */
+.desk-nav{display:none;}
+@media(min-width:1000px){
+  .nemo-app{max-width:880px !important;}
+  .desk-nav{display:flex;}
+  .mobile-bottom-nav{display:none !important;}
+  .prod-grid{grid-template-columns:repeat(3,1fr) !important;}
+}
+.desk-link:hover{background:#eef9fa !important;}
 `;
 
 /* ═══════════════════ TINY COMPONENTS ═══════════════════ */
@@ -2212,7 +2221,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Featured</span>
             <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.accent,fontWeight:700,background:"none",border:"none",fontFamily:"'Nunito',sans-serif"}}>View All →</button>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             {featured.map(p=>(
               <ProductCard key={p.id} product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
                 onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
@@ -2252,29 +2261,100 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           </button>
         </div>
 
-        {/* Contact footer */}
-        <div style={{marginTop:22,paddingTop:18,borderTop:`1px solid ${C.border}`,textAlign:"center"}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text,marginBottom:8}}>{STORE_NAME} Aqua Store</div>
-          {settings.storeAddress&&(
-            <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6,marginBottom:6,display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-              <span>📍</span><span>{settings.storeAddress}</span>
+        {/* ── Site footer ── */}
+        <div style={{margin:"28px -16px 0",background:C.card,borderTop:`3px solid ${C.primary}`,padding:"26px 18px 22px"}}>
+          {/* Brand + tagline */}
+          <div style={{marginBottom:22}}>
+            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>{STORE_NAME} Aqua Store</div>
+            <div style={{fontSize:12,color:C.textSub,marginTop:3,lineHeight:1.5,maxWidth:300}}>Hand-picked healthy fish, live plants &amp; quality accessories — delivered with care across India.</div>
+          </div>
+
+          {/* Link columns */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"22px 16px",marginBottom:22}}>
+            <div>
+              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:8}}>Shop</div>
+              {CATEGORIES.map(cat=>(
+                <button key={cat} className="press" onClick={()=>{setCategory(cat);nav("shop");}}
+                  style={{display:"flex",alignItems:"center",gap:7,background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Nunito',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
+                  <span style={{fontSize:14}}>{CAT_META[cat].emoji}</span>{cat}
+                </button>
+              ))}
+            </div>
+            <div>
+              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:8}}>Company</div>
+              {[
+                {label:"About Us",to:"about"},
+                {label:"Care Guides",to:"guides"},
+                {label:"Request a Product",to:"request"},
+                {label:"Track My Orders",to:"orders"},
+              ].map(l=>(
+                <button key={l.label} className="press" onClick={()=>nav(l.to)}
+                  style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Nunito',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
+                  {l.label}
+                </button>
+              ))}
+              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,margin:"14px 0 8px"}}>Policies</div>
+              {["Terms & Conditions","Privacy Policy","Returns & Refunds"].map(l=>(
+                <button key={l} className="press" onClick={()=>nav("about")}
+                  style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Nunito',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Contact */}
+          <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18,marginBottom:18}}>
+            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Contact Us</div>
+            {settings.storeAddress&&(
+              <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}>
+                <span>📍</span><span>{settings.storeAddress}</span>
+              </div>
+            )}
+            {settings.storeHours&&(
+              <div style={{fontSize:12.5,color:C.textSub,marginBottom:8,display:"flex",gap:7}}><span>🕒</span><span>{settings.storeHours}</span></div>
+            )}
+            {settings.ownerWhatsapp&&(
+              <a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
+                style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",marginBottom:8}}>
+                <span style={{fontSize:14}}>💬</span> +{settings.ownerWhatsapp.replace(/\D/g,"")}
+              </a>
+            )}
+            <a href={`mailto:${settings.orderEmail||BUSINESS_EMAIL}`}
+              style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:C.accent,textDecoration:"none"}}>
+              <span style={{fontSize:14}}>✉️</span> {settings.orderEmail||BUSINESS_EMAIL}
+            </a>
+          </div>
+
+          {/* Follow us */}
+          {(settings.instagramUrl||settings.facebookUrl||settings.ownerWhatsapp)&&(
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18,marginBottom:18}}>
+              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Follow Us</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+                {settings.instagramUrl&&(
+                  <a href={settings.instagramUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#c13584",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>📷 Instagram</a>
+                )}
+                {settings.facebookUrl&&(
+                  <a href={settings.facebookUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#1877f2",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>👍 Facebook</a>
+                )}
+                {settings.ownerWhatsapp&&(
+                  <a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>💬 WhatsApp</a>
+                )}
+              </div>
             </div>
           )}
-          {settings.storeHours&&(
-            <div style={{fontSize:11.5,color:C.textSub,marginBottom:6}}>🕒 {settings.storeHours}</div>
-          )}
-          {settings.ownerWhatsapp&&(
-            <a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
-              style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#25965a",textDecoration:"none",marginTop:2}}>
-              <span style={{fontSize:14}}>💬</span> +{settings.ownerWhatsapp.replace(/\D/g,"")}
-            </a>
-          )}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginTop:12,flexWrap:"wrap"}}>
-            <button className="press" onClick={()=>nav("about")} style={{background:"none",border:"none",fontSize:12,fontWeight:700,color:C.accent,fontFamily:"'Nunito',sans-serif"}}>About &amp; Policies</button>
-            <span style={{color:C.border}}>·</span>
-            <button className="press" onClick={()=>nav("guides")} style={{background:"none",border:"none",fontSize:12,fontWeight:700,color:C.accent,fontFamily:"'Nunito',sans-serif"}}>Care Guides</button>
+
+          {/* Secure payment */}
+          <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18,marginBottom:18}}>
+            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Secure Payment</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {["UPI","VISA","Mastercard","RuPay"].map(b=>(
+                <span key={b} style={{fontSize:11,fontWeight:800,letterSpacing:.3,color:C.textSub,background:C.bg||"#f1f7f7",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 11px"}}>{b}</span>
+              ))}
+            </div>
           </div>
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:12,opacity:.7}}>© {new Date().getFullYear()} {STORE_NAME}. All rights reserved.</div>
+
+          <div style={{fontSize:10.5,color:C.textSub,opacity:.75,lineHeight:1.5}}>© {new Date().getFullYear()} {STORE_NAME} Aqua Store. All rights reserved.</div>
         </div>
       </div>
     </div>
@@ -2349,7 +2429,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             <div style={{fontSize:12}}>Try adjusting your filters</div>
           </div>
         ):(
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             {list.map(p=>(
               <div key={p.id}>
                 <ProductCard product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
@@ -3392,12 +3472,41 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   );
 }
 
+/* ═══════════════════ DESKTOP TOP NAV (shown ≥1000px) ═══════════════════ */
+function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap}){
+  const links=[{id:"home",label:"Home"},{id:"shop",label:"Shop"},{id:"guides",label:"Care Guides"},{id:"request",label:"Request"}];
+  const active=page==="detail"?"shop":page==="checkout"?"cart":page==="auth"?"orders":page;
+  const linkStyle=on=>({background:on?"#eef9fa":"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:on?800:600,color:on?C.primary:C.text,padding:"8px 12px",borderRadius:10,fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap"});
+  return(
+    <div className="desk-nav" style={{flexShrink:0,alignItems:"center",gap:4,background:C.card,borderBottom:`1px solid ${C.border}`,padding:"10px 22px",position:"sticky",top:0,zIndex:60,boxShadow:"0 2px 12px rgba(11,110,114,.06)"}}>
+      <div className="press" onClick={onSecretTap} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginRight:8}}>
+        <img src={settings.storeLogo||STORE_LOGO} alt="" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:38,height:38,objectFit:"contain"}}/>
+        <span style={{fontFamily:"'Baloo 2',sans-serif",fontWeight:800,fontSize:16,color:C.text,letterSpacing:.4,whiteSpace:"nowrap"}}>{STORE_NAME} Aqua Store</span>
+      </div>
+      {links.map(l=>(
+        <button key={l.id} className="desk-link" onClick={()=>nav(l.id)} style={linkStyle(active===l.id)}>{l.label}</button>
+      ))}
+      <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
+        <button className="desk-link" onClick={()=>nav("orders")} style={linkStyle(active==="orders")}>📦 Orders</button>
+        <button className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+          🛒 Cart
+          {cartCount>0&&<span style={{position:"absolute",top:-6,right:-6,background:C.coral,color:"white",fontSize:10,fontWeight:800,borderRadius:10,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{cartCount>99?"99+":cartCount}</span>}
+        </button>
+        <button className="press" onClick={()=>nav("orders")} style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:`1px solid ${C.border}`,borderRadius:30,padding:"5px 12px 5px 5px",cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
+          <span style={{width:28,height:28,borderRadius:"50%",background:C.primary,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>{user?(user.name||"U").charAt(0).toUpperCase():"👤"}</span>
+          <span style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap"}}>{user?(user.name||"").split(" ")[0]||"Account":"Sign in"}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════ BOTTOM NAV ═══════════════════ */
 function BottomNav({page,nav,cartCount}){
   const tabs=[{id:"home",label:"Home",icon:"🏠"},{id:"shop",label:"Shop",icon:"🛍️"},{id:"orders",label:"Orders",icon:"📦"},{id:"cart",label:"Cart",icon:"🛒"}];
   const active=page==="home"?"home":page==="shop"||page==="detail"?"shop":page==="orders"||page==="auth"?"orders":page==="cart"||page==="checkout"?"cart":"home";
   return(
-    <div style={{position:"absolute",bottom:0,left:0,right:0,zIndex:100}}>
+    <div className="mobile-bottom-nav" style={{position:"absolute",bottom:0,left:0,right:0,zIndex:100}}>
       {/* Bottom nav tabs */}
       <div style={{background:C.navBg,backdropFilter:"blur(20px)",borderTop:`1px solid ${C.border}`,display:"flex",paddingTop:"8px",paddingBottom:"calc(14px + env(safe-area-inset-bottom, 0px))"}}>
         {tabs.map(t=>{
@@ -4902,6 +5011,8 @@ function SettingsPanel({settings,onSave}){
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Shown at the bottom of the home page for customers.</div>
         {field("Store Address","storeAddress","e.g. 12 Lake View Rd, Chennai 600001")}
         {field("Opening Hours (optional)","storeHours","e.g. Mon–Sat, 10am–8pm")}
+        {field("Instagram Link (optional)","instagramUrl","https://instagram.com/yourstore","Shown in the home-page footer under Follow Us.")}
+        {field("Facebook Link (optional)","facebookUrl","https://facebook.com/yourstore")}
         {field("Order Notification Email (optional)","orderEmail","you@example.com","Where new-order alerts and your admin security codes are sent. Delivered via EmailJS (set the keys below). Changing this needs an email security code.","email")}
       </div>
 
@@ -5532,7 +5643,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
             <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Browse Products</button>
           </div>
         ):(
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             {saved.map(p=>(
               <div key={p.id}>
                 <ProductCard product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
@@ -5816,6 +5927,20 @@ function NemoStore(){
     window.addEventListener("nemo-fb-ready",cloudSync);
     return()=>window.removeEventListener("nemo-fb-ready",cloudSync);
   },[]);
+
+  // Deep-link: /?p=<productId> (used by the static SEO product pages) opens that product once it's loaded
+  const deepLinkRef = useRef((()=>{ try{ return new URLSearchParams(window.location.search).get("p")||""; }catch(e){ return ""; } })());
+  useEffect(()=>{
+    const pid=deepLinkRef.current;
+    if(!pid) return;
+    const prod=products.find(p=>p.id===pid);
+    if(prod){
+      deepLinkRef.current=""; // fire once
+      nav("detail",prod);
+      // Tidy the URL so a refresh/share doesn't keep re-triggering, without reloading
+      try{ window.history.replaceState({},"",window.location.pathname); }catch(e){}
+    }
+  },[products]);
 
   // Visitor analytics: count one visit per session, once Firebase is ready
   useEffect(()=>{
@@ -6211,6 +6336,7 @@ function NemoStore(){
     <div className="nemo-app" style={{fontFamily:"'Nunito',sans-serif",background:C.bg,maxWidth:430,margin:"0 auto",position:"relative",overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <style>{STYLES}</style>
       {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
+      {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap}/>}
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
         {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}

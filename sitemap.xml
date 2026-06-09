@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://www.nemoaquastore.in/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
+<url><loc>https://www.nemoaquastore.in/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/neon-tetra-pair</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/fancy-guppy-pair</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/betta-halfmoon-male</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/clownfish</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/java-fern</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/anubias-barteri</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/starter-tank-20l</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/hob-filter-300l-h</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/planted-led-light</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://www.nemoaquastore.in/p/tropical-flakes-100g</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
 </urlset>
