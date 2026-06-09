@@ -1119,6 +1119,8 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
 .showcase-slide{animation:showcaseSlide .3s ease both;}
 /* ── Desktop layout (≥1000px) ── */
 .desk-nav{display:none;}
+/* Header top padding adapts to device safe-area instead of a flat notch inset */
+.vh-head{padding-top:calc(env(safe-area-inset-top, 0px) + 14px) !important;}
 @media(min-width:1000px){
   .nemo-app{max-width:880px !important;}
   .desk-nav{display:flex;}
@@ -1132,6 +1134,20 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
 `;
 
 /* ═══════════════════ TINY COMPONENTS ═══════════════════ */
+/* Renders children as a direct child of <body> so fixed-position overlays
+   escape any ancestor with a transform (e.g. the .slide-up entrance animation,
+   whose held identity matrix would otherwise trap position:fixed). */
+function Portal({children}){
+  const elRef = useRef(null);
+  if(!elRef.current && typeof document!=="undefined"){ elRef.current=document.createElement("div"); }
+  useEffect(()=>{
+    const el=elRef.current; if(!el) return;
+    document.body.appendChild(el);
+    return ()=>{ try{document.body.removeChild(el);}catch(e){} };
+  },[]);
+  if(!elRef.current) return null;
+  return ReactDOM.createPortal(children, elRef.current);
+}
 function Toast({msg,type,onDone}){
   useEffect(()=>{const t=setTimeout(onDone,2800);return()=>clearTimeout(t);},[]);
   const ok=type==="success";
@@ -1389,6 +1405,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
         </div>
       )}
       {fullImg&&(
+        <Portal>
         <div onClick={()=>setFullImg(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.88)",zIndex:9999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
           <img src={fullImg.imgData} alt={fullImg.ownerName} style={{maxWidth:"100%",maxHeight:"70vh",borderRadius:16,objectFit:"contain"}}/>
           <div style={{marginTop:14,textAlign:"center"}}>
@@ -1397,6 +1414,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
           </div>
           <button onClick={()=>setFullImg(null)} style={{marginTop:16,background:"rgba(255,255,255,.18)",border:"1px solid rgba(255,255,255,.3)",borderRadius:12,padding:"10px 24px",color:"white",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Close</button>
         </div>
+        </Portal>
       )}
     </div>
   );
@@ -2747,7 +2765,7 @@ function CartPage({cart,updateQty,total,nav}){
   );
   return(
     <div className="slide-up">
-      <div style={{padding:"52px 16px 100px"}}>
+      <div className="vh-head" style={{padding:"52px 16px 100px"}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:20}}>My Cart ({cart.reduce((s,i)=>s+i.qty,0)})</div>
         {cart.map(item=>{
           const m=CAT_META[item.category]||CAT_META["Live Fish"];
@@ -3208,7 +3226,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   return(
     <div className="slide-up">
       {/* Header */}
-      <div style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
+      <div className="vh-head" style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
           <button className="press" onClick={()=>step===1?nav("cart"):setStep(1)}
             style={{background:"none",border:"none",fontSize:20,color:C.textSub}}>←</button>
@@ -4172,10 +4190,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         </div>
 
         {proofZoom&&o.paymentProof&&(
-          <div onClick={()=>setProofZoom(false)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <Portal>
+          <div onClick={()=>setProofZoom(false)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
             <img src={o.paymentProof} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:8}}/>
             <button className="press" onClick={()=>setProofZoom(false)} style={{position:"absolute",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22}}>✕</button>
           </div>
+          </Portal>
         )}
 
         {/* WhatsApp updates */}
@@ -5618,7 +5638,8 @@ function CareGuidesPage({nav,guides,mediaCache}){
 
       {/* Fullscreen poster viewer — tap image to zoom in for full detail, tap outside to close */}
       {zoom&&(
-        <div onClick={()=>{setZoom(null);setPz(false);}} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.94)",zIndex:400,display:"flex",alignItems:pz?"flex-start":"center",justifyContent:pz?"flex-start":"center",padding:pz?0:"16px",overflow:"auto",animation:"fadeIn .2s ease"}}>
+        <Portal>
+        <div onClick={()=>{setZoom(null);setPz(false);}} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.94)",zIndex:9000,display:"flex",alignItems:pz?"flex-start":"center",justifyContent:pz?"flex-start":"center",padding:pz?0:"16px",overflow:"auto",animation:"fadeIn .2s ease"}}>
           <img src={zoom} alt="" onClick={e=>{e.stopPropagation();setPz(z=>!z);}}
             style={pz
               ? {width:"auto",height:"auto",maxWidth:"none",minWidth:"100%",cursor:"zoom-out",display:"block"}
@@ -5626,8 +5647,9 @@ function CareGuidesPage({nav,guides,mediaCache}){
           <div style={{position:"fixed",bottom:18,left:0,right:0,textAlign:"center",pointerEvents:"none"}}>
             <span style={{background:"rgba(0,0,0,.55)",color:"rgba(255,255,255,.92)",fontSize:11.5,fontWeight:700,padding:"6px 14px",borderRadius:20}}>{pz?"Tap image to fit · tap outside to close":"Tap image to zoom in · tap outside to close"}</span>
           </div>
-          <button className="press" onClick={e=>{e.stopPropagation();setZoom(null);setPz(false);}} style={{position:"fixed",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22,zIndex:401}}>✕</button>
+          <button className="press" onClick={e=>{e.stopPropagation();setZoom(null);setPz(false);}} style={{position:"fixed",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22,zIndex:9001}}>✕</button>
         </div>
+        </Portal>
       )}
     </div>
   );
@@ -5834,7 +5856,7 @@ function RequestPage({nav,user,onSubmit,myRequests}){
 
   return(
     <div className="slide-up">
-      <div style={{background:`linear-gradient(150deg,${C.accent},${C.primary})`,padding:"52px 18px 24px",color:"white",position:"relative",overflow:"hidden"}}>
+      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.accent},${C.primary})`,padding:"52px 18px 24px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.1)"}}/>
         <button className="press" onClick={()=>nav("home")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Request a Product</div>
