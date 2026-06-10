@@ -273,7 +273,27 @@ function withTimeout(promise, ms, fallback=null){
 }
 /* Local (device) layer — used as cache + offline fallback */
 async function dbGet(k)   { try { const v=localStorage.getItem(k); return v; } catch { return null; } }
-async function dbSet(k,v) { try { localStorage.setItem(k,v); return true; } catch { return false; } }
+/* Free space by evicting cached media (base64 images/videos). Returns bytes freed.
+   Collect keys first, then remove, so live index shifts don't skip entries. */
+function evictMediaCache(targetBytes){
+  let freed=0; const keys=[];
+  try{ for(let i=0;i<localStorage.length;i++){ const key=localStorage.key(i); if(key&&(key.indexOf("nemo-img-")===0||key.indexOf("nemo-vid-")===0||key.indexOf("nemo-m-")===0)) keys.push(key); } }catch(e){ return 0; }
+  for(const key of keys){ const val=localStorage.getItem(key)||""; try{ localStorage.removeItem(key); freed+=val.length; }catch(e){} if(freed>=targetBytes) break; }
+  return freed;
+}
+async function dbSet(k,v) {
+  try { localStorage.setItem(k,v); return true; }
+  catch(e){
+    // Quota exceeded (localStorage fills with base64 media). Evict media and retry,
+    // so small critical keys — settings, orders, user — always persist.
+    try{ evictMediaCache((v?v.length:0)*2 + 500000); localStorage.setItem(k,v); return true; }
+    catch(e2){
+      const isMedia=(k.indexOf("nemo-img-")===0||k.indexOf("nemo-vid-")===0||k.indexOf("nemo-m-")===0);
+      if(!isMedia){ try{ evictMediaCache(Infinity); localStorage.setItem(k,v); return true; }catch(e3){} }
+      return false;
+    }
+  }
+}
 async function dbDel(k)   { try { localStorage.removeItem(k); } catch {} }
 
 /* ── Firebase Realtime Database ──
@@ -355,26 +375,66 @@ async function saveOneOrder(o){ // write one order to local cache + cloud (per-u
   if(FB_OK&&o.userUid){ try{ await FB_DB.ref("orders/"+o.userUid+"/"+o.id).set(o); }catch(e){} }
 }
 async function saveOrders(l) { await dbSet("nemo-orders",JSON.stringify(l)); } // local cache only
-async function loadImg(id)   { const l=await dbGet("nemo-img-"+id); if(l)return l; if(FB_OK){ const v=await fbGetObj("media/img-"+id); if(v){ dbSet("nemo-img-"+id,v); return v; } } return null; }
-async function saveImg(id,b) { await dbSet("nemo-img-"+id,b); if(FB_OK){ try{ await FB_DB.ref("media/img-"+id).set(b); }catch(e){} } return true; }
-async function loadVid(id)   { return dbGet("nemo-vid-"+id); }
-async function saveVid(id,b) { return dbSet("nemo-vid-"+id,b); }
-async function delMedia(id)  { await dbDel("nemo-img-"+id); await dbDel("nemo-vid-"+id); if(FB_OK){ try{ await FB_DB.ref("media/img-"+id).remove(); }catch(e){} } }
+/* ── Media cache: IndexedDB (large quota) with one-time migration from the old localStorage cache.
+   Big base64 images/videos live here instead of localStorage, so the 5MB localStorage cap
+   (which silently broke settings/orders writes) is never hit by media again. ── */
+const HAS_IDB = (typeof indexedDB!=="undefined");
+const IDB = (function(){
+  let dbp=null;
+  function open(){
+    if(dbp) return dbp;
+    dbp=new Promise((res)=>{
+      try{
+        const r=indexedDB.open("nemo-media",1);
+        r.onupgradeneeded=()=>{ try{ r.result.createObjectStore("kv"); }catch(e){} };
+        r.onsuccess=()=>res(r.result);
+        r.onerror=()=>res(null);
+      }catch(e){ res(null); }
+    });
+    return dbp;
+  }
+  function store(mode){ return open().then(db=>{ if(!db) return null; try{ return db.transaction("kv",mode).objectStore("kv"); }catch(e){ return null; } }); }
+  return {
+    get(k){ return store("readonly").then(s=>s&&new Promise(res=>{ const r=s.get(k); r.onsuccess=()=>res(r.result==null?null:r.result); r.onerror=()=>res(null); })).catch(()=>null); },
+    set(k,v){ return store("readwrite").then(s=>s&&new Promise(res=>{ const r=s.put(v,k); r.onsuccess=()=>res(true); r.onerror=()=>res(false); })).catch(()=>false); },
+    del(k){ return store("readwrite").then(s=>s&&new Promise(res=>{ const r=s.delete(k); r.onsuccess=()=>res(true); r.onerror=()=>res(true); })).catch(()=>{}); },
+  };
+})();
+async function mediaGet(k){
+  if(HAS_IDB){
+    const v=await IDB.get(k); if(v!=null) return v;
+    // Migrate any legacy localStorage copy into IDB, then free the localStorage slot.
+    try{ const ls=localStorage.getItem(k); if(ls!=null){ IDB.set(k,ls); localStorage.removeItem(k); return ls; } }catch(e){}
+    return null;
+  }
+  return dbGet(k);
+}
+async function mediaSet(k,v){
+  if(HAS_IDB){ const ok=await IDB.set(k,v); if(ok){ try{ localStorage.removeItem(k); }catch(e){} return true; } }
+  return dbSet(k,v);
+}
+async function mediaDel(k){ if(HAS_IDB){ await IDB.del(k); } try{ localStorage.removeItem(k); }catch(e){} }
 
-/* ── Multi-media (per-product gallery): base64 stored in RTDB `media/<key>` + local cache ── */
+async function loadImg(id)   { const l=await mediaGet("nemo-img-"+id); if(l)return l; if(FB_OK){ const v=await fbGetObj("media/img-"+id); if(v){ mediaSet("nemo-img-"+id,v); return v; } } return null; }
+async function saveImg(id,b) { await mediaSet("nemo-img-"+id,b); if(FB_OK){ try{ await FB_DB.ref("media/img-"+id).set(b); }catch(e){} } return true; }
+async function loadVid(id)   { return mediaGet("nemo-vid-"+id); }
+async function saveVid(id,b) { return mediaSet("nemo-vid-"+id,b); }
+async function delMedia(id)  { await mediaDel("nemo-img-"+id); await mediaDel("nemo-vid-"+id); if(FB_OK){ try{ await FB_DB.ref("media/img-"+id).remove(); }catch(e){} } }
+
+/* ── Multi-media (per-product gallery): base64 stored in RTDB `media/<key>` + IndexedDB cache ── */
 async function saveMediaItem(key,b64){
-  await dbSet("nemo-m-"+key,b64);
+  await mediaSet("nemo-m-"+key,b64);
   if(FB_OK){ try{ await FB_DB.ref("media/"+key).set(b64); }catch(e){ console.warn("saveMediaItem",e?.message); } }
   return true;
 }
 async function loadMediaItem(key){
-  // Check local cache first — avoids a 6-second Firebase timeout on every image load
-  const cached=await dbGet("nemo-m-"+key); if(cached)return cached;
-  if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("media/"+key).get(),6000); const v=s&&s.val(); if(v){ dbSet("nemo-m-"+key,v); return v; } }catch(e){} }
+  // Check local (IndexedDB) cache first — avoids a 6-second Firebase timeout on every image load
+  const cached=await mediaGet("nemo-m-"+key); if(cached)return cached;
+  if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("media/"+key).get(),6000); const v=s&&s.val(); if(v){ mediaSet("nemo-m-"+key,v); return v; } }catch(e){} }
   return null;
 }
 async function delMediaItem(key){
-  await dbDel("nemo-m-"+key);
+  await mediaDel("nemo-m-"+key);
   if(FB_OK){ try{ await FB_DB.ref("media/"+key).remove(); }catch(e){} }
 }
 /* Compress an image file to a JPEG data-URL (keeps RTDB + sync light) */
@@ -777,6 +837,56 @@ function waStatusMsg(order, status, tracking=""){
 
 function openWA(number, msg){ window.open(`https://wa.me/${number}?text=${msg}`,"_blank"); }
 
+/* Build a clean, itemized invoice as plain text + the business header fields,
+   so the order email effectively carries a full invoice in its body.
+   Returns params you can merge into an EmailJS payload. */
+function buildInvoiceFields(order, settings){
+  const s=settings||{}; const o=order||{}; const addr=o.address||{};
+  const gstin=(s.gstin||"").trim();
+  const label=gstin?"TAX INVOICE":"INVOICE / BILL OF SUPPLY";
+  const invNo=o.orderNo||orderId(o.id||"");
+  const dateStr=o.placedAt?new Date(o.placedAt).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"";
+  const grand=o.amountDue??((o.total||0)+(o.fee||0));
+  const lgFee=o.liveGuaranteeFee||0;
+  const couponOff=o.couponDiscount||0;
+  const refOff=o.referralDiscount||0;
+  const loyaltyOff=o.loyaltyDiscount||0;
+  const lines=(o.items||[]).map((i,n)=>`${n+1}. ${i.name}${i.variantLabel?" ("+i.variantLabel+")":""}  x${i.qty}  =  Rs.${i.price*i.qty}`);
+  const body=[
+    `${label}   ${invNo}`,
+    dateStr?`Date: ${dateStr}`:"",
+    `------------------------------------------`,
+    s.legalName||(STORE_NAME+" Aqua Store"),
+    (s.legalAddress||s.storeAddress||s.legalCity||""),
+    gstin?`GSTIN: ${gstin}`:"",
+    `------------------------------------------`,
+    `Ship To: ${addr.name||"-"}, ${addr.phone||""}`,
+    `${addr.address||""}, ${addr.city||""} ${addr.pincode||""}`.trim(),
+    `------------------------------------------`,
+    ...lines,
+    `------------------------------------------`,
+    `Subtotal: Rs.${o.total||0}`,
+    `Shipping: Rs.${o.fee||0}`,
+    o.liveGuarantee?`Live Arrival Guarantee: ${lgFee>0?"Rs."+lgFee:"Included"}`:"",
+    couponOff>0?`Coupon${o.coupon?" ("+o.coupon+")":""}: -Rs.${couponOff}`:"",
+    refOff>0?`Referral discount: -Rs.${refOff}`:"",
+    loyaltyOff>0?`Loyalty points: -Rs.${loyaltyOff}`:"",
+    `GRAND TOTAL: Rs.${grand}`,
+    `------------------------------------------`,
+    gstin?"Prices inclusive of GST.":"Not GST-registered — Bill of Supply.",
+    `Computer-generated invoice from ${s.legalName||(STORE_NAME+" Aqua Store")}.`,
+  ].filter(l=>l!=="").join("\n");
+  return {
+    invoice_label: label,
+    invoice_no: invNo,
+    invoice_date: dateStr,
+    invoice_business: s.legalName||(STORE_NAME+" Aqua Store"),
+    invoice_address: s.legalAddress||s.storeAddress||s.legalCity||"",
+    invoice_gstin: gstin,
+    order_invoice: body,
+  };
+}
+
 /* Send an email to the CUSTOMER via EmailJS (needs keys set in admin Settings).
    `event` controls the message: "placed" | "confirmed" | "shipped" | "delivered". */
 function sendCustomerEmail(order, settings, event){
@@ -830,6 +940,7 @@ function sendCustomerEmail(order, settings, event){
     care_reminder: careReminder,
     store_name: STORE_NAME,
     store_whatsapp: s.ownerWhatsapp||BUSINESS_WA,
+    ...buildInvoiceFields(order, s),
   };
   // Surface failures to the console so the admin can diagnose (EmailJS errors are otherwise silent)
   if(!s.emailjsService || !s.emailjsTemplate || !s.emailjsKey){
@@ -871,6 +982,7 @@ function sendOrderEmail(order, email, settings){
     care_reminder: order.summary?("Customer note: "+order.summary):"",
     store_name: STORE_NAME,
     store_whatsapp: s.ownerWhatsapp||BUSINESS_WA,
+    ...buildInvoiceFields(order, s),
   };
   try{ emailjs.send(s.emailjsService, s.emailjsTemplate, params, {publicKey:s.emailjsKey}).catch(()=>{}); }catch(e){}
 }
@@ -1121,12 +1233,16 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
 .desk-nav{display:none;}
 /* Header top padding adapts to device safe-area instead of a flat notch inset */
 .vh-head{padding-top:calc(env(safe-area-inset-top, 0px) + 14px) !important;}
+/* Left filter drawer */
+@keyframes slideInLeft{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+.drawer-panel{animation:slideInLeft .22s cubic-bezier(.22,1,.36,1) both;}
 @media(min-width:1000px){
   .nemo-app{max-width:880px !important;}
   .desk-nav{display:flex;}
   .mobile-bottom-nav{display:none !important;}
   .prod-grid{grid-template-columns:repeat(3,1fr) !important;}
   .vh-head{padding-top:18px !important;}
+  .shop-bar{top:59px !important;}
   .sheet-overlay{align-items:center !important;padding:24px !important;}
   .sheet-panel{border-radius:20px !important;max-width:460px !important;}
 }
@@ -1752,14 +1868,15 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
 function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setPriceMax, availability, setAvailability, onClear, count}){
   if(!open) return null;
   return(
-    <div onClick={onClose} className="sheet-overlay" style={{position:"fixed",inset:0,background:"rgba(10,36,38,.42)",zIndex:200,display:"flex",alignItems:"flex-end",animation:"fadeIn .18s ease"}}>
-      <div onClick={e=>e.stopPropagation()} className="slide-up sheet-panel"
-        style={{background:C.card,width:"100%",maxWidth:430,margin:"0 auto",borderRadius:"22px 22px 0 0",padding:"22px 20px 28px",maxHeight:"82vh",overflowY:"auto"}}>
-        <div style={{width:40,height:4,background:C.border,borderRadius:2,margin:"0 auto 16px"}}/>
+    <Portal>
+    <div onClick={onClose} className="drawer-overlay" style={{position:"fixed",inset:0,background:"rgba(10,36,38,.42)",zIndex:9000,display:"flex",alignItems:"stretch",justifyContent:"flex-start",animation:"fadeIn .18s ease"}}>
+      <div onClick={e=>e.stopPropagation()} className="drawer-panel"
+        style={{background:C.card,width:"86%",maxWidth:340,height:"100%",padding:"22px 20px 28px",overflowY:"auto",boxShadow:"4px 0 30px rgba(10,36,38,.25)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>Filter & Sort</div>
-          <button className="press" onClick={onClear} style={{background:"none",border:"none",fontSize:12,fontWeight:700,color:C.accent,fontFamily:"'Nunito',sans-serif"}}>Clear all</button>
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>Filter &amp; Sort</div>
+          <button className="press" onClick={onClose} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,width:34,height:34,fontSize:17,color:C.textSub,cursor:"pointer"}}>✕</button>
         </div>
+        <button className="press" onClick={onClear} style={{background:"none",border:"none",fontSize:12,fontWeight:700,color:C.accent,fontFamily:"'Nunito',sans-serif",padding:0,marginBottom:18,cursor:"pointer"}}>↺ Clear all filters</button>
 
         <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Sort by</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:22}}>
@@ -1796,6 +1913,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
         </button>
       </div>
     </div>
+    </Portal>
   );
 }
 
@@ -2149,7 +2267,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
 }
 
 /* ═══════════════════ HOME PAGE ═══════════════════ */
-function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock}){
+function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock}){
   const featured=products.slice(0,6);
   const offer = products.find(p=>(p.discountPct||0)>0 && p.offerEndsAt && new Date(p.offerEndsAt).getTime()>Date.now());
   const offerStock = offer ? (offer.stockCount ?? DEFAULT_STOCK) : 0;
@@ -2208,7 +2326,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         <FestivalBanner settings={settings}/>
 
         {/* First-order welcome coupon */}
-        <WelcomeBanner settings={settings} orders={orders}/>
+        {settingsReady&&<WelcomeBanner settings={settings} orders={orders}/>}
 
         {/* Categories */}
         <div style={{marginBottom:24}}>
@@ -2420,27 +2538,20 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
 
   return(
     <div className="slide-up">
-      <div className="vh-head" style={{background:C.card,padding:"52px 16px 12px",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:10}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:12}}>Shop</div>
-        <div style={{display:"flex",alignItems:"center",background:C.bg,borderRadius:14,padding:"10px 14px",gap:10,marginBottom:12,border:`1.5px solid ${C.border}`}}>
-          <span style={{fontSize:16}}>🔍</span>
-          <input type="text" placeholder="Search fish, plants, accessories…" value={query} onChange={e=>setQuery(e.target.value)}
-            style={{border:"none",background:"transparent",outline:"none",flex:1,fontSize:13}}/>
-          {query&&<button className="press" onClick={()=>setQuery("")} style={{background:"none",border:"none",fontSize:15,color:C.textSub}}>✕</button>}
-        </div>
+      <div className="vh-head shop-bar" style={{background:C.card,padding:"52px 14px 10px",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:20}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <button className="press" onClick={()=>setSheet(true)}
-            style={{display:"flex",alignItems:"center",gap:6,background:activeFilters>0?C.primary:C.card,border:`1.5px solid ${activeFilters>0?C.primary:C.border}`,borderRadius:12,padding:"7px 12px",fontSize:12,fontWeight:700,color:activeFilters>0?"white":C.text,fontFamily:"'Nunito',sans-serif"}}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
-            Filter {activeFilters>0&&<span style={{background:"rgba(255,255,255,.25)",borderRadius:10,padding:"1px 6px",fontSize:10,marginLeft:2}}>{activeFilters}</span>}
-          </button>
-          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.textSub,fontWeight:600}}>
-            <span style={{color:C.text,fontWeight:700}}>Sort:</span>
-            <select value={sort} onChange={e=>setSort(e.target.value)}
-              style={{border:"none",background:"transparent",outline:"none",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
-              {SORT_OPTS.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text,flexShrink:0}}>Shop</div>
+          <div style={{display:"flex",alignItems:"center",background:C.bg,borderRadius:12,padding:"8px 12px",gap:8,flex:1,minWidth:0,border:`1.5px solid ${C.border}`}}>
+            <span style={{fontSize:15}}>🔍</span>
+            <input type="text" placeholder="Search…" value={query} onChange={e=>setQuery(e.target.value)}
+              style={{border:"none",background:"transparent",outline:"none",flex:1,fontSize:13,minWidth:0}}/>
+            {query&&<button className="press" onClick={()=>setQuery("")} style={{background:"none",border:"none",fontSize:15,color:C.textSub}}>✕</button>}
           </div>
+          <button className="press" onClick={()=>setSheet(true)}
+            style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,background:activeFilters>0?C.primary:C.card,border:`1.5px solid ${activeFilters>0?C.primary:C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:activeFilters>0?"white":C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+            Filter &amp; Sort{activeFilters>0&&<span style={{background:"rgba(255,255,255,.25)",borderRadius:10,padding:"1px 6px",fontSize:10}}>{activeFilters}</span>}
+          </button>
         </div>
         <CategoryPills selected={category} onSelect={setCategory} all/>
       </div>
@@ -5918,6 +6029,7 @@ function NemoStore(){
   const [requests,setRequests]     = useState([]);
   const [guides,setGuides]         = useState(DEFAULT_GUIDES);
   const [settings,setSettings]     = useState(DEFAULT_SETTINGS);
+  const [settingsReady,setSettingsReady] = useState(false);
   const [user,setUser]             = useState(null);
   const [authReturn,setAuthReturn] = useState("orders"); // where to go after login
   const [reviewedSet,setReviewedSet] = useState([]);
@@ -5988,7 +6100,8 @@ function NemoStore(){
     // Settings — seed if missing
     const stObj=await fbGetObj("settings");
     if(stObj===null && FB_OK){ const local=localSettingsData(); await saveSettings(local); setSettings(local); }
-    else if(stObj){ setSettings(normalizeSettings({...DEFAULT_SETTINGS,...stObj})); }
+    else if(stObj){ const merged=normalizeSettings({...DEFAULT_SETTINGS,...stObj}); setSettings(merged); try{dbSet("nemo-settings",JSON.stringify(merged));}catch(e){} }
+    setSettingsReady(true);
     // Showcase
     loadShowcase().then(sc=>{ if(sc&&sc.length) setShowcase(sc); });
   };
@@ -6003,6 +6116,10 @@ function NemoStore(){
       const reqs=localRequests(); setRequests(reqs);
       const guideList=localGuidesData()||DEFAULT_GUIDES; setGuides(guideList);
       setSettings(localSettingsData());
+      // NOTE: do NOT mark settingsReady from the local cache — it may be stale
+      // (localStorage can be full of image data, so cloud writes silently fail).
+      // settingsReady flips true only after cloudSync reads the authoritative value,
+      // so promo banners never paint a stale price and then flash to the real one.
       const u=await loadUser(); if(u){setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));loadFavorites(userKey(u)).then(setFavorites);setInterestedSet(loadIntLocal(userKey(u)));}
       setLoading(false);
       // Remove the boot splash now that the app has painted
@@ -6021,7 +6138,10 @@ function NemoStore(){
     return()=>window.removeEventListener("nemo-fb-ready",cloudSync);
   },[]);
 
-  // Deep-link: /?p=<productId> (used by the static SEO product pages) opens that product once it's loaded
+  // Safety net: if Firebase never connects (offline / blocked), still reveal settings-gated
+  // promo banners from the local value after a short grace period, so they aren't hidden forever.
+  useEffect(()=>{ const t=setTimeout(()=>setSettingsReady(true), 3500); return()=>clearTimeout(t); },[]);
+
   const deepLinkRef = useRef((()=>{ try{ return new URLSearchParams(window.location.search).get("p")||""; }catch(e){ return ""; } })());
   useEffect(()=>{
     const pid=deepLinkRef.current;
@@ -6431,7 +6551,7 @@ function NemoStore(){
       {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
       {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap}/>}
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
-        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock}/>}
+        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="detail"   &&<DetailPage product={selProduct} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav}/>}
