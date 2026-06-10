@@ -990,11 +990,12 @@ function sendOrderEmail(order, email, settings){
 /* ── Bill / Invoice generator ──────────────────────────────────────────────
    Returns an HTML string that can be opened in a new tab for printing or sharing. */
 /* Email a one-time 6-digit security code to the admin email via EmailJS (reuses the customer template).
-   Confirms sensitive changes (WhatsApp / email / admin password). Returns true on a confirmed send. */
+   Confirms sensitive changes (WhatsApp / email / admin password). Returns {ok, error}. */
 async function sendOtpEmail(email, code, settings){
   const s=settings||{};
-  if(!email || !s.emailjsService || !s.emailjsTemplate || !s.emailjsKey) return false;
-  if(typeof emailjs==="undefined") return false;
+  if(!email) return {ok:false, error:"No admin email set in Settings"};
+  if(!s.emailjsService || !s.emailjsTemplate || !s.emailjsKey) return {ok:false, error:"EmailJS Service/Template/Key missing in Settings"};
+  if(typeof emailjs==="undefined") return {ok:false, error:"EmailJS library not loaded (check your connection)"};
   const params={
     to_email: email,
     to_name: "Admin",
@@ -1017,8 +1018,12 @@ async function sendOtpEmail(email, code, settings){
   };
   try{
     await emailjs.send(s.emailjsService, s.emailjsTemplate, params, {publicKey:s.emailjsKey});
-    return true;
-  }catch(e){ return false; }
+    return {ok:true};
+  }catch(e){
+    const msg=(e&&(e.text||e.message))||(e&&e.status?("HTTP "+e.status):"unknown error");
+    console.error("[OTP Email] FAILED:", e);
+    return {ok:false, error:msg};
+  }
 }
 /* Mask an email for display: jo***@gmail.com */
 function maskEmail(e){ const p=String(e||"").split("@"); if(p.length<2) return e; const u=p[0]; return (u.length<=2?u[0]+"*":u.slice(0,2)+"***")+"@"+p[1]; }
@@ -1242,7 +1247,6 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
   .mobile-bottom-nav{display:none !important;}
   .prod-grid{grid-template-columns:repeat(3,1fr) !important;}
   .vh-head{padding-top:18px !important;}
-  .shop-bar{top:59px !important;}
   .sheet-overlay{align-items:center !important;padding:24px !important;}
   .sheet-panel{border-radius:20px !important;max-width:460px !important;}
 }
@@ -5058,15 +5062,15 @@ function SettingsPanel({settings,onSave}){
     setOtpInput(""); setOtpMsg(""); setOtpTries(0); setPendingSave(nf);
     setOtpSendFailed(false); setOverrideText("");
     setOtpOpen(true); setOtpBusy(true);
-    const ok=await sendOtpEmail(email, code, settings);
-    setOtpBusy(false); setOtpSendFailed(!ok);
-    setOtpMsg(ok ? ("✓ Code sent to "+maskEmail(email)) : ("⚠ Couldn't send. Check your EmailJS keys (Settings) and that "+maskEmail(email)+" is correct, or tap Resend."));
+    const res=await sendOtpEmail(email, code, settings);
+    setOtpBusy(false); setOtpSendFailed(!res.ok);
+    setOtpMsg(res.ok ? ("✓ Code sent to "+maskEmail(email)) : ("⚠ Couldn't send — "+res.error+". In your EmailJS template, set the “To Email” field to {{to_email}}, and allow your site's domain under Account → Security."));
   };
   const resendOtp=async()=>{
     const code=genCode(); setOtpCode(code); setOtpExp(Date.now()+5*60*1000);
     setOtpTries(0); setOtpInput(""); setOtpBusy(true); setOtpMsg("");
-    const ok=await sendOtpEmail(otpEmail, code, settings); setOtpBusy(false); setOtpSendFailed(!ok);
-    setOtpMsg(ok ? ("✓ New code sent to "+maskEmail(otpEmail)) : "⚠ Couldn't confirm the send. Try again.");
+    const res=await sendOtpEmail(otpEmail, code, settings); setOtpBusy(false); setOtpSendFailed(!res.ok);
+    setOtpMsg(res.ok ? ("✓ New code sent to "+maskEmail(otpEmail)) : ("⚠ "+res.error));
   };
   const verifyOtp=()=>{
     if(Date.now()>otpExp){ setOtpMsg("⌛ Code expired — tap Resend for a new one."); return; }
