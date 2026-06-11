@@ -40,8 +40,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="Nemo"/>
-<link rel="icon" type="image/png" href="assets/nemo-logo.png"/>
-<link rel="apple-touch-icon" href="assets/nemo-logo.png"/>
+<!-- Favicons — what Google shows beside your search result. Multiple sizes (all 48px multiples) + root /favicon.ico that Google's crawler probes by default. -->
+<link rel="icon" href="/favicon.ico" sizes="any"/>
+<link rel="icon" type="image/png" sizes="48x48" href="assets/favicon-48.png"/>
+<link rel="icon" type="image/png" sizes="96x96" href="assets/favicon-96.png"/>
+<link rel="icon" type="image/png" sizes="144x144" href="assets/favicon-144.png"/>
+<link rel="icon" type="image/png" sizes="192x192" href="assets/favicon-192.png"/>
+<link rel="apple-touch-icon" href="assets/favicon-192.png"/>
 <!-- Preload logo so it appears instantly when React mounts -->
 <link rel="preload" as="image" href="assets/nemo-logo.png" fetchpriority="high"/>
 <!-- Preload app code so Babel can compile it the moment the page is interactive -->
