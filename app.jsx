@@ -1234,6 +1234,16 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
 .points-pop{animation:pointsPop .35s cubic-bezier(.22,1,.36,1) both;}
 @keyframes showcaseSlide{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
 .showcase-slide{animation:showcaseSlide .3s ease both;}
+/* Gentle fade + rise — for promo banners and content that appears after data loads */
+@keyframes fadeRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.fade-rise{animation:fadeRise .4s cubic-bezier(.22,1,.36,1) both;}
+/* Images fade in once decoded instead of snapping in (set data-loaded after onLoad) */
+img.smooth-img{opacity:0;transition:opacity .35s ease;}
+img.smooth-img[data-loaded="1"]{opacity:1;}
+/* Respect users who prefer less motion — disable decorative loops & transitions */
+@media(prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;}
+}
 /* ── Desktop layout (≥1000px) ── */
 .desk-nav{display:none;}
 /* Header top padding adapts to device safe-area instead of a flat notch inset */
@@ -1267,6 +1277,16 @@ function Portal({children}){
   },[]);
   if(!elRef.current) return null;
   return ReactDOM.createPortal(children, elRef.current);
+}
+/* Image that fades in once decoded (no abrupt pop). Falls back instantly for cached/data-URI images. */
+function SmoothImg({src,alt,style,className}){
+  const onReady=(el)=>{ if(el){ if(el.complete && el.naturalWidth>0) el.setAttribute("data-loaded","1"); } };
+  return (
+    <img src={src} alt={alt||""} ref={onReady}
+      className={"smooth-img"+(className?(" "+className):"")} style={style}
+      onLoad={e=>e.currentTarget.setAttribute("data-loaded","1")}
+      onError={e=>e.currentTarget.setAttribute("data-loaded","1")}/>
+  );
 }
 function Toast({msg,type,onDone}){
   useEffect(()=>{const t=setTimeout(onDone,2800);return()=>clearTimeout(t);},[]);
@@ -1372,7 +1392,7 @@ function WelcomeBanner({settings,orders=[]}){
   if(settings.welcomeCouponEnabled===false)return null;
   if(hasRealOrder||!code)return null;
   return(
-    <div style={{background:"linear-gradient(135deg,#ff5a40 0%,#ff8c3b 100%)",borderRadius:18,padding:"14px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:12,boxShadow:"0 6px 24px rgba(255,90,64,.25)"}}>
+    <div className="fade-rise" style={{background:"linear-gradient(135deg,#ff5a40 0%,#ff8c3b 100%)",borderRadius:18,padding:"14px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:12,boxShadow:"0 6px 24px rgba(255,90,64,.25)"}}>
       <div style={{fontSize:30,flexShrink:0}}>🎉</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:800,color:"white",marginBottom:2}}>First order? Save ₹{amt}!</div>
@@ -2180,6 +2200,14 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
   );
 }
 
+/* True when a product is expected to have a photo (so we can show a shimmer placeholder
+   while its image is still hydrating from IndexedDB, instead of flashing the emoji then popping). */
+function productExpectsImage(p){
+  if(!p) return false;
+  if(Array.isArray(p.media) && p.media.some(m=>m && m.type!=="video")) return true;
+  return !!p.imageUrl;
+}
+
 /* ═══════════════════ PRODUCT CARD ═══════════════════ */
 function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,isInterested=false,onInterest}){
   const m   = CAT_META[p.category]||CAT_META["Live Fish"];
@@ -2206,8 +2234,11 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
       style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`,cursor:"pointer"}}>
       <div style={{height:120,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",
         background:imgSrc?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`}}>
-        {imgSrc?<img src={imgSrc} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-          :<span style={{fontSize:54}}>{m.emoji}</span>}
+        {imgSrc
+          ? <SmoothImg src={imgSrc} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+          : productExpectsImage(p)
+            ? <div className="shimmer-bar" style={{position:"absolute",inset:0}}/>
+            : <span style={{fontSize:54}}>{m.emoji}</span>}
         {p.tag&&<span style={{position:"absolute",top:8,left:8,background:"rgba(0,0,0,.32)",color:"white",fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,backdropFilter:"blur(4px)"}}>{p.tag}</span>}
         {onSale&&!soon&&<span style={{position:"absolute",bottom:8,left:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:20}}>-{p.discountPct}%</span>}
         {Heart}
@@ -2665,7 +2696,7 @@ function DetailPage({product:p,media={images:[],video:null},addToCart,cart=[],na
             <div key={i} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000"}}>
               {s.type==="video"
                 ? <video src={s.src} controls playsInline loop style={{width:"100%",height:"100%",objectFit:"contain"}}/>
-                : <img src={s.src} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+                : <SmoothImg src={s.src} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
             </div>
           ))}
         </div>
@@ -5726,7 +5757,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
               {img&&(
                 <button onClick={()=>setZoom(img)} className="press"
                   style={{display:"block",width:"100%",padding:0,border:"none",background:"#0c2b30",cursor:"zoom-in",lineHeight:0,overflow:"hidden"}}>
-                  <img src={img} alt={g.title} style={{width:"100%",maxWidth:"100%",height:"auto",display:"block"}}/>
+                  <SmoothImg src={img} alt={g.title} style={{width:"100%",maxWidth:"100%",height:"auto",display:"block"}}/>
                 </button>
               )}
               <div style={{padding:"14px 16px"}}>
@@ -6120,10 +6151,11 @@ function NemoStore(){
       const reqs=localRequests(); setRequests(reqs);
       const guideList=localGuidesData()||DEFAULT_GUIDES; setGuides(guideList);
       setSettings(localSettingsData());
-      // NOTE: do NOT mark settingsReady from the local cache — it may be stale
-      // (localStorage can be full of image data, so cloud writes silently fail).
-      // settingsReady flips true only after cloudSync reads the authoritative value,
-      // so promo banners never paint a stale price and then flash to the real one.
+      // Caching is now reliable (media lives in IndexedDB, so localStorage no longer fills up
+      // and silently drops settings writes). So a cached settings blob is trustworthy — reveal
+      // settings-gated promo banners IMMEDIATELY from cache instead of waiting on the cloud fetch.
+      // First-ever visitors (no cache) briefly wait for the cloud value; everyone else sees it instantly.
+      try{ if(localStorage.getItem("nemo-settings")) setSettingsReady(true); }catch(e){}
       const u=await loadUser(); if(u){setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));loadFavorites(userKey(u)).then(setFavorites);setInterestedSet(loadIntLocal(userKey(u)));}
       setLoading(false);
       // Remove the boot splash now that the app has painted
@@ -6142,9 +6174,9 @@ function NemoStore(){
     return()=>window.removeEventListener("nemo-fb-ready",cloudSync);
   },[]);
 
-  // Safety net: if Firebase never connects (offline / blocked), still reveal settings-gated
-  // promo banners from the local value after a short grace period, so they aren't hidden forever.
-  useEffect(()=>{ const t=setTimeout(()=>setSettingsReady(true), 3500); return()=>clearTimeout(t); },[]);
+  // Safety net: first-ever visitors have no cache, so reveal settings-gated promo banners
+  // from the local value after a short grace period even if Firebase is slow/blocked.
+  useEffect(()=>{ const t=setTimeout(()=>setSettingsReady(true), 1200); return()=>clearTimeout(t); },[]);
 
   const deepLinkRef = useRef((()=>{ try{ return new URLSearchParams(window.location.search).get("p")||""; }catch(e){ return ""; } })());
   useEffect(()=>{
