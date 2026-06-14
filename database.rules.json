@@ -21,7 +21,10 @@
     "reviews": {
       ".read": true,
       "$pid": {
-        ".write": "auth != null"
+        "$rid": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChild('rating') && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5"
+        }
       }
     },
 
@@ -73,7 +76,7 @@
     "loyalty": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE'))",
-        ".write": "auth != null && auth.uid === $uid"
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE') || (auth.uid === $uid && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= (data.exists() ? data.child('points').val() : 0)) )"
       }
     },
 
@@ -96,8 +99,29 @@
     "referrals": {
       "$code": {
         ".read": "auth != null",
-        ".write": "auth != null",
-        ".validate": "newData.hasChild('owner') && (!data.exists() || data.child('owner').val() === newData.child('owner').val())"
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE') || !data.exists() || data.child('used').val() != true )",
+        ".validate": "newData.hasChild('owner') && (!data.exists() || data.child('owner').val() === newData.child('owner').val())",
+        "rewardCoins": {
+          ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE') || newData.val() === (data.exists() ? data.val() : 0)"
+        },
+        "delivered": {
+          ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE') || newData.val() === false || (data.exists() && newData.val() === data.val())"
+        }
+      }
+    },
+
+    "testimonials": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
+        ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))"
+      }
+    },
+
+    "promoUsage": {
+      ".read": true,
+      "$date": {
+        "$type": { ".write": "auth != null", ".validate": "newData.isNumber()" }
       }
     },
 

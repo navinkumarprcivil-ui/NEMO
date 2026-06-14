@@ -119,6 +119,11 @@ const DEFAULT_SHIPPING_RATES = {
     "2-5kg":     { TN:400, SouthIndia:500, CentralIndia:650, NorthIndia:800 },
     "5-10kg":    { TN:600, SouthIndia:750, CentralIndia:900, NorthIndia:1200 },
   },
+  // Thermacol (insulated) box material surcharge — added ONLY when a thermacol packing is chosen.
+  // Charged by total live-parcel weight bracket, just like the courier rates above.
+  thermacol: {
+    "Up to 500g":40, "500g-1kg":70, "1-2kg":110, "2-5kg":200, "5-10kg":350,
+  },
 };
 /* Canonical weight tiers shared by dry goods AND live fish. */
 const SHIP_TIERS = ["Up to 500g","500g-1kg","1-2kg","2-5kg","5-10kg"];
@@ -193,17 +198,83 @@ function getWeightBracket(kg){
   if(kg<=5)  return "2-5kg";
   return "5-10kg";
 }
-function calcShipping(cart, zone, isSpecial, settings){
+/* ─────────── Live-fish packing options (customer chooses one at checkout) ───────────
+   Two independent layers fold into 4 named options:
+     • box     : carton | thermacol  (thermacol = insulated, adds a weight-based material charge)
+     • courier : normal | special    (special = priority/fast & safe, adds the flat Special fee)
+   rank = protection level (1 = lightest → 4 = safest). The Live Arrival Guarantee applies when
+   the customer picks the admin-recommended packing (per product) OR a higher-rank one. */
+const PACKING_OPTIONS = [
+  { key:"carton_normal",      label:"Carton Box · Normal Courier",      box:"carton",    courier:"normal",  rank:1, blurb:"Economical — fine for nearby locations." },
+  { key:"carton_special",     label:"Carton Box · Speed Courier",       box:"carton",    courier:"special", rank:2, blurb:"Faster delivery with safe handling by the courier." },
+  { key:"thermacol_standard", label:"Thermacol Box · Standard Courier", box:"thermacol", courier:"normal",  rank:3, blurb:"Insulated box — for premium fish, local transport." },
+  { key:"thermacol_special",  label:"Thermacol Box · Speed Courier",    box:"thermacol", courier:"special", rank:4, blurb:"Best protection — premium fish & long-distance travel." },
+];
+const PACKING_BY_KEY = PACKING_OPTIONS.reduce((m,o)=>{m[o.key]=o;return m;},{});
+function packingOpt(key){ return PACKING_BY_KEY[key] || PACKING_BY_KEY.carton_special; }
+function packingLabel(key){ return packingOpt(key).label; }
+/* Recommended packing for a cart = the safest (highest-rank) per-product suggestion among its live fish. */
+function suggestedPackingForCart(cart){
+  let best=null;
+  (cart||[]).forEach(i=>{
+    if(i.category!=="Live Fish") return;
+    const o=PACKING_BY_KEY[i.suggestedPacking||"carton_special"];
+    if(o && (!best || o.rank>best.rank)) best=o;
+  });
+  return best ? best.key : "carton_special";
+}
+/* Thermacol material surcharge for a given parcel-weight bracket. */
+function thermacolCharge(bracket, settings){
+  const r=(settings&&settings.shippingRates)||DEFAULT_SHIPPING_RATES;
+  return Number((r.thermacol||DEFAULT_SHIPPING_RATES.thermacol)[bracket]||0);
+}
+/* Thermacol (packaging) portion of a cart's shipping fee — 0 unless a thermacol packing is chosen.
+   Used to keep the shipping-reward calc to courier charges only (packaging is never rewardable). */
+function thermacolFeeFor(cart, packingKey, settings){
+  const pk=packingOpt(packingKey);
+  if(pk.box!=="thermacol") return 0;
+  const fishItems=(cart||[]).filter(i=>i.category==="Live Fish");
+  if(!fishItems.length) return 0;
+  const r=settings.shippingRates||DEFAULT_SHIPPING_RATES;
+  const fishWt=fishItems.reduce((s,i)=>s+(Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2)*i.qty,0);
+  const liveBase=Number(r.liveBasePackagingKg!=null?r.liveBasePackagingKg:(r.basePackagingKg??0.5));
+  return thermacolCharge(getLiveFishWeightBracket(fishWt+liveBase), settings);
+}
+/* Zones live fish are NOT delivered to when the admin restriction is on. */
+const LIVE_FISH_BLOCKED_ZONES = ["CentralIndia","NorthIndia"];
+function liveFishBlockedForZone(zone, settings){
+  if(settings && settings.liveFishRestrictNCIndia===false) return false;
+  return LIVE_FISH_BLOCKED_ZONES.includes(zone);
+}
+/* The customer's oldest un-redeemed shipping-reward code (reward stacks on top of coupons). */
+function unredeemedShippingReward(orders){
+  const list=orders||[];
+  const redeemed=new Set(list.map(o=>(o.rewardRedeemedCode||"").toLowerCase()).filter(Boolean));
+  const sorted=[...list].sort((a,b)=>(a.placedAt||"").localeCompare(b.placedAt||"")); // oldest first
+  for(const o of sorted){
+    const rw=o.shippingReward;
+    if(rw&&rw.code&&!redeemed.has(rw.code.toLowerCase())){
+      return {code:rw.code, amount:Number(rw.amount)||0, fromOrderId:o.id};
+    }
+  }
+  return null;
+}
+function calcShipping(cart, zone, opts, settings){
   if(!zone) return null;
   const r = settings.shippingRates || DEFAULT_SHIPPING_RATES;
+  // opts: object {packing, special} (new) OR a bare boolean isSpecial (legacy)
+  const o = (opts && typeof opts==="object") ? opts : { special: !!opts };
+  const packing = packingOpt(o.packing);
+  const dryItems  = cart.filter(i=>i.category!=="Live Fish");
+  const fishItems = cart.filter(i=>i.category==="Live Fish");
+  // Special-courier surcharge applies when the fish packing uses a special courier, or (dry-only) the special box is ticked
+  const wantSpecial = fishItems.length ? (packing.courier==="special") : !!o.special;
   // Free-delivery threshold — check subtotal before any other fee is added
   const threshold = Number(settings.freeDeliveryThreshold||0);
   if(threshold > 0){
     const subtotal = cart.reduce((s,i)=>s+i.price*i.qty, 0);
-    if(subtotal >= threshold && !isSpecial) return 0;
+    if(subtotal >= threshold && !wantSpecial) return 0;
   }
-  const dryItems  = cart.filter(i=>i.category!=="Live Fish");
-  const fishItems = cart.filter(i=>i.category==="Live Fish");
   let fee = 0;
   if(fishItems.length){
     // Weight-based live fish shipping (uses variantPackagingWeight if set, else product packagingWeight)
@@ -215,14 +286,35 @@ function calcShipping(cart, zone, isSpecial, settings){
     const totalFishWt = fishWt + liveBase;
     const bracket = getLiveFishWeightBracket(totalFishWt);
     fee += (r.liveFish?.[bracket]?.[zone]||0);
+    if(packing.box==="thermacol") fee += thermacolCharge(bracket, settings);
   }
   if(dryItems.length){
     const wt = dryItems.reduce((s,i)=>s+((Number(i.packagingWeight)||0.1)*i.qty),0)+(Number(r.basePackagingKg)||0.5);
     const bracket = getWeightBracket(wt);
     fee += (r.dryGoods?.[bracket]?.[zone]||0);
   }
-  if(isSpecial) fee += Number(settings.specialDeliveryPrice||0);
+  if(wantSpecial) fee += Number(settings.specialDeliveryPrice||0);
   return fee;
+}
+/* Open a courier's tracking page for an order. If the saved track URL contains a
+   {awb}/{tracking}/{number} placeholder it's filled with the consignment number;
+   otherwise the number is copied to the clipboard so the customer can paste it. */
+function trackParcelUrl(o){
+  let url=(o&&o.courierTrackUrl)||"";
+  const num=((o&&o.trackingNumber)||"").trim();
+  if(url && /\{(awb|tracking|number|id|consignment)\}/i.test(url)){
+    url=url.replace(/\{(awb|tracking|number|id|consignment)\}/ig, encodeURIComponent(num));
+  }
+  return url;
+}
+function trackParcel(o){
+  const url=trackParcelUrl(o);
+  if(!url) return;
+  const num=((o&&o.trackingNumber)||"").trim();
+  if(num && !/\{(awb|tracking|number|id|consignment)\}/i.test(o.courierTrackUrl||"")){
+    try{ navigator.clipboard.writeText(num); }catch(e){}
+  }
+  try{ window.open(url,"_blank","noopener"); }catch(e){ try{ location.href=url; }catch(_){} }
 }
 function validateCoupon(code, settings, userOrders, cartTotal){
   if(!code||!code.trim()) return {ok:false, msg:""};
@@ -492,11 +584,14 @@ async function deleteReview(pid,rid){
 const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
-  liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Special / Fast & Safe parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
+  liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Speed Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
   returnPolicy:"NO RETURNS & NO REPLACEMENTS once live fish or plants have been received in good condition — all livestock sales are final on safe delivery. The only cover for transit loss is the Live Arrival Guarantee (DOA) above, which is one-time and limited to the cost of the fish. Live fish & plants are non-returnable and non-refundable once delivered safely. Approved DOA refunds are processed within 5–7 working days of our approval of your unboxing video — no item needs to be returned. Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect, and refunds for returned dry goods are issued within 5–7 working days after we receive and inspect the item. Refunds (where applicable) are issued as store credit or to the original payment method. Orders cannot be cancelled once payment is confirmed.",
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   shippingRates: null,
   specialDeliveryPrice: 200,
+  couriers: [],                  // [{id,name,trackUrl}] — courier partners + their tracking-page links
+  shippingRewardMin: 10,         // min ₹ overcharge before a shipping-reward code is auto-created
+  liveFishRestrictNCIndia: true, // when true, live fish can't be ordered to Central/North India
   /* Business / legal identity (shown on About page + invoice). No PAN/personal data is ever displayed. */
   legalName: "NEMO AQUA STORE",
   legalEntity: "Proprietorship · Udyam-registered Micro Enterprise",
@@ -518,7 +613,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   welcomeCouponEnabled: true,
   welcomeCoupon: "WELCOME100",
   welcomeCouponAmount: 100,
-  welcomeCouponMinOrder: 500,
+  welcomeCouponMinOrder: 999,
   /* Festival/seasonal banner */
   festivalBanner: { text:"", emoji:"🎉", bg:"#7c3aed", active:false, endsAt:"" },
   /* Loyalty points */
@@ -526,10 +621,17 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   loyaltyPointsPerHundred: 10,  // points earned per ₹100 spent
   loyaltyRedeemMin: 100,        // minimum points to redeem
   loyaltyRedeemValue: 1,        // ₹ value per point
+  walletMaxCoins: 100,          // max wallet coins redeemable per order
+  walletMinOrder: 500,          // min order subtotal (₹) to redeem wallet coins
+  maxDiscountPct: 25,           // hard cap: coupon + referral + loyalty together can't exceed this % of cart subtotal
   /* Referral */
   referralEnabled: true,
   referralDiscount: 50,
+  referralCoins: 50,      // wallet points credited to the code-giver when a friend uses it
   referralMinOrder: 0,    // min order value before a referral code is issued (0 = always)
+  /* Daily promo caps — limit how many customers can redeem each offer per day (0 = unlimited) */
+  couponDailyLimit: 0,
+  referralDailyLimit: 0,
   /* Customer tank showcase */
   showcaseEnabled: true,
   /* Which customer emails to auto-send (saves EmailJS quota — rest you can do on WhatsApp) */
@@ -580,11 +682,56 @@ async function validateReferral(code, uid){
     return {ok:true};
   }catch(e){ return {ok:false, msg:"Couldn't verify code — try again"}; }
 }
-/* Mark a referral code as claimed so it can never be reused. */
-async function claimReferral(code, uid){
+/* Mark a referral code as claimed at order placement so it can't be reused. The giver's
+   wallet reward is NOT granted yet — it's written onto the node only when the friend's
+   order is delivered (see creditReferralOnDelivery). */
+async function claimReferral(code, uid, orderId){
   const c=(code||"").trim();
   if(!FB_OK || !/^\d{6}$/.test(c)) return;
-  try{ await FB_DB.ref("referrals/"+c).update({used:true, claimedBy:uid||"", claimedAt:Date.now()}); }catch(e){}
+  try{ await FB_DB.ref("referrals/"+c).update({used:true, claimedBy:uid||"", claimedAt:Date.now(), pendingOrderId:orderId||"", delivered:false}); }catch(e){}
+}
+/* Called when a friend's order (that used a referral code) is marked Delivered — grants the
+   code-giver their wallet coins. Idempotent: only writes once per code. */
+async function creditReferralOnDelivery(code, settings, deliveredOrderId){
+  const c=(code||"").trim();
+  if(!FB_OK || !/^\d{6}$/.test(c)) return;
+  const coins=Number((settings&&settings.referralCoins)!=null?settings.referralCoins:50)||0;
+  try{
+    const snap=await FB_DB.ref("referrals/"+c).get();
+    const r=snap&&snap.val();
+    if(!r || r.delivered===true) return; // already credited
+    await FB_DB.ref("referrals/"+c).update({delivered:true, rewardCoins:coins, deliveredOrderId:deliveredOrderId||"", deliveredAt:Date.now()});
+    // Credit the referrer's wallet DIRECTLY (admin context — rules allow admin to write any loyalty node).
+    if(coins>0 && r.owner) await adminCreditLoyalty(r.owner, coins, "ref:"+c+":"+(deliveredOrderId||"d"), "Referral reward");
+  }catch(e){}
+}
+/* Cancel/return reversal: undo a referrer's credit (if it was paid out) and free the code for reuse. */
+async function reverseReferralOnCancel(code){
+  const c=(code||"").trim();
+  if(!FB_OK || !/^\d{6}$/.test(c)) return;
+  try{
+    const snap=await FB_DB.ref("referrals/"+c).get();
+    const r=snap&&snap.val();
+    if(r && r.delivered===true && (Number(r.rewardCoins)||0)>0 && r.owner){
+      await adminCreditLoyalty(r.owner, -(Number(r.rewardCoins)||0), "refrev:"+c+":"+(r.deliveredOrderId||"d"), "Referral reversed (order cancelled)");
+    }
+    // Free the code so a fresh referral can be used again — keep owner intact (rules require it).
+    await FB_DB.ref("referrals/"+c).update({used:false, claimedBy:"", pendingOrderId:"", delivered:false, rewardCoins:0, deliveredOrderId:"", canceledAt:Date.now()});
+  }catch(e){}
+}
+/* Admin-only: directly credit (or, with a negative value, deduct) a customer's loyalty wallet.
+   Runs in the admin context where rules permit writing any user's loyalty node. Idempotent per entryId. */
+async function adminCreditLoyalty(uid, pts, entryId, note){
+  if(!FB_OK || !uid || !pts) return;
+  try{
+    await FB_DB.ref("loyalty/"+uid).transaction(cur=>{
+      cur = cur || {points:0, history:[]};
+      const hist = Array.isArray(cur.history)?cur.history:[];
+      if(entryId && hist.some(h=>h&&h.id===entryId)) return; // already applied → abort
+      const entry={id:entryId||("adm-"+Date.now()), pts, type: pts>=0?"credit":"reverse", note:note||"", date:new Date().toISOString()};
+      return {points: Math.max(0,(cur.points||0)+pts), history:[entry, ...hist].slice(0,80)};
+    });
+  }catch(e){}
 }
 
 /* Auth — Google (Firebase) with demo fallback. User is {name,email,phone,uid,method,loginAt} */
@@ -599,6 +746,40 @@ function addReviewedLocal(key,pid){ const s=loadReviewedSet(key); if(!s.includes
 
 /* Stable per-user key (Google uid, else phone) */
 function userKey(u){ return u ? (u.uid || ("ph-"+normalizePhone(u.phone||""))) : null; }
+
+/* Recent searches (local, max 8) + keyword-based related products */
+function loadRecentSearches(){ try{ return JSON.parse(localStorage.getItem("nemo-recent-search")||"[]"); }catch{ return []; } }
+function addRecentSearch(q){
+  q=(q||"").trim(); if(q.length<2) return loadRecentSearches();
+  let l=loadRecentSearches().filter(x=>x.toLowerCase()!==q.toLowerCase());
+  l.unshift(q); l=l.slice(0,8);
+  try{ localStorage.setItem("nemo-recent-search",JSON.stringify(l)); }catch{}
+  return l;
+}
+function clearRecentSearches(){ try{ localStorage.setItem("nemo-recent-search","[]"); }catch{} }
+/* Recently viewed products (local, max 12) — product ids, most-recent first. */
+function loadRecentlyViewed(){ try{ return JSON.parse(localStorage.getItem("nemo-recent-viewed")||"[]"); }catch{ return []; } }
+function pushRecentlyViewed(pid){
+  if(!pid) return loadRecentlyViewed();
+  let l=loadRecentlyViewed().filter(x=>x!==pid);
+  l.unshift(pid); l=l.slice(0,12);
+  try{ localStorage.setItem("nemo-recent-viewed",JSON.stringify(l)); }catch{}
+  return l;
+}
+/* Products related to a set of search terms, by keyword match on name/category/desc. */
+function relatedProducts(products, terms, excludeId, limit=8){
+  const words=[]; (terms||[]).forEach(t=>String(t).toLowerCase().split(/\s+/).forEach(w=>{ if(w.length>=3) words.push(w); }));
+  if(!words.length) return [];
+  const scored=[];
+  products.forEach(p=>{
+    if(p.id===excludeId) return;
+    const hay=(p.name+" "+p.category+" "+(p.desc||"")).toLowerCase();
+    let score=0; words.forEach(w=>{ if(hay.includes(w)) score++; });
+    if(score>0) scored.push({p,score});
+  });
+  scored.sort((a,b)=>b.score-a.score);
+  return scored.slice(0,limit).map(s=>s.p);
+}
 
 /* Favorites / Saved items — per user (local cache + cloud sync) */
 function favKey(uid){ return "nemo-fav-"+uid; }
@@ -638,15 +819,20 @@ async function saveLoyalty(uid,data){
   try{localStorage.setItem(loyaltyKey(uid),JSON.stringify(data));}catch(e){}
   if(FB_OK&&uid){ try{ await FB_DB.ref("loyalty/"+uid).set(data); }catch(e){} }
 }
-function earnPoints(uid, orderId, amount, settings){
-  if(!uid||!settings.loyaltyEnabled) return;
-  const pph=Number(settings.loyaltyPointsPerHundred||10);
-  const pts=Math.floor((amount/100)*pph);
-  if(pts<=0)return;
-  const cur=loadLoyaltyLocal(uid);
-  const next={points:(cur.points||0)+pts,history:[{id:orderId,pts,type:"earn",date:new Date().toISOString()},...(cur.history||[]).slice(0,49)]};
-  saveLoyalty(uid,next).catch(()=>{});
-  return pts;
+/* Daily promo caps — limit how many customers redeem a coupon / referral each day. */
+function promoDateKey(){ return new Date().toISOString().slice(0,10); }
+async function promoUsageCount(type){
+  if(!FB_OK) return 0;
+  try{ const s=await withTimeout(FB_DB.ref("promoUsage/"+promoDateKey()+"/"+type).get(),4000); return (s&&Number(s.val()))||0; }catch(e){ return 0; }
+}
+function bumpPromoUsage(type){
+  if(!FB_OK || typeof firebase==="undefined") return;
+  try{ FB_DB.ref("promoUsage/"+promoDateKey()+"/"+type).set(firebase.database.ServerValue.increment(1)); }catch(e){}
+}
+async function promoLimitReached(type, limit){
+  const lim=Number(limit||0);
+  if(lim<=0) return false;
+  return (await promoUsageCount(type))>=lim;
 }
 function redeemPoints(uid, pts, redemptionId){
   if(!uid||pts<=0)return;
@@ -655,9 +841,19 @@ function redeemPoints(uid, pts, redemptionId){
   saveLoyalty(uid,next).catch(()=>{});
 }
 
+/* ── Unified Wallet ──────────────────────────────────────────────────────────
+   The wallet balance IS the loyalty-points ledger, and it lives in ONE place:
+   the cloud node `loyalty/<uid>`, keyed to the customer's Firebase (Google) uid.
+   • Crediting is admin-only and happens at delivery — order points, referral
+     payout and shipping refunds are all written by adminCreditLoyalty().
+   • The customer can only READ their balance and SPEND it (redeemPoints), which
+     the security rules enforce. The UI subscribes live to this node (see the
+     wallet effect in the App component), so every device stays in sync. */
+
 /* ── Customer Tank Showcase ── */
-const SHOWCASE_TTL = 24*60*60*1000; // photos auto-expire 24h after upload
-function showcaseExpired(x, now){ const exp = x.expiresAt || (x.createdAt ? new Date(x.createdAt).getTime()+SHOWCASE_TTL : 0); return exp>0 && now>exp; }
+const SHOWCASE_TTL = 24*60*60*1000; // photos auto-expire 24h AFTER admin approval (when expiresAt is set)
+function showcaseApproved(x){ return x && x.approved!==false; } // legacy items (no flag) count as approved
+function showcaseExpired(x, now){ const exp=Number(x&&x.expiresAt)||0; return exp>0 && now>exp; }
 async function loadShowcase(){
   let arr=[];
   if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("showcase").get(),6000); if(s){ const v=s.val(); if(v) arr=Object.values(v).filter(x=>x&&x.id); } }catch(e){} }
@@ -671,9 +867,32 @@ async function addShowcasePhoto(item){
   await dbSet("nemo-showcase",JSON.stringify([item])); // local
   if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).set(item); }catch(e){} }
 }
+/* Admin approves a pending tank — makes it public and starts its 24h life. */
+async function approveShowcasePhoto(item){
+  const now=Date.now();
+  const updated={...item, approved:true, approvedAt:new Date(now).toISOString(), expiresAt:now+SHOWCASE_TTL};
+  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).update({approved:true, approvedAt:updated.approvedAt, expiresAt:updated.expiresAt}); }catch(e){} }
+  return updated;
+}
 async function deleteShowcasePhoto(id){
   if(FB_OK){ try{ await FB_DB.ref("showcase/"+id).remove(); }catch(e){} }
   const r=await dbGet("nemo-showcase"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-showcase",JSON.stringify(arr.filter(x=>x.id!==id)));
+}
+
+/* ── Testimonials — any signed-in customer can post one short note; public to all; admin can delete ── */
+async function loadTestimonials(){
+  let arr=[];
+  if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("testimonials").get(),6000); if(s){ const v=s.val(); if(v) arr=Object.values(v).filter(x=>x&&x.id); } }catch(e){} }
+  if(!arr.length){ const r=await dbGet("nemo-testimonials"); if(r) try{ arr=JSON.parse(r); }catch(e){} }
+  return arr.sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+}
+async function addTestimonial(t){
+  if(FB_OK){ try{ await FB_DB.ref("testimonials/"+t.id).set(t); }catch(e){} }
+  try{ const r=await dbGet("nemo-testimonials"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-testimonials",JSON.stringify([t,...arr].slice(0,60))); }catch(e){}
+}
+async function deleteTestimonial(id){
+  if(FB_OK){ try{ await FB_DB.ref("testimonials/"+id).remove(); }catch(e){} }
+  try{ const r=await dbGet("nemo-testimonials"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-testimonials",JSON.stringify(arr.filter(x=>x.id!==id))); }catch(e){}
 }
 
 /* ── Visitor analytics (built-in, free — counts unique sessions in Firebase) ── */
@@ -794,7 +1013,7 @@ function hasPurchased(orders, user, productId){
   if(!user) return false;
   const uk = userKey(user);
   const ph = normalizePhone(user.phone||"");
-  const ok = new Set(["Confirmed","Shipped","Delivered"]); // payment verified onwards = verified buyer
+  const ok = new Set(["Delivered"]); // only a delivered order makes a verified reviewer
   return orders.some(o =>
     ( (uk && o.userUid===uk) || (user.uid && o.userUid===user.uid) || (ph && normalizePhone(o.address?.phone)===ph) )
     && ok.has(o.status)
@@ -829,7 +1048,7 @@ function waStatusMsg(order, status, tracking=""){
   const oid = orderId(order.id);
   const msgs = {
     Confirmed:`✅ *Order Confirmed — ${STORE_NAME}*\n\nHi ${order.address.name}! 👋\nYour order ${oid} has been confirmed.\nWe're packing your goodies carefully 🐠\n\nWe'll update you when it ships!`,
-    Shipped:`🚚 *Order Shipped — ${STORE_NAME}*\n\nGreat news ${order.address.name}!\nYour order ${oid} is on its way!\n${tracking?`📦 Tracking: ${tracking}\n`:""}\nExpected delivery in 1–3 days.`,
+    Shipped:`🚚 *Order Shipped — ${STORE_NAME}*\n\nGreat news ${order.address.name}!\nYour order ${oid} is on its way!\n${order.courierName?`🏷 Courier: ${order.courierName}\n`:""}${tracking?`📦 Consignment: ${tracking}\n`:""}${trackParcelUrl(order)?`🔗 Track here: ${trackParcelUrl(order)}\n`:""}\nExpected delivery in 1–3 days.`,
     Delivered:`🎉 *Order Delivered — ${STORE_NAME}*\n\nHi ${order.address.name}!\nYour order ${oid} has been delivered!\nWe hope your fish and plants are thriving 🌿\n\n⭐ *Please rate your order!*\nOpen the ${STORE_NAME} app → *Orders* tab → tap *Rate* on your products. Your review helps us & fellow fishkeepers. 🙏`,
   };
   return encodeURIComponent(msgs[status]||"");
@@ -1107,7 +1326,7 @@ function generateBillHTML(order, settings){
   </table>
   <div style="text-align:right;margin-top:14px"><button class="np" onclick="window.print()" style="background:#0b6e72;color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save PDF</button></div>
   <div class="footer">
-    ${o.liveGuarantee?`<p>🛡️ <b>Live Arrival Guarantee</b> applies (included with your Special / Fast &amp; Safe parcel). Send a continuous unboxing video within 2 hours of delivery to WhatsApp ${storeWA} if any fish arrives Dead on Arrival. One approved claim is resolved by replacement, store credit, or refund of the fish amount.</p>`:""}
+    ${o.liveGuarantee?`<p>🛡️ <b>Live Arrival Guarantee</b> applies (included with your Speed Delivery parcel). Send a continuous unboxing video within 2 hours of delivery to WhatsApp ${storeWA} if any fish arrives Dead on Arrival. One approved claim is resolved by replacement, store credit, or refund of the fish amount.</p>`:""}
     <p>${gstin?"Prices are inclusive of GST.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this is a Bill of Supply."}</p>
     <p>Thank you for shopping at <b>${storeName}</b> 🐠</p>
     <p>Support: WhatsApp ${storeWA}</p>
@@ -1128,7 +1347,7 @@ function openBill(order,settings){
 
 /* Share a product via the native share sheet (WhatsApp/Instagram/etc), with clipboard fallback */
 async function shareProduct(p, showToast){
-  const url=(typeof location!=="undefined")?location.href.split("#")[0]:"";
+  const url=(typeof location!=="undefined")?(location.origin+location.pathname+"?p="+encodeURIComponent(p.id)):"";
   const price=effectivePrice(p);
   const text=`🐠 ${p.name} — ₹${price} at ${STORE_NAME} Aqua Store\n${p.desc?p.desc.slice(0,90)+"… ":""}${url}`;
   try{
@@ -1139,13 +1358,13 @@ async function shareProduct(p, showToast){
 }
 
 /* Export orders to a CSV file (opens in Excel/Sheets). Optional [from,to] ISO-date range (inclusive). */
-function exportOrdersCSV(orders, from="", to="", settings={}){
+function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={}){
   const esc=v=>{ const s=String(v==null?"":v).replace(/"/g,'""'); return `"${s}"`; };
   let list=[...orders];
   if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
-  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Special Delivery","Live Guarantee","Coupon","Coupon Discount","Loyalty Reward Used (Rs.)","Points Redeemed","Points Earned","Grand Total","Tracking","Customer Summary","WhatsApp Updates","Customer ID"];
+  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Speed Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier","Consignment","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","Customer Summary","WhatsApp Updates","Customer ID"];
   const pph=Number(settings?.loyaltyPointsPerHundred||10);
   const rupeePerPoint=Number(settings?.loyaltyRedeemValue||1);
   const rows=list.map(o=>{
@@ -1154,7 +1373,8 @@ function exportOrdersCSV(orders, from="", to="", settings={}){
     const loyaltyUsed=Number(o.loyaltyDiscount||0);
     const ptsRedeemed=loyaltyUsed>0?Math.round(loyaltyUsed/(rupeePerPoint||1)):0;
     const ptsEarned=settings?.loyaltyEnabled?Math.floor((grand/100)*pph):0;
-    return [orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.coupon||"",o.couponDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,grand,o.trackingNumber||"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||""].map(esc).join(",");
+    const wBal=walletBalances[o.userUid]!=null?walletBalances[o.userUid]:"";
+    return [orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||""].map(esc).join(",");
   });
   const csv="\uFEFF"+[head.map(esc).join(","),...rows].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -1260,6 +1480,8 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
   .sheet-overlay{align-items:center !important;padding:24px !important;}
   .sheet-panel{border-radius:20px !important;max-width:460px !important;}
 }
+.home-footer{display:none;}
+@media(min-width:1000px){ .home-footer{display:block;} }
 .desk-link:hover{background:#eef9fa !important;}
 `;
 
@@ -1387,7 +1609,7 @@ function MiniCountdown({endsAt,compact=false}){
 function WelcomeBanner({settings,orders=[]}){
   const code=settings.welcomeCoupon||"WELCOME100";
   const amt=settings.welcomeCouponAmount||100;
-  const min=settings.welcomeCouponMinOrder||500;
+  const min=settings.welcomeCouponMinOrder||999;
   const hasRealOrder=orders.some(o=>!["Cancelled"].includes(o.status));
   if(settings.welcomeCouponEnabled===false)return null;
   if(hasRealOrder||!code)return null;
@@ -1424,32 +1646,40 @@ function FestivalBanner({settings}){
 }
 
 /* ═══════════════════ LOYALTY POINTS WIDGET ═══════════════════ */
-function LoyaltyWidget({points,settings,onRedeem,redeemApplied}){
+function LoyaltyWidget({points,settings,onRedeem,redeemApplied,subtotal=0}){
   const enabled=settings.loyaltyEnabled;
   const min=Number(settings.loyaltyRedeemMin||100);
   const val=Number(settings.loyaltyRedeemValue||1);
+  const maxCoins=Number(settings.walletMaxCoins||100);
+  const minOrder=Number(settings.walletMinOrder||0);
   if(!enabled||points==null)return null;
-  const canRedeem=points>=min&&!redeemApplied;
-  const worth=Math.floor(points*val);
+  const orderOk=subtotal>=minOrder;
+  const canRedeem=points>=min&&orderOk&&!redeemApplied;
+  const usedCoins=Math.min(points,maxCoins);
+  const worth=Math.floor(usedCoins*val);
+  const totalWorth=Math.floor(points*val);
   return(
     <div className="points-pop" style={{background:"linear-gradient(135deg,#1d4ed8 0%,#7c3aed 100%)",borderRadius:16,padding:"14px 16px",marginBottom:14,boxShadow:"0 6px 20px rgba(124,58,237,.2)"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:redeemApplied?0:8}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:22}}>⭐</span>
+          <span style={{fontSize:22}}>👛</span>
           <div>
             <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,color:"white",lineHeight:1}}>{points} pts</div>
-            <div style={{fontSize:10.5,color:"rgba(255,255,255,.8)"}}>= ₹{worth} reward</div>
+            <div style={{fontSize:10.5,color:"rgba(255,255,255,.8)"}}>Wallet = ₹{totalWorth}</div>
           </div>
         </div>
         {!redeemApplied&&(
           <button className="press" onClick={onRedeem} disabled={!canRedeem}
             style={{background:canRedeem?"rgba(255,255,255,.2)":"rgba(255,255,255,.08)",border:`1px solid ${canRedeem?"rgba(255,255,255,.5)":"rgba(255,255,255,.2)"}`,borderRadius:10,padding:"8px 14px",color:canRedeem?"white":"rgba(255,255,255,.45)",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:canRedeem?"pointer":"not-allowed"}}>
-            {canRedeem?"Redeem":`Need ${min-points} more pts`}
+            {points<min?`Need ${min-points} more pts`:!orderOk?`Min order ₹${minOrder}`:`Redeem ₹${worth}`}
           </button>
         )}
       </div>
       {redeemApplied&&(
-        <div style={{fontSize:12,color:"rgba(255,255,255,.9)",fontWeight:600}}>✓ ₹{worth} loyalty reward applied!</div>
+        <div style={{fontSize:12,color:"rgba(255,255,255,.9)",fontWeight:600}}>✓ ₹{worth} wallet credit applied{points>maxCoins?` (max ${maxCoins} coins/order)`:""}!</div>
+      )}
+      {!redeemApplied&&canRedeem&&points>maxCoins&&(
+        <div style={{fontSize:10.5,color:"rgba(255,255,255,.8)",marginTop:4}}>You can use up to {maxCoins} coins (₹{Math.floor(maxCoins*val)}) on this order.</div>
       )}
       {!redeemApplied&&!canRedeem&&(
         <div style={{background:"rgba(0,0,0,.15)",borderRadius:8,height:5,overflow:"hidden",marginTop:4}}>
@@ -1475,10 +1705,11 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
     if(user?.name) setOwnerName(n=>n||user.name);
   },[user?.name]);
   if(!settings.showcaseEnabled)return null;
-  if(!showcase.length&&!user)return null;
+  if(!(showcase||[]).some(s=>showcaseApproved(s))&&!user)return null;
   const now=Date.now();
-  const liveShowcase=(showcase||[]).filter(s=>!showcaseExpired(s,now));
-  const mine=user&&liveShowcase.find(s=>s.userUid===user.uid);
+  const liveShowcase=(showcase||[]).filter(s=>showcaseApproved(s)&&!showcaseExpired(s,now));
+  const mine=user&&(showcase||[]).find(s=>s.userUid===user.uid&&!showcaseExpired(s,now));
+  const minePending=mine&&!showcaseApproved(mine);
   const handleFile=async file=>{
     if(!file)return;
     setNote("Processing…");
@@ -1489,9 +1720,9 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
     if(!imgData){setNote("⚠ Please select a photo");return;}
     const finalName=(user?.name||ownerName||"Aquarist").trim();
     setUploading(true);
-    await onSubmit({id:user?.uid||uid("sc"),imgData,ownerName:finalName,caption:caption.trim(),createdAt:new Date().toISOString(),expiresAt:Date.now()+SHOWCASE_TTL,userUid:user?.uid||(user?userKey(user):"")});
-    setImgData(null);setPreview(null);setCaption("");setOwnerName(user?.name||"");setNote("🎉 Your tank is live!");setUploading(false);
-    setTimeout(()=>setNote(""),3500);
+    await onSubmit({id:user?.uid||uid("sc"),imgData,ownerName:finalName,caption:caption.trim(),createdAt:new Date().toISOString(),approved:false,userUid:user?.uid||(user?userKey(user):"")});
+    setImgData(null);setPreview(null);setCaption("");setOwnerName(user?.name||"");setNote("📩 Submitted! We'll review it soon.");setUploading(false);
+    setTimeout(()=>setNote(""),4000);
   };
   return(
     <div style={{marginBottom:26}}>
@@ -1499,6 +1730,12 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
         <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>🪸 Customer Tanks</span>
         {liveShowcase.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{liveShowcase.length} shared · 24h</span>}
       </div>
+      {minePending&&(
+        <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+          <img src={mine.imgData} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+          <div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your tank photo is awaiting approval. Once approved it goes live for everyone for 24 hours.</div>
+        </div>
+      )}
       {liveShowcase.length>0&&(
         <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,marginBottom:12}}>
           {liveShowcase.map(s=>(
@@ -1516,8 +1753,8 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
       )}
       {user&&(
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Update Your Tank":"Share Your Tank!"}</div>
-          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>One photo per customer · auto-removed after 24 hours</div>
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {minePending?"Replace Your Pending Photo":mine?"Update Your Tank":"Share Your Tank!"}</div>
+          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>One photo per customer · admin-approved · shown 24 hours after approval</div>
           {preview?(
             <div style={{position:"relative",borderRadius:12,overflow:"hidden",marginBottom:8}}>
               <img src={preview} alt="preview" style={{width:"100%",height:110,objectFit:"cover"}}/>
@@ -1555,6 +1792,78 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
           <button onClick={()=>setFullImg(null)} style={{marginTop:16,background:"rgba(255,255,255,.18)",border:"1px solid rgba(255,255,255,.3)",borderRadius:12,padding:"10px 24px",color:"white",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Close</button>
         </div>
         </Portal>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════ TESTIMONIALS ═══════════════════ */
+function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
+  const [text,setText]=useState("");
+  const [rating,setRating]=useState(5);
+  const [busy,setBusy]=useState(false);
+  const [note,setNote]=useState("");
+  const mine=user&&(testimonials||[]).find(t=>t.uid&&t.uid===userKey(user));
+  const submit=async()=>{
+    const body=text.trim();
+    if(body.length<4){ setNote("⚠ Please write a few words."); return; }
+    setBusy(true); setNote("");
+    const t={ id:"ts-"+Date.now()+"-"+Math.random().toString(36).slice(2,6),
+      uid:userKey(user)||"", name:(user.name||"Customer").slice(0,40), text:body.slice(0,280),
+      rating:Number(rating)||5, createdAt:new Date().toISOString() };
+    try{ await onSubmit(t); setText(""); setNote("🎉 Thanks for sharing!"); }
+    catch(e){ setNote("⚠ Couldn't post — try again."); }
+    setBusy(false);
+  };
+  const list=(testimonials||[]).slice(0,12);
+  if(!list.length && !user) return null;
+  return(
+    <div style={{marginBottom:26}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>💬 Testimonials</span>
+        {list.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{list.length} from our customers</span>}
+      </div>
+      {list.length>0&&(
+        <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,marginBottom:12,WebkitOverflowScrolling:"touch"}}>
+          {list.map(t=>(
+            <div key={t.id} style={{flexShrink:0,width:240,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 15px",display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{display:"flex",gap:2}}>
+                {[1,2,3,4,5].map(s=><span key={s} className={s<=(t.rating||5)?"stars":"stars-dim"} style={{fontSize:13}}>★</span>)}
+              </div>
+              <div style={{fontSize:13,color:C.text,lineHeight:1.5,fontStyle:"italic"}}>“{t.text}”</div>
+              <div style={{display:"flex",alignItems:"center",gap:7,marginTop:"auto"}}>
+                <span style={{width:24,height:24,borderRadius:"50%",background:C.primary,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0}}>{(t.name||"C").charAt(0).toUpperCase()}</span>
+                <span style={{fontSize:12,fontWeight:700,color:C.text}}>{t.name||"Customer"}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {user?(
+        mine?(
+          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}!</div>
+        ):(
+          <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
+            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:8}}>Share your experience</div>
+            <div style={{display:"flex",gap:4,marginBottom:8}}>
+              {[1,2,3,4,5].map(s=>(
+                <button key={s} onClick={()=>setRating(s)} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,padding:0,lineHeight:1,color:s<=rating?"#f59e0b":"#d1d5db"}}>★</button>
+              ))}
+            </div>
+            <textarea value={text} onChange={e=>setText(e.target.value.slice(0,280))} placeholder="How was your experience with Nemo Aqua Store?"
+              rows={3} style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6,resize:"vertical",fontFamily:"'Nunito',sans-serif"}}/>
+            {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:C.success,fontWeight:600,marginBottom:6}}>{note}</div>}
+            <button className="press" onClick={submit} disabled={busy}
+              style={{width:"100%",background:busy?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              {busy?"Posting…":"Post Testimonial 💬"}
+            </button>
+          </div>
+        )
+      ):(
+        <button className="press" onClick={onSignIn}
+          style={{width:"100%",background:C.card,color:C.primary,border:`1.5px dashed ${C.accent}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+          Sign in to write a testimonial
+        </button>
       )}
     </div>
   );
@@ -2046,7 +2355,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
             <div style={{position:"relative"}}>
               <div style={{fontSize:24,marginBottom:4}}>💜</div>
               <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Refer a friend — they save ₹{refAmt}</div>
-              <div style={{fontSize:12,opacity:.92,lineHeight:1.5,marginBottom:12}}>Thanks for shopping with us! Share your personal code — your friend gets ₹{refAmt} off their first order.</div>
+              <div style={{fontSize:12,opacity:.92,lineHeight:1.5,marginBottom:12}}>Thanks for shopping with us! Share your personal code — your friend gets ₹{refAmt} off, and you earn {settings.referralCoins??50} 👛 wallet points once their order is delivered.</div>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.5)",borderRadius:10,padding:"10px 14px",fontFamily:"monospace",fontSize:20,fontWeight:800,letterSpacing:3,textAlign:"center"}}>{refCode}</div>
                 <button className="press" onClick={()=>{
@@ -2112,7 +2421,19 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 <span style={{fontSize:12,color:C.textSub}}>Grand Total</span>
                 <span style={{fontFamily:PRICE_FONT,fontSize:16,fontWeight:800,color:C.primary}}>₹{o.amountDue??(o.total+o.fee)}</span>
               </div>
-              {o.trackingNumber&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>Tracking: <b style={{color:C.text}}>{o.trackingNumber}</b></div>}
+              {o.trackingNumber&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>Consignment: <b style={{color:C.text}}>{o.trackingNumber}</b>{o.courierName?<> · {o.courierName}</>:null}</div>}
+              {(o.status==="Shipped"||o.status==="Delivered")&&o.courierTrackUrl&&(
+                <button className="press" onClick={()=>trackParcel(o)}
+                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                  🚚 Track Parcel{o.courierName?` · ${o.courierName}`:""}
+                </button>
+              )}
+              {o.shippingReward&&(
+                <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"11px 13px"}}>
+                  <div style={{fontSize:12.5,fontWeight:800,color:"#15803d",marginBottom:3}}>🎁 Shipping refund — ₹{o.shippingReward.amount} added to your wallet!</div>
+                  <div style={{fontSize:11.5,color:"#166534",lineHeight:1.55}}>Your parcel cost us less than you paid for shipping, so we've credited the difference to your 👛 wallet. Redeem it at checkout on any future order.</div>
+                </div>
+              )}
               {/* Bill button */}
               <button className="press" onClick={()=>openBill(o,settings)}
                 style={{width:"100%",marginTop:10,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
@@ -2301,13 +2622,91 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   );
 }
 
+/* ═══════════════════ CATEGORY DRAWER (left slide-in) ═══════════════════ */
+function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
+  const go=(to)=>{ onClose&&onClose(); nav&&nav(to); };
+  const COMPANY=[{label:"About Us",to:"about"},{label:"Care Guides",to:"guides"},{label:"Request a Product",to:"request"},{label:"Track My Orders",to:"orders"}];
+  const POLICIES=[{label:"Live Guarantee",to:"policy-guarantee"},{label:"Returns & Refunds",to:"policy-returns"},{label:"Terms & Conditions",to:"policy-terms"},{label:"Privacy Policy",to:"policy-privacy"},{label:"Contact Us",to:"about"}];
+  return(
+    <div aria-hidden={!open} style={{position:"fixed",inset:0,zIndex:300,pointerEvents:open?"auto":"none"}}>
+      {/* Scrim */}
+      <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(7,32,35,.45)",opacity:open?1:0,transition:"opacity .28s ease",backdropFilter:open?"blur(2px)":"none"}}/>
+      {/* Panel */}
+      <div style={{position:"absolute",top:0,bottom:0,left:0,width:"78%",maxWidth:300,background:C.card,boxShadow:"6px 0 30px rgba(0,0,0,.25)",transform:open?"translateX(0)":"translateX(-104%)",transition:"transform .3s cubic-bezier(.4,0,.2,1)",display:"flex",flexDirection:"column",overflowY:"auto"}}>
+        <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"46px 20px 18px",color:"white",position:"relative"}}>
+          <button className="press" onClick={onClose} aria-label="Close menu"
+            style={{position:"absolute",top:42,right:14,width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:18,cursor:"pointer",lineHeight:1}}>×</button>
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800}}>Browse</div>
+          <div style={{fontSize:11.5,color:"rgba(255,255,255,.8)",marginTop:2}}>Shop by category</div>
+        </div>
+        <div style={{padding:"12px 12px 18px"}}>
+          <button className="press" onClick={()=>onSelect("All")}
+            style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderRadius:13,padding:"13px 12px",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left"}}>
+            <span style={{fontSize:22,width:28,textAlign:"center"}}>🌊</span>
+            <span style={{fontSize:14.5,fontWeight:800,color:C.text}}>All Products</span>
+          </button>
+          {CATEGORIES.map(cat=>(
+            <button key={cat} className="press" onClick={()=>onSelect(cat)}
+              style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderTop:`1px solid ${C.border}`,padding:"13px 12px",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left"}}>
+              <span style={{fontSize:22,width:28,textAlign:"center"}}>{CAT_META[cat].emoji}</span>
+              <span style={{fontSize:14.5,fontWeight:700,color:C.text}}>{cat}</span>
+              <span style={{marginLeft:"auto",color:C.textSub,fontSize:16}}>›</span>
+            </button>
+          ))}
+          {recent.length>0&&(
+            <div style={{marginTop:18,paddingTop:6}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 12px",marginBottom:8}}>
+                <span style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6}}>Recent searches</span>
+                <button className="press" onClick={()=>onRecent&&onRecent(null)} style={{background:"none",border:"none",color:C.textSub,fontSize:10.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Clear</button>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7,padding:"0 12px"}}>
+                {recent.map(r=>(
+                  <button key={r} className="press" onClick={()=>onRecent&&onRecent(r)}
+                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 12px",fontSize:12,fontWeight:600,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+                    🔍 {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {nav&&(
+            <div style={{marginTop:18,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+              <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",marginBottom:4}}>Company</div>
+              {COMPANY.map(l=>(
+                <button key={l.label} className="press" onClick={()=>go(l.to)}
+                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>{l.label}</button>
+              ))}
+              <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",margin:"10px 0 4px"}}>Policies</div>
+              {POLICIES.map(l=>(
+                <button key={l.label} className="press" onClick={()=>go(l.to)}
+                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>{l.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════ HOME PAGE ═══════════════════ */
-function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock}){
+function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit}){
   const featured=products.slice(0,6);
+  const [menuOpen,setMenuOpen]=useState(false);
+  const [recent,setRecent]=useState(()=>loadRecentSearches());
+  const related=useMemo(()=>relatedProducts(products,recent,null,6),[products,recent]);
+  const recentlyViewed=useMemo(()=>loadRecentlyViewed().map(id=>products.find(p=>p.id===id)).filter(Boolean).slice(0,10),[products]);
+  const handleRecent=(r)=>{
+    if(r===null){ clearRecentSearches(); setRecent([]); return; }
+    setMenuOpen(false); setQuery(r); nav("shop");
+  };
   const offer = products.find(p=>(p.discountPct||0)>0 && p.offerEndsAt && new Date(p.offerEndsAt).getTime()>Date.now());
   const offerStock = offer ? (offer.stockCount ?? DEFAULT_STOCK) : 0;
   return(
     <div className="slide-up">
+      <CategoryDrawer open={menuOpen} onClose={()=>setMenuOpen(false)} recent={recent} nav={nav}
+        onSelect={(cat)=>{ setMenuOpen(false); setCategory(cat); nav("shop"); }}
+        onRecent={handleRecent}/>
       {/* Hero */}
       <div style={{background:`linear-gradient(165deg,${C.primaryDark} 0%,${C.primary} 55%,${C.accent} 100%)`,
         padding:"42px 22px 30px",borderRadius:"0 0 32px 32px",position:"relative",overflow:"hidden"}}>
@@ -2315,8 +2714,22 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         <div style={{position:"absolute",top:40,right:50,width:70,height:70,borderRadius:"50%",border:"2px solid rgba(255,255,255,.1)"}}/>
         <div style={{position:"absolute",bottom:-50,left:-40,width:160,height:160,borderRadius:"50%",background:"rgba(255,255,255,.05)"}}/>
 
+        {/* Hamburger — opens category drawer */}
+        <button className="press" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
+          style={{position:"absolute",top:46,left:16,width:38,height:38,borderRadius:12,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",backdropFilter:"blur(8px)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,cursor:"pointer",zIndex:3}}>
+          <span style={{width:17,height:2,background:"white",borderRadius:2}}/>
+          <span style={{width:17,height:2,background:"white",borderRadius:2}}/>
+          <span style={{width:17,height:2,background:"white",borderRadius:2}}/>
+        </button>
         {/* Account chip */}
         <div style={{position:"absolute",top:46,right:16,display:"flex",alignItems:"center",gap:8}}>
+          {user&&settings.loyaltyEnabled!==false&&(
+            <button className="press" onClick={()=>nav("orders")} title="Your wallet"
+              style={{display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",borderRadius:30,padding:"7px 12px",color:"white",fontFamily:"'Nunito',sans-serif",backdropFilter:"blur(8px)",cursor:"pointer"}}>
+              <span style={{fontSize:14,lineHeight:1}}>👛</span>
+              <span style={{fontSize:12.5,fontWeight:800,fontFamily:"'Baloo 2',sans-serif"}}>{walletPts}</span>
+            </button>
+          )}
           <button className="press" onClick={()=>nav("orders")}
             style={{display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",borderRadius:30,padding:"6px 12px 6px 6px",color:"white",fontFamily:"'Nunito',sans-serif",backdropFilter:"blur(8px)",cursor:"pointer"}}>
             <span style={{width:26,height:26,borderRadius:"50%",background:"rgba(255,255,255,.9)",color:C.primary,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>
@@ -2354,6 +2767,17 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             onFocus={()=>nav("shop")}
             style={{border:"none",background:"transparent",outline:"none",flex:1,fontSize:14}}/>
         </div>
+        {recent.length>0&&(
+          <div style={{display:"flex",alignItems:"center",gap:7,overflowX:"auto",marginTop:10,paddingBottom:2,WebkitOverflowScrolling:"touch"}}>
+            <span style={{fontSize:11,color:C.textSub,fontWeight:700,flexShrink:0}}>Recent:</span>
+            {recent.slice(0,6).map(r=>(
+              <button key={r} className="press" onClick={()=>{setQuery(r);nav("shop");}}
+                style={{flexShrink:0,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:600,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer",whiteSpace:"nowrap"}}>
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{padding:"0 16px 100px"}}>
@@ -2364,18 +2788,24 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {settingsReady&&<WelcomeBanner settings={settings} orders={orders}/>}
 
         {/* Categories */}
+        {/* Recently viewed — replaces the old category grid */}
+        {recentlyViewed.length>0&&(
         <div style={{marginBottom:24}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text,marginBottom:14}}>Browse Categories</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-            {CATEGORIES.map(cat=>(
-              <button key={cat} className="press" onClick={()=>{setCategory(cat);nav("shop");}}
-                style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px 8px",textAlign:"center",cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
-                <div style={{fontSize:28,marginBottom:6}}>{CAT_META[cat].emoji}</div>
-                <div style={{fontSize:11.5,fontWeight:700,color:C.text}}>{cat}</div>
-              </button>
+          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+            <span style={{fontSize:18}}>🕒</span>
+            <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Recently Viewed</span>
+          </div>
+          <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
+            {recentlyViewed.map(p=>(
+              <div key={p.id} style={{flexShrink:0,width:150}}>
+                <ProductCard product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+                  onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
+                  isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
+              </div>
             ))}
           </div>
         </div>
+        )}
 
         {/* Limited time offer */}
         {offer&&(
@@ -2386,6 +2816,25 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
               subtitle={`${offer.discountPct}% off ${offer.name} — don't miss out!`}
               stockNote={offerStock<=10?`Only ${offerStock} items left in stock!`:null}
               onShop={()=>nav("detail",offer)}/>
+          </div>
+        )}
+
+        {/* Related to your recent searches */}
+        {related.length>0&&(
+          <div style={{marginBottom:26}}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+              <span style={{fontSize:18}}>✨</span>
+              <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Based on Your Searches</span>
+            </div>
+            <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
+              {related.map(p=>(
+                <div key={p.id} style={{flexShrink:0,width:150}}>
+                  <ProductCard product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+                    onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
+                    isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -2406,6 +2855,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
         {/* Customer Tank Showcase */}
         <TankShowcaseSection showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
+
+        {/* Testimonials — any signed-in customer can post */}
+        <TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>
 
         {/* Free delivery banner — only shown when admin has set a threshold */}
         {Number(settings.freeDeliveryThreshold) > 0 && (
@@ -2435,8 +2887,8 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           </button>
         </div>
 
-        {/* ── Site footer ── */}
-        <div style={{margin:"28px -16px 0",background:C.card,borderTop:`3px solid ${C.primary}`,padding:"26px 18px 22px"}}>
+        {/* ── Site footer (desktop only — on mobile these links live in the side menu) ── */}
+        <div className="home-footer" style={{margin:"28px -16px 0",background:C.card,borderTop:`3px solid ${C.primary}`,padding:"26px 18px 22px"}}>
           {/* Brand + tagline */}
           <div style={{marginBottom:22}}>
             <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>{STORE_NAME} Aqua Store</div>
@@ -2544,6 +2996,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,addToCart,cartMap,favorites=[],onFav,interestedSet=[],onInterest,restockSet=[],onRestock}){
   const [sort,setSort]=useState("relevance");
   const [availability,setAvailability]=useState("all");
+  const [recent,setRecent]=useState(()=>loadRecentSearches());
+  // Record the search term once the user stops typing
+  useEffect(()=>{ const q=(query||"").trim(); if(q.length<2) return; const t=setTimeout(()=>setRecent(addRecentSearch(q)),900); return ()=>clearTimeout(t); },[query]);
   const priceCap = useRef(Math.max(2500, ...products.map(p=>p.price))).current;
   const [priceMax,setPriceMax]=useState(priceCap);
   const [sheet,setSheet]=useState(false);
@@ -2591,6 +3046,22 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
         <CategoryPills selected={category} onSelect={setCategory} all/>
       </div>
       <div style={{padding:"14px 16px 100px"}}>
+        {!query&&recent.length>0&&(
+          <div style={{marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontSize:12,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Recent searches</span>
+              <button className="press" onClick={()=>{clearRecentSearches();setRecent([]);}} style={{background:"none",border:"none",color:C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Clear</button>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {recent.map(r=>(
+                <button key={r} className="press" onClick={()=>setQuery(r)}
+                  style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"7px 13px",fontSize:12.5,fontWeight:600,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+                  🔍 {r}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div style={{fontSize:12,color:C.textSub,fontWeight:500,marginBottom:14}}>
           {list.length} product{list.length!==1?"s":""}{category!=="All"?` in ${category}`:""}{query?` for "${query}"`:""}
         </div>
@@ -2612,6 +3083,29 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             ))}
           </div>
         )}
+        {/* Related products — keyword matches outside the current result set */}
+        {query.trim()&&(()=>{
+          const inList=new Set(list.map(p=>p.id));
+          const rel=relatedProducts(products,[query],null,8).filter(p=>!inList.has(p.id));
+          if(!rel.length) return null;
+          return(
+            <div style={{marginTop:28}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+                <span style={{fontSize:18}}>✨</span>
+                <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,color:C.text}}>You might also like</span>
+              </div>
+              <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
+                {rel.map(p=>(
+                  <div key={p.id} style={{flexShrink:0,width:150}}>
+                    <ProductCard product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+                      onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
+                      isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
       <SortFilterSheet open={sheet} onClose={()=>setSheet(false)}
         sort={sort} setSort={setSort}
@@ -2640,6 +3134,7 @@ function DetailPage({product:p,media={images:[],video:null},addToCart,cart=[],na
     setReviews([]);
     setShowForm(false);
     setSubmitted(false);
+    pushRecentlyViewed(p.id);
     loadReviews(p.id).then(r=>{ setReviews(r); setLoadingRev(false); if((r.length||0)!==(p.reviewCount||0)) onReviewsChanged && onReviewsChanged(p.id, r); });
     setSlide(0);
     // Auto-open the review form when the customer tapped "Rate" from their orders
@@ -2672,7 +3167,7 @@ function DetailPage({product:p,media={images:[],video:null},addToCart,cart=[],na
   const revCount  = reviews.length;
 
   const handleNewReview=async(rev)=>{
-    const next=await appendReview(p.id,rev);
+    const next=await appendReview(p.id,{...rev,uid:userKey(user)||""});
     setReviews(next);
     onReviewsChanged && onReviewsChanged(p.id, next);
     onReviewed && onReviewed(p.id);
@@ -2899,7 +3394,7 @@ function DetailPage({product:p,media={images:[],video:null},addToCart,cart=[],na
 }
 
 /* ═══════════════════ CART PAGE ═══════════════════ */
-function CartPage({cart,updateQty,total,nav}){
+function CartPage({cart,updateQty,total,nav,settings={}}){
   const hasLiveFish=cart.some(i=>i.category==="Live Fish");
   if(!cart.length)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"20px",textAlign:"center"}}>
@@ -2947,6 +3442,19 @@ function CartPage({cart,updateQty,total,nav}){
             <span style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,color:C.primary}}>₹{total}</span>
           </div>
         </div>
+        {settings.loyaltyEnabled!==false && (()=>{
+          const pph=Number(settings.loyaltyPointsPerHundred||10);
+          const val=Number(settings.loyaltyRedeemValue||1);
+          const pts=Math.floor((Number(total)||0)/100*pph);
+          const worth=Math.floor(pts*val);
+          if(worth<=0) return null;
+          return (
+            <div style={{background:"#ecfdf5",borderRadius:12,padding:"11px 14px",marginTop:10,fontSize:12.5,color:"#15803d",fontWeight:700,border:"1px solid #a7f3d0",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16}}>👛</span>
+              <span>Earn ₹{worth} back in wallet points — credited when your order is delivered.</span>
+            </div>
+          );
+        })()}
         <div style={{background:C.accentLight,borderRadius:12,padding:"10px 14px",marginTop:10,fontSize:12.5,color:C.primaryDark,fontWeight:600,border:`1px solid ${C.border}`}}>
           🚚 Shipping is calculated at checkout based on your location &amp; order weight
           {hasLiveFish&&<span style={{display:"block",fontSize:11,fontWeight:500,marginTop:3,color:C.primary}}>🐠 Live fish shipping rates apply — see chart at checkout</span>}
@@ -3147,6 +3655,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     return ()=>{alive=false;};
   },[placed,user,settings.referralMinOrder]);
   const [specialDelivery,setSpecialDelivery]=useState(false);
+  const suggestedPacking=suggestedPackingForCart(cart);
+  const [packing,setPacking]=useState(()=>suggestedPackingForCart(cart));
+  const selPack=packingOpt(packing);
   const [placing,setPlacing]=useState(false);
   const [placeErr,setPlaceErr]=useState("");
   const [couponCode,setCouponCode]=useState("");
@@ -3169,23 +3680,45 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   },[]);
   const loyaltyVal=Number(settings.loyaltyRedeemValue||1);
   const loyaltyMin=Number(settings.loyaltyRedeemMin||100);
-  const loyaltyDiscount=loyaltyRedeemed&&loyaltyPts>=loyaltyMin?Math.floor(loyaltyPts*loyaltyVal):0;
+  const walletMaxCoins=Number(settings.walletMaxCoins||100);
+  const walletMinOrder=Number(settings.walletMinOrder||0);
+  let loyaltyDiscount=(loyaltyRedeemed&&loyaltyPts>=loyaltyMin&&total>=walletMinOrder)?Math.floor(Math.min(loyaltyPts,walletMaxCoins)*loyaltyVal):0;
+  let loyaltyCoinsUsed=loyaltyDiscount>0?Math.min(loyaltyPts,walletMaxCoins):0;
   // Dynamic shipping
   const zone=pincodeToZone(addr.pincode);
-  const shippingFee=calcShipping(cart,zone,specialDelivery,settings);
-  // Live Arrival Guarantee is now INCLUDED FREE with the recommended (Special / Fast & Safe) parcel — no separate charge.
-  const guaranteeActive=hasLiveFish&&specialDelivery;
+  const shipOpts = hasLiveFish ? {packing} : {special:specialDelivery};
+  const shippingFee=calcShipping(cart,zone,shipOpts,settings);
+  // Live Arrival Guarantee is FREE when the customer picks the recommended packing (or a safer/higher-rank one).
+  const guaranteeActive=hasLiveFish && selPack.rank >= packingOpt(suggestedPacking).rank;
   const lgPrice=0;
-  const couponDiscount=couponApplied?Math.min(couponApplied.type==="percent"?Math.round(total*couponApplied.discount/100):Number(couponApplied.discount||0),total+lgPrice):0;
-  const refDiscount=refApplied?Math.min(Number(settings.referralDiscount||50),Math.max(0,total+lgPrice-couponDiscount)):0;
+  let couponDiscount=couponApplied?Math.min(couponApplied.type==="percent"?Math.round(total*couponApplied.discount/100):Number(couponApplied.discount||0),total+lgPrice):0;
+  let refDiscount=refApplied?Math.min(Number(settings.referralDiscount||50),Math.max(0,total+lgPrice-couponDiscount)):0;
+  // ── Anti-stacking cap: coupon + referral + loyalty together can't exceed maxDiscountPct% of subtotal.
+  //    Trim loyalty first (customer keeps their points), then referral, then coupon. ──
+  const maxDiscPct=Number(settings.maxDiscountPct||0);
+  const discountCap=maxDiscPct>0?Math.floor(total*maxDiscPct/100):Infinity;
+  let discountCapped=false;
+  if(couponDiscount+refDiscount+loyaltyDiscount>discountCap){
+    discountCapped=true;
+    let over=(couponDiscount+refDiscount+loyaltyDiscount)-discountCap;
+    const dLoy=Math.min(loyaltyDiscount,over); loyaltyDiscount-=dLoy; over-=dLoy;
+    const dRef=Math.min(refDiscount,over); refDiscount-=dRef; over-=dRef;
+    const dCoup=Math.min(couponDiscount,over); couponDiscount-=dCoup; over-=dCoup;
+    loyaltyCoinsUsed=loyaltyDiscount>0?Math.ceil(loyaltyDiscount/loyaltyVal):0;
+  }
+  // Live fish geo-restriction (admin-toggleable)
+  const liveBlocked = hasLiveFish && liveFishBlockedForZone(zone, settings);
   const fee=shippingFee??0;
   const grand=Math.max(0,total+fee+lgPrice-couponDiscount-refDiscount-loyaltyDiscount);
   const f=(k,v)=>setAddr(a=>({...a,[k]:v}));
   const fb=(k,v)=>setBilling(a=>({...a,[k]:v}));
   const anySuggestSpecial=cart.some(i=>i.suggestSpecialDelivery);
-  const applyCoupon=()=>{
+  const applyCoupon=async()=>{
     const r=validateCoupon(couponCode,settings,orders,total);
     if(!r.ok){ setCouponMsg({text:r.msg,ok:false}); setCouponApplied(null); return; }
+    if(await promoLimitReached("coupon", settings.couponDailyLimit)){
+      setCouponMsg({text:"Today's coupon quota is full — please try tomorrow.",ok:false}); setCouponApplied(null); return;
+    }
     setCouponApplied(r.coupon);
     const saved=r.coupon.type==="percent"?Math.round(total*r.coupon.discount/100):Number(r.coupon.discount||0);
     setCouponMsg({text:`✓ Coupon applied — saves ₹${saved}!`,ok:true});
@@ -3193,6 +3726,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
 
   const applyReferral=async()=>{
     if(settings.referralEnabled===false){ setRefMsg({text:"Referral program is currently off",ok:false}); return; }
+    if(await promoLimitReached("referral", settings.referralDailyLimit)){
+      setRefMsg({text:"Today's referral quota is full — please try tomorrow.",ok:false}); setRefApplied(false); return;
+    }
     const r=await validateReferral(refInput,user?.uid);
     if(!r.ok){ setRefMsg({text:r.msg,ok:false}); setRefApplied(false); return; }
     setRefApplied(true);
@@ -3218,6 +3754,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
 
   const handlePlaceOrder=async()=>{
     if(placing) return;
+    if(liveBlocked){ setPlaceErr("Sorry — we currently don't ship live fish to this region. Please remove live-fish items or use a Tamil Nadu / South India delivery address."); return; }
     setPlaceErr(""); setPlacing(true);
     // Live stock re-check — stops the last unit being oversold when two people check out at once
     if(FB_OK && FB_DB){
@@ -3242,11 +3779,15 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       billingAddress:useSameBilling?addr:billing,
       summary:addr.summary||"",
       total,fee,shippingZone:zone||"",shippingZoneLabel:zone?ZONE_LABELS[zone]:"Unknown",
-      specialDelivery,specialDeliveryFee:specialDelivery?Number(settings.specialDeliveryPrice||0):0,
+      specialDelivery: hasLiveFish ? (selPack.courier==="special") : specialDelivery,
+      specialDeliveryFee: (hasLiveFish?(selPack.courier==="special"):specialDelivery) ? Number(settings.specialDeliveryPrice||0):0,
+      packing: hasLiveFish?packing:"", packingLabel: hasLiveFish?packingLabel(packing):"",
+      suggestedPacking: hasLiveFish?suggestedPacking:"", suggestedPackingLabel: hasLiveFish?packingLabel(suggestedPacking):"",
       liveGuarantee:guaranteeActive,liveGuaranteeFee:0,
       coupon:couponApplied?couponCode.trim():"",couponDiscount,
       referralCode:refApplied?refInput.trim():"", referralDiscount:refDiscount,
       loyaltyDiscount:loyaltyRedeemed?loyaltyDiscount:0,
+      thermacolFee: hasLiveFish?thermacolFeeFor(cart,packing,settings):0,
       status:"Awaiting Payment",trackingNumber:"",
       paymentMethod:"online",
       paymentStatus:"Awaiting Payment",
@@ -3269,7 +3810,10 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     sendOrderEmail(order, settings.orderEmail||BUSINESS_EMAIL, settings);
     sendCustomerEmail(order, settings);
     // Claim the friend's referral code so it can never be reused
-    if(refApplied&&refInput.trim()) claimReferral(refInput.trim(), userKey(user));
+    if(refApplied&&refInput.trim()) claimReferral(refInput.trim(), userKey(user), id);
+    // Count today's promo usage toward the admin's daily caps
+    if(couponApplied) bumpPromoUsage("coupon");
+    if(refApplied&&refInput.trim()) bumpPromoUsage("referral");
     // Root app handles state + storage + stock decrement
     onOrderPlaced(order);
     setPlaced(order);
@@ -3319,10 +3863,10 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             const pts=Math.floor(((placed.amountDue??(placed.total+placed.fee))/100)*pph);
             return pts>0?(
               <div className="points-pop" style={{background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:16,padding:"12px 20px",marginBottom:14,display:"flex",alignItems:"center",gap:10,width:"100%",maxWidth:340}}>
-                <span style={{fontSize:26}}>⭐</span>
+                <span style={{fontSize:26}}>👛</span>
                 <div style={{textAlign:"left"}}>
-                  <div style={{fontSize:14,fontWeight:800,color:"white"}}>+{pts} loyalty points earned!</div>
-                  <div style={{fontSize:11,color:"rgba(255,255,255,.85)"}}>= ₹{Math.floor(pts*Number(settings.loyaltyRedeemValue||1))} reward for your next order</div>
+                  <div style={{fontSize:14,fontWeight:800,color:"white"}}>{pts} wallet points pending</div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,.85)"}}>≈ ₹{Math.floor(pts*Number(settings.loyaltyRedeemValue||1))} — credited to your 👛 wallet once your order is delivered</div>
                 </div>
               </div>
             ):null;
@@ -3417,6 +3961,12 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             })()}
             {showRates&&<ShippingRatesChart settings={settings}/>}
           </div>
+          {liveBlocked&&(
+            <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:14,padding:"13px 15px",marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#b91c1c",marginBottom:3}}>🚫 Live fish not deliverable to {zone?ZONE_LABELS[zone]:"this region"}</div>
+              <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.5}}>For the safety of the fish we currently ship live stock only within <b>Tamil Nadu</b> and <b>South India</b>. Please use a delivery address in those regions, or remove the live-fish items to continue with the rest of your order.</div>
+            </div>
+          )}
           {hasLiveFish&&(
             <>
             <div style={{background:"#dcfce7",border:`1px solid #86efac`,borderRadius:16,padding:"14px 16px",marginBottom:12}}>
@@ -3424,7 +3974,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <span style={{fontSize:20}}>🛡️</span>
                 <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:"#15803d"}}>Live Arrival Guarantee</span>
               </div>
-              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Included free on orders shipped by our recommended <b>Special / Fast &amp; Safe</b> parcel — no separate charge. If a fish arrives Dead on Arrival (DOA), send a valid unboxing video on WhatsApp within 2 hours and we'll make it right <b>one time</b>: a replacement, store credit, or refund of the fish amount (our choice). Normal-parcel orders are not covered. Delivery charges are non-refundable. Once fish are received in good condition, all sales are final — no returns or replacements.</div>
+              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Included free on orders shipped by our recommended <b>Speed Delivery</b> parcel — no separate charge. If a fish arrives Dead on Arrival (DOA), send a valid unboxing video on WhatsApp within 2 hours and we'll make it right <b>one time</b>: a replacement, store credit, or refund of the fish amount (our choice). Normal-parcel orders are not covered. Delivery charges are non-refundable. Once fish are received in good condition, all sales are final — no returns or replacements.</div>
               <button className="press" onClick={()=>nav("about")}
                 style={{marginTop:8,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",textDecoration:"underline"}}>
                 📖 Read our acclimatization guide →
@@ -3458,19 +4008,47 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <div style={{fontSize:11,color:C.textSub,marginTop:4}}>📝 Tell us anything special about your order — we'll see it with your order.</div>
           </div>
           {/* Special delivery — recommended parcel that carries the Live Arrival Guarantee for live fish */}
-          {(anySuggestSpecial||hasLiveFish)&&(
+          {/* Live-fish packing chooser (customer picks); falls back to dry-goods special toggle */}
+          {hasLiveFish ? (
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>🐠 Choose Live-Fish Packing</div>
+              <div style={{fontSize:11.5,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> is free <b>only</b> when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer one above it.</div>
+              {PACKING_OPTIONS.map(opt=>{
+                const sel=packing===opt.key;
+                const isSug=opt.key===suggestedPacking;
+                const covered=opt.rank>=packingOpt(suggestedPacking).rank;
+                const optFee=calcShipping(cart,zone,{packing:opt.key},settings);
+                return(
+                  <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:11,background:sel?"#eff6ff":"#fff",borderRadius:13,padding:"12px 13px",marginBottom:8,cursor:"pointer",userSelect:"none",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
+                    <input type="radio" name="packing" checked={sel} onChange={()=>setPacking(opt.key)} style={{width:18,height:18,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        <span style={{fontSize:12.5,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
+                        {isSug&&<span style={{fontSize:9,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"2px 7px",letterSpacing:.3}}>RECOMMENDED</span>}
+                        {covered&&<span style={{fontSize:9.5,fontWeight:700,color:"#15803d"}}>🛡️ Guaranteed</span>}
+                      </div>
+                      <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>{opt.blurb}</div>
+                    </div>
+                    <span style={{fontSize:12.5,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>{zone?`₹${optFee}`:"—"}</span>
+                  </label>
+                );
+              })}
+              {selPack.rank < packingOpt(suggestedPacking).rank &&(
+                <div style={{fontSize:11,color:"#9a3412",lineHeight:1.45,marginTop:2,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px"}}>⚠ You've chosen a lighter packing than we recommend for these fish — that's okay, but <b>live arrival won't be guaranteed</b>.</div>
+              )}
+            </div>
+          ) : anySuggestSpecial ? (
             <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"#eff6ff":"#fff",borderRadius:14,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
               <input type="checkbox" checked={specialDelivery} onChange={e=>setSpecialDelivery(e.target.checked)} style={{width:20,height:20,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
               <div>
-                <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ {hasLiveFish?"Recommended — ":""}Special / Fast &amp; Safe Delivery</div>
-                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile or live items.{hasLiveFish?<> <b>Includes the Live Arrival Guarantee</b> for your live fish.</>:""} Adds <b>₹{settings.specialDeliveryPrice||200}</b> to shipping.</div>
-                {hasLiveFish&&!specialDelivery&&<div style={{fontSize:11,color:"#9a3412",marginTop:4,lineHeight:1.4}}>Prefer a normal parcel for your area/weather? That's fine — but live arrival won't be guaranteed.</div>}
+                <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ Speed Delivery</div>
+                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{settings.specialDeliveryPrice||200}</b> to shipping.</div>
               </div>
             </label>
-          )}
-          {/* Loyalty points */}
+          ) : null}
+          {/* Wallet — redeem points (earned + referral + shipping refunds) */}
           {settings.loyaltyEnabled&&loyaltyPts!=null&&loyaltyPts>0&&(
-            <LoyaltyWidget points={loyaltyPts} settings={settings} redeemApplied={loyaltyRedeemed} onRedeem={()=>setLoyaltyRedeemed(true)}/>
+            <LoyaltyWidget points={loyaltyPts} settings={settings} subtotal={total} redeemApplied={loyaltyRedeemed} onRedeem={()=>setLoyaltyRedeemed(true)}/>
           )}
           {/* Coupon code */}
           {settings.showCouponField!==false && (
@@ -3581,13 +4159,17 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               <span style={{fontSize:13,color:C.textSub}}>Shipping {zone&&<span style={{fontSize:11,color:C.accent}}>({ZONE_LABELS[zone]})</span>}</span>
               <span style={{fontSize:13,fontWeight:600,color:zone?C.text:C.accent}}>{zone?`₹${fee}`:"TBD after address"}</span>
             </div>
-            {specialDelivery&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
-              <span style={{fontSize:13,color:"#1d4ed8"}}>⚡ Special Delivery</span>
-              <span style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:13,fontWeight:600,color:"#1d4ed8"}}>+₹{settings.specialDeliveryPrice||200}</span>
+            {hasLiveFish ? (
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"flex-start"}}>
+                <span style={{fontSize:13,color:C.textSub}}>📦 Packing</span>
+                <span style={{fontSize:12,fontWeight:700,color:C.text,textAlign:"right",maxWidth:"62%"}}>{packingLabel(packing)}</span>
+              </div>
+            ) : specialDelivery ? (
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
+                <span style={{fontSize:13,color:"#1d4ed8"}}>⚡ Speed Delivery <span style={{fontSize:11,color:C.textSub}}>(incl. above)</span></span>
                 <button className="press" onClick={()=>setSpecialDelivery(false)} title="Remove" style={{width:22,height:22,borderRadius:"50%",background:"#dbeafe",color:"#1d4ed8",border:"none",fontSize:14,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
-              </span>
-            </div>}
+              </div>
+            ) : null}
             {guaranteeActive&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
               <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Arrival Guarantee</span>
               <span style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Included</span>
@@ -3601,8 +4183,11 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               <span style={{fontSize:13,fontWeight:600,color:"#7c3aed"}}>-₹{refDiscount}</span>
             </div>}
             {loyaltyRedeemed&&loyaltyDiscount>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:13,color:"#7c3aed"}}>⭐ Loyalty Reward</span>
+              <span style={{fontSize:13,color:"#7c3aed"}}>👛 Wallet</span>
               <span style={{fontSize:13,fontWeight:600,color:"#7c3aed"}}>-₹{loyaltyDiscount}</span>
+            </div>}
+            {discountCapped&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,gap:8}}>
+              <span style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Max savings of {maxDiscPct}% applied — some discounts were trimmed.</span>
             </div>}
             <div style={{height:1,background:C.border,margin:"10px 0"}}/>
             <div style={{display:"flex",justifyContent:"space-between"}}>
@@ -3825,6 +4410,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     comingSoon:!!product?.comingSoon,
     packagingWeight:product?.packagingWeight||"",
     suggestSpecialDelivery:!!product?.suggestSpecialDelivery,
+    suggestedPacking:product?.suggestedPacking||"carton_special",
   });
   // Gallery: images [{key,src,b64?}], one video {key,src,b64?,tooLarge?}
   const initImgs=(product?._mediaImgs||[]).map((src,i)=>({key:(product.media?.filter(m=>m.type!=="video")[i]?.key)||uid("mi"),src,existing:true}));
@@ -3895,6 +4481,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
       comingSoon:!!form.comingSoon,
       packagingWeight:Number(form.packagingWeight)||0,
       suggestSpecialDelivery:!!form.suggestSpecialDelivery,
+      suggestedPacking:form.suggestedPacking||"carton_special",
       media,
       rating:product?.rating||0,reviews:product?.reviews||0,
       variants: form.category==="Live Fish"
@@ -4033,15 +4620,14 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
 
         {/* Packaging weight + special delivery suggestion */}
         {form.category==="Live Fish" ? (
-          /* Live fish weight is set per-variant (type-wise) above — no single packaging-weight field needed */
+          /* Live fish weight is set per-variant (type-wise) above. Admin recommends a packing here. */
           <div style={{marginBottom:16}}>
-            <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",userSelect:"none",background:C.bg,borderRadius:10,padding:"12px 14px",border:`1.5px solid ${C.border}`}}>
-              <input type="checkbox" checked={!!form.suggestSpecialDelivery} onChange={e=>f("suggestSpecialDelivery",e.target.checked)} style={{width:16,height:16,accentColor:C.primary,flexShrink:0,marginTop:2}}/>
-              <div>
-                <div style={{fontSize:11.5,fontWeight:700,color:C.text}}>suggest special delivery</div>
-                <div style={{fontSize:10,color:C.textSub,marginTop:2,lineHeight:1.4}}>Highlight special delivery at checkout. Parcel weight comes from each type's <b>kg</b> set above.</div>
-              </div>
-            </label>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5,textTransform:"uppercase"}}>recommended packing for this fish</div>
+            <select value={form.suggestedPacking||"carton_special"} onChange={e=>f("suggestedPacking",e.target.value)}
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif"}}>
+              {PACKING_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+            <div style={{fontSize:10,color:C.textSub,marginTop:5,lineHeight:1.5}}>Shown as <b>“Recommended”</b> at checkout. For costly / delicate fish choose a <b>Thermacol</b> option (premium packing). The <b>Live Arrival Guarantee</b> applies only when the customer picks this packing or a safer one. Thermacol adds a weight-based charge (set in Settings).</div>
           </div>
         ) : (
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
@@ -4055,8 +4641,8 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",userSelect:"none"}}>
               <input type="checkbox" checked={!!form.suggestSpecialDelivery} onChange={e=>f("suggestSpecialDelivery",e.target.checked)} style={{width:16,height:16,accentColor:C.primary,flexShrink:0,marginTop:2}}/>
               <div>
-                <div style={{fontSize:11,fontWeight:700,color:C.text}}>suggest special delivery</div>
-                <div style={{fontSize:10,color:C.textSub,marginTop:2,lineHeight:1.4}}>Highlight special delivery option at checkout for this product.</div>
+                <div style={{fontSize:11,fontWeight:700,color:C.text}}>suggest speed delivery</div>
+                <div style={{fontSize:10,color:C.textSub,marginTop:2,lineHeight:1.4}}>Highlight Speed Delivery option at checkout for this product.</div>
               </div>
             </label>
           </div>
@@ -4132,6 +4718,11 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
 function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,settings={}}){
   const [status,setStatus]=useState(o.status);
   const [tracking,setTracking]=useState(o.trackingNumber||"");
+  const couriers=settings.couriers||[];
+  const [courierId,setCourierId]=useState(o.courierId||"");
+  const selCourier=couriers.find(c=>c.id===courierId)||null;
+  const rewardMin=Number(settings.shippingRewardMin??10);
+  const [actualShip,setActualShip]=useState("");
   const [verified,setVerified]=useState(o.paymentStatus==="Verified");
   const [proofZoom,setProofZoom]=useState(false);
   const [saving,setSaving]=useState(false);
@@ -4216,9 +4807,30 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 
   const handleUpdate=async()=>{
     setSaving(true);
-    const updated={...o,status,trackingNumber:tracking,updatedAt:new Date().toISOString()};
+    const updated={...o,status,trackingNumber:tracking,courierId,courierName:selCourier?.name||"",courierTrackUrl:selCourier?.trackUrl||"",updatedAt:new Date().toISOString()};
     await onUpdateOrder(updated);
     showToast("Order updated!");
+    setSaving(false);
+  };
+  // Shipping reward is based on COURIER charge only — packaging (thermacol) is never rewardable.
+  const courierCharged=Math.max(0, Number(o.fee||0) - Number(o.thermacolFee||0));
+  const chargedShip=courierCharged;
+  const [rewardConfirm,setRewardConfirm]=useState(false);
+  const issueShippingReward=async()=>{
+    const actual=Number(actualShip);
+    if(!(actual>=0)){ showToast("Enter the actual courier cost","error"); return; }
+    const diff=Math.round(chargedShip-actual);
+    if(diff<rewardMin){ showToast(`Difference must be at least ₹${rewardMin} to reward`,"error"); return; }
+    setSaving(true);
+    const code="NEMO"+Math.random().toString(36).slice(2,7).toUpperCase();
+    const reward={code,amount:diff,actual,charged:chargedShip,issuedAt:new Date().toISOString()};
+    await onUpdateOrder({...o,shippingReward:reward,updatedAt:new Date().toISOString()});
+    // Credit the customer's wallet directly (admin context — rules permit writing any loyalty node).
+    const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
+    const coins=Math.round(diff/coinVal);
+    if(coins>0 && o.userUid) adminCreditLoyalty(o.userUid, coins, "ship:"+code, "Shipping refund");
+    showToast(`₹${diff} credited to ${o.address.name}'s wallet`);
+    setRewardConfirm(false);
     setSaving(false);
   };
   const verifyPayment=async(ok)=>{
@@ -4283,9 +4895,22 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           {/* Tracking */}
           {(status==="Shipped"||status==="Delivered")&&(
             <div style={{marginBottom:12}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Tracking Number</div>
+              {couriers.length>0 ? (
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Courier Partner</div>
+                  <select value={courierId} onChange={e=>setCourierId(e.target.value)}
+                    style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.bg,fontFamily:"'Nunito',sans-serif"}}>
+                    <option value="">— Select courier —</option>
+                    {couriers.map(c=><option key={c.id} value={c.id}>{c.name||"(unnamed)"}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px",marginBottom:10,lineHeight:1.45}}>Add your courier partners in <b>Settings → Live-Fish Packing &amp; Couriers</b> to give customers a Track button.</div>
+              )}
+              <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Consignment / Tracking Number</div>
               <input value={tracking} onChange={e=>setTracking(e.target.value)} placeholder="e.g. DTDC123456789IN"
-                style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.bg}}/>
+                style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+              {selCourier&&selCourier.trackUrl&&<div style={{fontSize:11,color:C.success,marginTop:6,fontWeight:600}}>✓ Customer will see a <b>Track</b> button linking to {selCourier.name}.</div>}
             </div>
           )}
           <button className="press" onClick={handleUpdate} disabled={saving}
@@ -4293,6 +4918,50 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             {saving?<><Spinner/>Saving…</>:"💾 Save Status Update"}
           </button>
         </div>
+
+        {/* Shipping-overcharge reward */}
+        {paidish && chargedShip>0 && (
+          <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>🎁 Shipping Reward</div>
+            {o.shippingReward ? (
+              <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"12px"}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#15803d",marginBottom:3}}>✓ Reward issued — ₹{o.shippingReward.amount}</div>
+                <div style={{fontSize:12,color:"#166534",lineHeight:1.55}}>₹{o.shippingReward.amount} has been credited to the customer's 👛 wallet. (Courier charged ₹{o.shippingReward.charged} · actual ₹{o.shippingReward.actual}.)</div>
+              </div>
+            ) : (
+              <>
+                <div style={{fontSize:12,color:C.textSub,marginBottom:6,lineHeight:1.55}}>Customer paid <b style={{color:C.text}}>₹{chargedShip}</b> in <b>courier charges</b> for this order{Number(o.thermacolFee||0)>0?<> (₹{o.fee} shipping − ₹{o.thermacolFee} thermacol packaging, which is not rewardable)</>:null}. If the courier actually cost you less (by ≥ ₹{rewardMin}), give the difference back as a reward code.</div>
+                <div style={{fontSize:11,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:9,padding:"7px 10px",marginBottom:10,lineHeight:1.45}}>ℹ️ Reward is based on the <b>courier partner charge only</b> — packaging costs are excluded.</div>
+                <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:12,color:C.text,fontWeight:700,whiteSpace:"nowrap"}}>Actual courier cost ₹</span>
+                  <input type="number" min="0" value={actualShip} onChange={e=>{setActualShip(e.target.value);setRewardConfirm(false);}} placeholder="0"
+                    style={{width:"100px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:14,outline:"none",background:C.bg}}/>
+                  {actualShip!==""&&Number(actualShip)>=0&&(
+                    <span style={{fontSize:12,fontWeight:700,color:(chargedShip-Number(actualShip))>=rewardMin?C.success:C.textSub}}>
+                      → reward ₹{Math.max(0,Math.round(chargedShip-Number(actualShip)))}
+                    </span>
+                  )}
+                </div>
+                {rewardConfirm ? (
+                  <div style={{background:"#ecfdf5",border:`1.5px solid #34d399`,borderRadius:12,padding:"12px"}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:"#15803d",marginBottom:10,textAlign:"center",lineHeight:1.5}}>Credit <b>{o.address.name}</b>'s 👛 wallet with ₹{Math.max(0,Math.round(chargedShip-Number(actualShip)))}? They can redeem it at checkout on a future order.</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      <button className="press" onClick={()=>setRewardConfirm(false)} disabled={saving}
+                        style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
+                      <button className="press" onClick={issueShippingReward} disabled={saving}
+                        style={{background:C.success,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>✓ Yes, issue</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="press" onClick={()=>{ if(actualShip===""){showToast("Enter the actual courier cost","error");return;} if((chargedShip-Number(actualShip))<rewardMin){showToast(`Difference must be at least ₹${rewardMin}`,"error");return;} setRewardConfirm(true); }} disabled={saving||actualShip===""}
+                    style={{width:"100%",background:(actualShip!==""&&(chargedShip-Number(actualShip))>=rewardMin)?C.success:"#9ca3af",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+                    🎁 Create Reward Code
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Payment — prepayment verification */}
         <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${C.border}`}}>
@@ -4530,7 +5199,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   const [editGuide,setEditGuide]=useState(null);
   const [guideFormOpen,setGuideFormOpen]=useState(false);
@@ -4548,6 +5217,31 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [prodQ,setProdQ]=useState("");
   const [allReviews,setAllReviews]=useState({}); // {pid: [reviews]}
   const [loadingRev,setLoadingRev]=useState(false);
+  const [walletBalances,setWalletBalances]=useState({}); // {uid: points}
+  const [loadingWallets,setLoadingWallets]=useState(false);
+
+  // Customers derived from orders (one entry per uid, most-recent name/phone)
+  const customers=useMemo(()=>{
+    const m=new Map();
+    [...orders].sort((a,b)=>(a.placedAt||"").localeCompare(b.placedAt||"")).forEach(o=>{
+      const uid=o.userUid; if(!uid) return;
+      const prev=m.get(uid)||{uid,orders:0,spent:0};
+      m.set(uid,{uid,name:o.address?.name||prev.name||"Customer",phone:o.address?.phone||prev.phone||"",email:o.userEmail||prev.email||"",orders:prev.orders+1,spent:prev.spent+Number((o.amountDue??(o.total+o.fee))||0),last:o.placedAt});
+    });
+    return [...m.values()].sort((a,b)=>(b.last||"").localeCompare(a.last||""));
+  },[orders]);
+
+  // Load every customer's wallet balance (admin can read each loyalty/<uid> node).
+  const loadWallets=async()=>{
+    setLoadingWallets(true);
+    const out={};
+    await Promise.all(customers.map(async c=>{
+      try{ const d=await loadLoyalty(c.uid); out[c.uid]=d.points||0; }catch(e){ out[c.uid]=0; }
+    }));
+    setWalletBalances(out);
+    setLoadingWallets(false);
+  };
+  useEffect(()=>{ if(tab==="wallets"&&customers.length&&!loadingWallets&&Object.keys(walletBalances).length===0){ loadWallets(); } },[tab,customers.length]);
 
   // Load all reviews when Reviews tab is opened
   useEffect(()=>{
@@ -4629,10 +5323,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
         {/* Tab bar */}
         <div style={{display:"flex",background:"rgba(0,0,0,.2)",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-          {["orders","products","reviews","requests","guides","settings"].map(t=>(
+          {["orders","products","wallets","reviews","requests","guides","settings"].map(t=>(
             <button key={t} className="press" onClick={()=>setTab(t)}
               style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
-              {t==="orders"?"📋 Orders":t==="products"?"📦 Products":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
+              {t==="orders"?"📋 Orders":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
               {t==="requests"&&requests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{requests.length}</span>}
             </button>
           ))}
@@ -4732,7 +5426,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               ))}
               {(csvFrom||csvTo)&&<button className="press" onClick={()=>{setCsvFrom("");setCsvTo("");}} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:16,padding:"5px 12px",fontSize:11,fontWeight:700,color:C.textSub,fontFamily:"'Nunito',sans-serif"}}>Clear</button>}
             </div>
-            <button className="press" onClick={()=>{const n=exportOrdersCSV(orders,csvFrom,csvTo,settings);showToast(n?`Exported ${n} order${n!==1?"s":""} to Excel`:"No orders in that range","error");}}
+            <button className="press" onClick={()=>{const n=exportOrdersCSV(orders,csvFrom,csvTo,settings,walletBalances);showToast(n?`Exported ${n} order${n!==1?"s":""} to Excel`:"No orders in that range","error");}}
               style={{width:"100%",background:"#107c41",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               ⬇ Download Excel (CSV){(csvFrom||csvTo)?" — selected range":" — all orders"}
             </button>
@@ -5005,24 +5699,125 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
       )}
 
+      {/* ── WALLETS TAB ── */}
+      {tab==="wallets"&&(
+        <div style={{padding:"16px 16px 100px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div>
+              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>👛 Customer Wallets</div>
+              <div style={{fontSize:11.5,color:C.textSub}}>{customers.length} customer{customers.length!==1?"s":""} · ₹{Number(settings.loyaltyRedeemValue||1)}/coin</div>
+            </div>
+            <button className="press" onClick={loadWallets} disabled={loadingWallets}
+              style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 12px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Nunito',sans-serif"}}>
+              {loadingWallets?"…":"↻ Refresh"}
+            </button>
+          </div>
+          {(()=>{
+            const totalCoins=Object.values(walletBalances).reduce((s,v)=>s+(Number(v)||0),0);
+            const val=Number(settings.loyaltyRedeemValue||1);
+            return(
+              <div style={{display:"flex",gap:10,marginBottom:14}}>
+                <div style={{flex:1,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:14,padding:"13px 15px",color:"white"}}>
+                  <div style={{fontSize:11,opacity:.85,fontWeight:600}}>Total coins outstanding</div>
+                  <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800}}>{totalCoins}</div>
+                  <div style={{fontSize:10.5,opacity:.85}}>≈ ₹{Math.floor(totalCoins*val)} liability</div>
+                </div>
+              </div>
+            );
+          })()}
+          {loadingWallets&&customers.length>0&&Object.keys(walletBalances).length===0?(
+            <div style={{textAlign:"center",padding:"30px",color:C.textSub,fontSize:13}}>Loading wallet balances…</div>
+          ):customers.length===0?(
+            <div style={{textAlign:"center",padding:"30px",color:C.textSub,fontSize:13}}>No customers yet.</div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {[...customers].sort((a,b)=>(walletBalances[b.uid]||0)-(walletBalances[a.uid]||0)).map(c=>{
+                const bal=walletBalances[c.uid];
+                const val=Number(settings.loyaltyRedeemValue||1);
+                return(
+                  <div key={c.uid} style={{display:"flex",alignItems:"center",gap:12,background:C.card,borderRadius:14,padding:"12px 14px",border:`1px solid ${C.border}`}}>
+                    <div style={{width:38,height:38,borderRadius:"50%",background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>👤</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</div>
+                      <div style={{fontSize:11,color:C.textSub}}>{c.phone||c.email||c.uid.slice(0,12)} · {c.orders} order{c.orders!==1?"s":""}</div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.primary}}>{bal==null?"—":bal} <span style={{fontSize:11,fontWeight:600,color:C.textSub}}>pts</span></div>
+                      {bal!=null&&<div style={{fontSize:10.5,color:C.textSub}}>≈ ₹{Math.floor(bal*val)}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── SETTINGS TAB ── */}
       {tab==="settings"&&(
         <div>
           {/* Showcase management */}
-          {showcase.length>0&&(
+          {showcase.length>0&&(()=>{
+            const now=Date.now();
+            const pending=showcase.filter(s=>!showcaseApproved(s)&&!showcaseExpired(s,now));
+            const live=showcase.filter(s=>showcaseApproved(s)&&!showcaseExpired(s,now));
+            const row=(s,isPending)=>(
+              <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"8px 10px",border:`1px solid ${isPending?"#fed7aa":C.border}`}}>
+                <img src={s.imgData} alt={s.ownerName} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.ownerName}</div>
+                  {s.caption&&<div style={{fontSize:11,color:C.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.caption}</div>}
+                  <div style={{fontSize:10,color:C.textSub}}>{fmtDate(s.createdAt)}{!isPending&&s.expiresAt?` · expires ${fmtDate(new Date(s.expiresAt).toISOString())}`:""}</div>
+                </div>
+                {isPending&&(
+                  <button className="press" onClick={()=>onApproveShowcase&&onApproveShowcase(s)}
+                    style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"5px 11px",fontSize:11,fontWeight:800,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                    Approve
+                  </button>
+                )}
+                <button className="press" onClick={()=>onDeleteShowcase&&onDeleteShowcase(s.id)}
+                  style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                  {isPending?"Reject":"Remove"}
+                </button>
+              </div>
+            );
+            return(
             <div style={{padding:"16px 16px 0"}}>
               <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:0,border:`1px solid ${C.border}`}}>
-                <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase ({showcase.length})</div>
+                <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase</div>
+                {pending.length>0&&(
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:11.5,fontWeight:800,color:"#9a3412",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>⏳ Pending approval ({pending.length})</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>{pending.map(s=>row(s,true))}</div>
+                  </div>
+                )}
+                <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>✓ Live ({live.length})</div>
+                {live.length>0?(
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>{live.map(s=>row(s,false))}</div>
+                ):(
+                  <div style={{fontSize:11.5,color:C.textSub,fontStyle:"italic"}}>No live tanks right now.</div>
+                )}
+              </div>
+            </div>
+            );
+          })()}
+          {/* Testimonials management */}
+          {testimonials.length>0&&(
+            <div style={{padding:"16px 16px 0"}}>
+              <div style={{background:C.card,borderRadius:16,padding:"16px",border:`1px solid ${C.border}`}}>
+                <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:4}}>💬 Testimonials ({testimonials.length})</div>
+                <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Posted by signed-in customers and shown on the home page. Remove any you don't want public.</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {showcase.map(s=>(
-                    <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"8px 10px",border:`1px solid ${C.border}`}}>
-                      <img src={s.imgData} alt={s.ownerName} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+                  {testimonials.map(t=>(
+                    <div key={t.id} style={{display:"flex",alignItems:"flex-start",gap:10,background:C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${C.border}`}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.ownerName}</div>
-                        {s.caption&&<div style={{fontSize:11,color:C.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.caption}</div>}
-                        <div style={{fontSize:10,color:C.textSub}}>{fmtDate(s.createdAt)}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                          <span style={{fontSize:12.5,fontWeight:800,color:C.text}}>{t.name||"Customer"}</span>
+                          <span style={{fontSize:11,color:"#f59e0b"}}>{"★".repeat(t.rating||5)}</span>
+                        </div>
+                        <div style={{fontSize:12,color:C.textSub,lineHeight:1.4}}>{t.text}</div>
                       </div>
-                      <button className="press" onClick={()=>onDeleteShowcase&&onDeleteShowcase(s.id)}
+                      <button className="press" onClick={()=>onDeleteTestimonial&&onDeleteTestimonial(t.id)}
                         style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
                         Remove
                       </button>
@@ -5049,6 +5844,18 @@ function SettingsPanel({settings,onSave}){
   const [pwMsg,setPwMsg]=useState("");
   const [backupMsg,setBackupMsg]=useState("");
   const adminOk=isAdminSignedIn();
+  // Live daily-promo usage (today) — refreshed on mount so admin sees "X of N used today"
+  const [promoToday,setPromoToday]=useState({coupon:0,referral:0});
+  useEffect(()=>{ let on=true; Promise.all([promoUsageCount("coupon"),promoUsageCount("referral")]).then(([c,r])=>{ if(on) setPromoToday({coupon:c,referral:r}); }); return ()=>{on=false;}; },[]);
+  const usageBadge=(type,limit)=>{
+    const used=promoToday[type]||0; const lim=Number(limit||0);
+    const full=lim>0&&used>=lim;
+    return (
+      <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,fontWeight:800,color:full?C.danger:lim>0?"#9a6a00":C.textSub,background:full?"#fee2e2":lim>0?"#fffbeb":C.bg,border:`1px solid ${full?"#fecaca":lim>0?"#fde68a":C.border}`,borderRadius:20,padding:"3px 9px",marginLeft:8}}>
+        {full?"●":"○"} {used}{lim>0?` of ${lim}`:""} used today{full?" — full":""}
+      </span>
+    );
+  };
 
   /* ── OTP-gated sensitive changes (WhatsApp number + admin password) ──
      Only the signed-in Google admin can change these, and only after entering a
@@ -5394,12 +6201,70 @@ function SettingsPanel({settings,onSave}){
         })}
       </div>
 
+      {/* Live-fish packing: thermacol charge chart + courier partners */}
+      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📦 Live-Fish Packing &amp; Couriers</div>
+        {/* Live-fish delivery region restriction */}
+        <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none",background:f.liveFishRestrictNCIndia!==false?"#fef2f2":C.bg,borderRadius:12,padding:"11px 13px",border:`1.5px solid ${f.liveFishRestrictNCIndia!==false?"#fecaca":C.border}`}}>
+          <input type="checkbox" checked={f.liveFishRestrictNCIndia!==false} onChange={e=>set("liveFishRestrictNCIndia",e.target.checked)} style={{width:18,height:18,accentColor:C.danger,flexShrink:0,marginTop:1}}/>
+          <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>🚫 Don't deliver live fish to Central &amp; North India</span><br/><span style={{fontSize:11,color:C.textSub,lineHeight:1.45}}>Detected from the customer's pincode. When on, live-fish orders to those regions are blocked at checkout (dry goods still ship everywhere). Turn off to allow all of India.</span></span>
+        </label>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Thermacol (insulated box) is added when a customer picks a <b>Thermacol</b> packing option, or for premium fish you recommend it on. The charge is by total live-parcel weight — same brackets as the shipping chart above.</div>
+        <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>🧊 Thermacol charge (₹ per parcel-weight bracket)</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:8}}>
+          {SHIP_TIERS.map(t=>{
+            const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};
+            const therm=cur.thermacol||DEFAULT_SHIPPING_RATES.thermacol;
+            return(
+              <div key={t} style={{display:"flex",alignItems:"center",gap:8,background:C.bg,borderRadius:10,padding:"8px 10px",border:`1px solid ${C.border}`}}>
+                <span style={{fontSize:11,color:C.text,fontWeight:700,flex:1,whiteSpace:"nowrap"}}>{t}</span>
+                <span style={{fontSize:12,color:C.textSub,fontWeight:700}}>₹</span>
+                <input type="number" min="0" value={therm[t]||0}
+                  onChange={e=>{const c2=f.shippingRates||{...DEFAULT_SHIPPING_RATES};const th={...(c2.thermacol||DEFAULT_SHIPPING_RATES.thermacol)};th[t]=Number(e.target.value)||0;set("shippingRates",{...c2,thermacol:th});}}
+                  style={{width:"58px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 8px",fontSize:12,outline:"none",background:"white",textAlign:"right"}}/>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{height:1,background:C.border,margin:"14px 0"}}/>
+        {/* Shipping-overcharge reward */}
+        <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>🎁 Shipping-overcharge reward</div>
+        <div style={{fontSize:11.5,color:C.textSub,marginBottom:8,lineHeight:1.5}}>When you ship an order you can enter what the courier actually cost. If it's lower than what the customer paid by at least this amount, the app creates a reward code in their orders to use next time — so you're never overcharging for shipping.</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+          <span style={{fontSize:11.5,color:C.text,fontWeight:700}}>Minimum difference to reward (₹)</span>
+          <input type="number" min="0" value={f.shippingRewardMin??10} onChange={e=>set("shippingRewardMin",Number(e.target.value)||0)}
+            style={{width:"80px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:13,outline:"none",background:"white"}}/>
+        </div>
+        <div style={{height:1,background:C.border,margin:"14px 0"}}/>
+        {/* Courier partners */}
+        <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:4}}>🚚 Courier partners &amp; tracking links</div>
+        <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Add the couriers you use and each one's public tracking-page link. When you mark an order Shipped you'll pick the courier and enter the consignment number — the customer gets a <b>Track</b> button. Tip: if a courier's URL accepts the number directly, put <b style={{fontFamily:"monospace"}}>{"{awb}"}</b> where the number goes (e.g. <span style={{fontFamily:"monospace"}}>https://dtdc.in/track?awb={"{awb}"}</span>) and it'll auto-fill; otherwise we copy the number for the customer to paste.</div>
+        {(f.couriers||[]).map((c,i)=>(
+          <div key={c.id||i} style={{background:C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${C.border}`,marginBottom:8}}>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <input value={c.name||""} onChange={e=>{const arr=[...(f.couriers||[])];arr[i]={...arr[i],name:e.target.value};set("couriers",arr);}}
+                placeholder="Courier name (e.g. DTDC, ST Courier)"
+                style={{flex:1,borderRadius:8,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",background:"white"}}/>
+              <button className="press" onClick={()=>{const arr=(f.couriers||[]).filter((_,j)=>j!==i);set("couriers",arr);}}
+                style={{flexShrink:0,width:28,height:28,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
+            </div>
+            <input value={c.trackUrl||""} onChange={e=>{const arr=[...(f.couriers||[])];arr[i]={...arr[i],trackUrl:e.target.value.trim()};set("couriers",arr);}}
+              placeholder="https://courier.com/track  (optionally with {awb})"
+              style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:12,fontFamily:"monospace",outline:"none",background:"white",marginTop:6,boxSizing:"border-box"}}/>
+          </div>
+        ))}
+        <button className="press" onClick={()=>set("couriers",[...(f.couriers||[]),{id:"cr"+Date.now().toString(36),name:"",trackUrl:""}])}
+          style={{width:"100%",background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginTop:2}}>
+          ＋ Add Courier Partner
+        </button>
+      </div>
+
       {/* Special delivery & live guarantee pricing */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>⚡ Special Delivery &amp; 🛡️ Live Guarantee</div>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>⚡ Speed Delivery &amp; 🛡️ Live Guarantee</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>Special Delivery add-on (₹)</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>Speed Delivery add-on (₹)</div>
             <input type="number" min="0" value={f.specialDeliveryPrice||200} onChange={e=>set("specialDeliveryPrice",Number(e.target.value))}
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
             <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Extra charge for fast/safe courier. Shown at checkout.</div>
@@ -5466,7 +6331,7 @@ function SettingsPanel({settings,onSave}){
 
       {/* Welcome coupon */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎉 First-Order Welcome Coupon</div>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12,display:"flex",alignItems:"center",flexWrap:"wrap"}}>🎉 First-Order Welcome Coupon{usageBadge("coupon",f.couponDailyLimit)}</div>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
           <input type="checkbox" checked={f.welcomeCouponEnabled!==false} onChange={e=>set("welcomeCouponEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Show welcome coupon banner</span>
@@ -5484,12 +6349,19 @@ function SettingsPanel({settings,onSave}){
               style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
           </div>
         </div>
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min Order Value (₹)</div>
-          <input type="number" min="0" value={f.welcomeCouponMinOrder||500} onChange={e=>set("welcomeCouponMinOrder",Number(e.target.value))}
-            style={{width:"140px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+        <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min Order Value (₹)</div>
+            <input type="number" min="0" value={f.welcomeCouponMinOrder||999} onChange={e=>set("welcomeCouponMinOrder",Number(e.target.value))}
+              style={{width:"140px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+          </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Daily limit (0 = unlimited)</div>
+            <input type="number" min="0" value={f.couponDailyLimit||0} onChange={e=>set("couponDailyLimit",Number(e.target.value))}
+              style={{width:"140px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+          </div>
         </div>
-        <div style={{fontSize:10.5,color:C.textSub,marginTop:6}}>Add this code to your coupons above too — so it's actually redeemable at checkout.</div>
+        <div style={{fontSize:10.5,color:C.textSub,marginTop:6}}>Add this code to your coupons above too — so it's actually redeemable at checkout. Daily limit caps how many customers can use coupons each day.</div>
       </div>
 
       {/* Festival / seasonal banner */}
@@ -5530,13 +6402,13 @@ function SettingsPanel({settings,onSave}){
         </div>
       </div>
 
-      {/* Loyalty points */}
+      {/* Wallet (loyalty points) */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>⭐ Loyalty Points</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Customers earn points per ₹100 spent, redeemable for ₹ discounts at checkout.</div>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>👛 Customer Wallet</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Every customer has a wallet. They earn points per ₹100 spent, plus referral rewards and shipping refunds — all land in the same wallet, redeemable for ₹ off at checkout. <b>₹ per point</b> is the coin value.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,cursor:"pointer"}}>
           <input type="checkbox" checked={!!f.loyaltyEnabled} onChange={e=>set("loyaltyEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
-          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable loyalty points</span>
+          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable customer wallet</span>
         </label>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
           <div>
@@ -5550,17 +6422,25 @@ function SettingsPanel({settings,onSave}){
               style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>₹ per point</div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>₹ per point (coin value)</div>
             <input type="number" min="0.1" step="0.1" value={f.loyaltyRedeemValue||1} onChange={e=>set("loyaltyRedeemValue",Number(e.target.value))}
               style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
           </div>
         </div>
-        <div style={{fontSize:10.5,color:C.textSub,marginTop:8}}>Example: spend ₹1000 → earn {(f.loyaltyPointsPerHundred||10)*10} pts → worth ₹{Math.floor((f.loyaltyPointsPerHundred||10)*10*(f.loyaltyRedeemValue||1))}.</div>
+        <div style={{fontSize:10.5,color:C.textSub,marginTop:8}}>Example: spend ₹1000 → earn {(f.loyaltyPointsPerHundred||10)*10} pts → worth ₹{Math.floor((f.loyaltyPointsPerHundred||10)*10*(f.loyaltyRedeemValue||1))} in the wallet.</div>
+        <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Max total discount per order (% of subtotal)</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <input type="number" min="0" max="100" value={f.maxDiscountPct??25} onChange={e=>set("maxDiscountPct",Number(e.target.value))}
+              style={{width:"90px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+            <span style={{fontSize:11,color:C.textSub,lineHeight:1.4,flex:1}}>Coupon + referral + wallet points combined can never exceed this. <b>0 = no cap</b> (risky). Protects your margin when offers stack.</span>
+          </div>
+        </div>
       </div>
 
       {/* Referral discount */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>💜 Referral Program</div>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12,display:"flex",alignItems:"center",flexWrap:"wrap"}}>💜 Referral Program{usageBadge("referral",f.referralDailyLimit)}</div>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
           <input type="checkbox" checked={f.referralEnabled!==false} onChange={e=>set("referralEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable referral program</span>
@@ -5568,9 +6448,15 @@ function SettingsPanel({settings,onSave}){
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>After an order at/above the minimum, customers get a unique <b>6-digit code</b> to share. A friend enters it at checkout for ₹X off — each code works <b>once</b>, then is permanently used.</div>
         <div style={{display:"flex",gap:12}}>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Discount (₹)</div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Friend's discount (₹)</div>
             <input type="number" min="0" value={f.referralDiscount||50} onChange={e=>set("referralDiscount",Number(e.target.value))}
               style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+          </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Giver's wallet coins</div>
+            <input type="number" min="0" value={f.referralCoins??50} onChange={e=>set("referralCoins",Number(e.target.value))}
+              style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Points added to the code-giver's 👛 wallet when a friend uses it.</div>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min order to issue (₹)</div>
@@ -5578,7 +6464,14 @@ function SettingsPanel({settings,onSave}){
               style={{width:"130px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = always issue a code</div>
           </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Daily limit</div>
+            <input type="number" min="0" value={f.referralDailyLimit||0} onChange={e=>set("referralDailyLimit",Number(e.target.value))}
+              style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = unlimited / day</div>
+          </div>
         </div>
+        <div style={{fontSize:11,color:C.textSub,marginTop:10,lineHeight:1.5,background:C.bg,borderRadius:10,padding:"9px 11px"}}>💜 When a friend uses a code: the <b>friend</b> gets ₹{f.referralDiscount||50} off their order immediately, and the <b>giver</b> earns {f.referralCoins??50} wallet points (≈ ₹{Math.floor((f.referralCoins??50)*(f.loyaltyRedeemValue||1))}) <b>once the friend's order is successfully delivered</b>.</div>
       </div>
 
       {/* Tank showcase */}
@@ -6076,8 +6969,10 @@ function NemoStore(){
   const [mediaCache,setMediaCache] = useState({});
   const [loading,setLoading]       = useState(true);
   const [showcase,setShowcase]     = useState([]);
+  const [testimonials,setTestimonials] = useState([]);
   const [restockSet,setRestockSet] = useState(()=>loadRestockLocal().map(x=>x.pid));
   const [selProduct,setSelProduct] = useState(null);
+  const [walletPts,setWalletPts]   = useState(0);
   const [cart,setCart]             = useState([]);
   const [query,setQuery]           = useState("");
   const [category,setCategory]     = useState("All");
@@ -6139,6 +7034,8 @@ function NemoStore(){
     setSettingsReady(true);
     // Showcase
     loadShowcase().then(sc=>{ if(sc&&sc.length) setShowcase(sc); });
+    // Testimonials
+    loadTestimonials().then(ts=>{ if(ts&&ts.length) setTestimonials(ts); });
   };
 
   useEffect(()=>{
@@ -6274,7 +7171,7 @@ function NemoStore(){
       if(qty>0 && curQty+qty>maxAllowed) setTimeout(()=>showToast(`Only ${maxAllowed} available per order`,"error"),0);
       else if(qty>0) setTimeout(()=>showToast("Added to cart"),0);
       if(ex) return prev.map(i=>i.key===key?{...i,qty:nextQty}:i);
-      return [...prev,{key,id:product.id,name:product.name,category:product.category,price:unitPrice,qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,stockCount:stock}];
+      return [...prev,{key,id:product.id,name:product.name,category:product.category,price:unitPrice,qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,suggestedPacking:product.suggestedPacking||null,suggestSpecialDelivery:!!product.suggestSpecialDelivery,stockCount:stock}];
     });
   };
   const updateQty=(key,delta)=>
@@ -6292,7 +7189,7 @@ function NemoStore(){
     setInterestedSet(loadIntLocal(userKey(u)));
     if(u.keep!==false) saveUser(u);
     showToast(`Welcome, ${u.name?.split(" ")[0]||"there"}!`);
-    nav(authReturn);
+    nav("home"); // after sign-in, always land on the home page
   };
   const handleLogout=()=>{ setUser(null); setReviewedSet([]); setFavorites([]); setInterestedSet([]); clearUser(); showToast("Signed out"); nav("home"); };
   const goAuth=(returnTo="orders")=>{ setAuthReturn(returnTo); nav("auth"); };
@@ -6329,7 +7226,21 @@ function NemoStore(){
   const handleShowcaseSubmit=async(item)=>{
     await addShowcasePhoto(item);
     setShowcase(s=>[item,...s.filter(x=>x.id!==item.id)]); // one per customer — replaces their previous photo
-    showToast("🐠 Your tank is live on the showcase!");
+    showToast("📩 Submitted! We'll review and post it soon.");
+  };
+  const handleApproveShowcase=async(item)=>{
+    const updated=await approveShowcasePhoto(item);
+    setShowcase(s=>s.map(x=>x.id===item.id?updated:x));
+    showToast("✓ Tank approved — now live for 24h");
+  };
+  const handleTestimonialSubmit=async(t)=>{
+    await addTestimonial(t);
+    setTestimonials(list=>[t,...list.filter(x=>x.uid!==t.uid)]);
+  };
+  const handleDeleteTestimonial=async(id)=>{
+    await deleteTestimonial(id);
+    setTestimonials(list=>list.filter(x=>x.id!==id));
+    showToast("Testimonial removed");
   };
   const handleRestock=(prod)=>{
     if(!user){ goAuth("home"); showToast("Sign in to get restock alerts"); return; }
@@ -6411,10 +7322,35 @@ function NemoStore(){
   const updateOrderHandler=async updated=>{
     const old=orders.find(o=>o.id===updated.id);
     const prevStatus=old?old.status:"";
-    // Auto-restock when an active order is cancelled (first time only) so inventory frees up
-    if(updated.status==="Cancelled" && prevStatus!=="Cancelled" && !old?.restocked && !updated.restocked){
-      updated={...updated,restocked:true};
-      restock(updated);
+    const pph=Number(settings.loyaltyPointsPerHundred||10);
+    // ── On DELIVERY (first time): all rewards are granted HERE and nowhere else. ──
+    if(updated.status==="Delivered" && prevStatus!=="Delivered"){
+      // (a) buyer earns loyalty points on the amount actually paid
+      if(settings.loyaltyEnabled!==false && updated.userUid && !updated.pointsEarned){
+        const amt=updated.amountDue??(updated.total+updated.fee);
+        const pts=Math.floor((Number(amt)||0)/100*pph);
+        if(pts>0){ adminCreditLoyalty(updated.userUid, pts, "earn:"+updated.id, "Order "+(updated.orderNo||updated.id)); updated={...updated,pointsEarned:pts}; }
+      }
+      // (b) referrer earns their reward, credited straight to their wallet
+      if(updated.referralCode){ creditReferralOnDelivery(updated.referralCode, settings, updated.id); }
+    }
+    // ── On CANCEL (first time): restock + claw back anything this order earned. ──
+    if(updated.status==="Cancelled" && prevStatus!=="Cancelled"){
+      if(!old?.restocked && !updated.restocked){ updated={...updated,restocked:true}; restock(updated); }
+      // reverse the buyer's earned points (only meaningful if they were credited on a prior delivery)
+      if(Number(updated.pointsEarned)>0 && updated.userUid){
+        adminCreditLoyalty(updated.userUid, -Number(updated.pointsEarned), "earnrev:"+updated.id, "Order cancelled");
+        updated={...updated,pointsEarned:0,pointsReversed:true};
+      }
+      // free the referral code used on this order (and claw back the referrer's reward if it was paid)
+      if(updated.referralCode){ reverseReferralOnCancel(updated.referralCode); }
+      // refund any wallet points the buyer SPENT on this order (they shouldn't lose points on a cancelled order)
+      if(Number(updated.loyaltyDiscount)>0 && updated.userUid && !updated.loyaltyRefunded){
+        const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
+        const back=Math.ceil(Number(updated.loyaltyDiscount)/coinVal);
+        adminCreditLoyalty(updated.userUid, back, "redeemrefund:"+updated.id, "Points refunded (order cancelled)");
+        updated={...updated,loyaltyRefunded:true};
+      }
     }
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
@@ -6453,11 +7389,8 @@ function NemoStore(){
     setCart([]);
     setOrders(prev=>[o,...prev]);
     saveOneOrder(o);
-    // Earn loyalty points for this order (deferred — doesn't block UI)
-    const uid=userKey(user);
-    if(uid && settings.loyaltyEnabled){
-      earnPoints(uid, o.id, o.amountDue??(o.total+o.fee), settings);
-    }
+    // NOTE: loyalty points are earned ONLY when the order is delivered (see updateOrderHandler),
+    // never at placement — an unpaid/cancelled order earns nothing.
     // Atomically decrement stock in the cloud (prevents overselling across devices)
     const sold={};
     o.items.forEach(it=>{sold[it.id]=(sold[it.id]||0)+it.qty;});
@@ -6573,6 +7506,33 @@ function NemoStore(){
     }
   },[user,page,fbReady]);
 
+  // WALLET: load balance for the signed-in customer, sweeping in any pending
+  // referral rewards + shipping refunds (idempotent). Re-runs when their orders change.
+  useEffect(()=>{
+    const uid=userKey(user);
+    if(!uid){ setWalletPts(0); return; }
+    let alive=true;
+    // Make sure this customer has a referral code provisioned (one-time, idempotent).
+    getMyReferralCode(uid).catch(()=>{});
+    // ── Unified, live wallet: subscribe to the authoritative cloud loyalty node so any
+    //    admin credit (delivery reward, referral payout, shipping refund) or the customer's
+    //    own redemption reflects in the UI instantly — same source of truth for every user. ──
+    if(FB_OK && FB_DB){
+      const ref=FB_DB.ref("loyalty/"+uid);
+      const cb=ref.on("value",s=>{
+        if(!alive) return;
+        const v=s&&s.val();
+        const pts=(v&&Number(v.points))||0;
+        try{ localStorage.setItem("nemo-lp-"+uid, JSON.stringify(v||{points:0,history:[]})); }catch(e){}
+        setWalletPts(pts);
+      },()=>{ /* read denied / offline → fall back to cached value */ if(alive) setWalletPts(loadLoyaltyLocal(uid).points||0); });
+      return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
+    }
+    // Offline fallback — one-shot read of the local cache.
+    setWalletPts(loadLoyaltyLocal(uid).points||0);
+    return ()=>{alive=false;};
+  },[user,settings.loyaltyRedeemValue,settings.referralCoins,fbReady]);
+
   if(loading)return(
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:C.bg,gap:16,fontFamily:"'Nunito',sans-serif"}}>
       <div style={{fontSize:52}}>🐠</div>
@@ -6587,10 +7547,10 @@ function NemoStore(){
       {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
       {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap}/>}
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
-        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock}/>}
+        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="detail"   &&<DetailPage product={selProduct} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
-        {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav}/>}
+        {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings}/>}
         {page==="checkout" &&(user
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} user={user} settings={settings} orders={orders}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
@@ -6604,7 +7564,7 @@ function NemoStore(){
         {page==="about"    &&<AboutPage nav={nav} settings={settings}/>}
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
-        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}}
+        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
       </div>
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}

@@ -1,5 +1,5 @@
 /* Nemo Aqua Store — service worker (offline fallback + always-fresh code) */
-const CACHE = 'nemo-v5';
+const CACHE = 'nemo-v8';
 const ASSETS = ['./index.html', './app.jsx', './assets/nemo-logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
@@ -23,17 +23,21 @@ self.addEventListener('fetch', (e) => {
   const isCode = /\.(html|jsx|js)$/.test(url.pathname) || e.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('/');
 
   if (isCode) {
-    // NETWORK-FIRST for app code: a fresh deploy always loads immediately when online.
-    // Falls back to cache only when offline.
-    e.respondWith(
-      fetch(e.request)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
-          return res;
-        })
-        .catch(() => caches.match(e.request))
-    );
+    // NETWORK-FIRST WITH A SHORT TIMEOUT for app code:
+    //  • fast network  → serve fresh (a new deploy shows immediately)
+    //  • slow network  → serve cached instantly after ~1.5s, while the fetch keeps
+    //                     running in the background to refresh the cache for next time
+    //  • offline       → serve cached
+    e.respondWith((async () => {
+      const cached = await caches.match(e.request);
+      const network = fetch(e.request)
+        .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {}); return res; })
+        .catch(() => null);
+      if (!cached) { const n = await network; return n || fetch(e.request); }
+      const timeout = new Promise((r) => setTimeout(() => r('__timeout__'), 1500));
+      const winner = await Promise.race([network, timeout]);
+      return (winner && winner !== '__timeout__') ? winner : cached;
+    })());
   } else {
     // CACHE-FIRST for static assets (images, fonts, manifest) — fast & rarely change.
     e.respondWith(
