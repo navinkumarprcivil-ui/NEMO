@@ -15,7 +15,8 @@ const ADMIN_OVERRIDE_HASH = "h11ya21j"; // secret-answer fallback when the OTP e
 const ADMIN_UID      = "cI2HmMt6FdR7fO7uUnugH85GeZt2"; // your Google account — must match Firebase rules
 const ADMIN_UID_2    = ""; // OPTIONAL co-admin (your helper). Paste their Google UID here, then also add it in database.rules.json + Firebase console. Leave "" if unused.
 const ADMIN_UIDS     = [ADMIN_UID, ADMIN_UID_2].filter(Boolean); // everyone allowed admin access
-function isAdminUid(uid){ return !!uid && ADMIN_UIDS.indexOf(uid)!==-1; }
+let RUNTIME_CO_ADMIN = ""; // optional co-admin UID entered in Admin → Settings (kept in sync from settings.coAdminUid)
+function isAdminUid(uid){ return !!uid && (ADMIN_UIDS.indexOf(uid)!==-1 || (!!RUNTIME_CO_ADMIN && uid===RUNTIME_CO_ADMIN)); }
 const BUSINESS_WA    = "919360921030"; // ← change to your WhatsApp number
 const BUSINESS_EMAIL = "nemoaquastore@gmail.com"; // store email — used for order alerts + admin OTP when Settings email is blank
 const SECRET_TAPS    = 10;             // tap logo this many times to open admin
@@ -259,7 +260,9 @@ function unredeemedShippingReward(orders){
   }
   return null;
 }
-function calcShipping(cart, zone, opts, settings){
+/* Itemised shipping cost so checkout can show a breakup:
+   { courier, thermacol, carton, special, total, freeShip }. All in ₹. */
+function shippingBreakdown(cart, zone, opts, settings){
   if(!zone) return null;
   const r = settings.shippingRates || DEFAULT_SHIPPING_RATES;
   // opts: object {packing, special} (new) OR a bare boolean isSpecial (legacy)
@@ -269,13 +272,11 @@ function calcShipping(cart, zone, opts, settings){
   const fishItems = cart.filter(i=>i.category==="Live Fish");
   // Special-courier surcharge applies when the fish packing uses a special courier, or (dry-only) the special box is ticked
   const wantSpecial = fishItems.length ? (packing.courier==="special") : !!o.special;
-  // Free-delivery threshold — check subtotal before any other fee is added
+  // Free-delivery threshold — waives courier + packaging (a special courier still bypasses free delivery)
   const threshold = Number(settings.freeDeliveryThreshold||0);
-  if(threshold > 0){
-    const subtotal = cart.reduce((s,i)=>s+i.price*i.qty, 0);
-    if(subtotal >= threshold && !wantSpecial) return 0;
-  }
-  let fee = 0;
+  const subtotal = cart.reduce((s,i)=>s+i.price*i.qty, 0);
+  const freeShip = threshold > 0 && subtotal >= threshold && !wantSpecial;
+  let courier = 0, thermacol = 0, carton = 0, special = 0;
   if(fishItems.length){
     // Weight-based live fish shipping (uses variantPackagingWeight if set, else product packagingWeight)
     const fishWt = fishItems.reduce((s,i)=>{
@@ -283,18 +284,23 @@ function calcShipping(cart, zone, opts, settings){
       return s + wt * i.qty;
     },0);
     const liveBase = Number(r.liveBasePackagingKg != null ? r.liveBasePackagingKg : (r.basePackagingKg ?? 0.5));
-    const totalFishWt = fishWt + liveBase;
-    const bracket = getLiveFishWeightBracket(totalFishWt);
-    fee += (r.liveFish?.[bracket]?.[zone]||0);
-    if(packing.box==="thermacol") fee += thermacolCharge(bracket, settings);
+    const bracket = getLiveFishWeightBracket(fishWt + liveBase);
+    courier += (r.liveFish?.[bracket]?.[zone]||0);
+    if(packing.box==="thermacol") thermacol += thermacolCharge(bracket, settings);
+    else if(packing.box==="carton") carton += Number(settings.cartonPackingCharge||0);
   }
   if(dryItems.length){
     const wt = dryItems.reduce((s,i)=>s+((Number(i.packagingWeight)||0.1)*i.qty),0)+(Number(r.basePackagingKg)||0.5);
     const bracket = getWeightBracket(wt);
-    fee += (r.dryGoods?.[bracket]?.[zone]||0);
+    courier += (r.dryGoods?.[bracket]?.[zone]||0);
   }
-  if(wantSpecial) fee += Number(settings.specialDeliveryPrice||0);
-  return fee;
+  if(wantSpecial) special += Number(settings.specialDeliveryPrice||0);
+  if(freeShip){ courier = 0; thermacol = 0; carton = 0; }
+  return { courier, thermacol, carton, special, total: courier+thermacol+carton+special, freeShip };
+}
+function calcShipping(cart, zone, opts, settings){
+  const b = shippingBreakdown(cart, zone, opts, settings);
+  return b ? b.total : null;
 }
 /* Open a courier's tracking page for an order. If the saved track URL contains a
    {awb}/{tracking}/{number} placeholder it's filled with the consignment number;
@@ -589,6 +595,8 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   shippingRates: null,
   specialDeliveryPrice: 200,
+  cartonPackingCharge: 0,         // flat carton-packing charge for live-fish parcels (₹). 0 = no charge; raise it in Settings later
+  coAdminUid: "",                 // optional co-admin Google UID (also add it to database.rules.json + the Firebase console)
   couriers: [],                  // [{id,name,trackUrl}] — courier partners + their tracking-page links
   shippingRewardMin: 10,         // min ₹ overcharge before a shipping-reward code is auto-created
   liveFishRestrictNCIndia: true, // when true, live fish can't be ordered to Central/North India
@@ -634,6 +642,8 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   referralDailyLimit: 0,
   /* Customer tank showcase */
   showcaseEnabled: true,
+  /* Customer testimonials on the home page */
+  testimonialsEnabled: true,
   /* Which customer emails to auto-send (saves EmailJS quota — rest you can do on WhatsApp) */
   emailPlaced: true,      // order received + bill
   emailConfirmed: false,  // payment confirmed (WhatsApp instead)
@@ -1345,7 +1355,141 @@ function openBill(order,settings){
   window.open(url,"_blank");
 }
 
-/* Share a product via the native share sheet (WhatsApp/Instagram/etc), with clipboard fallback */
+/* ── Professional invoice (corporate A4 layout, print → PDF) ─────────────────
+   The teal "bill" above is a friendly summary for WhatsApp/email; THIS is the
+   formal, print-ready document attached/downloaded as a PDF. */
+function generateInvoiceHTML(order, settings){
+  const s=settings||{}; const o=order||{}; const addr=o.address||{};
+  const E=(v)=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const fmt=n=>Number(n||0).toLocaleString("en-IN");
+  const billingAddr=o.billingAddress||addr;
+  const items=(o.items||[]);
+  const storeName=E(s.legalName||(STORE_NAME+" Aqua Store"));
+  const storeEntity=E(s.legalEntity||"");
+  const storeAddr=E(s.legalAddress||s.storeAddress||s.legalCity||"");
+  const storeWA=E(s.ownerWhatsapp||BUSINESS_WA);
+  const storeEmail=E(s.orderEmail||"");
+  const gstin=E((s.gstin||"").trim());
+  const docLabel=gstin?"TAX INVOICE":"INVOICE";
+  const invNo=E(o.orderNo||orderId(o.id||""));
+  const dateStr=o.placedAt?new Date(o.placedAt).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—";
+  const custId=E((o.userPhone||addr.phone||"").toString().slice(-10));
+  const subtotal=o.total||0;
+  const shipping=o.fee||0;
+  // Shipping breakup — new orders carry it; older ones are reconstructed from stored fees.
+  const bd=o.shippingBreakup||{courier:Math.max(0,shipping-(o.thermacolFee||0)-(o.specialDeliveryFee||0)),thermacol:o.thermacolFee||0,carton:0,special:o.specialDeliveryFee||0};
+  const couponOff=o.couponDiscount||0, refOff=o.referralDiscount||0, loyaltyOff=o.loyaltyDiscount||0;
+  const grand=o.amountDue??(subtotal+shipping);
+  const isPaid=["Verified","Paid"].includes(o.paymentStatus||"")||["Confirmed","Shipped","Delivered"].includes(o.status||"");
+  const sameAddr=!o.billingAddress||(addr.address===billingAddr.address&&addr.city===billingAddr.city);
+
+  const itemRows=items.map((it,i)=>`<tr>
+    <td class="c">${i+1}</td>
+    <td>${E(it.name)}${it.variantLabel?`<div class="muted">${E(it.variantLabel)}</div>`:""}</td>
+    <td class="c">${E(it.qty)}</td>
+    <td class="r">₹${fmt(it.price)}</td>
+    <td class="r">₹${fmt(it.price*it.qty)}</td>
+  </tr>`).join("");
+  const totRow=(label,val,opts={})=>`<tr${opts.grand?' class="grand"':""}><td colspan="3"></td><td class="r lbl${opts.neg?' neg':''}">${label}</td><td class="r val${opts.neg?' neg':''}">${val}</td></tr>`;
+  const addrBlock=(a)=>`${E(a.name)||"—"}<div class="muted">${E(a.address||"")}</div><div class="muted">${E(a.city||"")} — ${E(a.pincode||"")}</div>${a.phone?`<div class="muted">☎ ${E(a.phone)}</div>`:""}`;
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Invoice ${invNo}</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;background:#e9edf3;margin:0;padding:20px;color:#1f2733}
+.page{max-width:780px;margin:0 auto;background:#fff;padding:42px 44px 36px;box-shadow:0 8px 32px rgba(31,56,100,.14)}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
+.co h2{margin:0 0 4px;font-size:18px;font-weight:800;color:#1f3864}
+.co p{margin:0;font-size:11.5px;line-height:1.6;color:#566}
+.title{text-align:right}
+.title .big{font-size:40px;font-weight:800;color:#2f4b7c;letter-spacing:1px;line-height:1}
+.meta{margin-top:12px;border-collapse:collapse;margin-left:auto}
+.meta td{font-size:11.5px;padding:3px 0 3px 14px;color:#566;text-align:right}
+.meta td.k{font-weight:700;color:#1f2733}
+.bar{height:3px;background:#2f4b7c;margin:22px 0 0}
+.parties{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:22px}
+.parties .h{background:#2f4b7c;color:#fff;font-size:11px;font-weight:700;letter-spacing:.6px;padding:6px 12px}
+.parties .b{font-size:12.5px;font-weight:700;color:#1f2733;padding:11px 12px;line-height:1.5}
+.parties .col:first-child .b{border-right:1px solid #e3e8ef}
+.muted{font-size:11px;color:#7a8694;font-weight:400;margin-top:2px}
+table.items{width:100%;border-collapse:collapse;margin-top:22px}
+table.items thead th{background:#2f4b7c;color:#fff;font-size:11px;font-weight:700;letter-spacing:.5px;padding:9px 10px;text-align:left}
+table.items thead th.c{text-align:center}table.items thead th.r{text-align:right}
+table.items tbody td{padding:9px 10px;font-size:12.5px;border-bottom:1px solid #e3e8ef;color:#1f2733}
+table.items tbody td.c{text-align:center}table.items tbody td.r{text-align:right}
+table.items tbody tr:nth-child(even){background:#f6f8fb}
+.tot td{padding:5px 10px;font-size:12.5px}
+.tot .lbl{color:#566;font-weight:600;width:150px}
+.tot .val{color:#1f2733;font-weight:700;width:110px}
+.tot .neg{color:#16834a}
+.tot .grand .lbl,.tot .grand .val{font-size:15px;font-weight:800;color:#1f3864;border-top:2px solid #2f4b7c;padding-top:8px}
+.note{margin-top:6px}
+.pay{display:inline-block;margin-top:14px;font-size:12px;font-weight:800;padding:5px 14px;border-radius:4px;border:1.5px solid ${''}}
+.paid{color:#16834a;border-color:#16834a}.due{color:#b45309;border-color:#b45309}
+.foot{margin-top:26px;border-top:1px solid #e3e8ef;padding-top:14px;font-size:11px;color:#7a8694;line-height:1.7}
+.foot b{color:#1f2733}
+.thanks{text-align:center;font-size:14px;font-weight:800;color:#2f4b7c;margin-top:18px}
+@media print{body{background:#fff;padding:0}.page{box-shadow:none}.np{display:none!important}}
+</style></head>
+<body><div class="page">
+  <div class="top">
+    <div class="co">
+      <h2>${storeName}</h2>
+      <p>${storeEntity?E(storeEntity)+"<br>":""}${storeAddr?storeAddr+"<br>":""}${storeWA?"☎ "+storeWA+"<br>":""}${storeEmail?storeEmail+"<br>":""}${gstin?"GSTIN: "+gstin:""}</p>
+    </div>
+    <div class="title">
+      <div class="big">${docLabel}</div>
+      <table class="meta">
+        <tr><td class="k">DATE</td><td>${dateStr}</td></tr>
+        <tr><td class="k">INVOICE #</td><td>${invNo}</td></tr>
+        ${custId?`<tr><td class="k">CUSTOMER ID</td><td>${custId}</td></tr>`:""}
+        <tr><td class="k">STATUS</td><td>${E(o.status||"—")}</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="bar"></div>
+  <div class="parties">
+    <div class="col"><div class="h">BILL TO</div><div class="b">${addrBlock(billingAddr)}</div></div>
+    <div class="col"><div class="h">SHIP TO</div><div class="b">${addrBlock(addr)}${o.shippingZoneLabel?`<div class="muted">Zone: ${E(o.shippingZoneLabel)}</div>`:""}</div></div>
+  </div>
+  <table class="items">
+    <thead><tr><th class="c" style="width:34px">#</th><th>Description</th><th class="c" style="width:50px">Qty</th><th class="r" style="width:90px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+    <tbody>${itemRows}</tbody>
+  </table>
+  <table class="tot" style="width:100%;border-collapse:collapse;margin-top:6px">
+    ${totRow("Subtotal","₹"+fmt(subtotal))}
+    ${bd.courier>0?totRow(`Shipping${o.shippingZoneLabel?" ("+E(o.shippingZoneLabel)+")":""}`,"₹"+fmt(bd.courier)):""}
+    ${bd.special>0?totRow("Speed Courier extra","₹"+fmt(bd.special)):""}
+    ${bd.thermacol>0?totRow("Thermacol packaging","₹"+fmt(bd.thermacol)):""}
+    ${bd.carton>0?totRow("Carton packaging","₹"+fmt(bd.carton)):""}
+    ${(bd.courier+bd.special+bd.thermacol+bd.carton)===0&&shipping===0?totRow("Shipping","Free"):""}
+    ${o.liveGuarantee?totRow("Live Arrival Guarantee","Included"):""}
+    ${couponOff>0?totRow(`Coupon${o.coupon?" ("+E(o.coupon)+")":""}`,"-₹"+fmt(couponOff),{neg:true}):""}
+    ${refOff>0?totRow("Referral discount","-₹"+fmt(refOff),{neg:true}):""}
+    ${loyaltyOff>0?totRow("Wallet / loyalty","-₹"+fmt(loyaltyOff),{neg:true}):""}
+    ${totRow("TOTAL","₹"+fmt(grand),{grand:true})}
+  </table>
+  <div class="note"><span class="pay ${isPaid?"paid":"due"}">${isPaid?"PAID":"PAYMENT DUE"}</span>${o.txnId?` &nbsp;<span style="font-size:11px;color:#7a8694">Txn/Ref: ${E(o.txnId)}</span>`:""}</div>
+  <div class="thanks">Thank you for your business! 🐠</div>
+  <div class="foot">
+    <p>${gstin?"Prices are inclusive of GST.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this document is issued as a Bill of Supply."}</p>
+    ${o.liveGuarantee?`<p><b>Live Arrival Guarantee</b> applies to this order. Report any Dead-on-Arrival with a continuous unboxing video on WhatsApp ${storeWA} within 2 hours of delivery.</p>`:""}
+    <p>For any questions about this invoice, contact <b>${storeName}</b> on WhatsApp ${storeWA}${storeEmail?` or ${storeEmail}`:""}.</p>
+    <p style="font-size:10px">This is a computer-generated invoice and does not require a signature. Subject to ${E(s.jurisdiction||"India")} jurisdiction.</p>
+  </div>
+  <div class="np" style="text-align:right;margin-top:18px"><button onclick="window.print()" style="background:#2f4b7c;color:#fff;border:none;border-radius:6px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save as PDF</button></div>
+</div></body></html>`;
+}
+function openInvoice(order,settings){
+  const html=generateInvoiceHTML(order,settings||{});
+  try{
+    const w=window.open("","_blank");
+    if(w){w.document.open();w.document.write(html);w.document.close();return;}
+  }catch(e){}
+  const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  window.open(url,"_blank");
+}
 async function shareProduct(p, showToast){
   const url=(typeof location!=="undefined")?(location.origin+location.pathname+"?p="+encodeURIComponent(p.id)):"";
   const price=effectivePrice(p);
@@ -1357,6 +1501,9 @@ async function shareProduct(p, showToast){
   catch(e){ window.open(`https://wa.me/?text=${encodeURIComponent(text)}`,"_blank"); }
 }
 
+/* Month key + previous-month range — used by the monthly "download your report" reminder. */
+function monthKey(d=new Date()){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+function prevMonthRange(){ const now=new Date(); const first=new Date(now.getFullYear(),now.getMonth()-1,1); const last=new Date(now.getFullYear(),now.getMonth(),0); const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; return {from:iso(first),to:iso(last),label:first.toLocaleString("en-IN",{month:"long",year:"numeric"})}; }
 /* Export orders to a CSV file (opens in Excel/Sheets). Optional [from,to] ISO-date range (inclusive). */
 function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={}){
   const esc=v=>{ const s=String(v==null?"":v).replace(/"/g,'""'); return `"${s}"`; };
@@ -1364,7 +1511,7 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
   if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
-  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Speed Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier","Consignment","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","Customer Summary","WhatsApp Updates","Customer ID"];
+  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Speed Courier Extra (Rs.)","Thermacol Packing (Rs.)","Carton Packing (Rs.)","Speed Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID"];
   const pph=Number(settings?.loyaltyPointsPerHundred||10);
   const rupeePerPoint=Number(settings?.loyaltyRedeemValue||1);
   const rows=list.map(o=>{
@@ -1374,7 +1521,8 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     const ptsRedeemed=loyaltyUsed>0?Math.round(loyaltyUsed/(rupeePerPoint||1)):0;
     const ptsEarned=settings?.loyaltyEnabled?Math.floor((grand/100)*pph):0;
     const wBal=walletBalances[o.userUid]!=null?walletBalances[o.userUid]:"";
-    return [orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||""].map(esc).join(",");
+    const bd=o.shippingBreakup||{courier:Math.max(0,(o.fee||0)-(o.thermacolFee||0)-(o.specialDeliveryFee||0)),thermacol:o.thermacolFee||0,carton:0,special:o.specialDeliveryFee||0};
+    return [orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||""].map(esc).join(",");
   });
   const csv="\uFEFF"+[head.map(esc).join(","),...rows].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -1472,13 +1620,26 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
 @keyframes slideInLeft{from{transform:translateX(-100%)}to{transform:translateX(0)}}
 .drawer-panel{animation:slideInLeft .22s cubic-bezier(.22,1,.36,1) both;}
 @media(min-width:1000px){
-  .nemo-app{max-width:880px !important;}
+  /* Branded canvas so the desktop page is fully, intentionally designed (not a bare strip) */
+  #root{background:radial-gradient(1100px 540px at 50% -8%, #0e6d72, #07383b 62%) !important;}
+  .nemo-app{max-width:min(1080px,94vw) !important;min-height:100vh;box-shadow:0 18px 60px rgba(0,0,0,.30);}
   .desk-nav{display:flex;}
   .mobile-bottom-nav{display:none !important;}
   .prod-grid{grid-template-columns:repeat(3,1fr) !important;}
   .vh-head{padding-top:18px !important;}
   .sheet-overlay{align-items:center !important;padding:24px !important;}
   .sheet-panel{border-radius:20px !important;max-width:460px !important;}
+  /* Keep single-column reading/forms comfortable inside the wide shell */
+  .dt-read{max-width:780px;margin-left:auto !important;margin-right:auto !important;}
+}
+/* Tablet / small desktop: a comfortable column instead of a tiny phone strip lost in space */
+@media(min-width:560px) and (max-width:999px){
+  .nemo-app{max-width:640px !important;box-shadow:0 0 0 1px rgba(11,110,114,.08);}
+}
+/* Large desktop: more breathing room + a denser product grid that fills the width */
+@media(min-width:1340px){
+  .nemo-app{max-width:1180px !important;}
+  .prod-grid{grid-template-columns:repeat(4,1fr) !important;}
 }
 .home-footer{display:none;}
 @media(min-width:1000px){ .home-footer{display:block;} }
@@ -2270,6 +2431,23 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
   const hasDelivered = myOrders.some(o=>o.status==="Delivered");
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const [doaOpen,setDoaOpen]=useState(null);
+  const [doaOrderNo,setDoaOrderNo]=useState("");
+  const [doaLookupMsg,setDoaLookupMsg]=useState("");
+  const submitDoaByNumber=()=>{
+    const q=doaOrderNo.trim().toUpperCase().replace(/\s/g,"");
+    if(!q){ setDoaLookupMsg("Enter your order number"); return; }
+    const match=myOrders.find(o=>{
+      const id=(orderId(o.id)||"").toUpperCase(), no=(o.orderNo||"").toUpperCase();
+      return id===q||no===q||id.endsWith(q)||no.endsWith(q)||id.includes(q);
+    });
+    if(!match){ setDoaLookupMsg("No order found with that number"); return; }
+    if(match.status!=="Delivered"){ setDoaLookupMsg("DOA can only be reported on a delivered order"); return; }
+    if(!match.items.some(it=>it.category==="Live Fish")){ setDoaLookupMsg("That order has no live fish"); return; }
+    if(match.doa){ setDoaLookupMsg("A DOA request already exists for that order"); return; }
+    openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${orderId(match.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`));
+    onReportDoa&&onReportDoa(match);
+    setDoaOrderNo(""); setDoaLookupMsg("");
+  };
   const [refCode,setRefCode]=useState(null);
   const [refCopied,setRefCopied]=useState(false);
   const refAmt=settings.referralDiscount||50;
@@ -2308,7 +2486,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
         </div>
       </div>
 
-      <div style={{padding:"16px 16px 100px"}}>
+      <div className="dt-read" style={{padding:"16px 16px 100px"}}>
         {/* Saved / Favorites — lives here under the signed-in account */}
         <button className="press" onClick={()=>nav("saved")}
           style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:16,cursor:"pointer",textAlign:"left"}}>
@@ -2380,6 +2558,19 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
         ):(
           <>
+          {myOrders.some(o=>o.status==="Delivered"&&o.items.some(it=>it.category==="Live Fish"))&&(
+            <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:16,padding:"14px 16px",marginBottom:16}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#9a3412",marginBottom:4}}>🐟 Report a Dead-on-Arrival (DOA)</div>
+              <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.55,marginBottom:10}}>Enter your order number to start a claim. Have your unboxing video ready — share it on WhatsApp within 2 hours of delivery.</div>
+              <div style={{display:"flex",gap:8}}>
+                <input value={doaOrderNo} onChange={e=>{setDoaOrderNo(e.target.value);setDoaLookupMsg("");}} placeholder="Your order number"
+                  style={{flex:1,borderRadius:12,border:`1.5px solid ${doaLookupMsg?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",fontFamily:"monospace"}}/>
+                <button className="press" onClick={submitDoaByNumber}
+                  style={{background:"#25D366",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>Report DOA</button>
+              </div>
+              {doaLookupMsg&&<div style={{fontSize:11.5,color:C.danger,fontWeight:600,marginTop:4}}>{doaLookupMsg}</div>}
+            </div>
+          )}
           <div style={{fontSize:12,color:C.textSub,fontWeight:600,marginBottom:12}}>{myOrders.length} order{myOrders.length!==1?"s":""}</div>
           {myOrders.map(o=>(
             <div key={o.id} style={{background:C.card,borderRadius:18,padding:"16px",marginBottom:12,border:`1px solid ${C.border}`}}>
@@ -2421,6 +2612,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 <span style={{fontSize:12,color:C.textSub}}>Grand Total</span>
                 <span style={{fontFamily:PRICE_FONT,fontSize:16,fontWeight:800,color:C.primary}}>₹{o.amountDue??(o.total+o.fee)}</span>
               </div>
+              {o.etaDays!==""&&o.etaDays!=null&&["Confirmed","Shipped"].includes(o.status)&&!o.closed&&<div style={{fontSize:11.5,color:C.primary,fontWeight:700,marginTop:6}}>📦 Estimated delivery: in {o.etaDays} day{Number(o.etaDays)===1?"":"s"}</div>}
               {o.trackingNumber&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>Consignment: <b style={{color:C.text}}>{o.trackingNumber}</b>{o.courierName?<> · {o.courierName}</>:null}</div>}
               {(o.status==="Shipped"||o.status==="Delivered")&&o.courierTrackUrl&&(
                 <button className="press" onClick={()=>trackParcel(o)}
@@ -2435,10 +2627,16 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 </div>
               )}
               {/* Bill button */}
+              <div style={{display:"flex",gap:8,marginTop:10}}>
               <button className="press" onClick={()=>openBill(o,settings)}
-                style={{width:"100%",marginTop:10,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                🧾 View Bill / Invoice
+                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                🧾 Quick Bill
               </button>
+              <button className="press" onClick={()=>openInvoice(o,settings)}
+                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                📄 Invoice (PDF)
+              </button>
+              </div>
 
               {/* Payment state */}
               {o.status==="Awaiting Payment"&&(
@@ -2743,7 +2941,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         <div onClick={onSecretTap}
           style={{display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",WebkitTapHighlightColor:"transparent",marginBottom:14,marginTop:6}}>
           <div style={{width:160,height:160,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <img src={(settings&&settings.storeLogo)||STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:"100%",height:"100%",objectFit:"contain",filter:"drop-shadow(0 14px 30px rgba(0,0,0,.4))"}}/>
+            <img src={(settings&&settings.storeLogo)||STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:"100%",height:"100%",objectFit:"contain",filter:"drop-shadow(0 6px 14px rgba(0,0,0,.28))"}}/>
           </div>
           <div style={{fontSize:11,color:"rgba(255,255,255,.82)",fontWeight:700,letterSpacing:4,marginTop:12}}>AQUA · STORE</div>
         </div>
@@ -2857,7 +3055,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         <TankShowcaseSection showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
 
         {/* Testimonials — any signed-in customer can post */}
-        <TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>
+        {settings.testimonialsEnabled!==false&&<TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>}
 
         {/* Free delivery banner — only shown when admin has set a threshold */}
         {Number(settings.freeDeliveryThreshold) > 0 && (
@@ -3406,7 +3604,7 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
   );
   return(
     <div className="slide-up">
-      <div className="vh-head" style={{padding:"52px 16px 100px"}}>
+      <div className="vh-head dt-read" style={{padding:"52px 16px 100px"}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:20}}>My Cart ({cart.reduce((s,i)=>s+i.qty,0)})</div>
         {cart.map(item=>{
           const m=CAT_META[item.category]||CAT_META["Live Fish"];
@@ -3688,6 +3886,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   const zone=pincodeToZone(addr.pincode);
   const shipOpts = hasLiveFish ? {packing} : {special:specialDelivery};
   const shippingFee=calcShipping(cart,zone,shipOpts,settings);
+  const shipBreak=shippingBreakdown(cart,zone,shipOpts,settings)||{courier:0,thermacol:0,carton:0,special:0,total:0,freeShip:false};
   // Live Arrival Guarantee is FREE when the customer picks the recommended packing (or a safer/higher-rank one).
   const guaranteeActive=hasLiveFish && selPack.rank >= packingOpt(suggestedPacking).rank;
   const lgPrice=0;
@@ -3714,6 +3913,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   const fb=(k,v)=>setBilling(a=>({...a,[k]:v}));
   const anySuggestSpecial=cart.some(i=>i.suggestSpecialDelivery);
   const applyCoupon=async()=>{
+    if(refApplied){ setCouponMsg({text:"You can use a coupon or a referral code — not both. Remove the referral code first.",ok:false}); return; }
     const r=validateCoupon(couponCode,settings,orders,total);
     if(!r.ok){ setCouponMsg({text:r.msg,ok:false}); setCouponApplied(null); return; }
     if(await promoLimitReached("coupon", settings.couponDailyLimit)){
@@ -3725,6 +3925,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   };
 
   const applyReferral=async()=>{
+    if(couponApplied){ setRefMsg({text:"You can use a coupon or a referral code — not both. Remove the coupon first.",ok:false}); return; }
     if(settings.referralEnabled===false){ setRefMsg({text:"Referral program is currently off",ok:false}); return; }
     if(await promoLimitReached("referral", settings.referralDailyLimit)){
       setRefMsg({text:"Today's referral quota is full — please try tomorrow.",ok:false}); setRefApplied(false); return;
@@ -3788,6 +3989,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       referralCode:refApplied?refInput.trim():"", referralDiscount:refDiscount,
       loyaltyDiscount:loyaltyRedeemed?loyaltyDiscount:0,
       thermacolFee: hasLiveFish?thermacolFeeFor(cart,packing,settings):0,
+      shippingBreakup:{courier:shipBreak.courier,thermacol:shipBreak.thermacol,carton:shipBreak.carton,special:shipBreak.special},
       status:"Awaiting Payment",trackingNumber:"",
       paymentMethod:"online",
       paymentStatus:"Awaiting Payment",
@@ -3843,16 +4045,33 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             const cats=new Set((placed.items||[]).map(i=>i.category));
             const hasFish=cats.has("Live Fish"), hasPlants=cats.has("Plants");
             if(!hasFish&&!hasPlants) return null; // dry goods only — no acclimatization needed
-            const sub=hasFish
-              ? "Acclimatize your fish the right way for a safe, happy arrival. Tap to read →"
-              : "Settle your new plants in correctly for healthy growth. Tap to read →";
+            if(hasFish){
+              // Show the acclimatization steps inline right after payment so the customer is ready when the fish arrive.
+              const steps=String(settings.acclimatizationTips||DEFAULT_SETTINGS.acclimatizationTips).split("\n").map(s=>s.replace(/^\s*\d+[.)]\s*/,"").trim()).filter(Boolean);
+              return(
+                <div style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"15px 16px",marginBottom:16,textAlign:"left"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <span style={{fontSize:22}}>🐠</span>
+                    <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14.5,fontWeight:800,color:"#065f46"}}>How to acclimatize your fish</span>
+                  </div>
+                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5,marginBottom:10}}>Save these steps for when your parcel arrives — they keep your new fish safe and stress-free.</div>
+                  <ol style={{margin:0,paddingLeft:18,display:"flex",flexDirection:"column",gap:6}}>
+                    {steps.map((st,i)=>(<li key={i} style={{fontSize:12.5,color:"#065f46",lineHeight:1.5}}>{st}</li>))}
+                  </ol>
+                  <button className="press" onClick={()=>nav("guides")}
+                    style={{marginTop:12,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
+                    📖 See full care guides →
+                  </button>
+                </div>
+              );
+            }
             return(
               <button className="press" onClick={()=>nav("guides")}
                 style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,textAlign:"left",cursor:"pointer"}}>
                 <span style={{fontSize:30,flexShrink:0}}>📖</span>
                 <div>
                   <div style={{fontSize:13.5,fontWeight:800,color:"#065f46",marginBottom:2}}>Please read the Care Guide</div>
-                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5}}>{sub}</div>
+                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5}}>Settle your new plants in correctly for healthy growth. Tap to read →</div>
                 </div>
               </button>
             );
@@ -3878,7 +4097,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             return(
               <div style={{background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:16,padding:"14px 16px",marginBottom:14,width:"100%",maxWidth:340,textAlign:"left",boxShadow:"0 6px 20px rgba(124,58,237,.25)"}}>
                 <div style={{fontSize:13,fontWeight:800,color:"white",marginBottom:4}}>💜 Loved it? Share with friends!</div>
-                <div style={{fontSize:12,color:"rgba(255,255,255,.88)",marginBottom:8}}>Share your code and both of you get <b>₹{refAmt} off</b> next time!</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,.88)",marginBottom:8}}>Share your code — your friend gets <b>₹{refAmt} off</b> their next order, and you earn <b>wallet rewards</b> once it's delivered!</div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.5)",borderRadius:8,padding:"6px 12px",fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{refCode}</div>
                   <button className="press" onClick={()=>{
@@ -3940,7 +4159,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       </div>
 
       {step===1&&(
-        <div style={{padding:"20px 16px 100px"}}>
+        <div className="dt-read" style={{padding:"20px 16px 100px"}}>
           {/* Shipping rates info */}
           <div style={{background:C.accentLight,borderRadius:14,padding:"12px 14px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -3974,7 +4193,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <span style={{fontSize:20}}>🛡️</span>
                 <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:"#15803d"}}>Live Arrival Guarantee</span>
               </div>
-              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Included free on orders shipped by our recommended <b>Speed Delivery</b> parcel — no separate charge. If a fish arrives Dead on Arrival (DOA), send a valid unboxing video on WhatsApp within 2 hours and we'll make it right <b>one time</b>: a replacement, store credit, or refund of the fish amount (our choice). Normal-parcel orders are not covered. Delivery charges are non-refundable. Once fish are received in good condition, all sales are final — no returns or replacements.</div>
+              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish arrives dead (DOA), share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery and we'll make it right <b>one time</b> — a replacement, store credit, or refund of the fish's value (our choice). Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
               <button className="press" onClick={()=>nav("about")}
                 style={{marginTop:8,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",textDecoration:"underline"}}>
                 📖 Read our acclimatization guide →
@@ -3987,7 +4206,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           {inp("WhatsApp Number","whatsapp","tel","9876543210 (if different)",false,true)}
           <label style={{display:"flex",alignItems:"center",gap:10,background:C.accentLight,borderRadius:12,padding:"12px 14px",marginBottom:14,cursor:"pointer",userSelect:"none"}}>
             <input type="checkbox" checked={addr.waUpdates} onChange={e=>f("waUpdates",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
-            <span style={{fontSize:12.5,color:C.primaryDark,fontWeight:500,lineHeight:1.45}}>💬 Notify me about my order (payment confirmed, shipped, delivered) on WhatsApp &amp; email</span>
+            <span style={{fontSize:12.5,color:C.primaryDark,fontWeight:500,lineHeight:1.45}}>💬 Notify me about my order (payment confirmed, shipped, delivered)</span>
           </label>
           {inp("Street Address","address","text","123, Main Street")}
           <div style={{display:"flex",gap:12}}>
@@ -4003,7 +4222,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           <div style={{marginBottom:14}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Order Summary / Special Requests <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <textarea value={addr.summary} onChange={e=>f("summary",e.target.value)} rows={3}
-              placeholder="e.g. Please pack fish with extra oxygen, prefer evening delivery, specific colour preference…"
+              placeholder="e.g. Please pack fish with extra oxygen, specific colour preference…"
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:"white"}}/>
             <div style={{fontSize:11,color:C.textSub,marginTop:4}}>📝 Tell us anything special about your order — we'll see it with your order.</div>
           </div>
@@ -4012,7 +4231,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           {hasLiveFish ? (
             <div style={{marginBottom:14}}>
               <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>🐠 Choose Live-Fish Packing</div>
-              <div style={{fontSize:11.5,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> is free <b>only</b> when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer one above it.</div>
+              <div style={{fontSize:11.5,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> applies when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer option above it. Whatever you choose, we always pack with the utmost care to keep your fish safe in transit.</div>
               {PACKING_OPTIONS.map(opt=>{
                 const sel=packing===opt.key;
                 const isSug=opt.key===suggestedPacking;
@@ -4135,7 +4354,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       )}
 
       {step===2&&(
-        <div style={{padding:"20px 16px 100px"}}>
+        <div className="dt-read" style={{padding:"20px 16px 100px"}}>
           <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:12}}>Order Items</div>
           {cart.map(item=>{
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
@@ -4155,21 +4374,41 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               <span style={{fontSize:13,color:C.textSub}}>Subtotal</span>
               <span style={{fontSize:13,fontWeight:600,color:C.text}}>₹{total}</span>
             </div>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:13,color:C.textSub}}>Shipping {zone&&<span style={{fontSize:11,color:C.accent}}>({ZONE_LABELS[zone]})</span>}</span>
-              <span style={{fontSize:13,fontWeight:600,color:zone?C.text:C.accent}}>{zone?`₹${fee}`:"TBD after address"}</span>
-            </div>
+            {!zone ? (
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,color:C.textSub}}>Shipping</span>
+                <span style={{fontSize:13,fontWeight:600,color:C.accent}}>TBD after address</span>
+              </div>
+            ) : (<>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,color:C.textSub}}>Shipping <span style={{fontSize:11,color:C.accent}}>({ZONE_LABELS[zone]})</span></span>
+                <span style={{fontSize:13,fontWeight:600,color:C.text}}>{shipBreak.freeShip?"Free":`₹${shipBreak.courier}`}</span>
+              </div>
+              {shipBreak.special>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
+                <span style={{fontSize:13,color:"#1d4ed8"}}>⚡ Speed Courier extra</span>
+                {!hasLiveFish?(
+                  <span style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:13,fontWeight:600,color:"#1d4ed8"}}>₹{shipBreak.special}</span>
+                    <button className="press" onClick={()=>setSpecialDelivery(false)} title="Remove" style={{width:22,height:22,borderRadius:"50%",background:"#dbeafe",color:"#1d4ed8",border:"none",fontSize:14,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
+                  </span>
+                ):<span style={{fontSize:13,fontWeight:600,color:"#1d4ed8"}}>₹{shipBreak.special}</span>}
+              </div>}
+              {shipBreak.thermacol>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,color:C.textSub}}>🧊 Thermacol packaging</span>
+                <span style={{fontSize:13,fontWeight:600,color:C.text}}>₹{shipBreak.thermacol}</span>
+              </div>}
+              {shipBreak.carton>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,color:C.textSub}}>📦 Carton packaging</span>
+                <span style={{fontSize:13,fontWeight:600,color:C.text}}>₹{shipBreak.carton}</span>
+              </div>}
+            </>)}
             {hasLiveFish ? (
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"flex-start"}}>
                 <span style={{fontSize:13,color:C.textSub}}>📦 Packing</span>
                 <span style={{fontSize:12,fontWeight:700,color:C.text,textAlign:"right",maxWidth:"62%"}}>{packingLabel(packing)}</span>
               </div>
-            ) : specialDelivery ? (
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
-                <span style={{fontSize:13,color:"#1d4ed8"}}>⚡ Speed Delivery <span style={{fontSize:11,color:C.textSub}}>(incl. above)</span></span>
-                <button className="press" onClick={()=>setSpecialDelivery(false)} title="Remove" style={{width:22,height:22,borderRadius:"50%",background:"#dbeafe",color:"#1d4ed8",border:"none",fontSize:14,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
-              </div>
             ) : null}
+            {zone&&fee>0&&<div style={{fontSize:10.5,color:C.textSub,lineHeight:1.5,marginTop:-2,marginBottom:8,background:C.accentLight,borderRadius:8,padding:"7px 10px"}}>ℹ️ Shipping is charged as an estimate. If your parcel actually costs less to send, we credit the difference back to your 👛 wallet as loyalty coins after it's dispatched.</div>}
             {guaranteeActive&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
               <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Arrival Guarantee</span>
               <span style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Included</span>
@@ -4512,7 +4751,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
         <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:"white"}}>{isEdit?"Edit Product":"Add Product"}</div>
       </div>
-      <div style={{padding:"20px 16px 100px"}}>
+      <div className="dt-read" style={{padding:"20px 16px 100px"}}>
         {fld("Product Name","name","text","e.g. Betta Splendens")}
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Category</div>
@@ -4718,6 +4957,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
 function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,settings={}}){
   const [status,setStatus]=useState(o.status);
   const [tracking,setTracking]=useState(o.trackingNumber||"");
+  const [etaDays,setEtaDays]=useState(o.etaDays!=null?o.etaDays:"");
   const couriers=settings.couriers||[];
   const [courierId,setCourierId]=useState(o.courierId||"");
   const selCourier=couriers.find(c=>c.id===courierId)||null;
@@ -4807,9 +5047,23 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 
   const handleUpdate=async()=>{
     setSaving(true);
-    const updated={...o,status,trackingNumber:tracking,courierId,courierName:selCourier?.name||"",courierTrackUrl:selCourier?.trackUrl||"",updatedAt:new Date().toISOString()};
+    const updated={...o,status,trackingNumber:tracking,etaDays:etaDays===""?"":Math.max(0,Number(etaDays)||0),courierId,courierName:selCourier?.name||"",courierTrackUrl:selCourier?.trackUrl||"",updatedAt:new Date().toISOString()};
     await onUpdateOrder(updated);
     showToast("Order updated!");
+    setSaving(false);
+  };
+  // Closing an order: only once it's delivered and no DOA is still open.
+  const doaResolved = !o.doa || (o.doa.status||"").startsWith("Approved") || o.doa.status==="Declined";
+  const doClose=async()=>{
+    setSaving(true);
+    await onUpdateOrder({...o,closed:true,closedAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    showToast("Order closed — all done ✓");
+    setSaving(false);
+  };
+  const doReopen=async()=>{
+    setSaving(true);
+    await onUpdateOrder({...o,closed:false,closedAt:"",updatedAt:new Date().toISOString()});
+    showToast("Order reopened");
     setSaving(false);
   };
   // Shipping reward is based on COURIER charge only — packaging (thermacol) is never rewardable.
@@ -4861,7 +5115,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         </div>
       </div>
 
-      <div style={{padding:"20px 16px 100px"}}>
+      <div className="dt-read" style={{padding:"20px 16px 100px"}}>
         {/* Current status */}
         <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${C.border}`}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>Order Status</div>
@@ -4913,11 +5167,43 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               {selCourier&&selCourier.trackUrl&&<div style={{fontSize:11,color:C.success,marginTop:6,fontWeight:600}}>✓ Customer will see a <b>Track</b> button linking to {selCourier.name}.</div>}
             </div>
           )}
+          {/* Estimated delivery time (days) — shown to the customer on their order */}
+          {(status==="Confirmed"||status==="Shipped"||status==="Delivered")&&(
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Estimated Delivery (days)</div>
+              <input type="number" min="0" value={etaDays} onChange={e=>setEtaDays(e.target.value)} placeholder="e.g. 3"
+                style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
+              <div style={{fontSize:10.5,color:C.textSub,marginTop:5}}>Shows on the customer's order as “Estimated delivery: in X day(s)”. Leave blank to hide.</div>
+            </div>
+          )}
           <button className="press" onClick={handleUpdate} disabled={saving}
             style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
             {saving?<><Spinner/>Saving…</>:"💾 Save Status Update"}
           </button>
         </div>
+
+        {/* Close / complete order — once delivered safely with no pending DOA */}
+        {o.status==="Delivered" && (
+          <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>✅ Complete Order</div>
+            {o.closed ? (
+              <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"12px"}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#15803d",marginBottom:3}}>✓ Order closed — all done</div>
+                <div style={{fontSize:11.5,color:"#166534",lineHeight:1.5,marginBottom:10}}>Delivered safely and finalised{o.closedAt?` on ${fmtDate(o.closedAt)}`:""}. Nothing more to do here.</div>
+                <button className="press" onClick={doReopen} disabled={saving}
+                  style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 14px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>↺ Reopen order</button>
+              </div>
+            ) : !doaResolved ? (
+              <div style={{fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"11px 13px",lineHeight:1.5}}>⏳ A Dead-on-Arrival request is still open. Resolve the DOA below before closing this order.</div>
+            ) : (
+              <>
+                <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>Everything delivered safely and no DOA is pending. Close this order to mark it fully complete.</div>
+                <button className="press" onClick={doClose} disabled={saving}
+                  style={{width:"100%",background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>✓ Close this order</button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Shipping-overcharge reward */}
         {paidish && chargedShip>0 && (
@@ -5086,10 +5372,14 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         )}
 
         {/* Bill / Invoice */}
-        <div style={{marginTop:14}}>
+        <div style={{marginTop:14,display:"flex",gap:10}}>
           <button className="press" onClick={()=>openBill(o,settings)}
-            style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            🧾 View / Print Bill
+            style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:13.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            🧾 Quick Bill
+          </button>
+          <button className="press" onClick={()=>openInvoice(o,settings)}
+            style={{flex:1,background:C.primary,color:"#fff",border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:13.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            📄 Invoice (PDF)
           </button>
         </div>
 
@@ -5213,6 +5503,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [orderSearch,setOrderSearch]=useState("");
   const [csvFrom,setCsvFrom]=useState("");
   const [csvTo,setCsvTo]=useState("");
+  // Monthly "download your report" reminder — stamped in localStorage once you export (or dismiss) each month.
+  const [exportDone,setExportDone]=useState(()=>{try{return localStorage.getItem("nemo-export-month")===monthKey();}catch(e){return true;}});
+  const stampExport=()=>{try{localStorage.setItem("nemo-export-month",monthKey());}catch(e){}setExportDone(true);};
   const [catFilter,setCatFilter]=useState("All");
   const [prodQ,setProdQ]=useState("");
   const [allReviews,setAllReviews]=useState({}); // {pid: [reviews]}
@@ -5288,6 +5581,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   );
 
   const filteredProds=products.filter(p=>(catFilter==="All"||p.category===catFilter)&&(!prodQ||p.name.toLowerCase().includes(prodQ.toLowerCase())));
+  const newOrderCount=orders.filter(o=>o.status==="Placed").length;          // new paid orders awaiting action
+  const outOfStockCount=products.filter(p=>(p.stockCount??DEFAULT_STOCK)<=0).length; // products that went out of stock
   const totalReviews=Object.values(allReviews).reduce((s,r)=>s+r.length,0);
   const stats=[{l:"Products",v:products.length,i:"📦"},{l:"Orders",v:orders.length,i:"🛒"},{l:"New",v:orders.filter(o=>o.status==="Placed").length,i:"🔔"},{l:"Reviews",v:totalReviews||"—",i:"⭐"}];
 
@@ -5327,6 +5622,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <button key={t} className="press" onClick={()=>setTab(t)}
               style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
               {t==="orders"?"📋 Orders":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
+              {t==="orders"&&newOrderCount>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{newOrderCount}</span>}
+              {t==="products"&&outOfStockCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Out of stock">{outOfStockCount}</span>}
               {t==="requests"&&requests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{requests.length}</span>}
             </button>
           ))}
@@ -5350,7 +5647,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
 
       {/* ── ORDERS TAB ── */}
       {tab==="orders"&&(
-        <div style={{padding:"16px 16px 100px"}}>
+        <div className="dt-read" style={{padding:"16px 16px 100px"}}>
           {/* Visitor analytics */}
           <div style={{background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -5399,6 +5696,26 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             ))}
           </div>
 
+          {/* Monthly report reminder */}
+          {!exportDone&&orders.length>0&&(()=>{
+            const pm=prevMonthRange();
+            return(
+              <div style={{background:"linear-gradient(135deg,#107c41,#0b5e31)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                  <span style={{fontSize:18}}>🗓️</span>
+                  <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800}}>Monthly report reminder</span>
+                </div>
+                <div style={{fontSize:12,opacity:.93,lineHeight:1.55,marginBottom:10}}>It's a new month — download &amp; save your <b>{pm.label}</b> orders report (Excel) for your records and accounts.</div>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="press" onClick={()=>{const n=exportOrdersCSV(orders,pm.from,pm.to,settings,walletBalances);stampExport();showToast(n?`Downloaded ${n} order${n!==1?"s":""} for ${pm.label}`:`No orders in ${pm.label} — marked done`);}}
+                    style={{flex:1,background:"white",color:"#0b5e31",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>⬇ Download {pm.label}</button>
+                  <button className="press" onClick={stampExport}
+                    style={{background:"rgba(255,255,255,.18)",color:"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"10px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Dismiss</button>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Excel export with date range */}
           <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -5426,7 +5743,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               ))}
               {(csvFrom||csvTo)&&<button className="press" onClick={()=>{setCsvFrom("");setCsvTo("");}} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:16,padding:"5px 12px",fontSize:11,fontWeight:700,color:C.textSub,fontFamily:"'Nunito',sans-serif"}}>Clear</button>}
             </div>
-            <button className="press" onClick={()=>{const n=exportOrdersCSV(orders,csvFrom,csvTo,settings,walletBalances);showToast(n?`Exported ${n} order${n!==1?"s":""} to Excel`:"No orders in that range","error");}}
+            <button className="press" onClick={()=>{const n=exportOrdersCSV(orders,csvFrom,csvTo,settings,walletBalances);stampExport();showToast(n?`Exported ${n} order${n!==1?"s":""} to Excel`:"No orders in that range","error");}}
               style={{width:"100%",background:"#107c41",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               ⬇ Download Excel (CSV){(csvFrom||csvTo)?" — selected range":" — all orders"}
             </button>
@@ -5843,6 +6160,7 @@ function SettingsPanel({settings,onSave}){
   const [npw2,setNpw2]=useState("");
   const [pwMsg,setPwMsg]=useState("");
   const [backupMsg,setBackupMsg]=useState("");
+  const [sec,setSec]=useState("store"); // settings are split into pages; this is the active one
   const adminOk=isAdminSignedIn();
   // Live daily-promo usage (today) — refreshed on mount so admin sees "X of N used today"
   const [promoToday,setPromoToday]=useState({coupon:0,referral:0});
@@ -5955,7 +6273,17 @@ function SettingsPanel({settings,onSave}){
     </div>
   );
   return(
-    <div style={{padding:"18px 16px 100px"}}>
+    <div className="dt-read" style={{padding:"18px 16px 100px"}}>
+      {/* Settings are split into pages for ease — pick a section */}
+      <div style={{display:"flex",gap:8,overflowX:"auto",marginBottom:16,paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
+        {[["store","🏪 Store"],["payship","🚚 Payments & Shipping"],["promos","🎁 Promotions"],["content","📄 Content"],["emails","🔐 Email & Security"]].map(([k,label])=>(
+          <button key={k} className="press" onClick={()=>setSec(k)}
+            style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${sec===k?C.primary:C.border}`,background:sec===k?C.primary:"white",color:sec===k?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap",cursor:"pointer"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {sec==="store"&&(<>
       {/* WhatsApp */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:14}}>💬 WhatsApp Notifications</div>
@@ -5997,6 +6325,8 @@ function SettingsPanel({settings,onSave}){
         {field("Order Notification Email (optional)","orderEmail","you@example.com","Where new-order alerts and your admin security codes are sent. Delivered via EmailJS (set the keys below). Changing this needs an email security code.","email")}
       </div>
 
+      </>)}
+      {sec==="emails"&&(<>
       {/* Customer confirmation emails (EmailJS) */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📧 Customer Confirmation Emails</div>
@@ -6067,6 +6397,14 @@ function SettingsPanel({settings,onSave}){
             <b>Currently configured admin UID(s):</b><br/>
             {ADMIN_UIDS.map(u=>(<code key={u} style={{fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:4,padding:"2px 6px",display:"inline-block",marginTop:4,marginRight:4}}>{u}</code>))}
           </div>
+          {/* Optional co-admin — a helper account that can also open the admin panel. */}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:6}}>🤝 Co-admin Google UID (optional)</div>
+            <input value={f.coAdminUid||""} onChange={e=>set("coAdminUid",e.target.value.trim())}
+              placeholder="Paste your helper's Google UID"
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:12.5,fontFamily:"monospace",outline:"none",background:"white"}}/>
+            <div style={{fontSize:10.5,color:C.textSub,marginTop:5,lineHeight:1.55}}>Lets a second person open Admin. You must <b>also</b> add this UID to <code style={{fontSize:10,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 4px"}}>database.rules.json</code> + the Firebase console so their changes sync to the cloud. Save Settings after pasting.</div>
+          </div>
           {FB_OK && FB_AUTH?.currentUser && !isAdminUid(FB_AUTH.currentUser.uid) && (
             <div style={{background:"#f0fdf4",border:`1px solid #86efac`,borderRadius:10,padding:"11px 13px",marginBottom:10,fontSize:12,color:"#14532d",lineHeight:1.6}}>
               <b>✓ New account UID (signed in now):</b><br/>
@@ -6104,6 +6442,8 @@ function SettingsPanel({settings,onSave}){
         {backupMsg&&<div style={{fontSize:11.5,color:backupMsg[0]==="✓"?C.success:backupMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8}}>{backupMsg}</div>}
       </div>
 
+      </>)}
+      {sec==="content"&&(<>
       {/* About & Policies content */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📄 About &amp; Policies</div>
@@ -6130,6 +6470,8 @@ function SettingsPanel({settings,onSave}){
         {field("Legal Jurisdiction","jurisdiction","Salem, Tamil Nadu")}
       </div>
 
+      </>)}
+      {sec==="payship"&&(<>
       {/* Payment */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💳 Online Payment</div>
@@ -6275,9 +6617,17 @@ function SettingsPanel({settings,onSave}){
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
             <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
           </div>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>📦 Carton packing charge (₹)</div>
+            <input type="number" min="0" value={f.cartonPackingCharge||0} onChange={e=>set("cartonPackingCharge",Number(e.target.value)||0)}
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
+            <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Added to live-fish parcels packed in a carton box, shown in the checkout breakup. Leave 0 for now.</div>
+          </div>
         </div>
       </div>
 
+      </>)}
+      {sec==="promos"&&(<>
       {/* Coupon codes */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎟 Coupon Codes</div>
@@ -6482,8 +6832,13 @@ function SettingsPanel({settings,onSave}){
           <input type="checkbox" checked={!!f.showcaseEnabled} onChange={e=>set("showcaseEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable tank showcase</span>
         </label>
+        <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+          <input type="checkbox" checked={f.testimonialsEnabled!==false} onChange={e=>set("testimonialsEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
+          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable customer testimonials</span>
+        </label>
       </div>
 
+      </>)}
       <button className="press" onClick={()=>startSave(f)}
         style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
         💾 Save Settings
@@ -6703,7 +7058,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>♥ Saved Items</div>
         <div style={{fontSize:12.5,color:C.textSub,marginTop:2}}>{saved.length} item{saved.length!==1?"s":""} saved for later</div>
       </div>
-      <div style={{padding:"16px 16px 100px"}}>
+      <div className="dt-read" style={{padding:"16px 16px 100px"}}>
         {saved.length===0?(
           <div style={{textAlign:"center",padding:"60px 20px",color:C.textSub}}>
             <div style={{fontSize:60,marginBottom:14}}>🤍</div>
@@ -6748,7 +7103,7 @@ function AboutPage({nav,settings={}}){
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>About Us</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>Who we are, how we deliver, and our promises to you.</div>
       </div>
-      <div style={{padding:"18px 16px 100px"}}>
+      <div className="dt-read" style={{padding:"18px 16px 100px"}}>
         <Section icon="🐠" title={`Our Story`} body={s.aboutStory} accent="#ffe9d6"/>
         <Section icon="🚚" title="Delivery Areas" body={s.deliveryAreas} accent="#d4f4f5"/>
         {/* Policies — each opens its own focused page */}
@@ -6820,7 +7175,7 @@ function PolicyPage({nav,settings={},which}){
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>{meta.icon} {meta.title}</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>{meta.sub}</div>
       </div>
-      <div style={{padding:"18px 16px 100px"}}>
+      <div className="dt-read" style={{padding:"18px 16px 100px"}}>
         <div style={{background:C.card,borderRadius:18,padding:"20px",border:`1px solid ${C.border}`,fontSize:13.5,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{s[meta.key]}</div>
         <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,margin:"22px 4px 10px"}}>More policies</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
@@ -6901,7 +7256,7 @@ function RequestPage({nav,user,onSubmit,myRequests}){
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Request a Product</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:300}}>Can't find what you need? Tell us the fish, plant, or gear you want and we'll try to source it for you.</div>
       </div>
-      <div style={{padding:"20px 16px 100px"}}>
+      <div className="dt-read" style={{padding:"20px 16px 100px"}}>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Product Name *</div>
           <input value={form.product} onChange={e=>f("product",e.target.value)} placeholder="e.g. Galaxy Koi Betta, CO2 regulator…"
@@ -6982,7 +7337,9 @@ function NemoStore(){
   const tapCount   = useRef(0);
   const tapTimer   = useRef(null);
 
-  const saveSettingsHandler=async(s)=>{ setSettings(s); await saveSettings(s); showToast("Settings saved"); };
+  const saveSettingsHandler=async(s)=>{ setSettings(s); RUNTIME_CO_ADMIN=(s&&s.coAdminUid||"").trim(); await saveSettings(s); showToast("Settings saved"); };
+  // Keep the runtime co-admin UID in sync so an entered helper account also unlocks admin (cloud writes still gated by Firebase rules).
+  useEffect(()=>{ RUNTIME_CO_ADMIN=((settings&&settings.coAdminUid)||"").trim(); },[settings.coAdminUid]);
 
   const showToast=(msg,type="success")=>setToast({msg,type});
 
@@ -7556,7 +7913,7 @@ function NemoStore(){
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
         {page==="orders"   &&(user
           ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} settings={settings} favorites={favorites}/>
-          : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("orders");}} onBack={()=>nav("home")}/>)}
+          : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={()=>nav("home")}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={()=>nav("home")}/>}
         {page==="request"  &&<RequestPage nav={nav} user={user} onSubmit={submitRequest}/>}
         {page==="guides"   &&<CareGuidesPage nav={nav} guides={guides} mediaCache={mediaCache}/>}
