@@ -1744,7 +1744,6 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
   .home-hero{padding:38px 48px 34px !important;display:flex !important;flex-direction:column;align-items:flex-start;text-align:left;}
   .home-hero .hero-tagline{font-size:36px !important;text-align:left !important;max-width:600px;margin-bottom:12px !important;}
   .home-hero .hero-sub{font-size:16px !important;text-align:left !important;letter-spacing:.3px;}
-  .home-hero .hero-cta{display:inline-block !important;margin-top:18px !important;}
   /* Desktop: surface the left-slide category sidebar from inside the banner, just above the quote */
   .home-hero .hero-browse{display:inline-flex !important;}
   .home-search{max-width:560px;margin-left:0 !important;margin-right:auto !important;margin-top:-28px !important;}
@@ -3082,15 +3081,12 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           </div>
         </div>
 
-        {/* Browse categories — opens the left-slide category sidebar (shown on desktop, just above the quote). On mobile the top-left hamburger already does this. */}
+        {/* Browse categories — opens the left-slide category sidebar (icon only; shown on desktop, just above the quote). On mobile the top-left hamburger already does this. */}
         <button className="press hero-browse" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
-          style={{display:"none",alignItems:"center",gap:10,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.3)",backdropFilter:"blur(8px)",borderRadius:30,padding:"9px 17px 9px 15px",color:"white",fontFamily:"'Nunito',sans-serif",fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:18}}>
-          <span style={{display:"flex",flexDirection:"column",gap:3.5}}>
-            <span style={{width:16,height:2,background:"white",borderRadius:2}}/>
-            <span style={{width:16,height:2,background:"white",borderRadius:2}}/>
-            <span style={{width:16,height:2,background:"white",borderRadius:2}}/>
-          </span>
-          Browse Categories
+          style={{display:"none",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:4,width:46,height:46,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.3)",backdropFilter:"blur(8px)",borderRadius:13,color:"white",cursor:"pointer",marginBottom:18}}>
+          <span style={{width:18,height:2,background:"white",borderRadius:2}}/>
+          <span style={{width:18,height:2,background:"white",borderRadius:2}}/>
+          <span style={{width:18,height:2,background:"white",borderRadius:2}}/>
         </button>
         {/* Tagline */}
         <div className="hero-tagline" style={{fontFamily:"'Baloo 2',sans-serif",fontSize:27,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:6,textWrap:"balance",textAlign:"center"}}>
@@ -3099,8 +3095,6 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         <div className="hero-sub" style={{fontSize:13,color:"rgba(255,255,255,.78)",marginBottom:0,textAlign:"center"}}>
           Quality Fishes · Plants · Accessories
         </div>
-        <button className="press hero-cta" onClick={()=>nav("shop")}
-          style={{display:"none",marginTop:20,background:"white",color:C.primary,border:"none",borderRadius:14,padding:"13px 30px",fontSize:15,fontWeight:800,fontFamily:"'Nunito',sans-serif",cursor:"pointer",boxShadow:"0 8px 22px rgba(0,0,0,.22)",alignSelf:"flex-start"}}>Shop the collection →</button>
       </div>
 
       {/* Search bar — type inline; Enter or the icon opens Shop with your query */}
