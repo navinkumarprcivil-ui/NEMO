@@ -631,6 +631,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   loyaltyRedeemValue: 1,        // ₹ value per point
   walletMaxCoins: 100,          // max wallet coins redeemable per order
   walletMinOrder: 500,          // min order subtotal (₹) to redeem wallet coins
+  walletValidityMonths: 0,      // coin validity in months after last wallet activity; 0 = never expire. Customer is warned 1 month before.
   maxDiscountPct: 25,           // hard cap: coupon + referral + loyalty together can't exceed this % of cart subtotal
   /* Referral */
   referralEnabled: true,
@@ -829,6 +830,18 @@ async function loadInterestCounts(){
 /* ── Loyalty points ── */
 function loyaltyKey(uid){ return "nemo-lp-"+uid; }
 function loadLoyaltyLocal(uid){ try{ const r=localStorage.getItem(loyaltyKey(uid)); return r?JSON.parse(r):{points:0,history:[]}; }catch{ return {points:0,history:[]}; } }
+/* Coin-validity: coins expire `walletValidityMonths` after the customer's most recent wallet activity.
+   Returns null when validity is off / wallet empty / no activity. Otherwise {expiry, expired, expiringSoon, daysLeft}. */
+function walletExpiryInfo(data,settings){
+  const months=Number((settings&&settings.walletValidityMonths)||0);
+  if(!months||!data||!(Number(data.points)>0)) return null;
+  const hist=Array.isArray(data.history)?data.history:[];
+  let base=0; hist.forEach(h=>{ const t=h&&h.date?new Date(h.date).getTime():0; if(t>base) base=t; });
+  if(!base) return null;
+  const expiry=new Date(base); expiry.setMonth(expiry.getMonth()+months);
+  const day=864e5, ms=expiry.getTime()-Date.now();
+  return { expiry, expired:ms<=0, expiringSoon:ms>0&&ms<=30*day, daysLeft:Math.ceil(ms/day) };
+}
 async function loadLoyalty(uid){
   if(FB_OK&&uid){ try{ const s=await withTimeout(FB_DB.ref("loyalty/"+uid).get(),5000); if(s){ const v=s.val(); if(v){ try{localStorage.setItem(loyaltyKey(uid),JSON.stringify(v));}catch(e){} return v; } } }catch(e){} }
   return loadLoyaltyLocal(uid);
@@ -1728,10 +1741,12 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
   .home-hero-logo{display:none !important;}
   .home-hero-chrome{display:none !important;}
   /* Desktop opening banner: tall gradient hero with left-aligned headline + CTA */
-  .home-hero{padding:60px 48px 56px !important;display:flex !important;flex-direction:column;align-items:flex-start;text-align:left;}
-  .home-hero .hero-tagline{font-size:46px !important;text-align:left !important;max-width:600px;margin-bottom:14px !important;}
-  .home-hero .hero-sub{font-size:17px !important;text-align:left !important;letter-spacing:.3px;}
-  .home-hero .hero-cta{display:inline-block !important;}
+  .home-hero{padding:38px 48px 34px !important;display:flex !important;flex-direction:column;align-items:flex-start;text-align:left;}
+  .home-hero .hero-tagline{font-size:36px !important;text-align:left !important;max-width:600px;margin-bottom:12px !important;}
+  .home-hero .hero-sub{font-size:16px !important;text-align:left !important;letter-spacing:.3px;}
+  .home-hero .hero-cta{display:inline-block !important;margin-top:18px !important;}
+  /* Desktop: surface the left-slide category sidebar from inside the banner, just above the quote */
+  .home-hero .hero-browse{display:inline-flex !important;}
   .home-search{max-width:560px;margin-left:0 !important;margin-right:auto !important;margin-top:-28px !important;}
   .home-body{padding-left:40px !important;padding-right:40px !important;}
   .sheet-overlay{align-items:center !important;padding:24px !important;}
@@ -2033,8 +2048,8 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,mode="full"}){
       </React.Fragment>}
       {showUpload&&(
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Replace Your Tank Photo":"Share Your Tank!"}</div>
-          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>{mine?"Upload a new photo — it replaces your current one and goes live again after we approve it.":"One photo per customer · admin-approved · shown 24 hours after approval"}</div>
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Replace Your Tank Photo":"Upload Your Aquarium to be Telecasted"}</div>
+          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>{mine?"Upload a new photo — it replaces your current one and is telecasted again after we approve it.":"One photo per customer · admin-approved · telecasted in our gallery for 24 hours"}</div>
           {preview?(
             <div style={{position:"relative",borderRadius:12,overflow:"hidden",marginBottom:8}}>
               <img src={preview} alt="preview" style={{width:"100%",height:110,objectFit:"cover"}}/>
@@ -3010,6 +3025,8 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
 function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit}){
   const featured=products.slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
+  const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
+  const walletWarn=!!(wexp&&(wexp.expiringSoon||wexp.expired));
   const [recent,setRecent]=useState(()=>loadRecentSearches());
   const related=useMemo(()=>relatedProducts(products,recent,null,6),[products,recent]);
   const recentlyViewed=useMemo(()=>loadRecentlyViewed().map(id=>products.find(p=>p.id===id)).filter(Boolean).slice(0,10),[products]);
@@ -3041,10 +3058,11 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Account chip */}
         <div className="home-hero-chrome" style={{position:"absolute",top:46,right:16,display:"flex",alignItems:"center",gap:8}}>
           {user&&settings.loyaltyEnabled!==false&&(
-            <button className="press" onClick={()=>nav("orders")} title="Your wallet"
-              style={{display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",borderRadius:30,padding:"7px 12px",color:"white",fontFamily:"'Nunito',sans-serif",backdropFilter:"blur(8px)",cursor:"pointer"}}>
+            <button className="press" onClick={()=>nav("orders")} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your wallet"}
+              style={{position:"relative",display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",borderRadius:30,padding:"7px 12px",color:"white",fontFamily:"'Nunito',sans-serif",backdropFilter:"blur(8px)",cursor:"pointer"}}>
               <span style={{fontSize:14,lineHeight:1}}>👛</span>
               <span style={{fontSize:12.5,fontWeight:800,fontFamily:"'Baloo 2',sans-serif"}}>{walletPts}</span>
+              {walletWarn&&<span style={{position:"absolute",top:-5,right:-4,minWidth:16,height:16,padding:"0 3px",borderRadius:9,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid rgba(13,90,94,.9)"}}>⏳</span>}
             </button>
           )}
           <button className="press" onClick={()=>nav("orders")}
@@ -3056,14 +3074,24 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           </button>
         </div>
 
-        {/* Real Nemo logo — secret tap target */}
+        {/* Real Nemo logo — secret tap target. marginTop clears the absolute account/wallet chip on mobile so the logo never overlaps Sign in. */}
         <div onClick={onSecretTap} className="home-hero-logo"
-          style={{display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",WebkitTapHighlightColor:"transparent",marginBottom:16,marginTop:8}}>
-          <div style={{width:"min(264px,74%)",aspectRatio:"600 / 311",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          style={{display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",WebkitTapHighlightColor:"transparent",marginBottom:16,marginTop:46}}>
+          <div style={{width:"min(248px,70%)",aspectRatio:"600 / 311",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:"100%",height:"100%",objectFit:"contain",filter:"drop-shadow(0 6px 14px rgba(0,0,0,.28))"}}/>
           </div>
         </div>
 
+        {/* Browse categories — opens the left-slide category sidebar (shown on desktop, just above the quote). On mobile the top-left hamburger already does this. */}
+        <button className="press hero-browse" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
+          style={{display:"none",alignItems:"center",gap:10,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.3)",backdropFilter:"blur(8px)",borderRadius:30,padding:"9px 17px 9px 15px",color:"white",fontFamily:"'Nunito',sans-serif",fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:18}}>
+          <span style={{display:"flex",flexDirection:"column",gap:3.5}}>
+            <span style={{width:16,height:2,background:"white",borderRadius:2}}/>
+            <span style={{width:16,height:2,background:"white",borderRadius:2}}/>
+            <span style={{width:16,height:2,background:"white",borderRadius:2}}/>
+          </span>
+          Browse Categories
+        </button>
         {/* Tagline */}
         <div className="hero-tagline" style={{fontFamily:"'Baloo 2',sans-serif",fontSize:27,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:6,textWrap:"balance",textAlign:"center"}}>
           Bring Colour to Your Life
@@ -4591,7 +4619,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
 }
 
 /* ═══════════════════ WALLET MODAL (coins + history) ═══════════════════ */
-function WalletModal({open,onClose,points=0,user}){
+function WalletModal({open,onClose,points=0,user,settings={}}){
   if(!open) return null;
   const data=loadLoyaltyLocal(userKey(user));
   const hist=Array.isArray(data&&data.history)?data.history:[];
@@ -4609,6 +4637,19 @@ function WalletModal({open,onClose,points=0,user}){
             <span style={{fontSize:13,opacity:.9}}>coins · ₹1 each</span>
           </div>
         </div>
+        {(()=>{ const ex=walletExpiryInfo(data,settings); if(!ex) return null;
+          const ds=ex.expiry.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
+          return(
+            <div style={{display:"flex",gap:9,alignItems:"flex-start",background:ex.expired?"#fef2f2":"#fff7ed",borderBottom:`1px solid ${C.border}`,padding:"12px 22px"}}>
+              <span style={{fontSize:16,lineHeight:1.2}}>{ex.expired?"⌛":"⏳"}</span>
+              <div style={{fontSize:12,fontWeight:700,color:ex.expired?"#b91c1c":"#9a3412",lineHeight:1.45}}>
+                {ex.expired
+                  ? `These coins lapsed on ${ds} from inactivity. Place an order to start earning again!`
+                  : `Your ${points} coins expire on ${ds}— use them at checkout before they're gone!`}
+              </div>
+            </div>
+          );
+        })()}
         <div style={{maxHeight:"50vh",overflowY:"auto"}}>
           {hist.length===0?(
             <div style={{padding:"30px 22px",textAlign:"center",color:C.textSub,fontSize:12.5,lineHeight:1.6}}>No coin activity yet.<br/>Earn coins on delivered orders &amp; referrals — they'll show here.</div>
@@ -4638,6 +4679,8 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
   const links=[{id:"home",label:"Home"},{id:"shop",label:"Shop"},{id:"guides",label:"Care Guides"},{id:"request",label:"Request"}];
   const active=page==="detail"?"shop":page==="checkout"?"cart":page==="auth"?"orders":page;
   const [walletOpen,setWalletOpen]=useState(false);
+  const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
+  const walletWarn=!!(wexp&&(wexp.expiringSoon||wexp.expired));
   const linkStyle=on=>({background:on?"#eef9fa":"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:on?800:600,color:on?C.primary:C.text,padding:"8px 12px",borderRadius:10,fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap"});
   return(
     <div className="desk-nav" style={{flexShrink:0,alignItems:"center",gap:4,background:C.card,borderBottom:`1px solid ${C.border}`,padding:"10px 22px",position:"sticky",top:0,zIndex:60,boxShadow:"0 2px 12px rgba(11,110,114,.06)"}}>
@@ -4647,7 +4690,6 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
       )}
       <div className="press" onClick={()=>nav("home")} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",cursor:"pointer",marginRight:16,lineHeight:1}}>
         <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{height:34,width:"auto",objectFit:"contain",display:"block"}} onDoubleClick={onSecretTap}/>
-        <span style={{fontSize:9.5,color:C.textSub,fontWeight:800,letterSpacing:1.4,marginTop:3,whiteSpace:"nowrap"}} onClick={e=>{e.stopPropagation();onSecretTap&&onSecretTap();}}>BRING COLOUR TO YOUR LIFE</span>
       </div>
       {links.map(l=>(
         <button key={l.id} className="desk-link" onClick={()=>nav(l.id)} style={linkStyle(active===l.id)}>{l.label}</button>
@@ -4655,9 +4697,10 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
       <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
         <button className="desk-link" onClick={()=>nav("orders")} style={linkStyle(active==="orders")}>📦 Orders</button>
         {user&&settings.loyaltyEnabled!==false&&(
-          <button className="press" onClick={()=>setWalletOpen(true)} title="Your coins & history"
-            style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,color:C.primary,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:800,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+          <button className="press" onClick={()=>setWalletOpen(true)} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your coins & history"}
+            style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,color:C.primary,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:800,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
             <span style={{fontSize:15,lineHeight:1}}>👛</span>{walletPts}
+            {walletWarn&&<span style={{position:"absolute",top:-6,right:-6,minWidth:16,height:16,padding:"0 3px",borderRadius:9,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${C.card}`}}>⏳</span>}
           </button>
         )}
         <button className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
@@ -4669,7 +4712,7 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
           <span style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap"}}>{user?(user.name||"").split(" ")[0]||"Account":"Sign in"}</span>
         </button>
       </div>
-      <WalletModal open={walletOpen} onClose={()=>setWalletOpen(false)} points={walletPts} user={user}/>
+      <WalletModal open={walletOpen} onClose={()=>setWalletOpen(false)} points={walletPts} user={user} settings={settings}/>
     </div>
   );
 }
@@ -6971,6 +7014,14 @@ function SettingsPanel({settings,onSave}){
             <input type="number" min="0" max="100" value={f.maxDiscountPct??25} onChange={e=>set("maxDiscountPct",Number(e.target.value))}
               style={{width:"90px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <span style={{fontSize:11,color:C.textSub,lineHeight:1.4,flex:1}}>Coupon + referral + wallet points combined can never exceed this. <b>0 = no cap</b> (risky). Protects your margin when offers stack.</span>
+          </div>
+        </div>
+        <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Coin validity (months)</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <input type="number" min="0" value={f.walletValidityMonths??0} onChange={e=>set("walletValidityMonths",Number(e.target.value))}
+              style={{width:"90px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+            <span style={{fontSize:11,color:C.textSub,lineHeight:1.4,flex:1}}>Coins expire this many months after a customer's last wallet activity. They get a ⏳ badge over their wallet and a reminder <b>1 month before</b> expiry. <b>0 = coins never expire.</b></span>
           </div>
         </div>
       </div>
