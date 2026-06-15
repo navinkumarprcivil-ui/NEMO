@@ -3057,11 +3057,12 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
 function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit}){
   const featured=products.slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
-  const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
-  const walletWarn=!!(wexp&&(wexp.expiringSoon||wexp.expired));
+  const [walletOpen,setWalletOpen]=useState(false);
   const [recent,setRecent]=useState(()=>loadRecentSearches());
   const related=useMemo(()=>relatedProducts(products,recent,null,6),[products,recent]);
   const recentlyViewed=useMemo(()=>loadRecentlyViewed().map(id=>products.find(p=>p.id===id)).filter(Boolean).slice(0,10),[products]);
+  const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
+  const walletWarn=!!(wexp&&(wexp.expiringSoon||wexp.expired));
   const handleRecent=(r)=>{
     if(r===null){ clearRecentSearches(); setRecent([]); return; }
     setMenuOpen(false); setQuery(r); nav("shop");
@@ -3073,6 +3074,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
       <CategoryDrawer open={menuOpen} onClose={()=>setMenuOpen(false)} recent={recent} nav={nav}
         onSelect={(cat)=>{ setMenuOpen(false); setCategory(cat); nav("shop"); }}
         onRecent={handleRecent}/>
+      <WalletModal open={walletOpen} onClose={()=>setWalletOpen(false)} points={walletPts} user={user} settings={settings}/>
       {/* Hero */}
       <div className="home-hero" style={{background:`linear-gradient(165deg,${C.primaryDark} 0%,${C.primary} 55%,${C.accent} 100%)`,
         padding:"42px 22px 30px",borderRadius:"0 0 32px 32px",position:"relative",overflow:"hidden"}}>
@@ -3090,7 +3092,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Account chip */}
         <div className="home-hero-chrome" style={{position:"absolute",top:46,right:16,display:"flex",alignItems:"center",gap:8}}>
           {user&&settings.loyaltyEnabled!==false&&(
-            <button className="press" onClick={()=>nav("orders")} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your wallet"}
+            <button className="press" onClick={()=>setWalletOpen(true)} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your coins & history"}
               style={{position:"relative",display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",borderRadius:30,padding:"7px 12px",color:"white",fontFamily:"'Nunito',sans-serif",backdropFilter:"blur(8px)",cursor:"pointer"}}>
               <span style={{fontSize:14,lineHeight:1}}>👛</span>
               <span style={{fontSize:12.5,fontWeight:800,fontFamily:"'Baloo 2',sans-serif"}}>{walletPts}</span>
@@ -6394,7 +6396,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                         </div>
                         <div style={{fontSize:12,color:C.textSub,lineHeight:1.4}}>{t.text}</div>
                       </div>
-                      <button className="press" onClick={()=>onDeleteTestimonial&&onDeleteTestimonial(t.id)}
+                      <button className="press" onClick={()=>{ if(window.confirm(`Remove ${t.name||"this customer"}'s testimonial?\n\n"${(t.text||"").slice(0,120)}${(t.text||"").length>120?"…":""}"\n\nThis permanently deletes it from the home page and cannot be undone.`)){ onDeleteTestimonial&&onDeleteTestimonial(t.id); } }}
                         style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
                         Remove
                       </button>
