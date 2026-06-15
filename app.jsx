@@ -1959,7 +1959,7 @@ function LoyaltyWidget({points,settings,onRedeem,redeemApplied,subtotal=0}){
 }
 
 /* ═══════════════════ CUSTOMER TANK SHOWCASE ═══════════════════ */
-function TankShowcaseSection({showcase,user,settings,onSubmit}){
+function TankShowcaseSection({showcase,user,settings,onSubmit,mode="full"}){
   const [preview,setPreview]=useState(null);
   const [ownerName,setOwnerName]=useState(user?.name||"");
   const [caption,setCaption]=useState("");
@@ -1973,11 +1973,15 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
     if(user?.name) setOwnerName(n=>n||user.name);
   },[user?.name]);
   if(!settings.showcaseEnabled)return null;
-  if(!(showcase||[]).some(s=>showcaseApproved(s))&&!user)return null;
   const now=Date.now();
   const liveShowcase=(showcase||[]).filter(s=>showcaseApproved(s)&&!showcaseExpired(s,now));
   const mine=user&&(showcase||[]).find(s=>s.userUid===user.uid&&!showcaseExpired(s,now));
   const minePending=mine&&!showcaseApproved(mine);
+  const showGallery = mode!=="upload";
+  const showUpload  = mode!=="gallery" && !!user;
+  // Nothing to show: gallery with no live photos & no pending submission, or upload with no signed-in user.
+  if(showGallery && !showUpload && liveShowcase.length===0 && !mine) return null;
+  if(!showGallery && !showUpload) return null;
   const handleFile=async file=>{
     if(!file)return;
     setNote("Processing…");
@@ -1994,6 +1998,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
   };
   return(
     <div style={{marginBottom:26}}>
+      {showGallery&&<React.Fragment>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
         <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>🪸 Customer Tanks</span>
         {liveShowcase.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{liveShowcase.length} shared · 24h</span>}
@@ -2025,7 +2030,8 @@ function TankShowcaseSection({showcase,user,settings,onSubmit}){
           ))}
         </div>
       )}
-      {user&&(
+      </React.Fragment>}
+      {showUpload&&(
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
           <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Replace Your Tank Photo":"Share Your Tank!"}</div>
           <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>{mine?"Upload a new photo — it replaces your current one and goes live again after we approve it.":"One photo per customer · admin-approved · shown 24 hours after approval"}</div>
@@ -3102,11 +3108,8 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* First-order welcome coupon */}
         {settingsReady&&<WelcomeBanner settings={settings} orders={orders}/>}
 
-        {/* Customer Tank Showcase — featured near the top of home */}
-        <TankShowcaseSection showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
-
-        {/* Testimonials — any signed-in customer can post */}
-        {settings.testimonialsEnabled!==false&&<TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>}
+        {/* Customer Tank Showcase — photo gallery only, featured near the top of home */}
+        <TankShowcaseSection mode="gallery" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
 
         {/* Categories */}
         {/* Recently viewed — replaces the old category grid */}
@@ -3203,6 +3206,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Can't find it? We'll source it</div>
           </button>
         </div>
+
+        {/* Share your tank (upload form) + Testimonials — moved to the bottom of the home page */}
+        <TankShowcaseSection mode="upload" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
+        {settings.testimonialsEnabled!==false&&<TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>}
 
         {/* ── Site footer (desktop only — on mobile these links live in the side menu) ── */}
         <div className="home-footer" style={{margin:"28px -16px 0",background:C.card,borderTop:`3px solid ${C.primary}`,padding:"26px 18px 22px"}}>
