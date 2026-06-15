@@ -4717,8 +4717,8 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
         <button className="press" onClick={()=>nav("home")} title="Back to home"
           style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 14px",marginRight:12,fontSize:14,fontWeight:800,color:C.primary,cursor:"pointer",fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap"}}>← Home</button>
       )}
-      <div className="press" onClick={()=>nav("home")} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",cursor:"pointer",marginRight:16,lineHeight:1}}>
-        <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{height:34,width:"auto",objectFit:"contain",display:"block"}} onDoubleClick={onSecretTap}/>
+      <div className="press" onClick={onSecretTap} title="Nemo Aqua Store" style={{display:"flex",flexDirection:"column",alignItems:"flex-start",cursor:"pointer",marginRight:16,lineHeight:1}}>
+        <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{height:34,width:"auto",objectFit:"contain",display:"block",pointerEvents:"none"}}/>
       </div>
       {links.map(l=>(
         <button key={l.id} className="desk-link" onClick={()=>nav(l.id)} style={linkStyle(active===l.id)}>{l.label}</button>
@@ -7813,6 +7813,8 @@ function NemoStore(){
       tapCount.current=0;
       nav("admin-login");
     } else {
+      // Normal use: a logo tap just goes home. Only 10 rapid taps (within 2s of each other) opens admin.
+      nav("home");
       tapTimer.current=setTimeout(()=>{tapCount.current=0;},2000);
     }
   };
