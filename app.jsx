@@ -302,6 +302,21 @@ function calcShipping(cart, zone, opts, settings){
   const b = shippingBreakdown(cart, zone, opts, settings);
   return b ? b.total : null;
 }
+/* Live delivery estimate. Admin sets etaDays (+ etaSetAt = the day it was given);
+   we recompute a real target date and a day-by-day countdown on every render so it
+   counts down on its own as the days pass. Returns null when no ETA is set. */
+function etaInfo(o){
+  if(!o||o.etaDays===""||o.etaDays==null) return null;
+  const days=Number(o.etaDays); if(!isFinite(days)) return null;
+  const anchor=o.etaSetAt||o.updatedAt||o.placedAt;
+  const a=anchor?new Date(anchor):new Date();
+  const start=new Date(a.getFullYear(),a.getMonth(),a.getDate());
+  const target=new Date(start.getTime()+days*864e5);
+  const now=new Date(); const t0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const daysLeft=Math.round((target.getTime()-t0.getTime())/864e5);
+  const dateLabel=target.toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"});
+  return {target,daysLeft,dateLabel};
+}
 /* Open a courier's tracking page for an order. If the saved track URL contains a
    {awb}/{tracking}/{number} placeholder it's filled with the consignment number;
    otherwise the number is copied to the clipboard so the customer can paste it. */
@@ -2548,6 +2563,9 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
 function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, settings={}, favorites=[]}){
   const uk = userKey(user);
   const [payOpen,setPayOpen]=useState(null);
+  // Refresh hourly so the live delivery countdown rolls over as the day changes while the app is left open.
+  const [,setDayTick]=useState(0);
+  useEffect(()=>{ const id=setInterval(()=>setDayTick(t=>t+1),3600000); return ()=>clearInterval(id); },[]);
   const myOrders = orders.filter(o =>
     (o.userUid && uk && o.userUid===uk) ||
     (user.uid && o.userUid===user.uid) ||
@@ -2745,7 +2763,22 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 <span style={{fontSize:12,color:C.textSub}}>Grand Total</span>
                 <span style={{fontFamily:PRICE_FONT,fontSize:16,fontWeight:800,color:C.primary}}>₹{o.amountDue??(o.total+o.fee)}</span>
               </div>
-              {o.etaDays!==""&&o.etaDays!=null&&["Confirmed","Shipped"].includes(o.status)&&!o.closed&&<div style={{fontSize:11.5,color:C.primary,fontWeight:700,marginTop:6}}>📦 Estimated delivery: in {o.etaDays} day{Number(o.etaDays)===1?"":"s"}</div>}
+              {["Confirmed","Shipped"].includes(o.status)&&!o.closed&&(()=>{
+                const eta=etaInfo(o); if(!eta) return null;
+                const d=eta.daysLeft;
+                const headline = d>1 ? `Arriving in ${d} days` : d===1 ? "Arriving tomorrow" : d===0 ? "Arriving today" : "Arriving very soon";
+                const sub = d<0 ? `Expected by ${eta.dateLabel} \u2014 should reach you any moment now` : `Expected by ${eta.dateLabel}`;
+                const urgent = d<=1;
+                return(
+                  <div style={{marginTop:10,display:"flex",alignItems:"center",gap:11,background:urgent?"#fff7ed":C.accentLight,border:`1.5px solid ${urgent?"#fdba74":C.accent}`,borderRadius:14,padding:"11px 13px"}}>
+                    <span style={{fontSize:22,lineHeight:1}}>🚚</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:800,color:urgent?"#9a3412":C.primaryDark,fontFamily:"'Baloo 2',sans-serif",lineHeight:1.15}}>{headline}</div>
+                      <div style={{fontSize:11.5,color:urgent?"#9a3412":C.textSub,fontWeight:600,marginTop:2}}>{sub}{o.status==="Shipped"?" \u00b7 on the way":""}</div>
+                    </div>
+                  </div>
+                );
+              })()}
               {o.trackingNumber&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>Consignment: <b style={{color:C.text}}>{o.trackingNumber}</b>{o.courierName?<> · {o.courierName}</>:null}</div>}
               {(o.status==="Shipped"||o.status==="Delivered")&&o.courierTrackUrl&&(
                 <button className="press" onClick={()=>trackParcel(o)}
@@ -2898,8 +2931,8 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
         {soon&&<div style={{position:"absolute",inset:0,background:"rgba(8,54,64,.55)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"white",fontSize:12,fontWeight:800,letterSpacing:1,background:"rgba(0,0,0,.3)",padding:"4px 12px",borderRadius:20}}>COMING SOON</span></div>}
         {!soon&&oos&&<div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"white",fontSize:12,fontWeight:700}}>Sold Out</span></div>}
       </div>
-      <div style={{padding:"14px 12px 12px"}}>
-        <div style={{fontSize:9,color:C.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:3}}>{p.category}</div>
+      <div style={{padding:"18px 12px 12px"}}>
+        <div style={{fontSize:9,color:C.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>{p.category}</div>
         <div style={{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.35,marginBottom:6,minHeight:34}}>{p.name}</div>
         {soon ? (
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
@@ -3230,7 +3263,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         </div>
 
         {/* Share your tank (upload form) + Testimonials — moved to the bottom of the home page */}
-        <TankShowcaseSection mode="upload" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
+        <div style={{marginTop:28}}>
+          <TankShowcaseSection mode="upload" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
+        </div>
         {settings.testimonialsEnabled!==false&&<TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>}
 
         {/* ── Site footer (desktop only — on mobile these links live in the side menu) ── */}
@@ -5262,7 +5297,10 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const handleUpdate=async()=>{
     if(o.closed){ showToast("Order is closed — reopen it to change status"); return; }
     setSaving(true);
-    const updated={...o,status,trackingNumber:tracking,etaDays:etaDays===""?"":Math.max(0,Number(etaDays)||0),courierId,courierName:selCourier?.name||"",courierTrackUrl:selCourier?.trackUrl||"",updatedAt:new Date().toISOString()};
+    const etaNum=etaDays===""?"":Math.max(0,Number(etaDays)||0);
+    // Anchor the countdown to the day the ETA is given; preserve it when etaDays is unchanged so re-saving other fields doesn't reset the clock.
+    const etaSetAt=etaNum===""?"":((o.etaDays===etaNum&&o.etaSetAt)?o.etaSetAt:new Date().toISOString());
+    const updated={...o,status,trackingNumber:tracking,etaDays:etaNum,etaSetAt,courierId,courierName:selCourier?.name||"",courierTrackUrl:selCourier?.trackUrl||"",updatedAt:new Date().toISOString()};
     await onUpdateOrder(updated);
     showToast("Order updated!");
     setSaving(false);
@@ -5391,7 +5429,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Estimated Delivery (days)</div>
               <input type="number" min="0" value={etaDays} onChange={e=>setEtaDays(e.target.value)} placeholder="e.g. 3"
                 style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
-              <div style={{fontSize:10.5,color:C.textSub,marginTop:5}}>Shows on the customer's order as “Estimated delivery: in X day(s)”. Leave blank to hide.</div>
+              <div style={{fontSize:10.5,color:C.textSub,marginTop:5}}>Sets a delivery date {etaDays!==""?`(≈ ${new Date(Date.now()+Math.max(0,Number(etaDays)||0)*864e5).toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"})})`:""} from today. The customer sees a highlighted “Arriving in X days” tracker that counts down on its own each day. Leave blank to hide.</div>
             </div>
           )}
           {o.closed ? (
