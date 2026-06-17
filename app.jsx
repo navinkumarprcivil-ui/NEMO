@@ -184,6 +184,24 @@ function liveGuaranteeMinPrice(settings){
   if(!vals.length) return Number(settings.liveGuaranteePrice||150);
   return Math.min(...vals);
 }
+/* ⚡ Speed-courier add-on resolved by destination zone: Tamil Nadu / South India / Central & North.
+   CentralIndia + NorthIndia + unknown share the "CentralNorth" rate. Falls back to the flat price. */
+function speedCourierZoneKey(zone){
+  if(zone==="TN") return "TN";
+  if(zone==="SouthIndia") return "SouthIndia";
+  return "CentralNorth"; // CentralIndia + NorthIndia + unknown
+}
+function speedCourierZoneLabel(zone){
+  const k=speedCourierZoneKey(zone);
+  return k==="TN"?"Tamil Nadu":k==="SouthIndia"?"South India":"Central & North India";
+}
+function speedCourierForZone(zone, settings){
+  const flat=Number(settings.specialDeliveryPrice||0);
+  const r=settings.speedCourierRates;
+  if(!r) return flat;
+  const v=r[speedCourierZoneKey(zone)];
+  return (v===0||v) ? Number(v) : flat;
+}
 /* Live fish uses the same 5-tier weight brackets as dry goods so rates are directly comparable */
 function getLiveFishWeightBracket(kg){
   if(kg<=0.5)return "Up to 500g";
@@ -215,11 +233,14 @@ const PACKING_BY_KEY = PACKING_OPTIONS.reduce((m,o)=>{m[o.key]=o;return m;},{});
 function packingOpt(key){ return PACKING_BY_KEY[key] || PACKING_BY_KEY.carton_special; }
 function packingLabel(key){ return packingOpt(key).label; }
 /* Recommended packing for a cart = the safest (highest-rank) per-product suggestion among its live fish. */
-function suggestedPackingForCart(cart){
+function suggestedPackingForCart(cart, zone){
+  // Admin sets a recommended packing per location on each live product: Inside TN vs Others (outside TN).
+  const inTN = zone==="TN";
   let best=null;
   (cart||[]).forEach(i=>{
     if(i.category!=="Live Fish") return;
-    const o=PACKING_BY_KEY[i.suggestedPacking||"carton_special"];
+    const byLoc = inTN ? i.suggestedPackingTN : i.suggestedPackingOther;
+    const o=PACKING_BY_KEY[byLoc||i.suggestedPacking||"carton_special"];
     if(o && (!best || o.rank>best.rank)) best=o;
   });
   return best ? best.key : "carton_special";
@@ -294,7 +315,7 @@ function shippingBreakdown(cart, zone, opts, settings){
     const bracket = getWeightBracket(wt);
     courier += (r.dryGoods?.[bracket]?.[zone]||0);
   }
-  if(wantSpecial) special += Number(settings.specialDeliveryPrice||0);
+  if(wantSpecial) special += speedCourierForZone(zone, settings);
   if(freeShip){ courier = 0; thermacol = 0; carton = 0; }
   return { courier, thermacol, carton, special, total: courier+thermacol+carton+special, freeShip };
 }
@@ -610,6 +631,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   shippingRates: null,
   specialDeliveryPrice: 200,
+  speedCourierRates: { TN:200, SouthIndia:300, CentralNorth:400 }, // ⚡ speed-courier add-on per zone; admin edits in Settings
   cartonPackingCharge: 0,         // flat carton-packing charge for live-fish parcels (₹). 0 = no charge; raise it in Settings later
   coAdminUid: "",                 // optional co-admin Google UID (also add it to database.rules.json + the Firebase console)
   couriers: [],                  // [{id,name,trackUrl}] — courier partners + their tracking-page links
@@ -669,6 +691,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   emailConfirmed: false,  // payment confirmed (WhatsApp instead)
   emailShipped: true,     // shipped + tracking
   emailDelivered: false,  // delivered (WhatsApp instead)
+  adminOrderEmail: false, // email a copy of each new order to the admin (off by default; opt in below)
 };
 async function loadSettings(){
   if(FB_OK){ const o=await fbGetObj("settings"); if(o) return normalizeSettings({...DEFAULT_SETTINGS,...o}); }
@@ -1296,6 +1319,8 @@ function sendCustomerEmail(order, settings, event){
 /* Email an order copy to the OWNER via EmailJS (reuses the customer template). Fire-and-forget. */
 function sendOrderEmail(order, email, settings){
   const s=settings||{};
+  // Admin order-received / payment-verification copy is OFF unless the admin opts in (Settings → Emails).
+  if(s.adminOrderEmail!==true) return;
   const ej=ejKeys(s);
   if(!email || !ej.service || !ej.template || !ej.key) return;
   if(typeof emailjs==="undefined") return;
@@ -1704,7 +1729,7 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     const grand=o.amountDue??(o.total+o.fee);
     const loyaltyUsed=Number(o.loyaltyDiscount||0);
     const ptsRedeemed=loyaltyUsed>0?Math.round(loyaltyUsed/(rupeePerPoint||1)):0;
-    const ptsEarned=settings?.loyaltyEnabled?Math.floor((grand/100)*pph):0;
+    const ptsEarned=settings?.loyaltyEnabled?Math.floor(((Number(o.total)||0)/100)*pph):0; // product value only (excludes shipping)
     const wBal=walletBalances[o.userUid]!=null?walletBalances[o.userUid]:"";
     const bd=o.shippingBreakup||{courier:Math.max(0,(o.fee||0)-(o.thermacolFee||0)-(o.specialDeliveryFee||0)),thermacol:o.thermacolFee||0,carton:0,special:o.specialDeliveryFee||0};
     return [orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||""].map(esc).join(",");
@@ -4108,8 +4133,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     return ()=>{alive=false;};
   },[placed,user,settings.referralMinOrder]);
   const [specialDelivery,setSpecialDelivery]=useState(false);
-  const suggestedPacking=suggestedPackingForCart(cart);
-  const [packing,setPacking]=useState(()=>suggestedPackingForCart(cart));
+  const packingZone=pincodeToZone(addr.pincode);
+  const suggestedPacking=suggestedPackingForCart(cart,packingZone);
+  const [packing,setPacking]=useState(()=>suggestedPackingForCart(cart,pincodeToZone(addr.pincode)));
   const selPack=packingOpt(packing);
   const [placing,setPlacing]=useState(false);
   const [placeErr,setPlaceErr]=useState("");
@@ -4236,7 +4262,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       summary:addr.summary||"",
       total,fee,shippingZone:zone||"",shippingZoneLabel:zone?ZONE_LABELS[zone]:"Unknown",
       specialDelivery: hasLiveFish ? (selPack.courier==="special") : specialDelivery,
-      specialDeliveryFee: (hasLiveFish?(selPack.courier==="special"):specialDelivery) ? Number(settings.specialDeliveryPrice||0):0,
+      specialDeliveryFee: (hasLiveFish?(selPack.courier==="special"):specialDelivery) ? speedCourierForZone(zone, settings):0,
       packing: hasLiveFish?packing:"", packingLabel: hasLiveFish?packingLabel(packing):"",
       suggestedPacking: hasLiveFish?suggestedPacking:"", suggestedPackingLabel: hasLiveFish?packingLabel(suggestedPacking):"",
       liveGuarantee:guaranteeActive,liveGuaranteeFee:0,
@@ -4334,7 +4360,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           {/* Loyalty points earned */}
           {settings.loyaltyEnabled&&placed&&(()=>{
             const pph=Number(settings.loyaltyPointsPerHundred||10);
-            const pts=Math.floor(((placed.amountDue??(placed.total+placed.fee))/100)*pph);
+            const pts=Math.floor(((Number(placed.total)||0)/100)*pph); // product value only (excludes shipping)
             return pts>0?(
               <div className="points-pop" style={{background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:16,padding:"12px 20px",marginBottom:14,display:"flex",alignItems:"center",gap:10,width:"100%",maxWidth:340}}>
                 <span style={{fontSize:26}}>👛</span>
@@ -4512,7 +4538,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               <input type="checkbox" checked={specialDelivery} onChange={e=>setSpecialDelivery(e.target.checked)} style={{width:20,height:20,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
               <div>
                 <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ Speed Delivery</div>
-                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{settings.specialDeliveryPrice||200}</b> to shipping.</div>
+                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{zone?speedCourierForZone(zone,settings):(settings.specialDeliveryPrice||200)}</b> to shipping.</div>
               </div>
             </label>
           ) : null}
@@ -4971,6 +4997,8 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     packagingWeight:product?.packagingWeight||"",
     suggestSpecialDelivery:!!product?.suggestSpecialDelivery,
     suggestedPacking:product?.suggestedPacking||"carton_special",
+    suggestedPackingTN:product?.suggestedPackingTN||product?.suggestedPacking||"carton_special",
+    suggestedPackingOther:product?.suggestedPackingOther||product?.suggestedPacking||"thermacol_special",
   });
   // Gallery: images [{key,src,b64?}], one video {key,src,b64?,tooLarge?}
   const initImgs=(product?._mediaImgs||[]).map((src,i)=>({key:(product.media?.filter(m=>m.type!=="video")[i]?.key)||uid("mi"),src,existing:true}));
@@ -5042,6 +5070,8 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
       packagingWeight:Number(form.packagingWeight)||0,
       suggestSpecialDelivery:!!form.suggestSpecialDelivery,
       suggestedPacking:form.suggestedPacking||"carton_special",
+      suggestedPackingTN:form.suggestedPackingTN||"carton_special",
+      suggestedPackingOther:form.suggestedPackingOther||"thermacol_special",
       media,
       rating:product?.rating||0,reviews:product?.reviews||0,
       variants: form.category==="Live Fish"
@@ -5182,12 +5212,24 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
         {form.category==="Live Fish" ? (
           /* Live fish weight is set per-variant (type-wise) above. Admin recommends a packing here. */
           <div style={{marginBottom:16}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5,textTransform:"uppercase"}}>recommended packing for this fish</div>
-            <select value={form.suggestedPacking||"carton_special"} onChange={e=>f("suggestedPacking",e.target.value)}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif"}}>
-              {PACKING_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
-            </select>
-            <div style={{fontSize:10,color:C.textSub,marginTop:5,lineHeight:1.5}}>Shown as <b>“Recommended”</b> at checkout. For costly / delicate fish choose a <b>Thermacol</b> option (premium packing). The <b>Live Arrival Guarantee</b> applies only when the customer picks this packing or a safer one. Thermacol adds a weight-based charge (set in Settings).</div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5,textTransform:"uppercase"}}>recommended packing by location</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div>
+                <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>📍 Inside Tamil Nadu</div>
+                <select value={form.suggestedPackingTN||"carton_special"} onChange={e=>f("suggestedPackingTN",e.target.value)}
+                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif"}}>
+                  {PACKING_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>🚚 Outside TN (Others)</div>
+                <select value={form.suggestedPackingOther||"thermacol_special"} onChange={e=>f("suggestedPackingOther",e.target.value)}
+                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif"}}>
+                  {PACKING_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{fontSize:10,color:C.textSub,marginTop:5,lineHeight:1.5}}>The matching option is shown as <b>“Recommended”</b> at checkout based on the customer's pincode. For distant zones pick a <b>Thermacol</b> (insulated) option to keep the <b>Live Arrival Guarantee</b>. Thermacol adds a weight-based charge (set in Settings).</div>
           </div>
         ) : (
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
@@ -6782,6 +6824,15 @@ function SettingsPanel({settings,onSave}){
             </label>
           ))}
         </div>
+        {/* Admin copy of each new order — OFF by default (opt in to receive the "order received" mail yourself) */}
+        <div style={{borderTop:`1px solid ${C.border}`,marginTop:14,paddingTop:12}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:4}}>Send a copy to admin</div>
+          <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Order-received / payment-verification emails to your own inbox are turned off. Tick this to opt in and receive a copy of every new order at your Notification Email above.</div>
+          <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",userSelect:"none"}}>
+            <input type="checkbox" checked={f.adminOrderEmail===true} onChange={e=>set("adminOrderEmail",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
+            <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>📥 Email me each new order</span><br/><span style={{fontSize:11,color:C.textSub}}>Sends the order-received copy to admin</span></span>
+          </label>
+        </div>
       </div>
 
       {/* Visitor analytics */}
@@ -7043,7 +7094,20 @@ function SettingsPanel({settings,onSave}){
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>Speed Delivery add-on (₹)</div>
             <input type="number" min="0" value={f.specialDeliveryPrice||200} onChange={e=>set("specialDeliveryPrice",Number(e.target.value))}
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Extra charge for fast/safe courier. Shown at checkout.</div>
+            <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Fallback charge. Used only if a zone amount below is blank.</div>
+            <div style={{fontSize:11.5,fontWeight:700,color:C.text,marginTop:10,marginBottom:6}}>⚡ Speed-courier charge by zone (₹)</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+              {[["TN","Tamil Nadu"],["SouthIndia","South India"],["CentralNorth","Central & North"]].map(([zk,zl])=>(
+                <div key={zk}>
+                  <div style={{fontSize:10,color:C.textSub,marginBottom:3,fontWeight:700}}>{zl}</div>
+                  <input type="number" min="0"
+                    value={(f.speedCourierRates&&f.speedCourierRates[zk]!=null)?f.speedCourierRates[zk]:""}
+                    onChange={e=>set("speedCourierRates",{...(f.speedCourierRates||{}),[zk]:e.target.value===""?"":Number(e.target.value)})}
+                    style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:10,color:C.textSub,marginTop:4}}>Applied at checkout from the customer's pincode zone.</div>
           </div>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>🚚 Free Delivery above (₹)</div>
@@ -8167,7 +8231,8 @@ function NemoStore(){
     if(updated.status==="Delivered" && prevStatus!=="Delivered"){
       // (a) buyer earns loyalty points on the amount actually paid
       if(settings.loyaltyEnabled!==false && updated.userUid && !updated.pointsEarned){
-        const amt=updated.amountDue??(updated.total+updated.fee);
+        // Reward coins apply to PRODUCT VALUE (subtotal) only — never shipping / parcel / packing cost.
+        const amt=Number(updated.total)||0;
         const pts=Math.floor((Number(amt)||0)/100*pph);
         if(pts>0){ adminCreditLoyalty(updated.userUid, pts, "earn:"+updated.id, "Order "+(updated.orderNo||updated.id), settings.walletValidityMonths); updated={...updated,pointsEarned:pts}; }
       }
@@ -8307,6 +8372,13 @@ function NemoStore(){
   const cartTotal=useMemo(()=>cart.reduce((s,i)=>s+i.price*i.qty,0),[cart]);
   const cartMap=useMemo(()=>{ const m={}; cart.forEach(i=>{m[i.id]=(m[i.id]||0)+i.qty;}); return m; },[cart]);
   const isAdminPage=["admin-login","admin"].includes(page);
+  // When in admin mode, a page refresh/close prompts for confirmation so you don't exit admin by accident.
+  useEffect(()=>{
+    if(page!=="admin") return;
+    const warn=e=>{ e.preventDefault(); e.returnValue=""; return ""; };
+    window.addEventListener("beforeunload",warn);
+    return ()=>window.removeEventListener("beforeunload",warn);
+  },[page]);
   // Load all orders when entering admin; load the user's own orders when they sign in
   // ADMIN: live listener on ALL orders (reflects new orders + customer payments instantly)
   useEffect(()=>{
