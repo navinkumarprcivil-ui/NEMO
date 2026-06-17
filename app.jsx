@@ -660,6 +660,10 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   showcaseEnabled: true,
   /* Customer testimonials on the home page */
   testimonialsEnabled: true,
+  /* Editable marketing copy (admin can change these from Settings; blank = use the built-in default) */
+  heroHeadline: "Bring Colour to Your Life",
+  heroSub: "Quality Fishes · Plants · Accessories",
+  tagline: "Hand-picked healthy fish, live plants & quality accessories — delivered with care across India.",
   /* Which customer emails to auto-send (saves EmailJS quota — rest you can do on WhatsApp) */
   emailPlaced: true,      // order received + bill
   emailConfirmed: false,  // payment confirmed (WhatsApp instead)
@@ -736,7 +740,7 @@ async function creditReferralOnDelivery(code, settings, deliveredOrderId){
     if(!r || r.delivered===true) return; // already credited
     await FB_DB.ref("referrals/"+c).update({delivered:true, rewardCoins:coins, deliveredOrderId:deliveredOrderId||"", deliveredAt:Date.now()});
     // Credit the referrer's wallet DIRECTLY (admin context — rules allow admin to write any loyalty node).
-    if(coins>0 && r.owner) await adminCreditLoyalty(r.owner, coins, "ref:"+c+":"+(deliveredOrderId||"d"), "Referral reward");
+    if(coins>0 && r.owner) await adminCreditLoyalty(r.owner, coins, "ref:"+c+":"+(deliveredOrderId||"d"), "Referral reward", settings&&settings.walletValidityMonths);
   }catch(e){}
 }
 /* Cancel/return reversal: undo a referrer's credit (if it was paid out) and free the code for reuse. */
@@ -754,16 +758,21 @@ async function reverseReferralOnCancel(code){
   }catch(e){}
 }
 /* Admin-only: directly credit (or, with a negative value, deduct) a customer's loyalty wallet.
-   Runs in the admin context where rules permit writing any user's loyalty node. Idempotent per entryId. */
-async function adminCreditLoyalty(uid, pts, entryId, note){
+   Runs in the admin context where rules permit writing any user's loyalty node. Idempotent per entryId.
+   `validityMonths` (for credits) freezes this batch's expiry at earn time — pass settings.walletValidityMonths. */
+async function adminCreditLoyalty(uid, pts, entryId, note, validityMonths){
   if(!FB_OK || !uid || !pts) return;
   try{
     await FB_DB.ref("loyalty/"+uid).transaction(cur=>{
-      cur = cur || {points:0, history:[]};
-      const hist = Array.isArray(cur.history)?cur.history:[];
+      const d = ensureLots(cur || {points:0, history:[]});
+      const hist = Array.isArray(d.history)?d.history:[];
       if(entryId && hist.some(h=>h&&h.id===entryId)) return; // already applied → abort
+      let lots = Array.isArray(d.lots)?[...d.lots]:[];
+      if(pts>=0) lots.push({id:entryId||("adm-"+Date.now()), pts, exp:computeLotExp(validityMonths, Date.now())});
+      else lots = consumeLots(lots, -pts);
+      const points = lots.reduce((s,l)=>s+(Number(l.pts)||0),0);
       const entry={id:entryId||("adm-"+Date.now()), pts, type: pts>=0?"credit":"reverse", note:note||"", date:new Date().toISOString()};
-      return {points: Math.max(0,(cur.points||0)+pts), history:[entry, ...hist].slice(0,80)};
+      return {points, lots, history:[entry, ...hist].slice(0,80)};
     });
   }catch(e){}
 }
@@ -845,17 +854,60 @@ async function loadInterestCounts(){
 /* ── Loyalty points ── */
 function loyaltyKey(uid){ return "nemo-lp-"+uid; }
 function loadLoyaltyLocal(uid){ try{ const r=localStorage.getItem(loyaltyKey(uid)); return r?JSON.parse(r):{points:0,history:[]}; }catch{ return {points:0,history:[]}; } }
-/* Coin-validity: coins expire `walletValidityMonths` after the customer's most recent wallet activity.
-   Returns null when validity is off / wallet empty / no activity. Otherwise {expiry, expired, expiringSoon, daysLeft}. */
+
+/* ── Coin expiry (per-batch / "lots") ────────────────────────────────────────
+   Each batch of earned coins is a LOT: {id, pts, exp}. `exp` is an absolute ms
+   timestamp captured WHEN THE COINS WERE EARNED (date + the validity months in
+   force at that moment), or 0 = never expires. Because exp is frozen per lot,
+   changing walletValidityMonths later only affects coins earned AFTER the change
+   — existing coins keep the expiry they were given. Coins are spent soonest-
+   expiring-first, and expired lots are removed automatically (see the wallet
+   listener + pruneExpiredLots). */
+function computeLotExp(months, fromMs){
+  const m=Number(months||0); if(m<=0) return 0;
+  const d=new Date(fromMs||Date.now()); d.setMonth(d.getMonth()+m); return d.getTime();
+}
+/* Guarantee a lots[] array. A legacy balance (saved before lots existed) becomes one
+   never-expiring lot, so a newly-introduced expiry policy never retro-expires old coins. */
+function ensureLots(data){
+  const d = (data&&typeof data==="object") ? {...data} : {points:0,history:[]};
+  if(!Array.isArray(d.lots)){ const p=Number(d.points)||0; d.lots = p>0 ? [{id:"legacy",pts:p,exp:0}] : []; }
+  return d;
+}
+/* Spend `pts`, draining soonest-expiring lots first. Returns the remaining lots. */
+function consumeLots(lots, pts){
+  let rem=Number(pts)||0;
+  const sorted=[...(lots||[])].sort((a,b)=>((Number(a.exp)||Infinity)-(Number(b.exp)||Infinity)));
+  const out=[];
+  for(const lot of sorted){
+    const p=Number(lot.pts)||0; if(p<=0) continue;
+    if(rem<=0){ out.push(lot); continue; }
+    if(p<=rem){ rem-=p; } else { out.push({...lot,pts:p-rem}); rem=0; }
+  }
+  return out;
+}
+/* Drop expired lots, recompute the balance, log the expiry. Returns {data, expiredPts}. */
+function pruneExpiredLots(data, nowMs){
+  const d=ensureLots(data); const now=nowMs||Date.now();
+  let expired=0; const live=[];
+  for(const lot of d.lots){ const p=Number(lot&&lot.pts)||0; if(p<=0) continue;
+    const e=Number(lot&&lot.exp)||0;
+    if(e>0 && now>e) expired+=p; else live.push({...lot,pts:p});
+  }
+  const points=live.reduce((s,l)=>s+l.pts,0);
+  let history=Array.isArray(d.history)?d.history:[];
+  if(expired>0) history=[{id:"exp-"+now,pts:-expired,type:"expire",note:"Coins expired",date:new Date(now).toISOString()},...history].slice(0,80);
+  return { data:{...d,points,lots:live,history}, expiredPts:expired };
+}
+/* Reports the soonest-expiring batch for the customer warning, or null if nothing expires. */
 function walletExpiryInfo(data,settings){
-  const months=Number((settings&&settings.walletValidityMonths)||0);
-  if(!months||!data||!(Number(data.points)>0)) return null;
-  const hist=Array.isArray(data.history)?data.history:[];
-  let base=0; hist.forEach(h=>{ const t=h&&h.date?new Date(h.date).getTime():0; if(t>base) base=t; });
-  if(!base) return null;
-  const expiry=new Date(base); expiry.setMonth(expiry.getMonth()+months);
-  const day=864e5, ms=expiry.getTime()-Date.now();
-  return { expiry, expired:ms<=0, expiringSoon:ms>0&&ms<=30*day, daysLeft:Math.ceil(ms/day) };
+  const d=ensureLots(data||{});
+  const lots=(Array.isArray(d.lots)?d.lots:[]).filter(l=>Number(l.pts)>0&&Number(l.exp)>0);
+  if(!lots.length) return null;
+  let soon=lots[0]; for(const l of lots){ if(Number(l.exp)<Number(soon.exp)) soon=l; }
+  const day=864e5, ms=Number(soon.exp)-Date.now();
+  const pts=lots.filter(l=>Number(l.exp)===Number(soon.exp)).reduce((s,l)=>s+Number(l.pts),0);
+  return { expiry:new Date(Number(soon.exp)), expired:ms<=0, expiringSoon:ms>0&&ms<=30*day, daysLeft:Math.ceil(ms/day), pts };
 }
 async function loadLoyalty(uid){
   if(FB_OK&&uid){ try{ const s=await withTimeout(FB_DB.ref("loyalty/"+uid).get(),5000); if(s){ const v=s.val(); if(v){ try{localStorage.setItem(loyaltyKey(uid),JSON.stringify(v));}catch(e){} return v; } } }catch(e){} }
@@ -882,8 +934,10 @@ async function promoLimitReached(type, limit){
 }
 function redeemPoints(uid, pts, redemptionId){
   if(!uid||pts<=0)return;
-  const cur=loadLoyaltyLocal(uid);
-  const next={points:Math.max(0,(cur.points||0)-pts),history:[{id:redemptionId,pts:-pts,type:"redeem",date:new Date().toISOString()},...(cur.history||[]).slice(0,49)]};
+  const cur=ensureLots(loadLoyaltyLocal(uid));
+  const lots=consumeLots(cur.lots, pts);
+  const points=lots.reduce((s,l)=>s+(Number(l.pts)||0),0);
+  const next={...cur, points, lots, history:[{id:redemptionId,pts:-pts,type:"redeem",date:new Date().toISOString()},...(cur.history||[]).slice(0,49)]};
   saveLoyalty(uid,next).catch(()=>{});
 }
 
@@ -937,8 +991,13 @@ async function addTestimonial(t){
   try{ const r=await dbGet("nemo-testimonials"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-testimonials",JSON.stringify([t,...arr].slice(0,60))); }catch(e){}
 }
 async function deleteTestimonial(id){
-  if(FB_OK){ try{ await FB_DB.ref("testimonials/"+id).remove(); }catch(e){} }
+  let cloudOk=true;
+  if(FB_OK){
+    try{ await FB_DB.ref("testimonials/"+id).remove(); }
+    catch(e){ cloudOk=false; }
+  }
   try{ const r=await dbGet("nemo-testimonials"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-testimonials",JSON.stringify(arr.filter(x=>x.id!==id))); }catch(e){}
+  return cloudOk;
 }
 
 /* ── Visitor analytics (built-in, free — counts unique sessions in Firebase) ── */
@@ -3040,7 +3099,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
                 <button key={l.label} className="press" onClick={()=>go(l.to)}
                   style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>{l.label}</button>
               ))}
-              <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",margin:"10px 0 4px"}}>Policies</div>
+              <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",margin:"20px 0 4px",borderTop:`1px solid ${C.border}`,paddingTop:16}}>Policies</div>
               {POLICIES.map(l=>(
                 <button key={l.label} className="press" onClick={()=>go(l.to)}
                   style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>{l.label}</button>
@@ -3125,10 +3184,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         </button>
         {/* Tagline */}
         <div className="hero-tagline" style={{fontFamily:"'Baloo 2',sans-serif",fontSize:27,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:6,textWrap:"balance",textAlign:"center"}}>
-          Bring Colour to Your Life
+          {settings.heroHeadline||"Bring Colour to Your Life"}
         </div>
         <div className="hero-sub" style={{fontSize:13,color:"rgba(255,255,255,.78)",marginBottom:0,textAlign:"center"}}>
-          Quality Fishes · Plants · Accessories
+          {settings.heroSub||"Quality Fishes · Plants · Accessories"}
         </div>
       </div>
 
@@ -3140,6 +3199,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             value={query} onChange={e=>setQuery(e.target.value)}
             onKeyDown={e=>{if(e.key==="Enter")nav("shop");}}
             style={{border:"none",background:"transparent",outline:"none",flex:1,fontSize:14}}/>
+          {query&&(
+            <button onClick={()=>setQuery("")} className="press" aria-label="Clear search"
+              style={{flexShrink:0,background:"none",border:"none",color:C.textSub,fontSize:18,lineHeight:1,cursor:"pointer",padding:"0 2px"}}>✕</button>
+          )}
           {query&&(
             <button onClick={()=>nav("shop")} className="press"
               style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 13px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Go</button>
@@ -3154,6 +3217,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                 {r}
               </button>
             ))}
+            <button className="press" onClick={()=>handleRecent(null)} title="Clear your recent searches"
+              style={{flexShrink:0,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.3)",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,color:"white",fontFamily:"'Nunito',sans-serif",cursor:"pointer",whiteSpace:"nowrap"}}>
+              ✕ Clear
+            </button>
           </div>
         )}
       </div>
@@ -3275,7 +3342,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           {/* Brand + tagline */}
           <div style={{marginBottom:22}}>
             <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>{STORE_NAME} Aqua Store</div>
-            <div style={{fontSize:12,color:C.textSub,marginTop:3,lineHeight:1.5,maxWidth:300}}>Hand-picked healthy fish, live plants &amp; quality accessories — delivered with care across India.</div>
+            <div style={{fontSize:12,color:C.textSub,marginTop:3,lineHeight:1.5,maxWidth:300}}>{settings.tagline||"Hand-picked healthy fish, live plants & quality accessories — delivered with care across India."}</div>
           </div>
 
           {/* Link columns */}
@@ -5337,7 +5404,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
     // Credit the customer's wallet directly (admin context — rules permit writing any loyalty node).
     const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
     const coins=Math.round(diff/coinVal);
-    if(coins>0 && o.userUid) adminCreditLoyalty(o.userUid, coins, "ship:"+code, "Shipping refund");
+    if(coins>0 && o.userUid) adminCreditLoyalty(o.userUid, coins, "ship:"+code, "Shipping refund", settings&&settings.walletValidityMonths);
     showToast(`₹${diff} credited to ${o.address.name}'s wallet`);
     setRewardConfirm(false);
     setSaving(false);
@@ -5774,6 +5841,23 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [loadingRev,setLoadingRev]=useState(false);
   const [walletBalances,setWalletBalances]=useState({}); // {uid: points}
   const [loadingWallets,setLoadingWallets]=useState(false);
+  const [adjUid,setAdjUid]=useState(null);     // which customer's wallet is being adjusted
+  const [adjAmt,setAdjAmt]=useState("");
+  const [adjNote,setAdjNote]=useState("");
+  const [adjBusy,setAdjBusy]=useState(false);
+  const doAdjust=async(c)=>{
+    const n=Math.round(Number(adjAmt));
+    if(!n){ showToast("Enter a non-zero amount"); return; }
+    const cur=walletBalances[c.uid]||0;
+    if(n<0 && cur+n<0){ showToast(`${c.name} only has ${cur} pts`); return; }
+    const verb=n>0?`Add ${n}`:`Deduct ${-n}`;
+    if(!window.confirm(`${verb} points ${n>0?"to":"from"} ${c.name}'s wallet?\n\nNew balance: ${cur+n} pts (≈ ₹${Math.floor((cur+n)*Number(settings.loyaltyRedeemValue||1))}).\n${adjNote?`Note: ${adjNote}`:""}`)) return;
+    setAdjBusy(true);
+    await adminCreditLoyalty(c.uid, n, "manual:"+Date.now(), adjNote||(n>0?"Manual credit":"Manual adjustment"), settings.walletValidityMonths);
+    setWalletBalances(b=>({...b,[c.uid]:Math.max(0,cur+n)}));
+    setAdjBusy(false); setAdjUid(null); setAdjAmt(""); setAdjNote("");
+    showToast(`✓ ${c.name}'s wallet updated`);
+  };
 
   // Customers derived from orders (one entry per uid, most-recent name/phone)
   const customers=useMemo(()=>{
@@ -5845,6 +5929,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const filteredProds=products.filter(p=>(catFilter==="All"||p.category===catFilter)&&(!prodQ||p.name.toLowerCase().includes(prodQ.toLowerCase())));
   const newOrderCount=orders.filter(o=>o.status==="Placed").length;          // new paid orders awaiting action
   const outOfStockCount=products.filter(p=>(p.stockCount??DEFAULT_STOCK)<=0).length; // products that went out of stock
+  const lowStockCount=products.filter(p=>{const s=p.stockCount??DEFAULT_STOCK; return s>0&&s<=3;}).length; // running low (1–3 left)
+  const stockAlertCount=outOfStockCount+lowStockCount;
   const totalReviews=Object.values(allReviews).reduce((s,r)=>s+r.length,0);
   const stats=[{l:"Products",v:products.length,i:"📦"},{l:"Orders",v:orders.length,i:"🛒"},{l:"New",v:orders.filter(o=>o.status==="Placed").length,i:"🔔"},{l:"Reviews",v:totalReviews||"—",i:"⭐"}];
 
@@ -5885,7 +5971,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
               {t==="orders"?"📋 Orders":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
               {t==="orders"&&newOrderCount>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{newOrderCount}</span>}
-              {t==="products"&&outOfStockCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Out of stock">{outOfStockCount}</span>}
+              {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":outOfStockCount>0?"#dc2626":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title={`${outOfStockCount} out of stock · ${lowStockCount} running low`}>{stockAlertCount}</span>}
               {t==="requests"&&requests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{requests.length}</span>}
             </button>
           ))}
@@ -6314,16 +6400,37 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 const bal=walletBalances[c.uid];
                 const val=Number(settings.loyaltyRedeemValue||1);
                 return(
-                  <div key={c.uid} style={{display:"flex",alignItems:"center",gap:12,background:C.card,borderRadius:14,padding:"12px 14px",border:`1px solid ${C.border}`}}>
-                    <div style={{width:38,height:38,borderRadius:"50%",background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>👤</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</div>
-                      <div style={{fontSize:11,color:C.textSub}}>{c.phone||c.email||c.uid.slice(0,12)} · {c.orders} order{c.orders!==1?"s":""}</div>
+                  <div key={c.uid} style={{background:C.card,borderRadius:14,padding:"12px 14px",border:`1px solid ${adjUid===c.uid?C.primary:C.border}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:12}}>
+                      <div style={{width:38,height:38,borderRadius:"50%",background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>👤</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</div>
+                        <div style={{fontSize:11,color:C.textSub}}>{c.phone||c.email||c.uid.slice(0,12)} · {c.orders} order{c.orders!==1?"s":""}</div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.primary}}>{bal==null?"—":bal} <span style={{fontSize:11,fontWeight:600,color:C.textSub}}>pts</span></div>
+                        {bal!=null&&<div style={{fontSize:10.5,color:C.textSub}}>≈ ₹{Math.floor(bal*val)}</div>}
+                      </div>
+                      <button className="press" onClick={()=>{ setAdjUid(adjUid===c.uid?null:c.uid); setAdjAmt(""); setAdjNote(""); }}
+                        style={{flexShrink:0,background:adjUid===c.uid?C.primary:C.accentLight,color:adjUid===c.uid?"white":C.primary,border:`1px solid ${C.border}`,borderRadius:9,padding:"7px 10px",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+                        {adjUid===c.uid?"Close":"Adjust"}
+                      </button>
                     </div>
-                    <div style={{textAlign:"right",flexShrink:0}}>
-                      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.primary}}>{bal==null?"—":bal} <span style={{fontSize:11,fontWeight:600,color:C.textSub}}>pts</span></div>
-                      {bal!=null&&<div style={{fontSize:10.5,color:C.textSub}}>≈ ₹{Math.floor(bal*val)}</div>}
-                    </div>
+                    {adjUid===c.uid&&(
+                      <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.4}}>Enter points to <b>add</b> (e.g. <b>50</b>) or <b>deduct</b> (e.g. <b>-50</b>). A confirmation will show the new balance.</div>
+                        <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+                          <input type="number" value={adjAmt} onChange={e=>setAdjAmt(e.target.value)} placeholder="± points"
+                            style={{width:110,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                          <input type="text" value={adjNote} onChange={e=>setAdjNote(e.target.value)} placeholder="Reason (optional)"
+                            style={{flex:1,minWidth:120,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                        </div>
+                        <button className="press" onClick={()=>doAdjust(c)} disabled={adjBusy}
+                          style={{width:"100%",background:adjBusy?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:11,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+                          {adjBusy?"Updating…":"Review & Confirm"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -6574,6 +6681,36 @@ function SettingsPanel({settings,onSave}){
             {logoNote&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>{logoNote}</div>}
           </div>
         </div>
+      </div>
+
+      {/* Home-page marketing copy */}
+      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>✍️ Home Page Text</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>The headline & taglines customers see on the home page. Type your own, or tap a suggestion.</div>
+        {(()=>{
+          const presets={
+            heroHeadline:["Bring Colour to Your Life","Healthy Fish, Happy Tanks","Your Underwater World Awaits","Premium Fish, Delivered with Care"],
+            heroSub:["Quality Fishes · Plants · Accessories","Live Fish · Plants · Tanks · Food","Hand-picked & delivered across India"],
+            tagline:["Hand-picked healthy fish, live plants & quality accessories — delivered with care across India.","Premium aquarium fish, plants & accessories — delivered with care.","Your trusted home for healthy fish & thriving aquariums."],
+          };
+          const chips=(key)=>(
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6,marginBottom:4}}>
+              {presets[key].map((opt,i)=>{
+                const on=(f[key]||"")===opt;
+                return <button key={i} className="press" onClick={()=>set(key,opt)}
+                  style={{background:on?C.primary:C.bg,color:on?"white":C.text,border:`1px solid ${on?C.primary:C.border}`,borderRadius:20,padding:"5px 11px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",lineHeight:1.3,textAlign:"left",maxWidth:"100%",whiteSpace:"normal"}}>{opt.length>46?opt.slice(0,44)+"…":opt}</button>;
+              })}
+            </div>
+          );
+          return (<>
+            {field("Hero headline","heroHeadline","Bring Colour to Your Life")}
+            {chips("heroHeadline")}
+            {field("Hero subtitle","heroSub","Quality Fishes · Plants · Accessories")}
+            {chips("heroSub")}
+            {area("Footer tagline","tagline")}
+            {chips("tagline")}
+          </>);
+        })()}
       </div>
 
       {/* Store contact (shown on home page) */}
@@ -7055,7 +7192,7 @@ function SettingsPanel({settings,onSave}){
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <input type="number" min="0" value={f.walletValidityMonths??0} onChange={e=>set("walletValidityMonths",Number(e.target.value))}
               style={{width:"90px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-            <span style={{fontSize:11,color:C.textSub,lineHeight:1.4,flex:1}}>Coins expire this many months after a customer's last wallet activity. They get a ⏳ badge over their wallet and a reminder <b>1 month before</b> expiry. <b>0 = coins never expire.</b></span>
+            <span style={{fontSize:11,color:C.textSub,lineHeight:1.4,flex:1}}>Each batch of coins expires this many months after it's earned, with a ⏳ reminder before expiry; expired coins are removed automatically. <b>Changing this only affects coins earned afterwards</b> — coins already in wallets keep their original expiry. <b>0 = never expire.</b></span>
           </div>
         </div>
       </div>
@@ -7296,7 +7433,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
           <div>
             <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Aquarium Care Guides</div>
-            <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:310}}>Tap a guide to open its poster — pinch, drag or use + / − to zoom into any detail.</div>
+            <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:310}}>Aquarium care posters and tips, curated by our team.</div>
           </div>
           <div style={{flexShrink:0,marginTop:4}}>
             <GuideNotifBtn/>
@@ -7337,7 +7474,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"inline-block",fontSize:9.5,fontWeight:800,color:C.accent,background:C.accentLight,padding:"2px 9px",borderRadius:20,marginBottom:5,letterSpacing:.5}}>{g.category}</div>
                   <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15.5,fontWeight:800,color:C.text,lineHeight:1.25}}>{g.title}</div>
-                  <div style={{fontSize:11,color:C.textSub,marginTop:3,fontWeight:600}}>{hasPoster?"🔍 Tap to open & zoom poster":content?(open?"Tap to collapse":"Tap to read"):""}</div>
+                  <div style={{fontSize:11,color:C.textSub,marginTop:3,fontWeight:600}}>{hasPoster?"":content?(open?"Tap to collapse":"Tap to read"):""}</div>
                 </div>
                 <span style={{flexShrink:0,fontSize:18,color:C.textSub,transform:(!hasPoster&&open)?"rotate(90deg)":"none",transition:"transform .2s"}}>{hasPoster?"⛶":"›"}</span>
               </button>
@@ -7903,9 +8040,15 @@ function NemoStore(){
     setTestimonials(list=>[t,...list.filter(x=>x.uid!==t.uid)]);
   };
   const handleDeleteTestimonial=async(id)=>{
-    await deleteTestimonial(id);
-    setTestimonials(list=>list.filter(x=>x.id!==id));
-    showToast("Testimonial removed");
+    const cloudOk=await deleteTestimonial(id);
+    if(cloudOk){
+      setTestimonials(list=>list.filter(x=>x.id!==id));
+      showToast("Testimonial removed");
+    }else{
+      // Cloud rejected the delete — almost always because this browser isn't signed into the
+      // admin Google account. Don't fake-remove it (it would reappear on reload).
+      showToast("⚠ Couldn't delete — sign in with the admin Google account first");
+    }
   };
   const handleRestock=(prod)=>{
     if(!user){ goAuth("home"); showToast("Sign in to get restock alerts"); return; }
@@ -7994,7 +8137,7 @@ function NemoStore(){
       if(settings.loyaltyEnabled!==false && updated.userUid && !updated.pointsEarned){
         const amt=updated.amountDue??(updated.total+updated.fee);
         const pts=Math.floor((Number(amt)||0)/100*pph);
-        if(pts>0){ adminCreditLoyalty(updated.userUid, pts, "earn:"+updated.id, "Order "+(updated.orderNo||updated.id)); updated={...updated,pointsEarned:pts}; }
+        if(pts>0){ adminCreditLoyalty(updated.userUid, pts, "earn:"+updated.id, "Order "+(updated.orderNo||updated.id), settings.walletValidityMonths); updated={...updated,pointsEarned:pts}; }
       }
       // (b) referrer earns their reward, credited straight to their wallet
       if(updated.referralCode){ creditReferralOnDelivery(updated.referralCode, settings, updated.id); }
@@ -8013,7 +8156,7 @@ function NemoStore(){
       if(Number(updated.loyaltyDiscount)>0 && updated.userUid && !updated.loyaltyRefunded){
         const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
         const back=Math.ceil(Number(updated.loyaltyDiscount)/coinVal);
-        adminCreditLoyalty(updated.userUid, back, "redeemrefund:"+updated.id, "Points refunded (order cancelled)");
+        adminCreditLoyalty(updated.userUid, back, "redeemrefund:"+updated.id, "Points refunded (order cancelled)", settings.walletValidityMonths);
         updated={...updated,loyaltyRefunded:true};
       }
     }
@@ -8187,8 +8330,13 @@ function NemoStore(){
       const cb=ref.on("value",s=>{
         if(!alive) return;
         const v=s&&s.val();
-        const pts=(v&&Number(v.points))||0;
-        try{ localStorage.setItem("nemo-lp-"+uid, JSON.stringify(v||{points:0,history:[]})); }catch(e){}
+        // Auto-expire: drop any lots whose frozen expiry has passed, then persist the cleaned wallet.
+        let data=v, pts=(v&&Number(v.points))||0;
+        if(v){
+          const pruned=pruneExpiredLots(v, Date.now());
+          if(pruned.expiredPts>0){ data=pruned.data; pts=data.points; try{ FB_DB.ref("loyalty/"+uid).set(data); }catch(e){} }
+        }
+        try{ localStorage.setItem("nemo-lp-"+uid, JSON.stringify(data||{points:0,history:[]})); }catch(e){}
         setWalletPts(pts);
       },()=>{ /* read denied / offline → fall back to cached value */ if(alive) setWalletPts(loadLoyaltyLocal(uid).points||0); });
       return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
