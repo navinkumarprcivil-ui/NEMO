@@ -965,7 +965,8 @@ async function loadShowcase(){
 }
 async function addShowcasePhoto(item){
   await dbSet("nemo-showcase",JSON.stringify([item])); // local
-  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).set(item); }catch(e){} }
+  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).set(item); return true; }catch(e){ return false; } }
+  return false;
 }
 /* Admin approves a pending tank — makes it public and starts its 24h life. */
 async function approveShowcasePhoto(item){
@@ -987,8 +988,10 @@ async function loadTestimonials(){
   return arr.sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
 }
 async function addTestimonial(t){
-  if(FB_OK){ try{ await FB_DB.ref("testimonials/"+t.id).set(t); }catch(e){} }
+  let cloudOk=false;
+  if(FB_OK){ try{ await FB_DB.ref("testimonials/"+t.id).set(t); cloudOk=true; }catch(e){ cloudOk=false; } }
   try{ const r=await dbGet("nemo-testimonials"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-testimonials",JSON.stringify([t,...arr].slice(0,60))); }catch(e){}
+  return cloudOk;
 }
 async function deleteTestimonial(id){
   let cloudOk=true;
@@ -2180,7 +2183,7 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
       uid:userKey(user)||"", name:(user.name||"Customer").slice(0,40), text:body.slice(0,280),
       rating:Number(rating)||5, createdAt:new Date().toISOString() };
     try{ await onSubmit(t); setText(""); setNote("🎉 Thanks for sharing!"); }
-    catch(e){ setNote("⚠ Couldn't post — try again."); }
+    catch(e){ setNote("⚠ Couldn't reach our server — please check your connection and try again."); }
     setBusy(false);
   };
   const list=(testimonials||[]).slice(0,12);
@@ -5823,6 +5826,13 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [editGuide,setEditGuide]=useState(null);
   const [guideFormOpen,setGuideFormOpen]=useState(false);
   const [editProduct,setEditProduct]=useState(null);
+  // Low-stock acknowledgment: remember the stock level at which the admin last viewed each product.
+  // A product "needs attention" while it's low/out AND its current level differs from what was last seen
+  // (so it re-alerts if stock drops further). Visiting (opening) the product clears its alert.
+  const [stockSeen,setStockSeen]=useState(()=>{ try{ return JSON.parse(localStorage.getItem("nemo-stock-seen")||"{}"); }catch{ return {}; } });
+  const markStockSeen=(p)=>{ setStockSeen(prev=>{ const next={...prev,[p.id]:(p.stockCount??DEFAULT_STOCK)}; try{ localStorage.setItem("nemo-stock-seen",JSON.stringify(next)); }catch(e){} return next; }); };
+  const needsStockAttn=(p)=>{ if(p.comingSoon) return false; const s=p.stockCount??DEFAULT_STOCK; return s<=3 && stockSeen[p.id]!==s; };
+  const openProduct=(p)=>{ const gm=getProductMedia(p,mediaCache); markStockSeen(p); setEditProduct({...p,_mediaImgs:gm.images,_mediaVid:gm.video}); setTab("form"); };
   const [viewOrder,setViewOrder]=useState(null);
   const [cleanMonths,setCleanMonths]=useState(6);
   const [cleanConfirm,setCleanConfirm]=useState(false);
@@ -5930,7 +5940,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const newOrderCount=orders.filter(o=>o.status==="Placed").length;          // new paid orders awaiting action
   const outOfStockCount=products.filter(p=>(p.stockCount??DEFAULT_STOCK)<=0).length; // products that went out of stock
   const lowStockCount=products.filter(p=>{const s=p.stockCount??DEFAULT_STOCK; return s>0&&s<=3;}).length; // running low (1–3 left)
-  const stockAlertCount=outOfStockCount+lowStockCount;
+  const attnProds=products.filter(needsStockAttn);          // low/out AND not yet acknowledged by admin
+  const stockAlertCount=attnProds.length;
   const totalReviews=Object.values(allReviews).reduce((s,r)=>s+r.length,0);
   const stats=[{l:"Products",v:products.length,i:"📦"},{l:"Orders",v:orders.length,i:"🛒"},{l:"New",v:orders.filter(o=>o.status==="Placed").length,i:"🔔"},{l:"Reviews",v:totalReviews||"—",i:"⭐"}];
 
@@ -5971,7 +5982,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
               {t==="orders"?"📋 Orders":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
               {t==="orders"&&newOrderCount>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{newOrderCount}</span>}
-              {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":outOfStockCount>0?"#dc2626":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title={`${outOfStockCount} out of stock · ${lowStockCount} running low`}>{stockAlertCount}</span>}
+              {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":attnProds.some(p=>(p.stockCount??DEFAULT_STOCK)<=0)?"#dc2626":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Products needing restock — tap Products to see which">{stockAlertCount}</span>}
               {t==="requests"&&requests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{requests.length}</span>}
             </button>
           ))}
@@ -6239,12 +6250,34 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             {prodQ&&<button className="press" onClick={()=>setProdQ("")} style={{background:"none",border:"none",fontSize:14,color:C.textSub}}>✕</button>}
           </div>
           <div style={{marginBottom:14}}><CategoryPills selected={catFilter} onSelect={setCatFilter} all/></div>
+          {attnProds.length>0&&(
+            <div style={{background:"#fff7ed",border:`1.5px solid #fed7aa`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}>
+                <span style={{fontSize:15}}>⚠️</span>
+                <span style={{fontSize:13,fontWeight:800,color:"#9a3412"}}>{attnProds.length} product{attnProds.length!==1?"s":""} need restocking</span>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {attnProds.map(p=>{
+                  const s=p.stockCount??DEFAULT_STOCK; const out=s<=0;
+                  return(
+                    <button key={p.id} className="press" onClick={()=>openProduct(p)} title="Open this product — clears the alert"
+                      style={{display:"inline-flex",alignItems:"center",gap:6,background:"white",border:`1px solid ${out?"#fecaca":"#fed7aa"}`,borderRadius:20,padding:"5px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+                      <span style={{width:7,height:7,borderRadius:"50%",background:out?"#dc2626":"#f59e0b",flexShrink:0}}/>
+                      {p.name} <span style={{color:out?"#dc2626":"#c2410c",fontWeight:800}}>{out?"· Out":`· ${s} left`}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{fontSize:10.5,color:"#9a3412",marginTop:8,opacity:.8}}>Tap a product to open it — that clears it from this alert.</div>
+            </div>
+          )}
           <div style={{fontSize:12,color:C.textSub,fontWeight:500,marginBottom:12}}>{filteredProds.length} product{filteredProds.length!==1?"s":""}</div>
           {filteredProds.map(p=>{
             const imgSrc=getProductMedia(p,mediaCache).images[0];
             const m=CAT_META[p.category]||CAT_META["Live Fish"];
+            const attn=needsStockAttn(p);
             return(
-              <div key={p.id} style={{background:C.card,borderRadius:16,padding:"12px",marginBottom:10,display:"flex",gap:12,alignItems:"center",border:`1px solid ${C.border}`}}>
+              <div key={p.id} style={{background:C.card,borderRadius:16,padding:"12px",marginBottom:10,display:"flex",gap:12,alignItems:"center",border:`1px solid ${attn?"#fdba74":C.border}`,boxShadow:attn?"0 0 0 1px #fdba74":"none"}}>
                 <div style={{width:60,height:60,borderRadius:12,overflow:"hidden",flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>
                   {imgSrc?<img src={imgSrc} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
                 </div>
@@ -6261,7 +6294,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                     {p.hasVid&&<span style={{fontSize:10,color:C.accent}}>🎬</span>}
                   </div>
                 </div>
-                <button className="press" onClick={()=>{const gm=getProductMedia(p,mediaCache);setEditProduct({...p,_mediaImgs:gm.images,_mediaVid:gm.video});setTab("form");}}
+                <button className="press" onClick={()=>openProduct(p)}
                   style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
                   Edit
                 </button>
@@ -7832,10 +7865,7 @@ function NemoStore(){
     if(stObj===null && FB_OK){ const local=localSettingsData(); await saveSettings(local); setSettings(local); }
     else if(stObj){ const merged=normalizeSettings({...DEFAULT_SETTINGS,...stObj}); setSettings(merged); try{dbSet("nemo-settings",JSON.stringify(merged));}catch(e){} }
     setSettingsReady(true);
-    // Showcase
-    loadShowcase().then(sc=>{ if(sc&&sc.length) setShowcase(sc); });
-    // Testimonials
-    loadTestimonials().then(ts=>{ if(ts&&ts.length) setTestimonials(ts); });
+    // Showcase + testimonials are loaded via a live listener (see the global content effect).
   };
 
   useEffect(()=>{
@@ -8026,9 +8056,10 @@ function NemoStore(){
     showToast("Thanks! We'll notify you when it's in 🔔");
   };
   const handleShowcaseSubmit=async(item)=>{
-    await addShowcasePhoto(item);
+    const cloudOk=await addShowcasePhoto(item);
     setShowcase(s=>[item,...s.filter(x=>x.id!==item.id)]); // one per customer — replaces their previous photo
-    showToast("📩 Submitted! We'll review and post it soon.");
+    if(cloudOk) showToast("📩 Submitted! We'll review and post it soon.");
+    else showToast("⚠ Saved on this device, but it couldn't reach our server — please check your connection and try again.");
   };
   const handleApproveShowcase=async(item)=>{
     const updated=await approveShowcasePhoto(item);
@@ -8036,8 +8067,9 @@ function NemoStore(){
     showToast("✓ Tank approved — now live for 24h");
   };
   const handleTestimonialSubmit=async(t)=>{
-    await addTestimonial(t);
+    const cloudOk=await addTestimonial(t);
     setTestimonials(list=>[t,...list.filter(x=>x.uid!==t.uid)]);
+    if(!cloudOk) throw new Error("cloud-write-failed"); // surfaces the ⚠ message in the form
   };
   const handleDeleteTestimonial=async(id)=>{
     const cloudOk=await deleteTestimonial(id);
@@ -8294,6 +8326,30 @@ function NemoStore(){
       loadOrders().then(o=>o&&setOrders(o));
     }
   },[page,fbReady]);
+
+  // GLOBAL: live listeners on community content (showcase + testimonials) so the admin
+  // sees new submissions the instant they're posted, and customers see fresh testimonials.
+  useEffect(()=>{
+    if(!(FB_OK && FB_DB)){
+      loadShowcase().then(sc=>{ if(sc&&sc.length) setShowcase(sc); });
+      loadTestimonials().then(ts=>{ if(ts&&ts.length) setTestimonials(ts); });
+      return;
+    }
+    const scRef=FB_DB.ref("showcase");
+    const scCb=scRef.on("value",s=>{
+      const v=s&&s.val(); const now=Date.now();
+      let arr=v?Object.values(v).filter(x=>x&&x.id):[];
+      arr=arr.filter(x=>!showcaseExpired(x,now)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+      setShowcase(arr);
+    },()=>{ loadShowcase().then(sc=>{ if(sc&&sc.length) setShowcase(sc); }); });
+    const tsRef=FB_DB.ref("testimonials");
+    const tsCb=tsRef.on("value",s=>{
+      const v=s&&s.val();
+      const arr=v?Object.values(v).filter(x=>x&&x.id).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")):[];
+      setTestimonials(arr);
+    },()=>{ loadTestimonials().then(ts=>{ if(ts&&ts.length) setTestimonials(ts); }); });
+    return ()=>{ try{scRef.off("value",scCb);}catch(e){} try{tsRef.off("value",tsCb);}catch(e){} };
+  },[fbReady]);
 
   // CUSTOMER: live listener on THEIR orders (reflects admin status updates instantly)
   useEffect(()=>{
