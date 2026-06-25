@@ -1025,6 +1025,23 @@ async function deleteTestimonial(id){
   try{ const r=await dbGet("nemo-testimonials"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-testimonials",JSON.stringify(arr.filter(x=>x.id!==id))); }catch(e){}
   return cloudOk;
 }
+/* ── Admin "Start Fresh": bulk-clear every customer submission ──
+   The parent nodes (showcase/testimonials/requests) have no .write rule, so a whole-node
+   .remove() is denied — we must remove each child id individually (the Google admin is
+   allowed to). We clear the local cache too, then re-read the cloud and return how many
+   entries STILL remain: 0 means a clean wipe; >0 means this browser isn't signed in as the
+   admin Google account (those entries are protected and can't be removed without it). */
+async function clearAllCloudNode(node, localKey){
+  if(FB_OK){
+    try{ const s=await withTimeout(FB_DB.ref(node).get(),6000); const v=s&&s.val(); if(v){ for(const k of Object.keys(v)){ try{ await FB_DB.ref(node+"/"+k).remove(); }catch(e){} } } }catch(e){}
+  }
+  try{ await dbSet(localKey,"[]"); }catch(e){}
+  if(!FB_OK) return 0;
+  try{ const s=await withTimeout(FB_DB.ref(node).get(),6000); const v=s&&s.val(); return v?Object.keys(v).length:0; }catch(e){ return 0; }
+}
+async function clearAllShowcase(){ return clearAllCloudNode("showcase","nemo-showcase"); }
+async function clearAllTestimonials(){ return clearAllCloudNode("testimonials","nemo-testimonials"); }
+async function clearAllRequestsCloud(){ return clearAllCloudNode("requests","nemo-requests"); }
 
 /* ── Visitor analytics (built-in, free — counts unique sessions in Firebase) ── */
 async function trackVisit(){
@@ -3141,6 +3158,47 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
 }
 
 /* ═══════════════════ HOME PAGE ═══════════════════ */
+/* Bottom-of-home pincode serviceability checker. */
+function PincodeChecker({settings={}}){
+  const [pin,setPin]=useState("");
+  const [res,setRes]=useState(null);
+  const check=()=>{
+    const clean=(pin||"").replace(/\D/g,"");
+    if(clean.length!==6){ setRes({err:true}); return; }
+    const zone=pincodeToZone(clean);
+    if(!zone){ setRes({err:true}); return; }
+    setRes({zone,live:!liveFishBlockedForZone(zone,settings)});
+  };
+  return(
+    <div style={{margin:"28px 0 0",background:`linear-gradient(135deg,${C.primaryDark},${C.primary})`,borderRadius:20,padding:"22px 20px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+        <span style={{fontSize:22}}>📍</span>
+        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,color:"#fff"}}>Check delivery to your area</span>
+      </div>
+      <div style={{fontSize:12.5,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>Enter your 6-digit pincode to see if we deliver — and whether live fish reach your area.</div>
+      <div style={{display:"flex",gap:8}}>
+        <input value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,6));setRes(null);}}
+          onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric" placeholder="e.g. 600001"
+          style={{flex:1,borderRadius:12,border:"none",padding:"13px 14px",fontSize:15,outline:"none",letterSpacing:2,fontFamily:PRICE_FONT,minWidth:0}}/>
+        <button className="press" onClick={check} style={{background:"#fff",color:C.primary,border:"none",borderRadius:12,padding:"0 20px",fontSize:14,fontWeight:800,fontFamily:"'Nunito',sans-serif",flexShrink:0,cursor:"pointer"}}>Check</button>
+      </div>
+      {res&&(
+        <div style={{marginTop:14,background:"rgba(255,255,255,.96)",borderRadius:14,padding:"13px 15px"}}>
+          {res.err?(
+            <div style={{fontSize:13,fontWeight:700,color:C.danger}}>Please enter a valid 6-digit pincode.</div>
+          ):(<>
+            <div style={{fontSize:14,fontWeight:800,color:C.success,marginBottom:6}}>✓ Yes! We deliver to {ZONE_LABELS[res.zone]}.</div>
+            {res.live?(
+              <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.5}}>🐠 Live fish, plants &amp; accessories — all available, with our Live Arrival Guarantee.</div>
+            ):(
+              <div style={{fontSize:12.5,color:"#b45309",lineHeight:1.5,fontWeight:600}}>📦 Accessories, food &amp; plants ship here. Live fish aren't delivered to this region yet — for their safety we ship live stock only within Tamil Nadu &amp; South India.</div>
+            )}
+          </>)}
+        </div>
+      )}
+    </div>
+  );
+}
 function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit}){
   const featured=products.slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
@@ -3364,6 +3422,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <TankShowcaseSection mode="upload" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
         </div>
         {settings.testimonialsEnabled!==false&&<TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>}
+
+        {/* Pincode serviceability checker */}
+        <PincodeChecker settings={settings}/>
 
         {/* ── Site footer (desktop only — on mobile these links live in the side menu) ── */}
         <div className="home-footer" style={{margin:"28px -16px 0",background:C.card,borderTop:`3px solid ${C.primary}`,padding:"26px 18px 22px"}}>
@@ -4108,8 +4169,55 @@ function ShippingRatesChart({settings={}}){
 /* ═══════════════════ CHECKOUT PAGE (Phase 3+4) ═══════════════════ */
 const BLANK_ADDR={name:"",phone:"",whatsapp:"",address:"",city:"",pincode:"",notes:"",summary:"",waUpdates:true};
 
-function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,user,settings={},orders=[]}){
+/* Two-stage exit-intent sheet shown when a customer with items tries to leave checkout. */
+function ExitIntentModal({savings=0, onStay, onLeave}){
+  const [stage,setStage]=useState(1);
+  const [reasons,setReasons]=useState([]);
+  const [other,setOther]=useState("");
+  const REASONS=["Found a better deal elsewhere","Facing technical issue on the website","Change my mind","Price issue","Others"];
+  const toggle=r=>setReasons(p=>p.includes(r)?p.filter(x=>x!==r):[...p,r]);
+  const overlay={position:"fixed",inset:0,background:"rgba(17,24,39,.55)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:4000};
+  const sheet={width:"100%",maxWidth:440,background:"#fff",borderRadius:"20px 20px 0 0",padding:"22px 20px calc(22px + env(safe-area-inset-bottom))",boxShadow:"0 -12px 40px rgba(0,0,0,.25)"};
+  const savingsBar=(emoji)=>savings>0?(
+    <div style={{background:"linear-gradient(90deg,#dcfce7,#bbf7d0)",borderRadius:12,padding:"10px 14px",marginBottom:18,fontSize:13,fontWeight:700,color:"#15803d",textAlign:"center"}}>{emoji} You might miss out on savings of <span style={{fontFamily:PRICE_FONT}}>₹{Math.round(savings)}</span></div>
+  ):null;
+  return(
+    <div style={overlay} onClick={onStay}>
+      <div className="slide-up" style={sheet} onClick={e=>e.stopPropagation()}>
+        {stage===1?(<>
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:12}}>Are you sure you want to exit?</div>
+          {savingsBar("🐠")}
+          <button className="press" onClick={()=>setStage(2)} style={{width:"100%",background:"#fff",color:C.text,border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",marginBottom:10,cursor:"pointer"}}>Yes, exit checkout</button>
+          <button className="press" onClick={onStay} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>No, continue checkout</button>
+        </>):(<>
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:8}}>Sorry to see you go…</div>
+          {savingsBar("🚚")}
+          <div style={{fontSize:13.5,fontWeight:700,color:C.text,marginBottom:12}}>What stopped you from completing your purchase?</div>
+          <div style={{display:"flex",flexDirection:"column",gap:11,marginBottom:14}}>
+            {REASONS.map(r=>(
+              <label key={r} style={{display:"flex",alignItems:"center",gap:10,fontSize:13.5,color:C.text,cursor:"pointer",userSelect:"none"}}>
+                <input type="checkbox" checked={reasons.includes(r)} onChange={()=>toggle(r)} style={{width:18,height:18,accentColor:C.primary}}/>
+                {r}
+              </label>
+            ))}
+          </div>
+          {reasons.includes("Others")&&(
+            <textarea value={other} onChange={e=>setOther(e.target.value)} rows={3} placeholder="Others (please specify)"
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",marginBottom:14,background:"#fff"}}/>
+          )}
+          <button className="press" onClick={()=>onLeave&&onLeave({reasons,other})} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Skip and exit</button>
+          <button className="press" onClick={onStay} style={{width:"100%",background:"none",color:C.textSub,border:"none",padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginTop:4,cursor:"pointer"}}>← Continue checkout instead</button>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,updateQty,user,settings={},orders=[]}){
   const [step,setStep]=useState(1);
+  const [exitAsk,setExitAsk]=useState(false);
+  const savingsTotal=cart.reduce((s,i)=>s+Math.max(0,((Number(i.mrp)||i.price)-i.price))*i.qty,0);
+  useEffect(()=>{ if(step>=2&&cart.length===0) setStep(1); },[cart.length,step]);
   const [addr,setAddr]=useState({...BLANK_ADDR,name:user?.name||"",phone:user?.phone||""});
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const supWA=(settings.supporterWhatsapp||"").replace(/\D/g,"");
@@ -4415,10 +4523,11 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
 
   return(
     <div className="slide-up">
+      {exitAsk&&<ExitIntentModal savings={savingsTotal} onStay={()=>setExitAsk(false)} onLeave={(fb)=>{ try{const k="nemo_exit_feedback";const a=JSON.parse(localStorage.getItem(k)||"[]");a.push({t:Date.now(),reasons:fb&&fb.reasons,other:fb&&fb.other,cartValue:total});localStorage.setItem(k,JSON.stringify(a));}catch(e){} setExitAsk(false); nav("cart"); }}/>}
       {/* Header */}
       <div className="vh-head" style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <button className="press" onClick={()=>step===1?nav("cart"):setStep(1)}
+          <button className="press" onClick={()=>{ if(step!==1){ setStep(1); } else if(cart.length){ setExitAsk(true); } else { nav("cart"); } }}
             style={{background:"none",border:"none",fontSize:20,color:C.textSub}}>←</button>
           <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>
             {step===1?"Shipping Details":"Review & Place Order"}
@@ -4633,16 +4742,30 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       {step===2&&(
         <div className="dt-read" style={{padding:"20px 16px 100px"}}>
           <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:12}}>Order Items</div>
+          <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,marginTop:-4}}>You can still adjust quantities or remove items below before placing your order.</div>
           {cart.map(item=>{
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
+            const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
             return(
-              <div key={item.id} style={{background:C.card,borderRadius:14,padding:"12px",marginBottom:8,display:"flex",gap:12,alignItems:"center",border:`1px solid ${C.border}`}}>
+              <div key={item.key||item.id} style={{background:C.card,borderRadius:14,padding:"12px",marginBottom:8,display:"flex",gap:12,alignItems:"center",border:`1px solid ${C.border}`}}>
                 <div style={{width:44,height:44,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{m.emoji}</div>
-                <div style={{flex:1}}>
+                <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:700,color:C.text}}>{item.name}</div>
-                  <div style={{fontSize:12,color:C.textSub}}>{item.variantLabel?`${item.variantLabel} · `:""}Qty: {item.qty}</div>
+                  {item.variantLabel&&<div style={{fontSize:12,color:C.textSub}}>{item.variantLabel}</div>}
+                  {updateQty?(
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginTop:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:10,padding:"4px 10px",border:`1.5px solid ${C.border}`}}>
+                        <button className="press" onClick={()=>updateQty(item.key,-1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,lineHeight:1,cursor:"pointer"}}>−</button>
+                        <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:16,textAlign:"center"}}>{item.qty}</span>
+                        <button className="press" onClick={()=>updateQty(item.key,1)} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:17,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,lineHeight:1,cursor:item.qty>=maxAllowed?"default":"pointer"}}>+</button>
+                      </div>
+                      <button className="press" onClick={()=>updateQty(item.key,-item.qty)} style={{background:"none",border:"none",fontSize:12,color:C.danger,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Remove</button>
+                    </div>
+                  ):(
+                    <div style={{fontSize:12,color:C.textSub}}>Qty: {item.qty}</div>
+                  )}
                 </div>
-                <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{item.price*item.qty}</div>
+                <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary,flexShrink:0}}>₹{item.price*item.qty}</div>
               </div>
             );
           })}
@@ -5863,7 +5986,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   const [editGuide,setEditGuide]=useState(null);
   const [guideFormOpen,setGuideFormOpen]=useState(false);
@@ -6517,6 +6640,27 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── SETTINGS TAB ── */}
       {tab==="settings"&&(
         <div>
+          {/* Start Fresh — bulk-clear all customer submissions */}
+          <div style={{padding:"16px 16px 0"}}>
+            <div style={{background:"#fff5f5",borderRadius:16,padding:"16px",border:`1.5px solid ${C.danger}`}}>
+              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.danger,marginBottom:4}}>🧹 Start Fresh</div>
+              <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Permanently delete all customer-submitted content so you can launch with a clean slate. Each clear cannot be undone.</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {[
+                  {label:"Customer Tanks",count:showcase.length,fn:onClearShowcase,word:"customer tank photo"},
+                  {label:"Testimonials",count:testimonials.length,fn:onClearTestimonials,word:"testimonial"},
+                  {label:"Requests",count:requests.length,fn:onClearRequests,word:"product request"},
+                ].map(b=>(
+                  <button key={b.label} className="press" disabled={!b.count}
+                    onClick={()=>{ if(b.count&&window.confirm(`Delete ALL ${b.count} ${b.word}${b.count>1?"s":""}?\n\nThis permanently removes them from the website and cannot be undone.`)){ b.fn&&b.fn(); } }}
+                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:b.count?"#fee2e2":C.bg,color:b.count?C.danger:C.textSub,border:`1.5px solid ${b.count?C.danger:C.border}`,borderRadius:12,padding:"11px 14px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:b.count?"pointer":"default",opacity:b.count?1:.6}}>
+                    <span>Clear all {b.label}</span>
+                    <span style={{fontSize:12,fontWeight:800,background:b.count?"rgba(220,38,38,.12)":"transparent",borderRadius:20,padding:b.count?"2px 9px":"0"}}>{b.count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
           {/* Showcase management */}
           {showcase.length>0&&(()=>{
             const now=Date.now();
@@ -7091,11 +7235,7 @@ function SettingsPanel({settings,onSave}){
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>⚡ Speed Delivery &amp; 🛡️ Live Guarantee</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>Speed Delivery add-on (₹)</div>
-            <input type="number" min="0" value={f.specialDeliveryPrice||200} onChange={e=>set("specialDeliveryPrice",Number(e.target.value))}
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Fallback charge. Used only if a zone amount below is blank.</div>
-            <div style={{fontSize:11.5,fontWeight:700,color:C.text,marginTop:10,marginBottom:6}}>⚡ Speed-courier charge by zone (₹)</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:6}}>⚡ Speed-courier charge by zone (₹)</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
               {[["TN","Tamil Nadu"],["SouthIndia","South India"],["CentralNorth","Central & North"]].map(([zk,zl])=>(
                 <div key={zk}>
@@ -8067,7 +8207,7 @@ function NemoStore(){
       if(qty>0 && curQty+qty>maxAllowed) setTimeout(()=>showToast(`Only ${maxAllowed} available per order`,"error"),0);
       else if(qty>0) setTimeout(()=>showToast("Added to cart"),0);
       if(ex) return prev.map(i=>i.key===key?{...i,qty:nextQty}:i);
-      return [...prev,{key,id:product.id,name:product.name,category:product.category,price:unitPrice,qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,suggestedPacking:product.suggestedPacking||null,suggestSpecialDelivery:!!product.suggestSpecialDelivery,stockCount:stock}];
+      return [...prev,{key,id:product.id,name:product.name,category:product.category,price:unitPrice,mrp:(v?variantBasePrice(product,v):(product.price||unitPrice)),qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,suggestedPacking:product.suggestedPacking||null,suggestSpecialDelivery:!!product.suggestSpecialDelivery,stockCount:stock}];
     });
   };
   const updateQty=(key,delta)=>
@@ -8186,6 +8326,28 @@ function NemoStore(){
     await delMedia(id);
     setMediaCache(c=>{const n={...c};delete n["img-"+id];return n;});
     showToast("Request deleted");
+  };
+  // ── "Start Fresh" — admin bulk-clears every customer submission ──
+  const clearAllShowcaseHandler=async()=>{
+    const remaining=await clearAllShowcase();
+    setShowcase([]); // the live listener will also reflect the cleared cloud node
+    if(remaining>0) showToast("⚠ "+remaining+" tank"+(remaining>1?"s":"")+" couldn't be removed — sign in with the admin Google account, then try again","error");
+    else showToast("✓ All customer tanks cleared");
+  };
+  const clearAllTestimonialsHandler=async()=>{
+    const remaining=await clearAllTestimonials();
+    setTestimonials([]);
+    if(remaining>0) showToast("⚠ "+remaining+" testimonial"+(remaining>1?"s":"")+" couldn't be removed — sign in with the admin Google account, then try again","error");
+    else showToast("✓ All testimonials cleared");
+  };
+  const clearAllRequestsHandler=async()=>{
+    const ids=requests.map(r=>r.id);
+    const remaining=await clearAllRequestsCloud();
+    for(const id of ids){ try{ await delMedia(id); }catch(e){} }
+    setRequests([]);
+    setMediaCache(c=>{const n={...c}; ids.forEach(id=>delete n["img-"+id]); return n;});
+    if(remaining>0) showToast("⚠ "+remaining+" request"+(remaining>1?"s":"")+" couldn't be removed — sign in with the admin Google account, then try again","error");
+    else showToast("✓ All requests cleared");
   };
 
   // Guides
@@ -8493,7 +8655,7 @@ function NemoStore(){
         {page==="detail"   &&<DetailPage product={selProduct} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings}/>}
         {page==="checkout" &&(user
-          ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} user={user} settings={settings} orders={orders}/>
+          ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
         {page==="orders"   &&(user
           ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} settings={settings} favorites={favorites}/>
@@ -8505,7 +8667,7 @@ function NemoStore(){
         {page==="about"    &&<AboutPage nav={nav} settings={settings}/>}
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
-        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial}
+        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
       </div>
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
