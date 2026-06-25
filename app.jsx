@@ -3214,6 +3214,8 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
   };
   const offer = products.find(p=>(p.discountPct||0)>0 && p.offerEndsAt && new Date(p.offerEndsAt).getTime()>Date.now());
   const offerStock = offer ? (offer.stockCount ?? DEFAULT_STOCK) : 0;
+  // Offer Zone — every product currently on offer (discount set, in stock, offer not expired).
+  const offerProducts = products.filter(p=>!p.comingSoon && (p.discountPct||0)>0 && (p.stockCount??DEFAULT_STOCK)>0 && (!p.offerEndsAt || new Date(p.offerEndsAt).getTime()>Date.now()));
   return(
     <div className="slide-up">
       <CategoryDrawer open={menuOpen} onClose={()=>setMenuOpen(false)} recent={recent} nav={nav}
@@ -3339,6 +3341,27 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             ))}
           </div>
         </div>
+        )}
+
+        {/* Offer Zone — lists only products that are currently on offer */}
+        {offerProducts.length>0&&(
+          <div style={{marginBottom:26,background:"linear-gradient(135deg,#fff1ee,#ffe8e3)",border:`1.5px solid ${C.coral}`,borderRadius:20,padding:"16px 14px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+              <span style={{display:"flex",alignItems:"center",gap:7}}>
+                <span style={{fontSize:20}}>🔥</span>
+                <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Offer Zone</span>
+                <span style={{background:C.coral,color:"#fff",fontSize:10.5,fontWeight:800,padding:"2px 8px",borderRadius:20}}>{offerProducts.length}</span>
+              </span>
+              <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.coral,fontWeight:700,background:"none",border:"none",fontFamily:"'Nunito',sans-serif"}}>View All →</button>
+            </div>
+            <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              {offerProducts.map(p=>(
+                <ProductCard key={p.id} product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+                  onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
+                  isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Limited time offer */}
