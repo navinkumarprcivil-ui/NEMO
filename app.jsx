@@ -125,6 +125,19 @@ const DEFAULT_SHIPPING_RATES = {
   thermacol: {
     "Up to 500g":40, "500g-1kg":70, "1-2kg":110, "2-5kg":200, "5-10kg":350,
   },
+  // Standard packing (carton box, or courier bag for small/dry items) — base material charge.
+  // Charged by total parcel-weight bracket, just like the courier & thermacol rates above.
+  carton: {
+    "Up to 500g":20, "500g-1kg":30, "1-2kg":50, "2-5kg":80, "5-10kg":120,
+  },
+  // ⚡ Speed-courier surcharge — by total parcel-weight bracket × zone (3 speed zones).
+  speedCourier: {
+    "Up to 500g":{ TN:80,  SouthIndia:120, CentralNorth:180 },
+    "500g-1kg":  { TN:120, SouthIndia:180, CentralNorth:250 },
+    "1-2kg":     { TN:180, SouthIndia:250, CentralNorth:350 },
+    "2-5kg":     { TN:280, SouthIndia:400, CentralNorth:550 },
+    "5-10kg":    { TN:450, SouthIndia:650, CentralNorth:850 },
+  },
 };
 /* Canonical weight tiers shared by dry goods AND live fish. */
 const SHIP_TIERS = ["Up to 500g","500g-1kg","1-2kg","2-5kg","5-10kg"];
@@ -195,12 +208,30 @@ function speedCourierZoneLabel(zone){
   const k=speedCourierZoneKey(zone);
   return k==="TN"?"Tamil Nadu":k==="SouthIndia"?"South India":"Central & North India";
 }
-function speedCourierForZone(zone, settings){
-  const flat=Number(settings.specialDeliveryPrice||0);
-  const r=settings.speedCourierRates;
-  if(!r) return flat;
-  const v=r[speedCourierZoneKey(zone)];
-  return (v===0||v) ? Number(v) : flat;
+function speedCourierForZone(zone, settings, cart){
+  const zk=speedCourierZoneKey(zone);
+  const sr=(settings&&settings.shippingRates)||{};
+  const tbl=sr.speedCourier;
+  if(tbl){
+    const bracket=parcelWeightBracket(cart, sr);
+    const row=tbl[bracket]||tbl["Up to 500g"]||{};
+    const v=row[zk];
+    if(v===0||v) return Number(v);
+  }
+  // Legacy flat per-zone (used until the weight chart is filled in Settings)
+  const legacy=settings.speedCourierRates;
+  if(legacy && (legacy[zk]===0||legacy[zk])) return Number(legacy[zk]);
+  return Number(settings.specialDeliveryPrice||0);
+}
+/* Total parcel-weight bracket for a whole cart (fish + dry + base packing weight). */
+function parcelWeightBracket(cart, r){
+  r=r||DEFAULT_SHIPPING_RATES;
+  const fish=(cart||[]).filter(i=>i.category==="Live Fish");
+  const dry=(cart||[]).filter(i=>i.category!=="Live Fish");
+  const fishWt=fish.reduce((s,i)=>s+(Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2)*i.qty,0);
+  const dryWt=dry.reduce((s,i)=>s+(Number(i.packagingWeight)||0.1)*i.qty,0);
+  const base=fish.length?Number(r.liveBasePackagingKg!=null?r.liveBasePackagingKg:(r.basePackagingKg??0.5)):(Number(r.basePackagingKg)||0.5);
+  return getWeightBracket(fishWt+dryWt+base);
 }
 /* Live fish uses the same 5-tier weight brackets as dry goods so rates are directly comparable */
 function getLiveFishWeightBracket(kg){
@@ -224,10 +255,10 @@ function getWeightBracket(kg){
    rank = protection level (1 = lightest → 4 = safest). The Live Arrival Guarantee applies when
    the customer picks the admin-recommended packing (per product) OR a higher-rank one. */
 const PACKING_OPTIONS = [
-  { key:"carton_normal",      label:"Carton Box · Normal Courier",      box:"carton",    courier:"normal",  rank:1, blurb:"Economical — fine for nearby locations." },
-  { key:"carton_special",     label:"Carton Box · Speed Courier",       box:"carton",    courier:"special", rank:2, blurb:"Faster delivery with safe handling by the courier." },
+  { key:"carton_normal",      label:"Standard Packing · Normal Courier",   box:"carton",    courier:"normal",  rank:1, blurb:"Economical — carton box or courier bag, fine for nearby locations." },
+  { key:"carton_special",     label:"Standard Packing · Premium Courier",  box:"carton",    courier:"special", rank:2, blurb:"Faster delivery with safe handling by the courier." },
   { key:"thermacol_standard", label:"Thermacol Box · Standard Courier", box:"thermacol", courier:"normal",  rank:3, blurb:"Insulated box — for premium fish, local transport." },
-  { key:"thermacol_special",  label:"Thermacol Box · Speed Courier",    box:"thermacol", courier:"special", rank:4, blurb:"Best protection — premium fish & long-distance travel." },
+  { key:"thermacol_special",  label:"Thermacol Box · Premium Courier",  box:"thermacol", courier:"special", rank:4, blurb:"Best protection — premium fish & long-distance travel." },
 ];
 const PACKING_BY_KEY = PACKING_OPTIONS.reduce((m,o)=>{m[o.key]=o;return m;},{});
 function packingOpt(key){ return PACKING_BY_KEY[key] || PACKING_BY_KEY.carton_special; }
@@ -249,6 +280,11 @@ function suggestedPackingForCart(cart, zone){
 function thermacolCharge(bracket, settings){
   const r=(settings&&settings.shippingRates)||DEFAULT_SHIPPING_RATES;
   return Number((r.thermacol||DEFAULT_SHIPPING_RATES.thermacol)[bracket]||0);
+}
+/* Standard-packing (carton box / courier bag) charge for a given parcel-weight bracket. */
+function cartonCharge(bracket, settings){
+  const r=(settings&&settings.shippingRates)||DEFAULT_SHIPPING_RATES;
+  return Number((r.carton||DEFAULT_SHIPPING_RATES.carton)[bracket]||0);
 }
 /* Thermacol (packaging) portion of a cart's shipping fee — 0 unless a thermacol packing is chosen.
    Used to keep the shipping-reward calc to courier charges only (packaging is never rewardable). */
@@ -308,14 +344,16 @@ function shippingBreakdown(cart, zone, opts, settings){
     const bracket = getLiveFishWeightBracket(fishWt + liveBase);
     courier += (r.liveFish?.[bracket]?.[zone]||0);
     if(packing.box==="thermacol") thermacol += thermacolCharge(bracket, settings);
-    else if(packing.box==="carton") carton += Number(settings.cartonPackingCharge||0);
+    else if(packing.box==="carton") carton += cartonCharge(bracket, settings);
   }
   if(dryItems.length){
     const wt = dryItems.reduce((s,i)=>s+((Number(i.packagingWeight)||0.1)*i.qty),0)+(Number(r.basePackagingKg)||0.5);
     const bracket = getWeightBracket(wt);
     courier += (r.dryGoods?.[bracket]?.[zone]||0);
+    // Standard (base) packing — carton box / courier bag. Only when no live fish already drives the box.
+    if(!fishItems.length) carton += cartonCharge(bracket, settings);
   }
-  if(wantSpecial) special += speedCourierForZone(zone, settings);
+  if(wantSpecial) special += speedCourierForZone(zone, settings, cart);
   if(freeShip){ courier = 0; thermacol = 0; carton = 0; }
   return { courier, thermacol, carton, special, total: courier+thermacol+carton+special, freeShip };
 }
@@ -442,13 +480,14 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "771650250460",
   appId: "1:771650250460:web:94a3df5aec9bd125a7b619",
 };
-let FB_DB=null, FB_AUTH=null, FB_OK=false;
+let FB_DB=null, FB_AUTH=null, FB_STORAGE=null, FB_OK=false;
 function tryInitFirebase(){
   if(FB_OK) return true;
   if(typeof firebase==="undefined" || !firebase.database || !firebase.auth) return false;
   try{
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     FB_DB=firebase.database(); FB_AUTH=firebase.auth(); FB_OK=true;
+    try{ if(firebase.storage) FB_STORAGE=firebase.storage(); }catch(e){}
     // Re-sync whenever auth state resolves. IMPORTANT: only sign in anonymously when
     // NOBODY is signed in — otherwise we'd clobber a returning customer's persisted Google
     // session (which would break their order reads/writes under the security rules).
@@ -550,15 +589,40 @@ async function mediaSet(k,v){
 async function mediaDel(k){ if(HAS_IDB){ await IDB.del(k); } try{ localStorage.removeItem(k); }catch(e){} }
 
 async function loadImg(id)   { const l=await mediaGet("nemo-img-"+id); if(l)return l; if(FB_OK){ const v=await fbGetObj("media/img-"+id); if(v){ mediaSet("nemo-img-"+id,v); return v; } } return null; }
-async function saveImg(id,b) { await mediaSet("nemo-img-"+id,b); if(FB_OK){ try{ await FB_DB.ref("media/img-"+id).set(b); }catch(e){} } return true; }
+async function saveImg(id,b) {
+  await mediaSet("nemo-img-"+id,b);
+  if(FB_OK){
+    const url=await uploadToStorage("media/img-"+id+".jpg", b);
+    if(url){ try{ await FB_DB.ref("media/img-"+id).set(url); await mediaSet("nemo-img-"+id,url); }catch(e){} return true; }
+    try{ await FB_DB.ref("media/img-"+id).set(b); }catch(e){}
+  }
+  return true;
+}
 async function loadVid(id)   { return mediaGet("nemo-vid-"+id); }
 async function saveVid(id,b) { return mediaSet("nemo-vid-"+id,b); }
 async function delMedia(id)  { await mediaDel("nemo-img-"+id); await mediaDel("nemo-vid-"+id); if(FB_OK){ try{ await FB_DB.ref("media/img-"+id).remove(); }catch(e){} } }
 
 /* ── Multi-media (per-product gallery): base64 stored in RTDB `media/<key>` + IndexedDB cache ── */
+/* Upload a compressed image (JPEG data-URL) to Firebase Storage and return its public URL.
+   Returns null if Storage isn't available/enabled or the upload fails — callers then fall
+   back to storing the base64 in the Realtime Database (the original behaviour). */
+async function uploadToStorage(path, dataUrl){
+  if(!FB_STORAGE || typeof dataUrl!=="string" || !dataUrl.startsWith("data:")) return null;
+  try{
+    const ref=FB_STORAGE.ref(path);
+    await ref.putString(dataUrl, "data_url");
+    return await ref.getDownloadURL();
+  }catch(e){ console.warn("storage upload failed (using base64 fallback):", e&&e.message); return null; }
+}
 async function saveMediaItem(key,b64){
   await mediaSet("nemo-m-"+key,b64);
-  if(FB_OK){ try{ await FB_DB.ref("media/"+key).set(b64); }catch(e){ console.warn("saveMediaItem",e?.message); } }
+  if(FB_OK){
+    // Prefer Storage: keep only a tiny URL in the DB (huge speed win on load/sync).
+    const url=await uploadToStorage("media/"+key+".jpg", b64);
+    if(url){ try{ await FB_DB.ref("media/"+key).set(url); await mediaSet("nemo-m-"+key,url); }catch(e){ console.warn("saveMediaItem url",e&&e.message); } return true; }
+    // Fallback: store base64 in the DB (original behaviour) so nothing breaks if Storage is off.
+    try{ await FB_DB.ref("media/"+key).set(b64); }catch(e){ console.warn("saveMediaItem",e&&e.message); }
+  }
   return true;
 }
 async function loadMediaItem(key){
@@ -605,6 +669,23 @@ async function loadReviews(pid){
   if(FB_OK){ const a=await fbGetColl("reviews/"+pid); if(a) return a.sort((x,y)=>(y.date||"").localeCompare(x.date||"")); }
   const r=await dbGet("nemo-rev-"+pid); return r?JSON.parse(r):[];
 }
+/* Aggregate every review-attached photo across all products → the "Arrived Alive" wall.
+   One cloud read; returns newest-first {photo, name, rating, pid}. */
+async function loadArrivedAlivePhotos(limit=24){
+  let byPid={};
+  if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("reviews").get(),6000); const v=s&&s.val(); if(v) byPid=v; }catch(e){} }
+  const out=[];
+  Object.keys(byPid||{}).forEach(pid=>{
+    const coll=byPid[pid]; if(!coll) return;
+    Object.values(coll).forEach(r=>{
+      if(r&&Array.isArray(r.photos)&&r.photos.length){
+        r.photos.forEach(ph=>out.push({photo:ph,name:r.name||"Customer",rating:r.rating||0,date:r.date||"",pid}));
+      }
+    });
+  });
+  out.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  return out.slice(0,limit);
+}
 async function saveReviews(pid,list){ await dbSet("nemo-rev-"+pid,JSON.stringify(list)); if(FB_OK) await fbSetColl("reviews/"+pid,list); }
 async function appendReview(pid,rev){
   // Write ONLY this review to its own node — never overwrite the whole collection (a whole-node .set wiped concurrent reviewers' entries)
@@ -622,11 +703,28 @@ async function deleteReview(pid,rid){
   return next;
 }
 
+/* ─── Service & packing experience reviews (one per delivered order, keyed by order id) ─── */
+async function loadExperienceReviews(){
+  if(FB_OK){ const a=await fbGetColl("experienceReviews"); if(a) return a.sort((x,y)=>(y.date||"").localeCompare(x.date||"")); }
+  try{ const r=localStorage.getItem("nemo-exp-reviews"); return r?JSON.parse(r):[]; }catch{ return []; }
+}
+async function saveExperienceReview(rev){
+  if(FB_OK){ try{ await FB_DB.ref("experienceReviews/"+rev.id).set(rev); }catch(e){} }
+  try{ const r=localStorage.getItem("nemo-exp-reviews"); const list=r?JSON.parse(r):[];
+    const next=list.some(x=>x.id===rev.id)?list.map(x=>x.id===rev.id?rev:x):[rev,...list];
+    localStorage.setItem("nemo-exp-reviews",JSON.stringify(next)); }catch{}
+}
+async function deleteExperienceReview(id){
+  if(FB_OK){ try{ await FB_DB.ref("experienceReviews/"+id).remove(); }catch(e){} }
+  try{ const r=localStorage.getItem("nemo-exp-reviews"); const list=r?JSON.parse(r):[];
+    localStorage.setItem("nemo-exp-reviews",JSON.stringify(list.filter(x=>x.id!==id))); }catch{}
+}
+
 /* Store settings (WhatsApp numbers, payment) — shared via Firebase */
 const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
-  liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Speed Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
+  liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
   returnPolicy:"NO RETURNS & NO REPLACEMENTS once live fish or plants have been received in good condition — all livestock sales are final on safe delivery. The only cover for transit loss is the Live Arrival Guarantee (DOA) above, which is one-time and limited to the cost of the fish. Live fish & plants are non-returnable and non-refundable once delivered safely. Approved DOA refunds are processed within 5–7 working days of our approval of your unboxing video — no item needs to be returned. Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect, and refunds for returned dry goods are issued within 5–7 working days after we receive and inspect the item. Refunds (where applicable) are issued as store credit or to the original payment method. Orders cannot be cancelled once payment is confirmed.",
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   shippingRates: null,
@@ -810,6 +908,11 @@ function reviewedKey(key){ return "nemo-reviewed-"+(key||"anon"); }
 function loadReviewedSet(key){ try{ const r=localStorage.getItem(reviewedKey(key)); return r?JSON.parse(r):[]; }catch{ return []; } }
 function addReviewedLocal(key,pid){ const s=loadReviewedSet(key); if(!s.includes(pid)){ s.push(pid); try{ localStorage.setItem(reviewedKey(key),JSON.stringify(s)); }catch{} } return s; }
 
+/* Track which delivered orders a customer has already rated for service & packing */
+function expReviewedKey(key){ return "nemo-exp-reviewed-"+(key||"anon"); }
+function loadExpReviewedSet(key){ try{ const r=localStorage.getItem(expReviewedKey(key)); return r?JSON.parse(r):[]; }catch{ return []; } }
+function addExpReviewedLocal(key,oid){ const s=loadExpReviewedSet(key); if(!s.includes(oid)){ s.push(oid); try{ localStorage.setItem(expReviewedKey(key),JSON.stringify(s)); }catch{} } return s; }
+
 /* Stable per-user key (Google uid, else phone) */
 function userKey(u){ return u ? (u.uid || ("ph-"+normalizePhone(u.phone||""))) : null; }
 
@@ -845,6 +948,42 @@ function relatedProducts(products, terms, excludeId, limit=8){
   });
   scored.sort((a,b)=>b.score-a.score);
   return scored.slice(0,limit).map(s=>s.p);
+}
+
+/* Cross-sell: complementary products to pair with the one being viewed.
+   Fish → food, conditioner & accessories (high-margin, zero mortality risk);
+   Plants → accessories & substrate; gear → other gear & feed. In-stock only. */
+const CROSS_SELL_MAP = {
+  "Live Fish":    ["Feed","Accessories","Plants"],
+  "Plants":       ["Accessories","Feed","Live Fish"],
+  "Accessories":  ["Feed","Accessories","Tanks"],
+  "Tanks":        ["Accessories","Feed","Plants"],
+  "Feed":         ["Accessories","Live Fish","Plants"],
+};
+function crossSellProducts(product, products, limit=6){
+  if(!product) return [];
+  const want=CROSS_SELL_MAP[product.category]||["Accessories","Feed"];
+  const avail=(products||[]).filter(p=>p.id!==product.id && !p.comingSoon && (p.stockCount??DEFAULT_STOCK)>0);
+  const out=[];
+  want.forEach(cat=>{ avail.forEach(p=>{ if(p.category===cat && !out.includes(p)) out.push(p); }); });
+  avail.forEach(p=>{ if(!out.includes(p)) out.push(p); }); // top up if short
+  return out.slice(0,limit);
+}
+
+/* Food re-order reminder: if the customer's most recent Feed delivery is older than
+   `days`, nudge them to restock (consumable = recurring revenue at good margin). */
+function foodReorderDue(orders, products, days=30){
+  const delivered=(orders||[]).filter(o=>o.status==="Delivered");
+  let best=null;
+  delivered.forEach(o=>{
+    const t=new Date(o.deliveredAt||o.updatedAt||o.placedAt||0).getTime();
+    (o.items||[]).forEach(it=>{ if(it.category==="Feed"){ if(!best||t>best.t) best={it,t}; } });
+  });
+  if(!best||!best.t) return null;
+  const ageDays=(Date.now()-best.t)/86400000;
+  if(ageDays<days || ageDays>180) return null; // due, but not so old it's irrelevant
+  const product=(products||[]).find(p=>p.id===best.it.id);
+  return { item:best.it, product, ageDays:Math.round(ageDays), key:String(best.t) };
 }
 
 /* Favorites / Saved items — per user (local cache + cloud sync) */
@@ -1440,9 +1579,9 @@ function generateBillHTML(order, settings){
     const zone=o.shippingZoneLabel?" ("+E(o.shippingZoneLabel)+")":"";
     const r=[];
     if(bd.courier>0)r.push(trow(`Shipping${zone}`,"₹"+fmt(bd.courier)));
-    if(bd.special>0)r.push(trow("&nbsp;&nbsp;• Speed courier extra","₹"+fmt(bd.special)));
+    if(bd.special>0)r.push(trow("&nbsp;&nbsp;• Premium courier extra","₹"+fmt(bd.special)));
     if(bd.thermacol>0)r.push(trow("&nbsp;&nbsp;• Thermacol packaging","₹"+fmt(bd.thermacol)));
-    if(bd.carton>0)r.push(trow("&nbsp;&nbsp;• Carton packaging","₹"+fmt(bd.carton)));
+    if(bd.carton>0)r.push(trow("&nbsp;&nbsp;• Standard packing","₹"+fmt(bd.carton)));
     if(!r.length)r.push(trow(`Shipping${zone}`, shipping>0?"₹"+fmt(shipping):"Free"));
     return r.join("");
   })();
@@ -1502,7 +1641,7 @@ function generateBillHTML(order, settings){
   </table>
   <div style="text-align:right;margin-top:14px"><button class="np" onclick="window.print()" style="background:#0b6e72;color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save PDF</button></div>
   <div class="footer">
-    ${o.liveGuarantee?`<p>🛡️ <b>Live Arrival Guarantee</b> applies (included with your Speed Delivery parcel). Send a continuous unboxing video within 2 hours of delivery to WhatsApp ${storeWA} if any fish arrives Dead on Arrival. One approved claim is resolved by replacement, store credit, or refund of the fish amount.</p>`:""}
+    ${o.liveGuarantee?`<p>🛡️ <b>Live Arrival Guarantee</b> applies (included with your Premium Delivery parcel). Send a continuous unboxing video within 2 hours of delivery to WhatsApp ${storeWA} if any fish arrives Dead on Arrival. One approved claim is resolved by replacement, store credit, or refund of the fish amount.</p>`:""}
     <p>${gstin?"Prices are inclusive of GST.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this is a Bill of Supply."}</p>
     <p>Thank you for shopping at <b>${storeName}</b> 🐠</p>
     <p>Support: WhatsApp ${storeWA}</p>
@@ -1545,8 +1684,12 @@ function generateInvoiceHTML(order, settings){
   const storeAddr=E(s.legalAddress||s.storeAddress||s.legalCity||"");
   const storeWA=E(s.ownerWhatsapp||BUSINESS_WA);
   const storeEmail=E(s.orderEmail||"");
+  const logo=E(s.storeLogo||"");
   const gstin=E((s.gstin||"").trim());
   const docLabel=gstin?"TAX INVOICE":"INVOICE";
+  // Per-line MRP (pre-discount unit price) and total line discount, for the price/discount columns.
+  const unitMrp=(it)=>Math.round(Number(it.mrp||it.origPrice||(Number(it.discountPct)>0?Number(it.price||0)/(1-Number(it.discountPct)/100):it.price||0)));
+  const lineDisc=(it)=>Math.max(0,Math.round((unitMrp(it)-Number(it.price||0))*Number(it.qty||0)));
   const invNo=E(o.orderNo||orderId(o.id||""));
   const dateStr=o.placedAt?new Date(o.placedAt).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—";
   const custId=E((o.userPhone||addr.phone||"").toString().slice(-10));
@@ -1586,7 +1729,8 @@ function generateInvoiceHTML(order, settings){
     taxableSum+=taxable;
     if(interState){ igstSum+=tax; } else { const c=round2(tax/2); cgstSum+=c; sgstSum+=round2(tax-c); }
     const hsn=E(String(it.hsn||defHsn||""));
-    return `<tr><td class="c">${i+1}</td><td>${E(it.name)}${it.variantLabel?`<div class="muted">${E(it.variantLabel)}</div>`:""}</td><td class="c">${hsn||"—"}</td><td class="c">${E(it.qty)}</td><td class="r">${money(taxable)}</td><td class="c">${rate}%</td><td class="r">${money(tax)}</td><td class="r">${money(gross)}</td></tr>`;
+    const mrp=unitMrp(it); const disc=lineDisc(it);
+    return `<tr><td class="c">${i+1}</td><td>${E(it.name)}${it.variantLabel?`<div class="muted">${E(it.variantLabel)}</div>`:""}</td><td class="c">${hsn||"—"}</td><td class="c">${E(it.qty)}</td><td class="r">₹${fmt(mrp)}</td><td class="r">${disc>0?"-₹"+fmt(disc):"—"}</td><td class="r">${money(taxable)}</td><td class="c">${rate}%</td><td class="r">${money(tax)}</td><td class="r">${money(gross)}</td></tr>`;
   }).join("");
   if(shipping>0){ const st=round2(shipping/(1+defRate/100)); const stx=round2(shipping-st); taxableSum+=st; if(interState){ igstSum+=stx; } else { const c=round2(stx/2); cgstSum+=c; sgstSum+=round2(stx-c); } }
   taxableSum=round2(taxableSum); cgstSum=round2(cgstSum); sgstSum=round2(sgstSum); igstSum=round2(igstSum);
@@ -1598,7 +1742,8 @@ function generateInvoiceHTML(order, settings){
     <td class="c">${i+1}</td>
     <td>${E(it.name)}${it.variantLabel?`<div class="muted">${E(it.variantLabel)}</div>`:""}</td>
     <td class="c">${E(it.qty)}</td>
-    <td class="r">₹${fmt(it.price)}</td>
+    <td class="r">₹${fmt(unitMrp(it))}</td>
+    <td class="r">${lineDisc(it)>0?"-₹"+fmt(lineDisc(it)):"—"}</td>
     <td class="r">₹${fmt(it.price*it.qty)}</td>
   </tr>`).join("");
   const totRow=(label,val,opts={})=>`<tr${opts.grand?' class="grand"':""}><td colspan="3"></td><td class="r lbl${opts.neg?' neg':''}">${label}</td><td class="r val${opts.neg?' neg':''}">${val}</td></tr>`;
@@ -1611,6 +1756,8 @@ body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;background:#e9edf3;margin
 .page{max-width:780px;margin:0 auto;background:#fff;padding:42px 44px 36px;box-shadow:0 8px 32px rgba(31,56,100,.14)}
 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
 .co h2{margin:0 0 4px;font-size:18px;font-weight:800;color:#1f3864}
+.co{display:flex;gap:14px;align-items:flex-start}
+.co .lg{width:58px;height:58px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid #e3e8ef}
 .co p{margin:0;font-size:11.5px;line-height:1.6;color:#566}
 .title{text-align:right}
 .title .big{font-size:40px;font-weight:800;color:#2f4b7c;letter-spacing:1px;line-height:1}
@@ -1657,8 +1804,11 @@ table.items.gst tbody td{padding:7px 7px;font-size:11px}
 <body><div class="page">
   <div class="top">
     <div class="co">
+      ${logo?`<img class="lg" src="${logo}" alt=""/>`:""}
+      <div class="coinfo">
       <h2>${storeName}</h2>
       <p>${storeEntity?E(storeEntity)+"<br>":""}${storeAddr?storeAddr+"<br>":""}${storeWA?"☎ "+storeWA+"<br>":""}${storeEmail?storeEmail+"<br>":""}${gstin?"GSTIN: "+gstin+"<br>":""}${hasGst&&pan?"PAN: "+pan+"<br>":""}${hasGst&&cin?"CIN: "+cin:""}</p>
+      </div>
     </div>
     <div class="title">
       <div class="big">${docLabel}</div>
@@ -1678,18 +1828,18 @@ table.items.gst tbody td{padding:7px 7px;font-size:11px}
     <div class="col"><div class="h">SHIP TO</div><div class="b">${addrBlock(addr)}${o.shippingZoneLabel?`<div class="muted">Zone: ${E(o.shippingZoneLabel)}</div>`:""}</div></div>
   </div>
   ${hasGst?`<div class="tablewrap"><table class="items gst">
-    <thead><tr><th class="c" style="width:24px">#</th><th>Description</th><th class="c">HSN/SAC</th><th class="c">Qty</th><th class="r">Taxable</th><th class="c">GST</th><th class="r">Tax</th><th class="r">Total</th></tr></thead>
+    <thead><tr><th class="c" style="width:24px">#</th><th>Description</th><th class="c">HSN/SAC</th><th class="c">Qty</th><th class="r">Rate</th><th class="r">Disc</th><th class="r">Taxable</th><th class="c">GST</th><th class="r">Tax</th><th class="r">Total</th></tr></thead>
     <tbody>${gstRows}</tbody>
   </table></div>`:`<div class="tablewrap"><table class="items">
-    <thead><tr><th class="c" style="width:34px">#</th><th>Description</th><th class="c" style="width:50px">Qty</th><th class="r" style="width:90px">Unit Price</th><th class="r" style="width:100px">Total</th></tr></thead>
+    <thead><tr><th class="c" style="width:34px">#</th><th>Description</th><th class="c" style="width:44px">Qty</th><th class="r" style="width:84px">MRP</th><th class="r" style="width:74px">Disc</th><th class="r" style="width:96px">Total</th></tr></thead>
     <tbody>${itemRows}</tbody>
   </table></div>`}
   <table class="tot" style="width:100%;border-collapse:collapse;margin-top:6px">
     ${totRow("Subtotal","₹"+fmt(subtotal))}
     ${bd.courier>0?totRow(`Shipping${o.shippingZoneLabel?" ("+E(o.shippingZoneLabel)+")":""}`,"₹"+fmt(bd.courier)):""}
-    ${bd.special>0?totRow("Speed Courier extra","₹"+fmt(bd.special)):""}
+    ${bd.special>0?totRow("Premium Courier extra","₹"+fmt(bd.special)):""}
     ${bd.thermacol>0?totRow("Thermacol packaging","₹"+fmt(bd.thermacol)):""}
-    ${bd.carton>0?totRow("Carton packaging","₹"+fmt(bd.carton)):""}
+    ${bd.carton>0?totRow("Standard packing","₹"+fmt(bd.carton)):""}
     ${(bd.courier+bd.special+bd.thermacol+bd.carton)===0&&shipping===0?totRow("Shipping","Free"):""}
     ${o.liveGuarantee?totRow("Live Arrival Guarantee","Included"):""}
     ${couponOff>0?totRow(`Coupon${o.coupon?" ("+E(o.coupon)+")":""}`,"-₹"+fmt(couponOff),{neg:true}):""}
@@ -1709,7 +1859,8 @@ table.items.gst tbody td{padding:7px 7px;font-size:11px}
     ${hasGst?`<p>We certify that our registration under the Goods and Services Tax Act, 2017 is in force and that this tax invoice reflects the goods actually supplied. ${pan?"PAN: "+pan+". ":""}GSTIN: ${gstin}.</p>`:""}
     ${o.liveGuarantee?`<p><b>Live Arrival Guarantee</b> applies to this order. Report any Dead-on-Arrival with a continuous unboxing video on WhatsApp ${storeWA} within 2 hours of delivery.</p>`:""}
     <p>For any questions about this invoice, contact <b>${storeName}</b> on WhatsApp ${storeWA}${storeEmail?` or ${storeEmail}`:""}.</p>
-    <p style="font-size:10px">This is a computer-generated invoice. E. &amp; O.E. Subject to ${E(s.jurisdiction||"India")} jurisdiction.</p>
+    <p style="font-size:10px">This is a computer-generated invoice and does not require a physical signature. E. &amp; O.E. Subject to ${E(s.jurisdiction||"India")} jurisdiction.</p>
+    <p style="font-size:10px"><b>Returns &amp; Refunds:</b> ${s.returnPolicy?E(s.returnPolicy):"Live fish are covered only under our Live Arrival Guarantee (report DOA with a continuous unboxing video within 2 hours of delivery). Being perishable livestock, fish are otherwise non-returnable. Dry goods &amp; accessories may be returned within 7 days if unused and in original packaging; approved refunds are issued to the original payment method or as store credit within 5–7 working days."}</p>
   </div>
   <div class="np" style="text-align:right;margin-top:18px"><button onclick="window.print()" style="background:#2f4b7c;color:#fff;border:none;border-radius:6px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save as PDF</button></div>
 </div></body></html>`;
@@ -1738,7 +1889,7 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
   if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
-  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Speed Courier Extra (Rs.)","Thermacol Packing (Rs.)","Carton Packing (Rs.)","Speed Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID"];
+  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID"];
   const pph=Number(settings?.loyaltyPointsPerHundred||10);
   const rupeePerPoint=Number(settings?.loyaltyRedeemValue||1);
   const rows=list.map(o=>{
@@ -1905,7 +2056,7 @@ function Portal({children}){
 function SmoothImg({src,alt,style,className}){
   const onReady=(el)=>{ if(el){ if(el.complete && el.naturalWidth>0) el.setAttribute("data-loaded","1"); } };
   return (
-    <img src={src} alt={alt||""} ref={onReady}
+    <img src={src} alt={alt||""} ref={onReady} decoding="async"
       className={"smooth-img"+(className?(" "+className):"")} style={style}
       onLoad={e=>e.currentTarget.setAttribute("data-loaded","1")}
       onError={e=>e.currentTarget.setAttribute("data-loaded","1")}/>
@@ -2312,9 +2463,10 @@ function GuideNotifBtn(){
 }
 
 function StockBadge({stockCount}){
+  // Show the exact count only once it drops below 10 (low-stock urgency). Otherwise just "In Stock".
   const m = stockCount<=0 ? {c:"#dc2626",bg:"#fee2e2",l:"✕ Out of Stock"}
-          : stockCount<=3 ? {c:"#c2410c",bg:"#fff7ed",l:`⚠ Only ${stockCount} left`}
-          : {c:"#15803d",bg:"#dcfce7",l:`● ${stockCount} in stock`};
+          : stockCount<10 ? {c:"#c2410c",bg:"#fff7ed",l:`⚠ Only ${stockCount} left`}
+          : {c:"#15803d",bg:"#dcfce7",l:"● In Stock"};
   return <span style={{fontSize:10,fontWeight:700,color:m.c,background:m.bg,padding:"3px 9px",borderRadius:20}}>{m.l}</span>;
 }
 function StatusBadge({status}){
@@ -2392,9 +2544,22 @@ function RatingSummary({reviews,avgRating}){
 function ReviewForm({onSubmit,onCancel,user,orderId:oid}){
   const [rating,setRating]   = useState(0);
   const [comment,setComment] = useState("");
+  const [photos,setPhotos]   = useState([]); // array of compressed JPEG data-URLs
+  const [photoBusy,setPhotoBusy]=useState(false);
   const [errs,setErrs]       = useState({});
   const [saving,setSaving]   = useState(false);
   const name = user?.name || "";
+  const MAX_PHOTOS=3;
+
+  const addPhotos=async(files)=>{
+    const list=Array.from(files||[]).slice(0,MAX_PHOTOS-photos.length);
+    if(!list.length) return;
+    setPhotoBusy(true);
+    const out=[];
+    for(const f of list){ try{ out.push(await compressImage(f,900,0.72)); }catch(e){} }
+    setPhotos(p=>[...p,...out].slice(0,MAX_PHOTOS));
+    setPhotoBusy(false);
+  };
 
   const validate=()=>{
     const e={};
@@ -2407,7 +2572,7 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid}){
   const submit=async()=>{
     if(!validate())return;
     setSaving(true);
-    await onSubmit({id:uid("rev"),name:name||"Customer",rating,comment:comment.trim(),date:new Date().toISOString(),orderId:oid,verified:true});
+    await onSubmit({id:uid("rev"),name:name||"Customer",rating,comment:comment.trim(),photos,date:new Date().toISOString(),orderId:oid,verified:true});
     setSaving(false);
   };
 
@@ -2437,6 +2602,26 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid}){
         <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
           {errs.comment?<span style={{fontSize:11,color:C.danger,fontWeight:600}}>{errs.comment}</span>:<span/>}
           <span style={{fontSize:11,color:C.textSub}}>{comment.length}/500</span>
+        </div>
+      </div>
+
+      {/* Photo upload */}
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Add Photos <span style={{textTransform:"none",letterSpacing:0,fontWeight:600,color:C.textSub}}>(optional · shows others your fish arrived happy)</span></div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {photos.map((src,i)=>(
+            <div key={i} style={{position:"relative",width:64,height:64,borderRadius:10,overflow:"hidden",border:`1px solid ${C.border}`}}>
+              <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+              <button className="press" onClick={()=>setPhotos(p=>p.filter((_,j)=>j!==i))}
+                style={{position:"absolute",top:2,right:2,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:11,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+            </div>
+          ))}
+          {photos.length<MAX_PHOTOS&&(
+            <label style={{width:64,height:64,borderRadius:10,border:`1.5px dashed ${C.border}`,background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",color:C.textSub,gap:2}}>
+              {photoBusy?<Spinner/>:<><span style={{fontSize:18,lineHeight:1}}>📷</span><span style={{fontSize:9,fontWeight:700}}>Add</span></>}
+              <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{addPhotos(e.target.files);e.target.value="";}}/>
+            </label>
+          )}
         </div>
       </div>
 
@@ -2660,6 +2845,55 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
       </div>
     </div>
     </Portal>
+  );
+}
+
+/* Inline "rate our service & packing" prompt shown on each delivered order. Self-contained:
+   reads/writes its own per-order "already rated" flag and saves to the experienceReviews node. */
+function ExperienceReview({order, uk, user}){
+  const [done,setDone]=useState(()=>loadExpReviewedSet(uk).includes(order.id));
+  const [service,setService]=useState(0);
+  const [packing,setPacking]=useState(0);
+  const [comment,setComment]=useState("");
+  const [saving,setSaving]=useState(false);
+  if(done) return(
+    <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
+      <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",fontSize:12,color:"#15803d",fontWeight:700}}>✓ Thanks for rating our service &amp; packing!</div>
+    </div>
+  );
+  const ready=service>0&&packing>0;
+  const submit=async()=>{
+    if(!ready||saving) return;
+    setSaving(true);
+    const rev={ id:order.id, orderNo:order.orderNo||orderId(order.id),
+      service, packing, comment:comment.trim(),
+      name:(user&&user.name)||order.address?.name||"Customer",
+      uid:uk||"", zone:order.shippingZoneLabel||"", date:new Date().toISOString() };
+    try{ await saveExperienceReview(rev); }catch(e){}
+    addExpReviewedLocal(uk, order.id);
+    setSaving(false); setDone(true);
+  };
+  return(
+    <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
+      <div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px"}}>
+        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:2}}>📦 How was our service &amp; packing?</div>
+        <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.45}}>Your feedback helps us pack &amp; deliver better. (Rate the products separately above.)</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
+          <span style={{fontSize:12,color:C.text,fontWeight:600}}>Service</span>
+          <ReviewStars value={service} onChange={setService} size={22}/>
+        </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <span style={{fontSize:12,color:C.text,fontWeight:600}}>Packing quality</span>
+          <ReviewStars value={packing} onChange={setPacking} size={22}/>
+        </div>
+        <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={2} placeholder="Anything about delivery, packing or service? (optional)"
+          style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:12.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",boxSizing:"border-box",marginBottom:9,fontFamily:"'Nunito',sans-serif"}}/>
+        <button className="press" onClick={submit} disabled={!ready||saving}
+          style={{width:"100%",background:ready?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:ready?"pointer":"default"}}>
+          {saving?<><Spinner/>Submitting…</>:"Submit rating"}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -2980,6 +3214,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                   )}
                 </div>
               )}
+              {o.status==="Delivered" && <ExperienceReview order={o} uk={uk} user={user}/>}
             </div>
           ))}
           </>
@@ -3052,8 +3287,8 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           {onSale&&<div style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{p.price}</div>}
         </div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-          <div style={{fontSize:10,color:stk<=3?C.coral:C.textSub,fontWeight:700}}>
-            {oos?"Out of stock":stk<=3?`Only ${stk} left`:`${stk} in stock`}
+          <div style={{fontSize:10,color:stk<10?C.coral:C.textSub,fontWeight:700}}>
+            {oos?"Out of stock":stk<10?`Only ${stk} left`:"In stock"}
           </div>
           {inCart>0 ? (
             <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:10,padding:"3px 4px",gap:4}}>
@@ -3199,6 +3434,149 @@ function PincodeChecker({settings={}}){
     </div>
   );
 }
+/* Food re-order reminder banner — shown on home when a consumable is due to run out. */
+function FoodReorderBanner({orders,products,addToCart,nav}){
+  const due=useMemo(()=>foodReorderDue(orders,products,30),[orders,products]);
+  const [dismissed,setDismissed]=useState(()=>{ try{ return localStorage.getItem("nemo-reorder-dismiss")===((due&&due.key)||"\u0000"); }catch{ return false; } });
+  if(!due||dismissed) return null;
+  const inStock=due.product&&!due.product.comingSoon&&(due.product.stockCount??DEFAULT_STOCK)>0;
+  const reorder=()=>{ if(inStock){ addToCart(due.product,1); nav("cart"); } else if(due.product){ nav("detail",due.product); } };
+  const dismiss=()=>{ try{ localStorage.setItem("nemo-reorder-dismiss",due.key); }catch{} setDismissed(true); };
+  return(
+    <div style={{marginBottom:22,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:18,padding:"14px 30px 14px 16px",display:"flex",alignItems:"center",gap:13,position:"relative"}}>
+      <div style={{width:44,height:44,borderRadius:12,background:"#ffedd5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>🥣</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14.5,fontWeight:800,color:"#9a3412",lineHeight:1.2}}>Running low on fish food?</div>
+        <div style={{fontSize:11.5,color:"#9a3412",opacity:.85,marginTop:2,lineHeight:1.4}}>You bought {due.item.name} about {due.ageDays} days ago — keep your fish well-fed.</div>
+      </div>
+      <button className="press" onClick={reorder}
+        style={{flexShrink:0,background:C.coral,color:"white",border:"none",borderRadius:11,padding:"10px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+        {inStock?"Reorder":"View"}
+      </button>
+      <button className="press" onClick={dismiss} aria-label="Dismiss"
+        style={{position:"absolute",top:6,right:8,background:"none",border:"none",color:"#9a3412",opacity:.5,fontSize:16,cursor:"pointer",lineHeight:1,padding:4}}>×</button>
+    </div>
+  );
+}
+/* ═══════════════════ DOA INSIGHTS (admin) ═══════════════════ */
+/* Aggregates Dead-on-Arrival reports across delivered live-fish orders by species,
+   destination zone, and season — so the owner can spot loss patterns and act. */
+function DoaInsights({orders=[]}){
+  const data=useMemo(()=>{
+    const seasonOf=iso=>{ const m=new Date(iso||0).getMonth(); return m>=2&&m<=5?"☀️ Summer (Mar–Jun)":m>=6&&m<=9?"🌧️ Monsoon (Jul–Oct)":"❄️ Winter (Nov–Feb)"; };
+    const deliveredLive=(orders||[]).filter(o=>o.status==="Delivered"&&(o.items||[]).some(it=>it.category==="Live Fish"));
+    const doaOrders=deliveredLive.filter(o=>o.doa);
+    const species={},zone={},season={};
+    const bump=(m,k,f)=>{ m[k]=m[k]||{d:0,doa:0}; m[k][f]++; };
+    deliveredLive.forEach(o=>{
+      bump(zone,o.shippingZoneLabel||"Unknown","d");
+      bump(season,seasonOf(o.placedAt),"d");
+      new Set((o.items||[]).filter(it=>it.category==="Live Fish").map(it=>it.name)).forEach(nm=>bump(species,nm,"d"));
+    });
+    doaOrders.forEach(o=>{
+      bump(zone,o.shippingZoneLabel||"Unknown","doa");
+      bump(season,seasonOf(o.placedAt),"doa");
+      new Set((o.items||[]).filter(it=>it.category==="Live Fish").map(it=>it.name)).forEach(nm=>{ if(species[nm]) species[nm].doa++; });
+    });
+    return { total:deliveredLive.length, doa:doaOrders.length, species, zone, season };
+  },[orders]);
+  const [open,setOpen]=useState(false);
+  if(data.total===0) return null;
+  const overall=data.total?((data.doa/data.total)*100):0;
+  const rateColor=r=>r>=20?"#dc2626":r>=10?"#c2410c":"#15803d";
+  const rows=(map,{onlyDoa=false,sortByRate=false}={})=>{
+    let arr=Object.entries(map).map(([k,v])=>({k,...v,rate:v.d?(v.doa/v.d)*100:0}));
+    if(onlyDoa) arr=arr.filter(x=>x.doa>0);
+    arr.sort((a,b)=> sortByRate ? b.rate-a.rate : b.doa-a.doa);
+    return arr;
+  };
+  const Section=({title,map,opts})=>{
+    const arr=rows(map,opts);
+    if(!arr.length) return null;
+    return(
+      <div style={{marginTop:12}}>
+        <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:6}}>{title}</div>
+        {arr.map(x=>(
+          <div key={x.k} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderTop:`1px solid ${C.border}`}}>
+            <span style={{flex:1,fontSize:12.5,fontWeight:600,color:C.text,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.k}</span>
+            <span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{x.doa}/{x.d}</span>
+            <span style={{fontSize:12,fontWeight:800,color:rateColor(x.rate),minWidth:46,textAlign:"right"}}>{x.rate.toFixed(0)}%</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+  return(
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
+      <button className="press" onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left"}}>
+        <span style={{fontSize:18}}>🩺</span>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>DOA Insights</div>
+          <div style={{fontSize:11,color:C.textSub,marginTop:1}}>{data.doa} DOA of {data.total} delivered live-fish orders</div>
+        </div>
+        <span style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,color:rateColor(overall)}}>{overall.toFixed(1)}%</span>
+        <span style={{fontSize:13,color:C.textSub,marginLeft:6}}>{open?"▲":"▼"}</span>
+      </button>
+      {open&&(data.doa===0?(
+        <div style={{marginTop:12,fontSize:12,color:"#15803d",fontWeight:600,background:"#ecfdf5",borderRadius:10,padding:"10px 12px"}}>✓ No DOA reported yet — your fish are arriving safe!</div>
+      ):(
+        <div>
+          <Section title="By species (most losses)" map={data.species} opts={{onlyDoa:true,sortByRate:true}}/>
+          <Section title="By destination zone" map={data.zone} opts={{sortByRate:true}}/>
+          <Section title="By season" map={data.season} opts={{sortByRate:true}}/>
+          <div style={{fontSize:10,color:C.textSub,marginTop:10,lineHeight:1.5,fontStyle:"italic"}}>Rate = DOA orders ÷ delivered live-fish orders for that group. Use high-rate species/zones to adjust packing, pause distant shipping in hot months, or pre-order delicate stock.</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════ ARRIVED ALIVE GALLERY ═══════════════════ */
+/* Trust wall of real photos customers attached to their verified reviews. */
+function ArrivedAliveGallery({products=[]}){
+  const [photos,setPhotos]=useState(null);
+  const [zoom,setZoom]=useState(null);
+  useEffect(()=>{ let on=true; loadArrivedAlivePhotos(24).then(p=>{ if(on) setPhotos(p); }); return ()=>{on=false;}; },[]);
+  if(!photos||photos.length===0) return null;
+  const nameFor=pid=>{ const p=products.find(x=>x.id===pid); return p?p.name:""; };
+  return(
+    <div style={{marginBottom:26}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>🐠 Arrived Alive</span>
+        <span style={{fontSize:11,color:C.success,fontWeight:700,background:"#dcfce7",padding:"3px 9px",borderRadius:20}}>✓ Real buyer photos</span>
+      </div>
+      <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.45}}>Unboxing photos shared by verified customers — see how healthy our fish arrive.</div>
+      <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6}}>
+        {photos.map((ph,i)=>(
+          <button key={i} className="press showcase-slide" onClick={()=>setZoom(ph)}
+            style={{flexShrink:0,width:128,padding:0,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${C.border}`,cursor:"zoom-in",textAlign:"left"}}>
+            <div style={{height:128,overflow:"hidden",position:"relative"}}>
+              <img src={ph.photo} alt="" loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+              <div style={{position:"absolute",top:6,left:6,background:"rgba(21,128,61,.92)",color:"white",fontSize:9,fontWeight:800,padding:"2px 7px",borderRadius:20}}>✓ Verified</div>
+            </div>
+            <div style={{padding:"7px 9px"}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🐠 {ph.name}</div>
+              {nameFor(ph.pid)&&<div style={{fontSize:9.5,color:C.textSub,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{nameFor(ph.pid)}</div>}
+            </div>
+          </button>
+        ))}
+      </div>
+      {zoom&&(
+        <Portal>
+        <div onClick={()=>setZoom(null)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:9000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
+          <img src={zoom.photo} alt="" style={{maxWidth:"100%",maxHeight:"72vh",objectFit:"contain",borderRadius:12}}/>
+          <div style={{marginTop:14,color:"white",textAlign:"center"}}>
+            <div style={{fontWeight:800,fontSize:15}}>🐠 {zoom.name} <span style={{fontSize:11,fontWeight:700,color:"#86efac",marginLeft:6}}>✓ Verified buyer</span></div>
+            {nameFor(zoom.pid)&&<div style={{fontSize:12,opacity:.8,marginTop:3}}>{nameFor(zoom.pid)}</div>}
+          </div>
+          <button className="press" onClick={()=>setZoom(null)} style={{position:"absolute",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22,cursor:"pointer"}}>×</button>
+        </div>
+        </Portal>
+      )}
+    </div>
+  );
+}
+
 function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit}){
   const featured=products.slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
@@ -3320,8 +3698,41 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* First-order welcome coupon */}
         {settingsReady&&<WelcomeBanner settings={settings} orders={orders}/>}
 
-        {/* Customer Tank Showcase — photo gallery only, featured near the top of home */}
+        {/* Rewards — surface wallet coins + referral so customers actually use them */}
+        {settingsReady&&user&&settings.loyaltyEnabled!==false&&(()=>{
+          const val=Number(settings.loyaltyRedeemValue||1);
+          const worth=Math.floor(walletPts*val);
+          const redeemMin=Number(settings.loyaltyRedeemMin||100);
+          const refOn=settings.referralEnabled!==false;
+          const refGet=Number(settings.referralDiscount||50);
+          return(
+            <div style={{marginBottom:22,borderRadius:20,overflow:"hidden",border:`1px solid ${C.border}`,background:`linear-gradient(135deg,${C.primaryDark},${C.primary})`,color:"white",position:"relative"}}>
+              <div style={{position:"absolute",top:-30,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
+              <button className="press" onClick={()=>setWalletOpen(true)} style={{display:"flex",alignItems:"center",gap:13,width:"100%",padding:"15px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left",color:"white",position:"relative"}}>
+                <div style={{width:46,height:46,borderRadius:14,background:"rgba(255,255,255,.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>👛</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,lineHeight:1.1}}>{walletPts>0?`${walletPts} coins · ₹${worth}`:"Earn coins on every order"}</div>
+                  <div style={{fontSize:11.5,opacity:.9,marginTop:2,lineHeight:1.4}}>{walletPts>=redeemMin?`Redeem ₹${worth} off your next order →`:walletPts>0?`Collect ${redeemMin-walletPts} more to redeem →`:`Get ${settings.loyaltyPointsPerHundred||10} coins per ₹100 spent →`}</div>
+                </div>
+              </button>
+              {refOn&&(
+                <button className="press" onClick={()=>nav("orders")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"12px 16px",background:"rgba(255,255,255,.12)",border:"none",borderTop:"1px solid rgba(255,255,255,.18)",cursor:"pointer",textAlign:"left",color:"white"}}>
+                  <span style={{fontSize:18}}>💜</span>
+                  <span style={{flex:1,fontSize:12.5,fontWeight:700,lineHeight:1.4}}>Refer a friend — they get ₹{refGet} off, you earn {settings.referralCoins||50} coins</span>
+                  <span style={{fontSize:16,opacity:.8}}>→</span>
+                </button>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Food re-order reminder */}
+        <FoodReorderBanner orders={orders} products={products} addToCart={addToCart} nav={nav}/>
+
         <TankShowcaseSection mode="gallery" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
+
+        {/* Arrived Alive — verified-buyer unboxing photos */}
+        <ArrivedAliveGallery products={products}/>
 
         {/* Categories */}
         {/* Recently viewed — replaces the old category grid */}
@@ -3361,18 +3772,6 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                   isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Limited time offer */}
-        {offer&&(
-          <div style={{marginBottom:26}}>
-            <CountdownBanner
-              endsAt={offer.offerEndsAt}
-              title="Limited Time Offer"
-              subtitle={`${offer.discountPct}% off ${offer.name} — don't miss out!`}
-              stockNote={offerStock<=10?`Only ${offerStock} items left in stock!`:null}
-              onShop={()=>nav("detail",offer)}/>
           </div>
         )}
 
@@ -3434,9 +3833,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           </button>
           <button className="press" onClick={()=>nav("request")}
             style={{background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left"}}>
-            <span style={{fontSize:28}}>🔎</span>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.2}}>Request a Product</div>
-            <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Can't find it? We'll source it</div>
+            <span style={{fontSize:28}}>🦄</span>
+            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.2}}>Exotic Fish on Request</div>
+            <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Rare or exotic fish? We'll source it for you</div>
           </button>
         </div>
 
@@ -3680,7 +4079,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
 }
 
 /* ═══════════════════ DETAIL PAGE ═══════════════════ */
-function DetailPage({product:p,media={images:[],video:null},addToCart,cart=[],nav,prevPage="shop",user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
+function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,prevPage="shop",user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
   const [qty,setQty]           = useState(1);
   const [selVarId,setSelVarId] = useState(null);
   const [tab,setTab]           = useState("desc");
@@ -3690,6 +4089,7 @@ function DetailPage({product:p,media={images:[],video:null},addToCart,cart=[],na
   const [submitted,setSubmitted]= useState(false);
   const [slide,setSlide]       = useState(0); // active gallery slide
   const [justAdded,setJustAdded] = useState(false);
+  const [photoZoom,setPhotoZoom] = useState(null); // review photo lightbox src
 
   useEffect(()=>{
     setLoadingRev(true);
@@ -3840,7 +4240,38 @@ function DetailPage({product:p,media={images:[],video:null},addToCart,cart=[],na
 
         {/* Description tab */}
         {tab==="desc"&&(
-          <div className="fade-in" style={{fontSize:13.5,color:C.textSub,lineHeight:1.75}}>{p.desc}</div>
+          <div className="fade-in">
+            <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.75}}>{p.desc}</div>
+            {(()=>{
+              const care=p.care||{};
+              const rows=[
+                ["🪣","Min tank size",care.tankSize],
+                ["🌡️","Water temp",care.temp],
+                ["💧","pH range",care.ph],
+                ["📏","Adult size",care.adultSize],
+                ["😊","Temperament",care.temperament],
+                ["⭐","Care level",care.level],
+                ["🍽️","Diet",care.diet],
+                ["🐟","Good tank mates",care.tankMates],
+              ].filter(r=>r[2]&&String(r[2]).trim());
+              if(!rows.length) return null;
+              return(
+                <div style={{marginTop:18,background:"#f0fbfc",borderRadius:16,padding:"14px 16px",border:`1px solid ${C.border}`}}>
+                  <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:10}}>🐠 Care Guide</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                    {rows.map(([icon,label,val],i)=>(
+                      <div key={label} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 0",borderTop:i?`1px solid ${C.border}`:"none"}}>
+                        <span style={{fontSize:15,flexShrink:0,lineHeight:1.3}}>{icon}</span>
+                        <span style={{fontSize:12.5,fontWeight:700,color:C.textSub,minWidth:118,flexShrink:0}}>{label}</span>
+                        <span style={{fontSize:12.5,fontWeight:600,color:C.text,lineHeight:1.4}}>{val}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{fontSize:10.5,color:C.textSub,marginTop:10,lineHeight:1.5,fontStyle:"italic"}}>Care details are a guide — conditions can vary by individual fish & tank.</div>
+                </div>
+              );
+            })()}
+          </div>
         )}
 
         {/* Reviews tab */}
@@ -3904,20 +4335,79 @@ function DetailPage({product:p,media={images:[],video:null},addToCart,cart=[],na
                         {r.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <div style={{fontSize:13,fontWeight:700,color:C.text}}>{r.name}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:C.text,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                          {r.name}
+                          {r.verified!==false&&<span style={{fontSize:9,fontWeight:800,color:C.success,background:"#dcfce7",padding:"2px 7px",borderRadius:20,display:"inline-flex",alignItems:"center",gap:3}}>✓ Verified Buyer</span>}
+                        </div>
                         <div style={{fontSize:10,color:C.textSub}}>{new Date(r.date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}</div>
                       </div>
                     </div>
                     <ReviewStars value={r.rating} size={13}/>
                   </div>
                   <div style={{fontSize:13,color:C.textSub,lineHeight:1.65,paddingLeft:44}}>{r.comment}</div>
-                  {/* Helpful label */}
-                  {r.rating>=4&&<div style={{fontSize:10,color:C.success,fontWeight:600,marginTop:6,paddingLeft:44}}>✓ Verified Purchase</div>}
+                  {/* Customer photos */}
+                  {Array.isArray(r.photos)&&r.photos.length>0&&(
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingLeft:44,marginTop:10}}>
+                      {r.photos.map((src,j)=>(
+                        <button key={j} className="press" onClick={()=>setPhotoZoom(src)}
+                          style={{padding:0,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",width:72,height:72,cursor:"zoom-in",background:"none"}}>
+                          <img src={src} alt="" loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))
             )}
           </div>
         )}
+
+        {/* Goes well with — cross-sell complementary products */}
+        {(()=>{
+          const cross=crossSellProducts(p,products,6);
+          if(!cross.length) return null;
+          return(
+            <div style={{marginTop:26}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
+                <span style={{fontSize:18}}>🧩</span>
+                <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Goes well with</span>
+              </div>
+              <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.45}}>{p.category==="Live Fish"?"Keep your new fish healthy — food, care & tank essentials.":"Pairs nicely with these."}</div>
+              <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
+                {cross.map(cp=>{
+                  const cm=CAT_META[cp.category]||CAT_META["Live Fish"];
+                  const cMedia=getProductMedia(cp,mediaCache);
+                  const cImg=cMedia.images&&cMedia.images[0];
+                  const cPrice=effectivePrice(cp);
+                  const cOnSale=(cp.discountPct||0)>0;
+                  return(
+                    <div key={cp.id} style={{flexShrink:0,width:140,background:C.card,borderRadius:14,overflow:"hidden",border:`1px solid ${C.border}`}}>
+                      <button className="press" onClick={()=>nav("detail",cp)} style={{display:"block",width:"100%",padding:0,border:"none",background:"none",cursor:"pointer",textAlign:"left"}}>
+                        <div style={{height:96,background:`linear-gradient(135deg,${cm.c1},${cm.c2})`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+                          {cImg?<img src={cImg} alt={cp.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:34}}>{cm.emoji}</span>}
+                        </div>
+                        <div style={{padding:"8px 10px 2px"}}>
+                          <div style={{fontSize:9.5,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>{cp.category}</div>
+                          <div style={{fontSize:12.5,fontWeight:700,color:C.text,lineHeight:1.25,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",minHeight:31}}>{cp.name}</div>
+                        </div>
+                      </button>
+                      <div style={{padding:"0 10px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+                        <div style={{display:"flex",flexDirection:"column"}}>
+                          <span style={{fontSize:13,fontWeight:800,color:C.primary,fontFamily:PRICE_FONT}}>₹{cPrice}</span>
+                          {cOnSale&&<span style={{fontSize:10,color:C.textSub,textDecoration:"line-through"}}>₹{cp.price}</span>}
+                        </div>
+                        {cp.category!=="Live Fish"&&(
+                          <button className="press" onClick={()=>{addToCart(cp,1);}}
+                            style={{background:C.primary,color:"white",border:"none",borderRadius:9,width:32,height:32,fontSize:18,fontWeight:700,lineHeight:1,cursor:"pointer",flexShrink:0}}>+</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Sticky bottom bar */}
@@ -3951,6 +4441,15 @@ function DetailPage({product:p,media={images:[],video:null},addToCart,cart=[],na
         </button>
         </>)}
       </div>
+
+      {photoZoom&&(
+        <Portal>
+        <div onClick={()=>setPhotoZoom(null)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <img src={photoZoom} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:10}}/>
+          <button className="press" onClick={()=>setPhotoZoom(null)} style={{position:"absolute",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22,cursor:"pointer"}}>×</button>
+        </div>
+        </Portal>
+      )}
     </div>
   );
 }
@@ -4019,7 +4518,7 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
         })()}
         <div style={{background:C.accentLight,borderRadius:12,padding:"10px 14px",marginTop:10,fontSize:12.5,color:C.primaryDark,fontWeight:600,border:`1px solid ${C.border}`}}>
           🚚 Shipping is calculated at checkout based on your location &amp; order weight
-          {hasLiveFish&&<span style={{display:"block",fontSize:11,fontWeight:500,marginTop:3,color:C.primary}}>🐠 Live fish shipping rates apply — see chart at checkout</span>}
+          {hasLiveFish&&<span style={{display:"block",fontSize:11,fontWeight:500,marginTop:3,color:C.primary}}>🐠 Live fish shipping rates apply</span>}
         </div>
         <button className="press" onClick={()=>nav("checkout")}
           style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"17px 16px",fontSize:15,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
@@ -4393,7 +4892,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       summary:addr.summary||"",
       total,fee,shippingZone:zone||"",shippingZoneLabel:zone?ZONE_LABELS[zone]:"Unknown",
       specialDelivery: hasLiveFish ? (selPack.courier==="special") : specialDelivery,
-      specialDeliveryFee: (hasLiveFish?(selPack.courier==="special"):specialDelivery) ? speedCourierForZone(zone, settings):0,
+      specialDeliveryFee: shipBreak.special,
       packing: hasLiveFish?packing:"", packingLabel: hasLiveFish?packingLabel(packing):"",
       suggestedPacking: hasLiveFish?suggestedPacking:"", suggestedPackingLabel: hasLiveFish?packingLabel(suggestedPacking):"",
       liveGuarantee:guaranteeActive,liveGuaranteeFee:0,
@@ -4575,13 +5074,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
         <div className="dt-read" style={{padding:"20px 16px 100px"}}>
           {/* Shipping rates info */}
           <div style={{background:C.accentLight,borderRadius:14,padding:"12px 14px",marginBottom:16,border:`1px solid ${C.border}`}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div style={{fontSize:13,fontWeight:700,color:C.primaryDark}}>🚚 Shipping rates vary by location &amp; weight</div>
-              <button className="press" onClick={()=>setShowRates(r=>!r)}
-                style={{background:"none",border:`1px solid ${C.primary}`,color:C.primary,borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
-                {showRates?"Hide":"View chart"}
-              </button>
-            </div>
+            <div style={{fontSize:13,fontWeight:700,color:C.primaryDark}}>🚚 Shipping rates vary by location &amp; weight</div>
             {zone&&<div style={{fontSize:11.5,color:C.primary,fontWeight:700,marginTop:4}}>📍 Detected zone: <b>{ZONE_LABELS[zone]}</b></div>}
             {!zone&&addr.pincode.length===6&&<div style={{fontSize:11.5,color:"#b45309",marginTop:4}}>⚠ Pincode not recognized — enter your city below and we'll confirm shipping</div>}
             {hasLiveFish&&(()=>{
@@ -4591,7 +5084,6 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               const total=fishWt+base;
               return <div style={{fontSize:11,color:C.textSub,marginTop:4}}>🐠 Estimated live parcel weight: <b style={{color:C.primary}}>{total.toFixed(2)} kg</b> (fish packing: {fishWt.toFixed(2)} kg + base: {base} kg)</div>;
             })()}
-            {showRates&&<ShippingRatesChart settings={settings}/>}
           </div>
           {liveBlocked&&(
             <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:14,padding:"13px 15px",marginBottom:14}}>
@@ -4669,8 +5161,8 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"#eff6ff":"#fff",borderRadius:14,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
               <input type="checkbox" checked={specialDelivery} onChange={e=>setSpecialDelivery(e.target.checked)} style={{width:20,height:20,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
               <div>
-                <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ Speed Delivery</div>
-                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{zone?speedCourierForZone(zone,settings):(settings.specialDeliveryPrice||200)}</b> to shipping.</div>
+                <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ Premium Delivery</div>
+                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{zone?speedCourierForZone(zone,settings,cart):(settings.specialDeliveryPrice||200)}</b> to shipping.</div>
               </div>
             </label>
           ) : null}
@@ -4808,7 +5300,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <span style={{fontSize:13,fontWeight:600,color:C.text}}>{shipBreak.freeShip?"Free":`₹${shipBreak.courier}`}</span>
               </div>
               {shipBreak.special>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
-                <span style={{fontSize:13,color:"#1d4ed8"}}>⚡ Speed Courier extra</span>
+                <span style={{fontSize:13,color:"#1d4ed8"}}>⚡ Premium Courier extra</span>
                 {!hasLiveFish?(
                   <span style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:13,fontWeight:600,color:"#1d4ed8"}}>₹{shipBreak.special}</span>
@@ -4821,7 +5313,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <span style={{fontSize:13,fontWeight:600,color:C.text}}>₹{shipBreak.thermacol}</span>
               </div>}
               {shipBreak.carton>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                <span style={{fontSize:13,color:C.textSub}}>📦 Carton packaging</span>
+                <span style={{fontSize:13,color:C.textSub}}>📦 Standard packing</span>
                 <span style={{fontSize:13,fontWeight:600,color:C.text}}>₹{shipBreak.carton}</span>
               </div>}
             </>)}
@@ -5145,6 +5637,14 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     suggestedPacking:product?.suggestedPacking||"carton_special",
     suggestedPackingTN:product?.suggestedPackingTN||product?.suggestedPacking||"carton_special",
     suggestedPackingOther:product?.suggestedPackingOther||product?.suggestedPacking||"thermacol_special",
+    careTankSize:product?.care?.tankSize||"",
+    careTemp:product?.care?.temp||"",
+    carePh:product?.care?.ph||"",
+    careDiet:product?.care?.diet||"",
+    careTemperament:product?.care?.temperament||"",
+    careLevel:product?.care?.level||"",
+    careAdultSize:product?.care?.adultSize||"",
+    careTankMates:product?.care?.tankMates||"",
   });
   // Gallery: images [{key,src,b64?}], one video {key,src,b64?,tooLarge?}
   const initImgs=(product?._mediaImgs||[]).map((src,i)=>({key:(product.media?.filter(m=>m.type!=="video")[i]?.key)||uid("mi"),src,existing:true}));
@@ -5218,6 +5718,8 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
       suggestedPacking:form.suggestedPacking||"carton_special",
       suggestedPackingTN:form.suggestedPackingTN||"carton_special",
       suggestedPackingOther:form.suggestedPackingOther||"thermacol_special",
+      care:{ tankSize:form.careTankSize.trim(), temp:form.careTemp.trim(), ph:form.carePh.trim(), diet:form.careDiet.trim(),
+             temperament:form.careTemperament.trim(), level:form.careLevel.trim(), adultSize:form.careAdultSize.trim(), tankMates:form.careTankMates.trim() },
       media,
       rating:product?.rating||0,reviews:product?.reviews||0,
       variants: form.category==="Live Fish"
@@ -5354,6 +5856,35 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
 
         {fld("Description","desc","text","Describe the product…",{textarea:true})}
 
+        {/* Care info — shown on the product page (Live Fish & Plants) */}
+        {(form.category==="Live Fish"||form.category==="Plants")&&(()=>{
+          const careRows=[
+            ["careTankSize","Min tank size","e.g. 40 L / 10 gal"],
+            ["careTemp","Water temp","e.g. 24–28 °C"],
+            ["carePh","pH range","e.g. 6.5–7.5"],
+            ["careAdultSize","Adult size","e.g. 6 cm"],
+            ["careTemperament","Temperament","e.g. Peaceful"],
+            ["careLevel","Care level","e.g. Beginner"],
+            ["careDiet","Diet","e.g. Omnivore — flakes, frozen"],
+            ["careTankMates","Good tank mates","e.g. Tetras, rasboras, corydoras"],
+          ];
+          return(
+            <div style={{background:"#f0fbfc",borderRadius:14,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:12,fontWeight:800,color:C.primary,textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>🐠 Care Info</div>
+              <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.45}}>Optional — shown as a care guide on the product page. Helps customers buy the right fish &amp; cuts DOA complaints. Leave blank to hide.</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {careRows.map(([k,label,ph])=>(
+                  <div key={k} style={{gridColumn:k==="careTankMates"?"1 / -1":"auto"}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>{label}</div>
+                    <input value={form[k]} onChange={e=>f(k,e.target.value)} placeholder={ph}
+                      style={{width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white",boxSizing:"border-box"}}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Packaging weight + special delivery suggestion */}
         {form.category==="Live Fish" ? (
           /* Live fish weight is set per-variant (type-wise) above. Admin recommends a packing here. */
@@ -5389,8 +5920,8 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",userSelect:"none"}}>
               <input type="checkbox" checked={!!form.suggestSpecialDelivery} onChange={e=>f("suggestSpecialDelivery",e.target.checked)} style={{width:16,height:16,accentColor:C.primary,flexShrink:0,marginTop:2}}/>
               <div>
-                <div style={{fontSize:11,fontWeight:700,color:C.text}}>suggest speed delivery</div>
-                <div style={{fontSize:10,color:C.textSub,marginTop:2,lineHeight:1.4}}>Highlight Speed Delivery option at checkout for this product.</div>
+                <div style={{fontSize:11,fontWeight:700,color:C.text}}>suggest premium delivery</div>
+                <div style={{fontSize:10,color:C.textSub,marginTop:2,lineHeight:1.4}}>Highlight Premium Delivery option at checkout for this product.</div>
               </div>
             </label>
           </div>
@@ -6037,6 +6568,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [prodQ,setProdQ]=useState("");
   const [allReviews,setAllReviews]=useState({}); // {pid: [reviews]}
   const [loadingRev,setLoadingRev]=useState(false);
+  const [expReviews,setExpReviews]=useState(null); // service & packing feedback (null = not loaded)
   const [walletBalances,setWalletBalances]=useState({}); // {uid: points}
   const [loadingWallets,setLoadingWallets]=useState(false);
   const [adjUid,setAdjUid]=useState(null);     // which customer's wallet is being adjusted
@@ -6091,6 +6623,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         setAllReviews(Object.fromEntries(entries));
         setLoadingRev(false);
       });
+      loadExperienceReviews().then(setExpReviews);
     }
   },[tab]);
 
@@ -6209,6 +6742,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             })()}
             <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {settings.gaId?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
           </div>
+          {/* DOA insights — loss patterns by species × zone × season */}
+          <DoaInsights orders={orders}/>
           {/* Payment destination — glance-check that money still routes to you */}
           <div style={{background:(settings.upiId||settings.razorpayLink)?"#ecfdf5":"#fff7ed",border:`1px solid ${(settings.upiId||settings.razorpayLink)?"#a7f3d0":"#fed7aa"}`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
             <div style={{fontSize:11,fontWeight:800,color:(settings.upiId||settings.razorpayLink)?"#15803d":"#9a3412",letterSpacing:.4,marginBottom:5}}>💰 PAYMENTS GO TO</div>
@@ -6374,6 +6909,45 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── REVIEWS TAB ── */}
       {tab==="reviews"&&(
         <div style={{padding:"16px 16px 100px"}}>
+          {/* ── Service & packing feedback summary ── */}
+          {Array.isArray(expReviews)&&expReviews.length>0&&(()=>{
+            const n=expReviews.length;
+            const avgSvc=(expReviews.reduce((s,r)=>s+(Number(r.service)||0),0)/n);
+            const avgPack=(expReviews.reduce((s,r)=>s+(Number(r.packing)||0),0)/n);
+            return(
+              <div style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
+                <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:10}}>📦 Service &amp; Packing Feedback</div>
+                <div style={{display:"flex",gap:12,marginBottom:14}}>
+                  <div style={{flex:1,background:C.bg,borderRadius:12,padding:"11px 12px",textAlign:"center"}}>
+                    <div style={{fontSize:11,color:C.textSub,fontWeight:700,marginBottom:3}}>SERVICE</div>
+                    <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,color:C.primary,lineHeight:1}}>{avgSvc.toFixed(1)}</div>
+                    <div style={{marginTop:4}}><ReviewStars value={Math.round(avgSvc)} size={12}/></div>
+                  </div>
+                  <div style={{flex:1,background:C.bg,borderRadius:12,padding:"11px 12px",textAlign:"center"}}>
+                    <div style={{fontSize:11,color:C.textSub,fontWeight:700,marginBottom:3}}>PACKING</div>
+                    <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,color:C.primary,lineHeight:1}}>{avgPack.toFixed(1)}</div>
+                    <div style={{marginTop:4}}><ReviewStars value={Math.round(avgPack)} size={12}/></div>
+                  </div>
+                </div>
+                <div style={{fontSize:11,color:C.textSub,fontWeight:600,marginBottom:8}}>{n} rating{n!==1?"s":""}</div>
+                {expReviews.map((r,i)=>(
+                  <div key={r.id||i} style={{paddingBottom:i<expReviews.length-1?10:0,marginBottom:i<expReviews.length-1?10:0,borderBottom:i<expReviews.length-1?`1px solid ${C.border}`:"none"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:700,color:C.text}}>{r.name||"Customer"} <span style={{fontWeight:600,color:C.textSub}}>· {r.orderNo||""}</span></div>
+                        <div style={{fontSize:11,color:C.textSub,marginTop:2}}>Service {Number(r.service)||0}★ · Packing {Number(r.packing)||0}★{r.zone?` · ${r.zone}`:""}</div>
+                        {r.comment&&<div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginTop:4}}>{r.comment}</div>}
+                      </div>
+                      <button className="press" onClick={async()=>{await deleteExperienceReview(r.id);setExpReviews(list=>list.filter(x=>x.id!==r.id));showToast("Feedback deleted");}}
+                        style={{background:"#fee2e2",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:C.danger,fontFamily:"'Nunito',sans-serif",flexShrink:0,marginLeft:8}}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
           {loadingRev?(
             <div style={{display:"flex",justifyContent:"center",padding:"40px"}}><Spinner/></div>
           ):products.map(p=>{
@@ -6413,16 +6987,23 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                       </button>
                     </div>
                     <div style={{fontSize:12,color:C.textSub,lineHeight:1.55}}>{r.comment}</div>
+                    {Array.isArray(r.photos)&&r.photos.length>0&&(
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                        {r.photos.map((src,j)=>(
+                          <img key={j} src={src} alt="" loading="lazy" style={{width:56,height:56,objectFit:"cover",borderRadius:8,border:`1px solid ${C.border}`}}/>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             );
           })}
-          {!loadingRev&&Object.values(allReviews).every(r=>r.length===0)&&(
+          {!loadingRev&&Object.values(allReviews).every(r=>r.length===0)&&!(Array.isArray(expReviews)&&expReviews.length>0)&&(
             <div style={{textAlign:"center",padding:"50px 0",color:C.textSub}}>
               <div style={{fontSize:48,marginBottom:12}}>⭐</div>
               <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No reviews yet</div>
-              <div style={{fontSize:12}}>Customer reviews will appear here</div>
+              <div style={{fontSize:12}}>Customer &amp; service reviews will appear here</div>
             </div>
           )}
         </div>
@@ -7220,6 +7801,23 @@ function SettingsPanel({settings,onSave}){
             );
           })}
         </div>
+        <div style={{fontSize:12,fontWeight:800,color:C.primary,marginTop:14,marginBottom:6}}>📦 Standard packing charge (₹ per parcel-weight bracket)</div>
+        <div style={{fontSize:11.5,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Base packing — carton box, or a courier bag for small/dry items. Added to <b>dry-goods parcels</b> and to live-fish orders packed with a <b>Standard</b> option. Charged by total parcel weight.</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:8}}>
+          {SHIP_TIERS.map(t=>{
+            const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};
+            const crt=cur.carton||DEFAULT_SHIPPING_RATES.carton;
+            return(
+              <div key={t} style={{display:"flex",alignItems:"center",gap:8,background:C.bg,borderRadius:10,padding:"8px 10px",border:`1px solid ${C.border}`}}>
+                <span style={{fontSize:11,color:C.text,fontWeight:700,flex:1,whiteSpace:"nowrap"}}>{t}</span>
+                <span style={{fontSize:12,color:C.textSub,fontWeight:700}}>₹</span>
+                <input type="number" min="0" value={crt[t]||0}
+                  onChange={e=>{const c2=f.shippingRates||{...DEFAULT_SHIPPING_RATES};const cb={...(c2.carton||DEFAULT_SHIPPING_RATES.carton)};cb[t]=Number(e.target.value)||0;set("shippingRates",{...c2,carton:cb});}}
+                  style={{width:"58px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 8px",fontSize:12,outline:"none",background:"white",textAlign:"right"}}/>
+              </div>
+            );
+          })}
+        </div>
         <div style={{height:1,background:C.border,margin:"14px 0"}}/>
         {/* Shipping-overcharge reward */}
         <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>🎁 Shipping-overcharge reward</div>
@@ -7255,34 +7853,38 @@ function SettingsPanel({settings,onSave}){
 
       {/* Special delivery & live guarantee pricing */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>⚡ Speed Delivery &amp; 🛡️ Live Guarantee</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:6}}>⚡ Speed-courier charge by zone (₹)</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-              {[["TN","Tamil Nadu"],["SouthIndia","South India"],["CentralNorth","Central & North"]].map(([zk,zl])=>(
-                <div key={zk}>
-                  <div style={{fontSize:10,color:C.textSub,marginBottom:3,fontWeight:700}}>{zl}</div>
-                  <input type="number" min="0"
-                    value={(f.speedCourierRates&&f.speedCourierRates[zk]!=null)?f.speedCourierRates[zk]:""}
-                    onChange={e=>set("speedCourierRates",{...(f.speedCourierRates||{}),[zk]:e.target.value===""?"":Number(e.target.value)})}
-                    style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
-                </div>
-              ))}
-            </div>
-            <div style={{fontSize:10,color:C.textSub,marginTop:4}}>Applied at checkout from the customer's pincode zone.</div>
-          </div>
-          <div>
+        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>⚡ Premium Delivery &amp; 🛡️ Live Guarantee</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr",gap:14}}>
+          <div style={{maxWidth:260}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>🚚 Free Delivery above (₹)</div>
             <input type="number" min="0" value={f.freeDeliveryThreshold||0} onChange={e=>set("freeDeliveryThreshold",Number(e.target.value))}
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
             <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
           </div>
           <div>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>📦 Carton packing charge (₹)</div>
-            <input type="number" min="0" value={f.cartonPackingCharge||0} onChange={e=>set("cartonPackingCharge",Number(e.target.value)||0)}
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Added to live-fish parcels packed in a carton box, shown in the checkout breakup. Leave 0 for now.</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:4}}>⚡ Premium-courier charge (₹ per parcel-weight bracket × zone)</div>
+            <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Added when a customer picks a <b>Premium-courier</b> option, by total parcel weight &amp; their pincode zone.</div>
+            <div style={{display:"grid",gridTemplateColumns:"1.1fr 1fr 1fr 1fr",gap:6,marginBottom:4,alignItems:"center"}}>
+              <span></span>
+              <span style={{fontSize:10,color:C.textSub,fontWeight:700,textAlign:"center"}}>Tamil Nadu</span>
+              <span style={{fontSize:10,color:C.textSub,fontWeight:700,textAlign:"center"}}>South India</span>
+              <span style={{fontSize:10,color:C.textSub,fontWeight:700,textAlign:"center"}}>Central &amp; North</span>
+            </div>
+            {SHIP_TIERS.map(t=>{
+              const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};
+              const sc=cur.speedCourier||DEFAULT_SHIPPING_RATES.speedCourier;
+              const row=sc[t]||DEFAULT_SHIPPING_RATES.speedCourier[t];
+              return(
+                <div key={t} style={{display:"grid",gridTemplateColumns:"1.1fr 1fr 1fr 1fr",gap:6,marginBottom:6,alignItems:"center"}}>
+                  <span style={{fontSize:11,color:C.text,fontWeight:700,whiteSpace:"nowrap"}}>{t}</span>
+                  {["TN","SouthIndia","CentralNorth"].map(zk=>(
+                    <input key={zk} type="number" min="0" value={row[zk]||0}
+                      onChange={e=>{const c2=f.shippingRates||{...DEFAULT_SHIPPING_RATES};const sp={...(c2.speedCourier||DEFAULT_SHIPPING_RATES.speedCourier)};sp[t]={...(sp[t]||{}),[zk]:Number(e.target.value)||0};set("shippingRates",{...c2,speedCourier:sp});}}
+                      style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 6px",fontSize:12,outline:"none",background:"white",textAlign:"right",boxSizing:"border-box"}}/>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -7957,7 +8559,7 @@ function RequestPage({nav,user,onSubmit,myRequests}){
         <div style={{position:"absolute",top:-30,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.1)"}}/>
         <button className="press" onClick={()=>nav("home")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
         <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Request a Product</div>
-        <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:300}}>Can't find what you need? Tell us the fish, plant, or gear you want and we'll try to source it for you.</div>
+        <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>Looking for a rare or <b>exotic fish</b>, a specific plant, or gear we don't stock? Tell us what you want — we specialise in sourcing exotic &amp; hard-to-find fish on request and will arrange it for you.</div>
       </div>
       <div className="dt-read" style={{padding:"20px 16px 100px"}}>
         <div style={{marginBottom:16}}>
@@ -8049,6 +8651,19 @@ function NemoStore(){
   // Load from storage
   // Load from storage — LOCAL first (instant), then hydrate from Firebase in the background
   const hydrateMedia=async(prods,reqs,guideList)=>{
+    // Wave 1 — paint catalog thumbnails as fast as possible: just the FIRST image of each
+    // product, pushed to the cache the moment they're ready. The full load (wave 2) still runs
+    // below unchanged, so the final cache is identical and detail/admin galleries are unaffected.
+    try{
+      const firstWave={};
+      await Promise.all(prods.map(async p=>{
+        if(Array.isArray(p.media)&&p.media.length){ const b=await loadMediaItem(p.media[0].key); if(b)firstWave["m-"+p.media[0].key]=b; }
+        else if(p.hasImg){ const b=await loadImg(p.id); if(b)firstWave["img-"+p.id]=b; }
+      }));
+      if(Object.keys(firstWave).length) setMediaCache(c=>({...c,...firstWave}));
+    }catch(e){}
+
+    // Wave 2 — full load: every gallery image, videos, request & guide images (unchanged).
     const cache={};
     await Promise.all([
       ...prods.map(async p=>{
@@ -8675,7 +9290,7 @@ function NemoStore(){
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
         {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
-        {page==="detail"   &&<DetailPage product={selProduct} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
+        {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings}/>}
         {page==="checkout" &&(user
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders}/>
