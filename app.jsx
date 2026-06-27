@@ -8270,6 +8270,7 @@ function SettingsPanel({settings,onSave}){
         {area("Delivery Areas","deliveryAreas")}
         {area("Live Arrival Guarantee","liveArrivalGuarantee")}
         {area("Returns & DOA Policy","returnPolicy")}
+        {area("Return Shipping Address","returnAddress")}
         {area("Acclimatization Guide","acclimatizationTips")}
         {area("Terms & Conditions","termsPolicy")}
         {area("Privacy Policy","privacyPolicy")}
