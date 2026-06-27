@@ -612,7 +612,14 @@ async function uploadToStorage(path, dataUrl){
     const ref=FB_STORAGE.ref(path);
     await ref.putString(dataUrl, "data_url");
     return await ref.getDownloadURL();
-  }catch(e){ console.warn("storage upload failed (using base64 fallback):", e&&e.message); return null; }
+  }catch(e){
+    // On the free (Spark) plan Storage isn't enabled, so every upload 401s. After the first
+    // failure, disable Storage for this session so we go straight to the base64 path (no waiting
+    // on doomed uploads, no console spam). Resets on reload if Storage is later enabled.
+    FB_STORAGE=null;
+    console.warn("Storage unavailable — using free-plan base64 path:", e&&e.message);
+    return null;
+  }
 }
 async function saveMediaItem(key,b64){
   await mediaSet("nemo-m-"+key,b64);
@@ -654,7 +661,7 @@ function compressImage(file, maxDim=1100, quality=0.82){
 /* Make a small catalog thumbnail (JPEG data-URL) from a full-size image data-URL.
    Used so the product grid downloads ~tiny images instead of full-res ones — the
    single biggest first-load win. Returns null for anything that isn't a data-URL image. */
-function makeThumb(dataUrl, maxDim=420, quality=0.7){
+function makeThumb(dataUrl, maxDim=560, quality=0.82){
   return new Promise(resolve=>{
     try{
       if(typeof dataUrl!=="string" || !dataUrl.startsWith("data:image")){ resolve(null); return; }
@@ -674,7 +681,7 @@ function makeThumb(dataUrl, maxDim=420, quality=0.7){
 }
 /* Like makeThumb but also accepts a remote (Storage) URL. Remote draws need CORS on the
    bucket; if that's not configured the canvas read throws and we return null (caller skips). */
-async function makeThumbFromAny(src, maxDim=420, quality=0.7){
+async function makeThumbFromAny(src, maxDim=560, quality=0.82){
   if(typeof src!=="string") return null;
   if(src.startsWith("data:")) return makeThumb(src, maxDim, quality);
   return new Promise(resolve=>{
@@ -708,8 +715,13 @@ async function persistImage(key, b64, withThumb=true){
       return out;
     }
   }
-  // Storage off / upload failed — keep the original behaviour (heavier, but never loses data)
+  // FREE plan (Storage off) — base64 in the Realtime Database, plus a small base64 thumbnail
+  // so the catalog grid stays light (full image only loads on the product page).
   await saveMediaItem(key, b64);
+  if(withThumb){
+    const t=await makeThumb(b64);
+    if(t){ await saveMediaItem(key+"_thumb", t); out.thumbData=t; }
+  }
   return out;
 }
 /* Resolve a product's gallery from the media cache (with backward-compat) */
@@ -5773,20 +5785,33 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     const media=[];
     const prevMedia=product?.media||[];
     const thumbPatch={};
-    for(const im of images){
+    for(let idx=0; idx<images.length; idx++){
+      const im=images[idx];
+      const isFirst=idx===0;
       const prev=prevMedia.find(m=>m.key===im.key)||{};
       const entry={key:im.key,type:"image"};
       if(im.b64){
-        const r=await persistImage(im.key, im.b64, true);
+        // Only the FIRST image needs a catalog thumbnail (that's all the grid shows).
+        const r=await persistImage(im.key, im.b64, isFirst);
         if(r.url) entry.url=r.url;
-        if(r.url_thumb){ entry.thumbUrl=r.url_thumb; entry.thumb=1; thumbPatch["thumb-"+im.key]=r.thumbData; }
+        if(r.url_thumb) entry.thumbUrl=r.url_thumb;
+        if(r.thumbData){ entry.thumb=1; thumbPatch["thumb-"+im.key]=r.thumbData; }
       } else {
-        // Untouched existing image — carry its embedded URLs/flags forward.
+        // Untouched existing image — carry its embedded URL/thumb forward.
         if(prev.url) entry.url=prev.url;
         if(prev.thumbUrl){ entry.thumbUrl=prev.thumbUrl; entry.thumb=1; }
         else if(prev.thumb) entry.thumb=1;
       }
       media.push(entry);
+    }
+    // Guarantee the FIRST image has a thumbnail — even if it's an existing image just moved into
+    // first place (its thumb may not have been generated yet). This is what the catalog grid uses.
+    {
+      const firstEntry=media.find(m=>m.type!=="video");
+      if(firstEntry && !firstEntry.thumb && !firstEntry.thumbUrl && images[0] && images[0].src){
+        const t=await makeThumbFromAny(images[0].src);
+        if(t){ await saveMediaItem(firstEntry.key+"_thumb", t); firstEntry.thumb=1; thumbPatch["thumb-"+firstEntry.key]=t; }
+      }
     }
     if(video && !video.tooLarge){
       const prevV=prevMedia.find(m=>m.key===video.key)||{};
@@ -6975,7 +7000,11 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
 
           {/* Speed up the storefront — migrate product photos to the fast catalog model */}
           {(()=>{
-            const needOpt=products.filter(p=>Array.isArray(p.media)&&p.media.some(m=>!m.url||(m.type!=="video"&&!m.thumbUrl))).length;
+            const needOpt=products.filter(p=>{
+              if(!Array.isArray(p.media)||!p.media.length) return false;
+              const first=p.media.find(m=>m.type!=="video");   // catalog thumbnail = first image
+              return first && !first.thumb && !first.thumbUrl;
+            }).length;
             return(
               <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
@@ -6983,13 +7012,13 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Speed Up Catalog</span>
                 </div>
                 <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
-                  Generates small thumbnails &amp; moves product photos to fast CDN storage so the shop grid loads much quicker and uses far less database space. Safe to run anytime — your full-size photos are never deleted. {needOpt>0?<b>{needOpt} product{needOpt!==1?"s":""} can be optimised.</b>:<span style={{color:C.success,fontWeight:700}}>All products optimised ✓</span>}
+                  Sets each product's <b>first photo</b> as its catalog thumbnail and shrinks it so the shop grid loads fast (full-size photos still open on the product page). Run it after adding products &amp; photos. Safe anytime — your full-size photos are never deleted. {needOpt>0?<b>{needOpt} product{needOpt!==1?"s":""} can be optimised.</b>:<span style={{color:C.success,fontWeight:700}}>All products optimised ✓</span>}
                 </div>
                 <button className="press" disabled={thumbBusy||!needOpt} onClick={async()=>{
                   setThumbBusy(true); setThumbMsg("Optimising…");
                   try{
                     const n=await onBackfillThumbs(d=>setThumbMsg(`Optimising… ${d} done`));
-                    setThumbMsg(n?`✓ Optimised ${n} product${n!==1?"s":""}`:"Nothing changed — if photos didn't optimise, your Storage bucket may need CORS enabled (or re-save the product in the editor).");
+                    setThumbMsg(n?`✓ Optimised ${n} product${n!==1?"s":""}`:"Nothing to optimise — try re-saving the product in the editor.");
                   }catch(e){ setThumbMsg("⚠ Something went wrong — please try again."); }
                   setThumbBusy(false);
                 }}
@@ -9214,31 +9243,38 @@ function NemoStore(){
     for(const o of old){ await deleteOrderHandler(o); }
     return old.length;
   };
-  /* Opt-in migration: bring existing products onto the major-ecommerce model — embed each
-     image's Storage URL (+ a generated thumbnail URL) directly on the product record, so the
-     catalog renders from a single `products` read with no per-image DB lookups. Purely additive:
-     full-size images are never deleted. Legacy base64 images are uploaded to Storage; images that
-     already have a Storage URL just get that URL embedded (+ a thumb when the bucket allows it). */
+  /* Opt-in migration: generate a small catalog thumbnail for every product image that lacks one,
+     so the shop grid loads tiny images instead of full-size photos. Works on BOTH plans:
+       • Free (no Storage): thumbnails are stored as base64 in the Realtime Database.
+       • Paid (Storage on): images move to Storage and their URL + thumbUrl get embedded.
+     Purely additive — full-size images are never deleted. */
   const backfillThumbs=async(onProgress)=>{
     let done=0;
     for(const p of products){
       if(!Array.isArray(p.media)||!p.media.length) continue;
+      const firstImgKey=(p.media.find(m=>m.type!=="video")||{}).key;
       let changed=false; const patch={}; const newMedia=[];
       for(const m of p.media){
-        if(m.url && (m.type==="video" || m.thumbUrl)){ newMedia.push(m); continue; } // already fully embedded
         const entry={...m};
+        const isThumbTarget = m.key===firstImgKey;   // only the 1st image becomes the thumbnail
         const cur = m.url || mediaCache["m-"+m.key] || await loadMediaItem(m.key);
-        if(typeof cur==="string" && /^https?:/.test(cur)){
-          // Already in Storage — just embed the URL (kills the per-key read) and add a thumb if CORS allows.
-          if(!entry.url){ entry.url=cur; changed=true; }
-          if(m.type!=="video" && !entry.thumbUrl){
+        // Embed an existing Storage URL on the record (cheap, kills a per-image DB read).
+        if(typeof cur==="string" && /^https?:/.test(cur) && !entry.url){ entry.url=cur; changed=true; }
+        // Generate a thumbnail ONLY for the first image, and only if it doesn't have one yet.
+        if(isThumbTarget && !entry.thumb && !entry.thumbUrl && typeof cur==="string"){
+          if(FB_STORAGE && /^https?:/.test(cur)){
             const t=await makeThumbFromAny(cur);
             if(t){ const tu=await uploadToStorage("media/"+m.key+"_thumb.jpg",t); if(tu){ entry.thumbUrl=tu; entry.thumb=1; patch["thumb-"+m.key]=t; changed=true; } }
+          } else if(cur.startsWith("data:")){
+            if(FB_STORAGE){
+              const r=await persistImage(m.key, cur, true);
+              if(r.url){ entry.url=r.url; changed=true; if(r.url_thumb) entry.thumbUrl=r.url_thumb; }
+              if(r.thumbData){ entry.thumb=1; patch["thumb-"+m.key]=r.thumbData; changed=true; }
+            } else {
+              const t=await makeThumb(cur);
+              if(t){ await saveMediaItem(m.key+"_thumb", t); entry.thumb=1; patch["thumb-"+m.key]=t; changed=true; }
+            }
           }
-        } else if(typeof cur==="string" && cur.startsWith("data:")){
-          // Legacy base64 in the DB — move bytes to Storage, embed URL + thumb, shrink the DB.
-          const r=await persistImage(m.key, cur, m.type!=="video");
-          if(r.url){ entry.url=r.url; changed=true; if(r.url_thumb){ entry.thumbUrl=r.url_thumb; entry.thumb=1; patch["thumb-"+m.key]=r.thumbData; } }
         }
         newMedia.push(entry);
       }

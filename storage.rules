@@ -11,8 +11,8 @@ rules_version = '2';
 //   Firebase Console → Build → Storage → Rules tab → paste this file → Publish.
 //   (Or with the CLI: keep this as storage.rules and run `firebase deploy --only storage`.)
 //
-// IMPORTANT: replace PASTE_FRIEND_UID_HERE below if you add a co-admin (same as database.rules.json),
-// or delete that clause if you don't use one.
+// Single admin account. To add a co-admin later, change the uid line to:
+//   && (request.auth.uid == 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || request.auth.uid == 'SECOND_UID')
 
 service firebase.storage {
   match /b/{bucket}/o {
@@ -24,8 +24,7 @@ service firebase.storage {
 
       // Admin-only write, capped size, images & short videos only.
       allow write: if request.auth != null
-        && (request.auth.uid == 'cI2HmMt6FdR7fO7uUnugH85GeZt2'
-            || request.auth.uid == 'PASTE_FRIEND_UID_HERE')
+        && request.auth.uid == 'cI2HmMt6FdR7fO7uUnugH85GeZt2'
         && request.resource.size < 12 * 1024 * 1024
         && request.resource.contentType.matches('(image|video)/.*');
     }
