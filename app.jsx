@@ -4135,8 +4135,8 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <button className="press" onClick={()=>nav("request")}
             style={{background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left"}}>
             <span style={{fontSize:28}}>🦄</span>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.2}}>Exotic Fish on Request</div>
-            <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Rare or exotic fish? We'll source it for you</div>
+            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.2}}>Exotic Fish or Any Product on Request</div>
+            <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Rare fish or any product? We'll source it for you</div>
           </button>
         </div>
 
