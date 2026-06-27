@@ -62,6 +62,37 @@ const ALL_STATUSES   = ["Awaiting Payment","Payment Review","Confirmed","Shipped
 const PAY_WINDOW_MIN = 10; // minutes a customer has to pay before auto-cancel
 const DEFAULT_STOCK  = 10;
 const MAX_PER_ORDER  = 10;
+// ── Returns / self-cancel policy helpers ──────────────────────────────
+const RETURN_WINDOW_DAYS = 3;   // window to raise a damaged-item return after delivery
+const SELF_CANCEL_MIN    = 60;  // customer may self-cancel within 1 hour of payment
+const NON_RETURNABLE_CATS = ["Live Fish","Plants","Feed"];
+function isReturnableItem(it){
+  if(!it) return false;
+  if(NON_RETURNABLE_CATS.includes(it.category)) return false;
+  const n=(it.name||"").toLowerCase();
+  if(/pump|tube|tubing|medicin|medication|\bfood\b|feed|conditioner|bacteria/.test(n)) return false;
+  return true;
+}
+function orderHasReturnable(o){ return (((o&&o.items)||[]).some(isReturnableItem)); }
+function deliveredAtOf(o){ return o&&(o.deliveredAt||(o.status==="Delivered"?o.updatedAt:null)||null); }
+function returnWindowOpen(o){
+  const base=deliveredAtOf(o); if(!base) return false;
+  return (Date.now()-new Date(base).getTime()) <= RETURN_WINDOW_DAYS*86400000;
+}
+function selfCancelOpen(o){
+  if(!o) return false;
+  if(o.status==="Awaiting Payment") return true;
+  if(o.status==="Payment Review"||o.status==="Confirmed"){
+    const t=o.paidAt?new Date(o.paidAt).getTime():(o.placedAt?new Date(o.placedAt).getTime():0);
+    return (Date.now()-t) <= SELF_CANCEL_MIN*60000;
+  }
+  return false;
+}
+// Product value of the items flagged in a return request (refund excludes packing & shipping)
+function returnItemsValue(o){
+  const ids=(o&&o.returnReq&&o.returnReq.itemIds)||[];
+  return ((o&&o.items)||[]).filter(it=>ids.includes(it.id)).reduce((s,it)=>s+(Number(it.price)||0)*(it.qty||1),0);
+}
 const SORT_OPTS = [
   {id:"relevance", label:"Relevance"},
   {id:"price-asc", label:"Price: Low to High"},
@@ -2072,6 +2103,19 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
 /* Live search suggestions — gentle drop-in under the search box */
 @keyframes suggDrop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 .sugg-drop{animation:suggDrop .18s ease both;}
+/* ── Storefront glow-up: flowing gradients, glass & soft glow ── */
+@keyframes auroraShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.aurora-layer{position:absolute;inset:0;pointer-events:none;opacity:.55;mix-blend-mode:soft-light;
+  background:linear-gradient(120deg,#12b5bc,#0b6e72,#1d4ed8,#12b5bc);background-size:300% 300%;animation:auroraShift 14s ease infinite;}
+@keyframes floatSoft{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.float-soft{animation:floatSoft 4.5s ease-in-out infinite;}
+.glass{background:rgba(255,255,255,.65);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border:1px solid rgba(255,255,255,.55);}
+@keyframes sheen{0%{transform:translateX(-120%)}60%,100%{transform:translateX(220%)}}
+.glow-btn{position:relative;overflow:hidden;}
+.glow-btn::after{content:"";position:absolute;top:0;bottom:0;width:38%;left:0;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent);transform:translateX(-120%);animation:sheen 3.8s ease-in-out infinite;}
+@keyframes kpiRise{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+.kpi-rise{animation:kpiRise .45s cubic-bezier(.22,1,.36,1) both;}
 @keyframes showcaseSlide{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
 .showcase-slide{animation:showcaseSlide .3s ease both;}
 /* Gentle fade + rise — for promo banners and content that appears after data loads */
@@ -2992,7 +3036,147 @@ function ExperienceReview({order, uk, user}){
 }
 
 /* ═══════════════════ ORDER HISTORY PAGE ═══════════════════ */
-function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, settings={}, favorites=[]}){
+/* Customer self-cancel button — shown only while the order is inside the cancel window */
+function SelfCancelBtn({o, onCancel}){
+  const [confirm,setConfirm]=useState(false);
+  const paid=!!o.paidAt||["Payment Review","Confirmed"].includes(o.status);
+  const mins=(()=>{
+    if(o.status==="Awaiting Payment") return null;
+    const t=o.paidAt?new Date(o.paidAt).getTime():(o.placedAt?new Date(o.placedAt).getTime():0);
+    return Math.max(0, Math.ceil((SELF_CANCEL_MIN*60000-(Date.now()-t))/60000));
+  })();
+  if(!confirm) return(
+    <div style={{marginTop:10}}>
+      <button className="press" onClick={()=>setConfirm(true)}
+        style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+        ✕ Cancel this order{mins!=null?` · ${mins} min left`:""}
+      </button>
+    </div>
+  );
+  return(
+    <div style={{marginTop:10,background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
+      <div style={{fontSize:12.5,fontWeight:800,color:C.danger,marginBottom:4}}>Cancel this order?</div>
+      <div style={{fontSize:11.5,color:"#7f1d1d",lineHeight:1.5,marginBottom:10}}>{paid?"Your order will be cancelled and a refund of the paid amount will be processed to your original payment method.":"Your order will be cancelled."} This can't be undone.</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <button className="press" onClick={()=>setConfirm(false)} style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Keep order</button>
+        <button className="press" onClick={()=>{setConfirm(false);onCancel&&onCancel(o);}} style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Yes, cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* Customer return / replacement request — raise, then (once approved) submit courier details */
+function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestReturn, onSubmitReturnShipment}){
+  const rr=o.returnReq;
+  const returnable=(o.items||[]).filter(isReturnableItem);
+  const [open,setOpen]=useState(false);
+  const [sel,setSel]=useState([]);
+  const [reason,setReason]=useState("");
+  const [resolution,setResolution]=useState("refund");
+  const [photo,setPhoto]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [courier,setCourier]=useState("");
+  const [consign,setConsign]=useState("");
+  const within=returnWindowOpen(o);
+  const toggle=id=>setSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const pickPhoto=async(file)=>{ if(!file)return; setBusy(true); try{ const d=await compressImage(file,1100,.8); setPhoto(d); }catch(e){} setBusy(false); };
+  const submit=async()=>{ if(!sel.length)return; await onRequestReturn(o,{itemIds:sel,reason:reason.trim(),resolution,photo}); setOpen(false); };
+  const disclaimer=(
+    <div style={{fontSize:10.5,color:"#9a3412",lineHeight:1.55,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",marginBottom:10}}>
+      <b>Eligible only for damaged dry goods.</b> Item must be unused and returned with all parts in the original packing cover. <b>Feeds, medicines, live fish, plants, pumps &amp; tubes are not eligible.</b> Refunds/coins exclude packing &amp; shipping charges.
+    </div>
+  );
+  const STAT={
+    Requested:"Submitted — under review by our team.",
+    Approved:"Approved ✓ — please courier the item back using the details below.",
+    Shipped:"We've noted your courier details — we'll verify the parcel on arrival.",
+    Declined:"Reviewed — this request was not approved.",
+    "Received & Verified":"Parcel received & verified ✓ — your resolution is being processed.",
+    Resolved:"Resolved ✓ — your refund / coins have been processed. Thank you!",
+  };
+  if(rr){
+    const tone=rr.status==="Declined"?{bg:"#fef2f2",bd:"#fecaca"}:rr.status==="Resolved"?{bg:"#ecfdf5",bd:"#a7f3d0"}:{bg:"#eff6ff",bd:"#bfdbfe"};
+    const retAddr=settings.returnAddress||"Please contact us on WhatsApp for the return shipping address before sending the parcel.";
+    return(
+      <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
+        <div style={{background:tone.bg,border:`1px solid ${tone.bd}`,borderRadius:10,padding:"11px 12px"}}>
+          <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:3}}>↩️ Return / Replacement request</div>
+          <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>{STAT[rr.status]||"Submitted."}</div>
+          {rr.note&&<div style={{fontSize:11.5,color:C.text,marginTop:6,lineHeight:1.5}}><b>Note from store:</b> {rr.note}</div>}
+          {rr.status==="Approved"&&(
+            <div style={{marginTop:10}}>
+              <div style={{fontSize:11,fontWeight:800,color:C.text,marginBottom:4}}>📦 Courier it back to:</div>
+              <div style={{fontSize:11.5,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5,background:"white",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{retAddr}</div>
+              <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Attach the consignment bill inside/with the parcel, then enter your courier partner &amp; consignment number below.</div>
+              <input value={courier} onChange={e=>setCourier(e.target.value)} placeholder="Courier partner (e.g. DTDC, ST Courier)"
+                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:8}}/>
+              <input value={consign} onChange={e=>setConsign(e.target.value)} placeholder="Consignment / tracking number"
+                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:10,fontFamily:"monospace"}}/>
+              <button className="press" disabled={!courier.trim()||!consign.trim()} onClick={()=>onSubmitReturnShipment(o,{courier:courier.trim(),consignment:consign.trim()})}
+                style={{width:"100%",background:(courier.trim()&&consign.trim())?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>Submit return shipment details</button>
+            </div>
+          )}
+          {(rr.status==="Shipped"||rr.status==="Received & Verified"||rr.status==="Resolved")&&(rr.courier||rr.consignment)&&(
+            <div style={{fontSize:11,color:C.textSub,marginTop:8}}>Sent via <b style={{color:C.text}}>{rr.courier||"courier"}</b>{rr.consignment?<> · <span style={{fontFamily:"monospace"}}>{rr.consignment}</span></>:null}</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if(!within) return null; // 3-day window closed
+  return(
+    <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
+      {!open?(
+        <button className="press" onClick={()=>setOpen(true)}
+          style={{background:"none",border:"none",padding:0,color:C.textSub,fontSize:11,fontWeight:600,fontFamily:"'Nunito',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
+          Item arrived damaged? Request a return / replacement →
+        </button>
+      ):(
+        <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"13px"}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>↩️ Return / Replacement (damaged item)</div>
+          {disclaimer}
+          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Which item(s)?</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+            {returnable.map(it=>(
+              <label key={it.id} style={{display:"flex",alignItems:"center",gap:9,fontSize:12.5,color:C.text,cursor:"pointer"}}>
+                <input type="checkbox" checked={sel.includes(it.id)} onChange={()=>toggle(it.id)} style={{width:17,height:17,accentColor:C.primary}}/>
+                {it.name} <span style={{color:C.textSub}}>· Qty {it.qty}</span>
+              </label>
+            ))}
+          </div>
+          <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder="Describe the damage…"
+            style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",resize:"none",background:"white",marginBottom:10}}/>
+          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Photo proof</div>
+          {photo?(
+            <div style={{position:"relative",display:"inline-block",marginBottom:10}}>
+              <img src={photo} alt="" style={{width:84,height:84,objectFit:"cover",borderRadius:10,border:`1px solid ${C.border}`}}/>
+              <button onClick={()=>setPhoto("")} style={{position:"absolute",top:-6,right:-6,width:22,height:22,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:13,cursor:"pointer"}}>×</button>
+            </div>
+          ):(
+            <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:10,border:`1.5px dashed ${C.border}`,background:"white",padding:"12px",cursor:"pointer",color:C.textSub,fontSize:12.5,fontWeight:600,marginBottom:10}}>
+              <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{pickPhoto(e.target.files[0]);e.target.value="";}}/>
+              {busy?"Processing…":"📷 Add a photo of the damage"}
+            </label>
+          )}
+          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Preferred resolution</div>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            {[["refund","💸 Refund"],["coins","🪙 Reward coins"]].map(([k,l])=>(
+              <button key={k} type="button" className="press" onClick={()=>setResolution(k)}
+                style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${resolution===k?C.primary:C.border}`,background:resolution===k?C.primary:"white",color:resolution===k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{l}</button>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button className="press" onClick={()=>setOpen(false)} style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
+            <button className="press" disabled={!sel.length||busy} onClick={submit}
+              style={{flex:1,background:sel.length?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>Submit request</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, settings={}, favorites=[]}){
   const uk = userKey(user);
   const [payOpen,setPayOpen]=useState(null);
   // Refresh hourly so the live delivery countdown rolls over as the day changes while the app is left open.
@@ -3014,6 +3198,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
   const hasDelivered = myOrders.some(o=>o.status==="Delivered");
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const [doaOpen,setDoaOpen]=useState(null);
+  const [doaReso,setDoaReso]=useState("replacement");
   const [doaOrderNo,setDoaOrderNo]=useState("");
   const [doaLookupMsg,setDoaLookupMsg]=useState("");
   const submitDoaByNumber=()=>{
@@ -3292,9 +3477,16 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                   ):doaOpen===o.id?(
                     <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px"}}>
                       <div style={{fontSize:12.5,fontWeight:800,color:"#9a3412",marginBottom:6}}>Report Dead on Arrival (DOA)</div>
-                      <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.6,marginBottom:10}}>If a fish arrived dead, send us ONE clear, unedited unboxing video (starting from the sealed package) on WhatsApp within 2 hours of delivery. We'll review it and, if approved, make it right <b>one time</b> — a replacement, store credit, or a refund of the fish amount.</div>
+                      <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.6,marginBottom:10}}>If a fish arrived dead, send us ONE clear, unedited unboxing video (starting from the sealed package) on WhatsApp within 2 hours of delivery. We'll review it against the Live Arrival Guarantee and, if approved, make it right <b>one time</b> — a replacement, refund to your original account, or reward coins (your choice, up to the fish's value). If that fish is unavailable, we may offer an equal-value substitute.</div>
+                      <div style={{fontSize:11,fontWeight:700,color:"#9a3412",marginBottom:6}}>Preferred resolution</div>
+                      <div style={{display:"flex",gap:6,marginBottom:10}}>
+                        {[["replacement","🐟 Replace"],["refund","💸 Refund"],["coins","🪙 Coins"]].map(([k,l])=>(
+                          <button key={k} type="button" className="press" onClick={()=>setDoaReso(k)}
+                            style={{flex:1,padding:"8px 4px",borderRadius:9,border:`1.5px solid ${doaReso===k?"#9a3412":"#fed7aa"}`,background:doaReso===k?"#9a3412":"white",color:doaReso===k?"white":"#9a3412",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{l}</button>
+                        ))}
+                      </div>
                       <div style={{display:"flex",gap:8}}>
-                        <button className="press" onClick={()=>{ openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${orderId(o.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`)); onReportDoa&&onReportDoa(o); setDoaOpen(null); }}
+                        <button className="press" onClick={()=>{ openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${orderId(o.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`)); onReportDoa&&onReportDoa(o,{resolution:doaReso}); setDoaOpen(null); }}
                           style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>💬 Share video on WhatsApp</button>
                         <button className="press" onClick={()=>setDoaOpen(null)}
                           style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
@@ -3307,6 +3499,13 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     </button>
                   )}
                 </div>
+              )}
+              {/* Self-cancel within the allowed window (instant) */}
+              {selfCancelOpen(o)&&<SelfCancelBtn o={o} onCancel={onCancelByCustomer}/>}
+              {/* Return / replacement for damaged dry goods */}
+              {o.status==="Delivered"&&orderHasReturnable(o)&&(
+                <ReturnRequestBlock o={o} products={products} ownerWA={ownerWA} settings={settings}
+                  onRequestReturn={onRequestReturn} onSubmitReturnShipment={onSubmitReturnShipment}/>
               )}
               {o.status==="Delivered" && <ExperienceReview order={o} uk={uk} user={user}/>}
             </div>
@@ -3704,6 +3903,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
       {/* Hero */}
       <div className="home-hero" style={{background:`linear-gradient(165deg,${C.primaryDark} 0%,${C.primary} 55%,${C.accent} 100%)`,
         padding:"42px 22px 30px",borderRadius:"0 0 32px 32px",position:"relative",overflow:"hidden"}}>
+        <div className="aurora-layer"/>
         <div style={{position:"absolute",top:-50,right:-40,width:180,height:180,borderRadius:"50%",border:"2px solid rgba(255,255,255,.08)"}}/>
         <div style={{position:"absolute",top:40,right:50,width:70,height:70,borderRadius:"50%",border:"2px solid rgba(255,255,255,.1)"}}/>
         <div style={{position:"absolute",bottom:-50,left:-40,width:160,height:160,borderRadius:"50%",background:"rgba(255,255,255,.05)"}}/>
@@ -5180,6 +5380,10 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             style={{marginTop:16,background:"none",border:"none",color:C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",textDecoration:"underline"}}>
             I'll pay later — go to Orders
           </button>
+          <button className="press" onClick={()=>{ if(placed){onCancelled&&onCancelled(placed);} nav("home"); }}
+            style={{marginTop:6,background:"none",border:"none",color:C.danger,fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",textDecoration:"underline"}}>
+            ✕ Cancel payment &amp; order
+          </button>
         </>
       )}
     </div>
@@ -5214,6 +5418,11 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
 
       {step===1&&(
         <div className="dt-read" style={{padding:"20px 16px 100px"}}>
+          {/* Add more items — keep shopping; cart is preserved */}
+          <button className="press" onClick={()=>nav("shop")}
+            style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            ＋ Add more items to this order
+          </button>
           {/* Shipping rates info */}
           <div style={{background:C.accentLight,borderRadius:14,padding:"12px 14px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{fontSize:13,fontWeight:700,color:C.primaryDark}}>🚚 Shipping rates vary by location &amp; weight</div>
@@ -5400,6 +5609,12 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
         <div className="dt-read" style={{padding:"20px 16px 100px"}}>
           <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:12}}>Order Items</div>
           <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,marginTop:-4}}>You can still adjust quantities or remove items below before placing your order.</div>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            <button className="press" onClick={()=>nav("shop")}
+              style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>＋ Add more items</button>
+            <button className="press" onClick={()=>setStep(1)}
+              style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>🚚 Change shipping</button>
+          </div>
           {cart.map(item=>{
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
             const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
@@ -6167,6 +6382,100 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
   );
 }
 
+/* ═══════════════════ ADMIN SALES DASHBOARD ═══════════════════ */
+function AdminSalesDashboard({orders=[], products=[], settings={}}){
+  const inr=n=>"₹"+Math.round(Number(n)||0).toLocaleString("en-IN");
+  const d=useMemo(()=>{
+    const val=o=>Number(o.amountDue!=null?o.amountDue:((o.total||0)+(o.fee||0)))||0;
+    const isPaid=o=>o.status!=="Cancelled"&&(o.paymentStatus==="Verified"||["Confirmed","Shipped","Delivered"].includes(o.status)||!!o.paidAt);
+    const paid=orders.filter(isPaid);
+    const whenOf=o=>new Date(o.paidAt||o.placedAt||o.updatedAt||Date.now()).getTime();
+    const now=Date.now(), DAY=86400000;
+    const since=days=>paid.filter(o=>whenOf(o)>=now-days*DAY).reduce((s,o)=>s+val(o),0);
+    // last 7 days revenue series (oldest → newest)
+    const series=[]; for(let i=6;i>=0;i--){ const dayStart=new Date(now-i*DAY); dayStart.setHours(0,0,0,0); const ds=dayStart.getTime(), de=ds+DAY;
+      const amt=paid.filter(o=>whenOf(o)>=ds&&whenOf(o)<de).reduce((s,o)=>s+val(o),0);
+      series.push({label:new Date(ds).toLocaleDateString("en-IN",{weekday:"short"}).slice(0,1),amt}); }
+    const pending=orders.filter(o=>["Awaiting Payment","Payment Review"].includes(o.status));
+    const counts={}; ALL_STATUSES.forEach(s=>counts[s]=orders.filter(o=>o.status===s).length);
+    // top products by qty across paid orders
+    const tally={}; paid.forEach(o=>(o.items||[]).forEach(it=>{ const k=it.id||it.name; if(!tally[k])tally[k]={name:it.name,qty:0,rev:0}; tally[k].qty+=it.qty||0; tally[k].rev+=(Number(it.price)||0)*(it.qty||0); }));
+    const top=Object.values(tally).sort((a,b)=>b.qty-a.qty).slice(0,5);
+    const low=products.filter(p=>!p.comingSoon&&(p.stockCount??DEFAULT_STOCK)<=5).sort((a,b)=>(a.stockCount??0)-(b.stockCount??0)).slice(0,6);
+    const openReturns=orders.filter(o=>o.returnReq&&!["Resolved","Declined"].includes(o.returnReq.status)).length;
+    const openDoa=orders.filter(o=>o.doa&&["Requested","Under Review"].includes(o.doa.status)).length;
+    return { revenue:paid.reduce((s,o)=>s+val(o),0), today:since(1), week:since(7), month:since(30),
+      paidCount:paid.length, aov:paid.length?paid.reduce((s,o)=>s+val(o),0)/paid.length:0,
+      pendingCount:pending.length, pendingVal:pending.reduce((s,o)=>s+val(o),0), series, counts, top, low, openReturns, openDoa };
+  },[orders,products]);
+  const maxBar=Math.max(1,...d.series.map(s=>s.amt));
+  const kpi=(icon,label,value,sub,grad)=>(
+    <div className="kpi-rise" style={{flex:"1 1 calc(50% - 5px)",minWidth:140,borderRadius:16,padding:"13px 14px",color:"white",background:grad,position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",top:-18,right:-12,width:64,height:64,borderRadius:"50%",background:"rgba(255,255,255,.12)"}}/>
+      <div style={{fontSize:18,marginBottom:4}}>{icon}</div>
+      <div style={{fontFamily:PRICE_FONT,fontSize:21,fontWeight:800,lineHeight:1.1}}>{value}</div>
+      <div style={{fontSize:11,fontWeight:700,opacity:.92,marginTop:2}}>{label}</div>
+      {sub&&<div style={{fontSize:10,opacity:.8,marginTop:2}}>{sub}</div>}
+    </div>
+  );
+  return(
+    <div style={{marginBottom:16}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{fontSize:18}}>📊</span>
+        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text}}>Sales Dashboard</span>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:12}}>
+        {kpi("💰",`${d.paidCount} paid order${d.paidCount!==1?"s":""}`,inr(d.revenue),"Total revenue",`linear-gradient(135deg,${C.primaryDark},${C.primary})`)}
+        {kpi("📅","Today",inr(d.today),`7-day ${inr(d.week)}`,"linear-gradient(135deg,#1d4ed8,#4f46e5)")}
+        {kpi("🧾","Avg order value",inr(d.aov),`30-day ${inr(d.month)}`,"linear-gradient(135deg,#0891b2,#0e7490)")}
+        {kpi("⏳",`${d.pendingCount} awaiting pay`,inr(d.pendingVal),"Pending collection","linear-gradient(135deg,#b45309,#92400e)")}
+      </div>
+      {/* 7-day revenue bars */}
+      <div className="glass" style={{borderRadius:16,padding:"14px",marginBottom:12}}>
+        <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:10,letterSpacing:.3}}>LAST 7 DAYS</div>
+        <div style={{display:"flex",alignItems:"flex-end",gap:8,height:84}}>
+          {d.series.map((s,i)=>(
+            <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:5,height:"100%",justifyContent:"flex-end"}}>
+              <div title={inr(s.amt)} style={{width:"78%",height:`${Math.max(4,(s.amt/maxBar)*100)}%`,background:`linear-gradient(180deg,${C.accent},${C.primary})`,borderRadius:"6px 6px 3px 3px",transition:"height .4s ease"}}/>
+              <span style={{fontSize:9.5,color:C.textSub,fontWeight:700}}>{s.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Alerts */}
+      {(d.openReturns>0||d.openDoa>0||d.low.length>0)&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
+          {d.openDoa>0&&<span style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#9a3412",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>🐟 {d.openDoa} DOA open</span>}
+          {d.openReturns>0&&<span style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1e40af",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>↩️ {d.openReturns} return{d.openReturns!==1?"s":""} open</span>}
+          {d.low.length>0&&<span style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>📦 {d.low.length} low stock</span>}
+        </div>
+      )}
+      <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+        {/* Top products */}
+        <div style={{flex:"1 1 calc(50% - 5px)",minWidth:160,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
+          <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>🏆 TOP SELLERS</div>
+          {d.top.length?d.top.map((t,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:7}}>
+              <span style={{fontSize:12,color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{i+1}. {t.name}</span>
+              <span style={{fontSize:11,fontWeight:800,color:C.primary,flexShrink:0}}>{t.qty}× · {inr(t.rev)}</span>
+            </div>
+          )):<div style={{fontSize:11.5,color:C.textSub}}>No paid orders yet.</div>}
+        </div>
+        {/* Low stock */}
+        <div style={{flex:"1 1 calc(50% - 5px)",minWidth:160,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
+          <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>⚠️ LOW / OUT OF STOCK</div>
+          {d.low.length?d.low.map((p,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:7}}>
+              <span style={{fontSize:12,color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</span>
+              <span style={{fontSize:11,fontWeight:800,color:(p.stockCount??0)<=0?C.danger:"#b45309",flexShrink:0}}>{(p.stockCount??0)<=0?"OUT":`${p.stockCount} left`}</span>
+            </div>
+          )):<div style={{fontSize:11.5,color:C.textSub}}>All products well stocked ✓</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════ ADMIN ORDER DETAIL (Phase 4) ═══════════════════ */
 function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,settings={}}){
   const [status,setStatus]=useState(o.status);
@@ -6250,12 +6559,37 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   );
 
   const liveInOrder=o.items.some(it=>it.category==="Live Fish");
+  const liveValue=o.items.filter(it=>it.category==="Live Fish").reduce((s,it)=>s+(Number(it.price)||0)*(it.qty||1),0);
   const [doaStatus,setDoaStatus]=useState(o.doa?.status&&o.doa.status!=="Requested"?o.doa.status:"Under Review");
   const [doaNote,setDoaNote]=useState(o.doa?.note||"");
+  const [doaSub,setDoaSub]=useState(o.doa?.substitute||"");
   const saveDoa=async()=>{
     setSaving(true);
-    await onUpdateOrder({...o,doa:{...(o.doa||{}),status:doaStatus,note:doaNote.trim(),requestedAt:o.doa?.requestedAt||new Date().toISOString(),updatedAt:new Date().toISOString()}});
+    await onUpdateOrder({...o,doa:{...(o.doa||{}),status:doaStatus,note:doaNote.trim(),substitute:doaSub.trim(),requestedAt:o.doa?.requestedAt||new Date().toISOString(),updatedAt:new Date().toISOString()}});
     showToast("DOA request updated");
+    setSaving(false);
+  };
+  // Return / replacement (damaged dry goods) admin review
+  const rr=o.returnReq;
+  const retValue=returnItemsValue(o);
+  const [retStatus,setRetStatus]=useState(rr?.status||"Requested");
+  const [retNote,setRetNote]=useState(rr?.note||"");
+  const saveReturn=async(resolveNow)=>{
+    setSaving(true);
+    const next={...(o.returnReq||{}),status:retStatus,note:retNote.trim(),updatedAt:new Date().toISOString()};
+    let patch={...o,returnReq:next};
+    if(resolveNow){
+      next.status="Resolved"; next.resolvedAt=new Date().toISOString();
+      if((rr?.resolution||"refund")==="coins" && o.userUid){
+        const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
+        try{ adminCreditLoyalty(o.userUid, Math.ceil(retValue/coinVal), "return:"+o.id, "Return resolved as reward coins", settings.walletValidityMonths); }catch(e){}
+      }else{
+        patch.refund={ due:true, amount:retValue, method:"upi", refundTxnId:o.refund?.refundTxnId||"", status:"processing", updatedAt:new Date().toISOString() };
+      }
+      patch.returnReq=next;
+    }
+    await onUpdateOrder(patch);
+    showToast(resolveNow?"Return resolved ✓":"Return request updated");
     setSaving(false);
   };
 
@@ -6613,7 +6947,9 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           <div style={{background:C.card,borderRadius:16,padding:"16px",marginTop:14,border:`1px solid ${o.doa&&o.doa.status==="Requested"?"#fdba74":C.border}`}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>🐟 Dead-on-Arrival (DOA) Request</div>
             {o.doa?(
-              <div style={{fontSize:12,color:C.text,marginBottom:10,lineHeight:1.55}}>Customer reported a DOA{o.doa.requestedAt?` on ${fmtDate(o.doa.requestedAt)}`:""}. Review their unboxing video on WhatsApp, then set the outcome below.</div>
+              <div style={{fontSize:12,color:C.text,marginBottom:10,lineHeight:1.55}}>Customer reported a DOA{o.doa.requestedAt?` on ${fmtDate(o.doa.requestedAt)}`:""}. Review their unboxing video on WhatsApp, then set the outcome below.
+                <div style={{marginTop:6,fontSize:11.5,color:C.textSub}}>Customer prefers: <b style={{color:C.text}}>{({replacement:"Replacement",refund:"Refund to source",coins:"Reward coins"})[o.doa.resolution]||"Replacement"}</b> · Covered up to fish value <b style={{color:C.text}}>₹{liveValue}</b>.</div>
+              </div>
             ):(
               <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>No DOA reported yet. You can still record an outcome here if the customer contacted you directly.</div>
             )}
@@ -6626,11 +6962,52 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${doaStatus===s?C.primary:C.border}`,background:doaStatus===s?C.primary:"transparent",color:doaStatus===s?"white":C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{s.replace("Approved - ","✓ ")}</button>
               ))}
             </div>
+            {doaStatus==="Approved - Replacement"&&(
+              <>
+                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Substitute fish <span style={{fontWeight:400,textTransform:"none"}}>(if the same one is out of stock)</span></div>
+                <input value={doaSub} onChange={e=>setDoaSub(e.target.value)} placeholder="e.g. Koi (Red) — agreed alternative of equal value"
+                  style={{...refundFld,marginBottom:10}}/>
+              </>
+            )}
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Note to customer <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <textarea value={doaNote} onChange={e=>setDoaNote(e.target.value)} rows={2} placeholder="e.g. Replacement will ship with your next order, or refund sent to your UPI"
               style={{...refundFld,resize:"none",lineHeight:1.5,marginBottom:10}}/>
             <button className="press" onClick={saveDoa} disabled={saving}
               style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",opacity:saving?.7:1}}>💾 Save DOA Outcome</button>
+          </div>
+        )}
+
+        {/* Return / Replacement (damaged dry goods) review */}
+        {rr && (
+          <div style={{background:C.card,borderRadius:16,padding:"16px",marginTop:14,border:`1px solid ${rr.status==="Requested"?"#fdba74":C.border}`}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>↩️ Return / Replacement Request</div>
+            <div style={{fontSize:12,color:C.text,marginBottom:8,lineHeight:1.55}}>
+              Raised {rr.requestedAt?`on ${fmtDate(rr.requestedAt)}`:""}. Customer prefers <b>{rr.resolution==="coins"?"reward coins":"refund"}</b>. Refund/coin value (excl. packing &amp; shipping): <b>₹{retValue}</b>.
+            </div>
+            {rr.reason&&<div style={{fontSize:11.5,color:C.text,marginBottom:8,lineHeight:1.5}}><b>Reason:</b> {rr.reason}</div>}
+            {(()=>{const names=(o.items||[]).filter(it=>(rr.itemIds||[]).includes(it.id)).map(it=>it.name); return names.length?<div style={{fontSize:11.5,color:C.text,marginBottom:8}}><b>Items:</b> {names.join(", ")}</div>:null;})()}
+            {rr.photo&&<img src={rr.photo} alt="damage" style={{width:90,height:90,objectFit:"cover",borderRadius:10,border:`1px solid ${C.border}`,marginBottom:10}}/>}
+            {(rr.courier||rr.consignment)&&(
+              <div style={{fontSize:11.5,color:C.text,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>📦 Return courier: <b>{rr.courier||"—"}</b>{rr.consignment?<> · Consignment <span style={{fontFamily:"monospace"}}>{rr.consignment}</span></>:null}</div>
+            )}
+            <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding your return request for order ${orderId(o.id)} —`))}
+              style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginBottom:12}}>💬 Message customer on WhatsApp</button>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Status</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+              {["Requested","Approved","Shipped","Received & Verified","Declined"].map(s=>(
+                <button key={s} className="press" onClick={()=>setRetStatus(s)}
+                  style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${retStatus===s?C.primary:C.border}`,background:retStatus===s?C.primary:"transparent",color:retStatus===s?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{s}</button>
+              ))}
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Note to customer <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+            <textarea value={retNote} onChange={e=>setRetNote(e.target.value)} rows={2} placeholder="e.g. Approved — courier it to our address; refund once we verify the parcel."
+              style={{...refundFld,resize:"none",lineHeight:1.5,marginBottom:10}}/>
+            <div style={{display:"flex",gap:8}}>
+              <button className="press" onClick={()=>saveReturn(false)} disabled={saving}
+                style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif",opacity:saving?.7:1}}>💾 Save</button>
+              <button className="press" onClick={()=>saveReturn(true)} disabled={saving}
+                style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif",opacity:saving?.7:1}}>✓ Resolve {rr.resolution==="coins"?`· ${Math.ceil(retValue/(Number(settings.loyaltyRedeemValue||1)||1))} coins`:`· ₹${retValue}`}</button>
+            </div>
           </div>
         )}
 
@@ -6904,6 +7281,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── ORDERS TAB ── */}
       {tab==="orders"&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
+          {/* Sales analytics dashboard */}
+          <AdminSalesDashboard orders={orders} products={products} settings={settings}/>
           {/* Visitor analytics */}
           <div style={{background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -9383,12 +9762,49 @@ function NemoStore(){
   };
 
   // Customer reports a Dead-on-Arrival fish → flags the order (best-effort cloud write) and routes them to WhatsApp
-  const reportDoa=async(order)=>{
+  const reportDoa=async(order,opts={})=>{
     if(order.doa&&order.doa.status&&order.doa.status!=="Requested") return; // don't overwrite an in-progress/resolved request
-    const updated={...order,doa:{status:"Requested",requestedAt:new Date().toISOString(),note:""}};
+    const updated={...order,doa:{status:"Requested",requestedAt:new Date().toISOString(),note:"",resolution:opts.resolution||"replacement"}};
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
     showToast("DOA request noted — please send your video on WhatsApp");
+  };
+
+  // Customer cancels their own order instantly (only inside the self-cancel window)
+  const cancelByCustomer=async(order)=>{
+    if(!selfCancelOpen(order)){ showToast("This order can no longer be cancelled","error"); return; }
+    const paid=!!order.paidAt||["Payment Review","Confirmed"].includes(order.status);
+    const refund=paid
+      ? { due:true, amount:order.amountDue??((order.total||0)+(order.fee||0)), method:"upi", refundTxnId:"", status:"pending", updatedAt:new Date().toISOString() }
+      : { due:false, amount:0, method:"none", refundTxnId:"", status:"none", updatedAt:new Date().toISOString() };
+    const updated={...order,status:"Cancelled",paymentStatus:paid?"Cancelled by customer — refund due":"Cancelled by customer",cancelReason:"Cancelled by customer",cancelledBy:"customer",refund,updatedAt:new Date().toISOString()};
+    setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
+    await saveOneOrder(updated);
+    restock(order);
+    if(Number(order.loyaltyDiscount)>0 && order.userUid && !order.loyaltyRefunded){
+      const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
+      try{ adminCreditLoyalty(order.userUid, Math.ceil(Number(order.loyaltyDiscount)/coinVal), "redeemrefund:"+order.id, "Points refunded (order cancelled)", settings.walletValidityMonths); }catch(e){}
+    }
+    if(order.referralCode){ try{ reverseReferralOnCancel(order.referralCode); }catch(e){} }
+    showToast(paid?"Order cancelled — your refund will be processed":"Order cancelled");
+  };
+
+  // Customer raises a damaged-item return / replacement request
+  const requestReturn=async(order,payload={})=>{
+    const updated={...order, returnReq:{ status:"Requested", requestedAt:new Date().toISOString(),
+      itemIds:payload.itemIds||[], reason:payload.reason||"", photo:payload.photo||"",
+      resolution:payload.resolution||"refund", courier:"", consignment:"", note:"" }};
+    setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
+    await saveOneOrder(updated);
+    showToast("Return request submitted — we'll review and update you");
+  };
+  // Customer adds courier + consignment details once the return is approved
+  const submitReturnShipment=async(order,ship={})=>{
+    const rr={...(order.returnReq||{}), status:"Shipped", courier:ship.courier||"", consignment:ship.consignment||"", shippedAt:new Date().toISOString()};
+    const updated={...order, returnReq:rr};
+    setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
+    await saveOneOrder(updated);
+    showToast("Return shipment details saved — thank you");
   };
 
   // Customer submits payment proof → order moves to "Payment Review"
@@ -9561,7 +9977,7 @@ function NemoStore(){
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
         {page==="orders"   &&(user
-          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} settings={settings} favorites={favorites}/>
+          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} settings={settings} favorites={favorites}/>
           : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={()=>nav("home")}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={()=>nav("home")}/>}
         {page==="request"  &&<RequestPage nav={nav} user={user} onSubmit={submitRequest}/>}
