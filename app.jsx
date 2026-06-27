@@ -4027,34 +4027,6 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* First-order welcome coupon */}
         {settingsReady&&<WelcomeBanner settings={settings} orders={orders}/>}
 
-        {/* Rewards — surface wallet coins + referral so customers actually use them */}
-        {settingsReady&&user&&settings.loyaltyEnabled!==false&&(()=>{
-          const val=Number(settings.loyaltyRedeemValue||1);
-          const worth=Math.floor(walletPts*val);
-          const redeemMin=Number(settings.loyaltyRedeemMin||100);
-          const refOn=settings.referralEnabled!==false;
-          const refGet=Number(settings.referralDiscount||50);
-          return(
-            <div style={{marginBottom:22,borderRadius:20,overflow:"hidden",border:`1px solid ${C.border}`,background:`linear-gradient(135deg,${C.primaryDark},${C.primary})`,color:"white",position:"relative"}}>
-              <div style={{position:"absolute",top:-30,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-              <button className="press" onClick={()=>setWalletOpen(true)} style={{display:"flex",alignItems:"center",gap:13,width:"100%",padding:"15px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left",color:"white",position:"relative"}}>
-                <div style={{width:46,height:46,borderRadius:14,background:"rgba(255,255,255,.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>👛</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,lineHeight:1.1}}>{walletPts>0?`${walletPts} coins · ₹${worth}`:"Earn coins on every order"}</div>
-                  <div style={{fontSize:11.5,opacity:.9,marginTop:2,lineHeight:1.4}}>{walletPts>=redeemMin?`Redeem ₹${worth} off your next order →`:walletPts>0?`Collect ${redeemMin-walletPts} more to redeem →`:`Get ${settings.loyaltyPointsPerHundred||10} coins per ₹100 spent →`}</div>
-                </div>
-              </button>
-              {refOn&&(
-                <button className="press" onClick={()=>nav("orders")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"12px 16px",background:"rgba(255,255,255,.12)",border:"none",borderTop:"1px solid rgba(255,255,255,.18)",cursor:"pointer",textAlign:"left",color:"white"}}>
-                  <span style={{fontSize:18}}>💜</span>
-                  <span style={{flex:1,fontSize:12.5,fontWeight:700,lineHeight:1.4}}>Refer a friend — they get ₹{refGet} off, you earn {settings.referralCoins||50} coins</span>
-                  <span style={{fontSize:16,opacity:.8}}>→</span>
-                </button>
-              )}
-            </div>
-          );
-        })()}
-
         {/* Food re-order reminder */}
         <FoodReorderBanner orders={orders} products={products} addToCart={addToCart} nav={nav}/>
 
