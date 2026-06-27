@@ -2066,6 +2066,12 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
 .festival-pulse{animation:festivalPulse 2.2s ease-in-out infinite;}
 @keyframes pointsPop{0%{transform:scale(0.8) translateY(4px);opacity:0}100%{transform:scale(1) translateY(0);opacity:1}}
 .points-pop{animation:pointsPop .35s cubic-bezier(.22,1,.36,1) both;}
+/* Cart count badge — replays a quick pop whenever the quantity changes (re-keyed in the navs) */
+@keyframes cartPop{0%{transform:scale(.4);opacity:.3}55%{transform:scale(1.35)}100%{transform:scale(1)}}
+.cart-pop{animation:cartPop .42s cubic-bezier(.22,1,.36,1) both;}
+/* Live search suggestions — gentle drop-in under the search box */
+@keyframes suggDrop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.sugg-drop{animation:suggDrop .18s ease both;}
 @keyframes showcaseSlide{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
 .showcase-slide{animation:showcaseSlide .3s ease both;}
 /* Gentle fade + rise — for promo banners and content that appears after data loads */
@@ -3672,6 +3678,13 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
   const [recent,setRecent]=useState(()=>loadRecentSearches());
   const related=useMemo(()=>relatedProducts(products,recent,null,6),[products,recent]);
   const recentlyViewed=useMemo(()=>loadRecentlyViewed().map(id=>products.find(p=>p.id===id)).filter(Boolean).slice(0,10),[products]);
+  // Live search suggestions — match name/category as the customer types
+  const suggestions=useMemo(()=>{
+    const q=(query||"").trim().toLowerCase();
+    if(q.length<1) return [];
+    return products.filter(p=>((p.name||"").toLowerCase().includes(q)||(p.category||"").toLowerCase().includes(q))).slice(0,6);
+  },[query,products]);
+  const [suggOpen,setSuggOpen]=useState(false);
   const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
   const walletWarn=!!(wexp&&(wexp.expiringSoon||wexp.expired));
   const handleRecent=(r)=>{
@@ -3747,19 +3760,47 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
       {/* Search bar — type inline; Enter or the icon opens Shop with your query */}
       <div className="home-search" style={{padding:"0 16px",marginTop:-22,marginBottom:18,position:"relative",zIndex:2}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,background:C.card,borderRadius:16,padding:"14px 16px",border:`1.5px solid ${C.border}`,boxShadow:"0 8px 24px rgba(11,110,114,.12)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,background:C.card,borderRadius:16,padding:"14px 16px",border:`1.5px solid ${C.border}`,boxShadow:"0 8px 24px rgba(11,110,114,.12)",position:"relative"}}>
           <button onClick={()=>nav("shop")} aria-label="Search" style={{background:"none",border:"none",padding:0,fontSize:18,cursor:"pointer",lineHeight:1}}>🔍</button>
           <input type="text" placeholder="Search fish, plants, accessories…"
-            value={query} onChange={e=>setQuery(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter")nav("shop");}}
+            value={query} onChange={e=>{setQuery(e.target.value);setSuggOpen(true);}}
+            onFocus={()=>setSuggOpen(true)} onBlur={()=>setTimeout(()=>setSuggOpen(false),160)}
+            onKeyDown={e=>{if(e.key==="Enter"){setSuggOpen(false);nav("shop");}}}
             style={{border:"none",background:"transparent",outline:"none",flex:1,fontSize:14}}/>
           {query&&(
             <button onClick={()=>setQuery("")} className="press" aria-label="Clear search"
               style={{flexShrink:0,background:"none",border:"none",color:C.textSub,fontSize:18,lineHeight:1,cursor:"pointer",padding:"0 2px"}}>✕</button>
           )}
           {query&&(
-            <button onClick={()=>nav("shop")} className="press"
+            <button onClick={()=>{setSuggOpen(false);nav("shop");}} className="press"
               style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 13px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Go</button>
+          )}
+          {/* Live search suggestions — tap a match to jump straight to the product */}
+          {suggOpen&&query.trim()&&suggestions.length>0&&(
+            <div className="sugg-drop" style={{position:"absolute",top:"calc(100% + 8px)",left:0,right:0,background:C.card,borderRadius:14,border:`1px solid ${C.border}`,boxShadow:"0 14px 34px rgba(11,110,114,.18)",overflow:"hidden",zIndex:40}}>
+              {suggestions.map(p=>{
+                const img=getCardImg(p,mediaCache);
+                const cm=CAT_META[p.category]||CAT_META["Live Fish"];
+                return(
+                  <button key={p.id} className="press" onMouseDown={e=>e.preventDefault()}
+                    onClick={()=>{setRecent(addRecentSearch(p.name));setSuggOpen(false);nav("detail",p);}}
+                    style={{display:"flex",alignItems:"center",gap:11,width:"100%",padding:"9px 12px",background:"none",border:"none",borderBottom:`1px solid ${C.border}`,cursor:"pointer",textAlign:"left"}}>
+                    <div style={{width:42,height:42,borderRadius:9,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${cm.c1},${cm.c2})`}}>
+                      {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:22}}>{cm.emoji}</span>}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+                      <div style={{fontSize:11,color:C.textSub}}>{p.category}</div>
+                    </div>
+                    <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary,flexShrink:0}}>₹{effectivePrice(p)}</div>
+                  </button>
+                );
+              })}
+              <button className="press" onMouseDown={e=>e.preventDefault()} onClick={()=>{setSuggOpen(false);nav("shop");}}
+                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",padding:"11px 12px",background:C.bg,border:"none",cursor:"pointer",color:C.primary,fontWeight:800,fontSize:12.5,fontFamily:"'Nunito',sans-serif"}}>
+                See all results for "{query.trim()}" →
+              </button>
+            </div>
           )}
         </div>
         {recent.length>0&&(
@@ -4495,6 +4536,20 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             </div>
           );
         })()}
+
+        {/* Trust signals — reassurance right at the buy decision */}
+        {!p.comingSoon&&(
+          <div style={{margin:"22px 0 6px",padding:"14px 12px",background:C.card,borderRadius:16,border:`1px solid ${C.border}`}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+              {[["🛡️","Live Arrival","Guarantee"],["📦","Safe, breathable","Packing"],["🔒","Secure UPI /","Online Pay"]].map(([ic,a,b])=>(
+                <div key={a} style={{display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",gap:5}}>
+                  <span style={{fontSize:22,lineHeight:1}}>{ic}</span>
+                  <span style={{fontSize:10.5,fontWeight:700,color:C.text,lineHeight:1.3}}>{a}<br/>{b}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Sticky bottom bar */}
@@ -5557,7 +5612,7 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
         )}
         <button className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
           🛒 Cart
-          {cartCount>0&&<span style={{position:"absolute",top:-6,right:-6,background:C.coral,color:"white",fontSize:10,fontWeight:800,borderRadius:10,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{cartCount>99?"99+":cartCount}</span>}
+          {cartCount>0&&<span key={cartCount} className="cart-pop" style={{position:"absolute",top:-6,right:-6,background:C.coral,color:"white",fontSize:10,fontWeight:800,borderRadius:10,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{cartCount>99?"99+":cartCount}</span>}
         </button>
         <button className="press" onClick={()=>nav("orders")} style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:`1px solid ${C.border}`,borderRadius:30,padding:"5px 12px 5px 5px",cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
           <span style={{width:28,height:28,borderRadius:"50%",background:C.primary,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>{user?(user.name||"U").charAt(0).toUpperCase():"👤"}</span>
@@ -5585,7 +5640,7 @@ function BottomNav({page,nav,cartCount}){
               <div style={{position:"relative"}}>
                 <span style={{fontSize:24,filter:on?"none":"grayscale(1) opacity(.45)",transition:"filter .2s",display:"block"}}>{t.icon}</span>
                 {t.id==="cart"&&cartCount>0&&(
-                  <span style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
+                  <span key={cartCount} className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
                     {cartCount>99?"99+":cartCount}
                   </span>
                 )}
