@@ -1315,6 +1315,24 @@ async function loadAnalytics(){
   if(!FB_OK) return null;
   try{ const s=await withTimeout(FB_DB.ref("analytics").get(),5000); return (s&&s.exists())?s.val():{total:0,daily:{}}; }catch(e){ return null; }
 }
+/* Lightweight behaviour analytics — write-only Firebase increments (safe for anon visitors;
+   rules permit numeric counters under analytics/events|search|funnel). No reads, never blocks UI. */
+function _akey(s){ return String(s||"").replace(/[.#$\[\]\/ -]/g,"_").slice(0,80); }
+function trackEvent(type,key){
+  if(!FB_OK||typeof firebase==="undefined")return;
+  const t=_akey(type),k=_akey(key); if(!t||!k)return;
+  try{ FB_DB.ref("analytics/events/"+t+"/"+k).set(firebase.database.ServerValue.increment(1)); }catch(e){}
+}
+function trackSearch(term){
+  if(!FB_OK||typeof firebase==="undefined")return;
+  const t=String(term||"").trim().toLowerCase(); if(t.length<2)return;
+  try{ FB_DB.ref("analytics/search/"+_akey(t)).set(firebase.database.ServerValue.increment(1)); }catch(e){}
+}
+function trackFunnel(step){
+  if(!FB_OK||typeof firebase==="undefined")return;
+  const s=_akey(step); if(!s)return;
+  try{ FB_DB.ref("analytics/funnel/"+s).set(firebase.database.ServerValue.increment(1)); }catch(e){}
+}
 /* Optional Google Analytics 4 — only loads if the admin set a Measurement ID (G-XXXX) in Settings. */
 let GA_DONE=false;
 function injectGA(gaId){
@@ -2116,6 +2134,10 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
   background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent);transform:translateX(-120%);animation:sheen 3.8s ease-in-out infinite;}
 @keyframes kpiRise{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
 .kpi-rise{animation:kpiRise .45s cubic-bezier(.22,1,.36,1) both;}
+@keyframes heartPop{0%{transform:scale(1)}40%{transform:scale(1.45)}70%{transform:scale(.88)}100%{transform:scale(1)}}
+.heart-pop{animation:heartPop .35s ease both;display:inline-block;}
+@keyframes pageIn{from{opacity:0}to{opacity:1}}
+.page-swap{animation:pageIn .24s ease both;}
 @keyframes showcaseSlide{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
 .showcase-slide{animation:showcaseSlide .3s ease both;}
 /* Gentle fade + rise — for promo banners and content that appears after data loads */
@@ -2612,7 +2634,7 @@ function StatusBadge({status}){
   const s=m[status]||m.Placed;
   return <span style={{fontSize:10,fontWeight:700,color:s.c,background:s.bg,padding:"3px 10px",borderRadius:20}}>{s.icon} {status}</span>;
 }
-function CategoryPills({selected,onSelect,all}){
+function CategoryPills({selected,onSelect,all,counts}){
   const list=all?["All",...CATEGORIES]:CATEGORIES;
   const icons={All:"🌊",...Object.fromEntries(CATEGORIES.map(c=>[c,CAT_META[c].emoji]))};
   return(
@@ -2624,6 +2646,7 @@ function CategoryPills({selected,onSelect,all}){
           fontSize:12,fontWeight:600,fontFamily:"'Nunito',sans-serif",transition:"all .2s",
           display:"flex",alignItems:"center",gap:5}}>
           <span>{icons[c]}</span>{c}
+          {counts&&<span style={{marginLeft:3,background:selected===c?"rgba(255,255,255,.25)":C.border,color:selected===c?"white":C.textSub,borderRadius:10,padding:"0 6px",fontSize:10,fontWeight:800,minWidth:14,textAlign:"center"}}>{counts[c]||0}</span>}
         </button>
       ))}
     </div>
@@ -3176,7 +3199,8 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
   );
 }
 
-function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, settings={}, favorites=[]}){
+function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
+  const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){ addToCart(prod,it.qty||1); n++; } }); nav("cart"); };
   const uk = userKey(user);
   const [payOpen,setPayOpen]=useState(null);
   // Refresh hourly so the live delivery countdown rolls over as the day changes while the app is left open.
@@ -3420,6 +3444,12 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 📄 Invoice (PDF)
               </button>
               </div>
+              {o.status==="Delivered"&&(
+                <button className="press" onClick={()=>reorder(o)}
+                  style={{width:"100%",marginTop:8,background:C.accentLight,color:C.primary,border:`1.5px solid ${C.accent}`,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+                  🔁 Reorder these items
+                </button>
+              )}
 
               {/* Payment state */}
               {o.status==="Awaiting Payment"&&(
@@ -3525,6 +3555,24 @@ function productExpectsImage(p){
   return !!p.imageUrl;
 }
 
+/* Shimmer skeleton grid — shown on a cold first load until product data hydrates */
+function SkeletonGrid({n=6}){
+  return(
+    <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      {Array.from({length:n}).map((_,i)=>(
+        <div key={i} style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`}}>
+          <div className="shimmer-bar" style={{height:120}}/>
+          <div style={{padding:"14px 12px 12px"}}>
+            <div className="shimmer-bar" style={{height:9,borderRadius:6,marginBottom:8,width:"45%"}}/>
+            <div className="shimmer-bar" style={{height:12,borderRadius:6,marginBottom:10}}/>
+            <div className="shimmer-bar" style={{height:16,borderRadius:6,width:"40%"}}/>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ═══════════════════ PRODUCT CARD ═══════════════════ */
 function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,isInterested=false,onInterest}){
   const m   = CAT_META[p.category]||CAT_META["Live Fish"];
@@ -3537,7 +3585,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   const Heart = onFav ? (
     <button className="press" onClick={e=>{e.stopPropagation();onFav(p);}} aria-label="Save"
       style={{position:"absolute",top:8,right:8,width:30,height:30,borderRadius:"50%",border:"none",background:"rgba(255,255,255,.9)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,.18)"}}>
-      <span style={{fontSize:16,lineHeight:1,color:isFav?C.coral:"#9ca3af"}}>{isFav?"♥":"♡"}</span>
+      <span key={isFav?"f":"e"} className={isFav?"heart-pop":""} style={{fontSize:16,lineHeight:1,color:isFav?C.coral:"#9ca3af"}}>{isFav?"♥":"♡"}</span>
     </button>
   ) : null;
   const ShareBtn = (
@@ -3870,7 +3918,7 @@ function ArrivedAliveGallery({products=[]}){
   );
 }
 
-function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit}){
+function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true}){
   const featured=products.slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
   const [walletOpen,setWalletOpen]=useState(false);
@@ -4101,6 +4149,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Featured</span>
             <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.accent,fontWeight:700,background:"none",border:"none",fontFamily:"'Nunito',sans-serif"}}>View All →</button>
           </div>
+          {!hydrated ? <SkeletonGrid n={6}/> : (
           <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             {featured.map(p=>(
               <ProductCard key={p.id} product={p} imgSrc={getCardImg(p,mediaCache)}
@@ -4108,6 +4157,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                 isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
             ))}
           </div>
+          )}
         </div>
 
         {/* Customer Tank Showcase */}
@@ -4255,12 +4305,12 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 }
 
 /* ═══════════════════ SHOP PAGE ═══════════════════ */
-function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,addToCart,cartMap,favorites=[],onFav,interestedSet=[],onInterest,restockSet=[],onRestock}){
+function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,addToCart,cartMap,favorites=[],onFav,interestedSet=[],onInterest,restockSet=[],onRestock,hydrated=true}){
   const [sort,setSort]=useState("relevance");
   const [availability,setAvailability]=useState("all");
   const [recent,setRecent]=useState(()=>loadRecentSearches());
   // Record the search term once the user stops typing
-  useEffect(()=>{ const q=(query||"").trim(); if(q.length<2) return; const t=setTimeout(()=>setRecent(addRecentSearch(q)),900); return ()=>clearTimeout(t); },[query]);
+  useEffect(()=>{ const q=(query||"").trim(); if(q.length<2) return; const t=setTimeout(()=>{setRecent(addRecentSearch(q)); trackSearch(q);},900); return ()=>clearTimeout(t); },[query]);
   const priceCap = useRef(Math.max(2500, ...products.map(p=>p.price))).current;
   const [priceMax,setPriceMax]=useState(priceCap);
   const [sheet,setSheet]=useState(false);
@@ -4288,6 +4338,15 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
 
   const activeFilters = (availability!=="all"?1:0) + (priceMax<priceCap?1:0) + (sort!=="relevance"?1:0);
 
+  // Live per-category result counts (reflect the current search term)
+  const catCounts=useMemo(()=>{
+    const q=(query||"").trim().toLowerCase();
+    const match=p=>!q||p.name.toLowerCase().includes(q)||p.category.toLowerCase().includes(q)||(p.desc||"").toLowerCase().includes(q);
+    const m={All:0}; CATEGORIES.forEach(c=>m[c]=0);
+    products.forEach(p=>{ if(match(p)){ m.All++; if(m[p.category]!=null) m[p.category]++; } });
+    return m;
+  },[products,query]);
+
   return(
     <div className="slide-up">
       <div className="vh-head shop-bar" style={{background:C.card,padding:"52px 14px 10px",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:20}}>
@@ -4305,7 +4364,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             Filter &amp; Sort{activeFilters>0&&<span style={{background:"rgba(255,255,255,.25)",borderRadius:10,padding:"1px 6px",fontSize:10}}>{activeFilters}</span>}
           </button>
         </div>
-        <CategoryPills selected={category} onSelect={setCategory} all/>
+        <CategoryPills selected={category} onSelect={setCategory} all counts={catCounts}/>
       </div>
       <div style={{padding:"14px 16px 100px"}}>
         {!query&&recent.length>0&&(
@@ -4324,10 +4383,10 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             </div>
           </div>
         )}
-        <div style={{fontSize:12,color:C.textSub,fontWeight:500,marginBottom:14}}>
+        {hydrated&&<div style={{fontSize:12,color:C.textSub,fontWeight:500,marginBottom:14}}>
           {list.length} product{list.length!==1?"s":""}{category!=="All"?` in ${category}`:""}{query?` for "${query}"`:""}
-        </div>
-        {list.length===0?(
+        </div>}
+        {!hydrated?(<SkeletonGrid n={8}/>):list.length===0?(
           <div style={{textAlign:"center",padding:"50px 20px",color:C.textSub}}>
             <div style={{fontSize:52,marginBottom:14}}>🌊</div>
             <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No products found</div>
@@ -4380,6 +4439,85 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
 }
 
 /* ═══════════════════ DETAIL PAGE ═══════════════════ */
+/* Pincode → delivery-zone & ETA estimate on the product page */
+function DeliveryEstimate({settings={}}){
+  const [pin,setPin]=useState("");
+  const ETA={TN:"1–2 days",SouthIndia:"2–4 days",CentralIndia:"3–5 days",NorthIndia:"4–6 days"};
+  const zone=/^\d{6}$/.test(pin)?pincodeToZone(pin):null;
+  return(
+    <div style={{margin:"18px 0 0",padding:"13px 14px",background:C.card,borderRadius:14,border:`1px solid ${C.border}`}}>
+      <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>🚚 Check delivery to your area</div>
+      <div style={{display:"flex",gap:8}}>
+        <input value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" placeholder="Enter 6-digit pincode"
+          style={{flex:1,boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13.5,outline:"none",background:"white",fontFamily:"monospace"}}/>
+      </div>
+      {pin.length===6&&(zone?(
+        <div style={{marginTop:9,fontSize:12,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
+          ✓ Delivers to <b>{ZONE_LABELS[zone]}</b> · Estimated <b>{ETA[zone]||"3–6 days"}</b>. Live fish ship on selected days for safe transit.
+        </div>
+      ):(
+        <div style={{marginTop:9,fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
+          Pincode not recognised — please message us on WhatsApp to confirm delivery & timing.
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Frequently bought together — complementary in-stock items + add-all */
+function FrequentlyBought({base, products=[], addToCart, mediaCache={}, nav}){
+  const fbt=useMemo(()=>{
+    const pool=products.filter(x=>x.id!==base.id && !x.comingSoon && (x.stockCount??DEFAULT_STOCK)>0);
+    const prefer = (base.category==="Live Fish"||base.category==="Plants") ? ["Feed","Accessories","Tanks"] : ["Accessories","Feed","Tanks"];
+    const score=x=>{ const i=prefer.indexOf(x.category); return i<0?0:(prefer.length-i); };
+    return [...pool].sort((a,b)=>score(b)-score(a)||(b.ratingAvg||0)-(a.ratingAvg||0)).slice(0,3);
+  },[products,base.id]);
+  if(fbt.length<2) return null;
+  const total=fbt.reduce((s,x)=>s+effectivePrice(x),0)+effectivePrice(base);
+  return(
+    <div style={{margin:"18px 0 0"}}>
+      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>🧰 Frequently bought together</div>
+      <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch"}}>
+        {fbt.map(x=>{ const img=getCardImg(x,mediaCache); const m=CAT_META[x.category]||CAT_META["Live Fish"]; return(
+          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:120,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"8px",textAlign:"left",cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
+            <div style={{height:74,borderRadius:9,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:6}}>
+              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:30}}>{m.emoji}</span>}
+            </div>
+            <div style={{fontSize:11.5,fontWeight:700,color:C.text,lineHeight:1.3,height:30,overflow:"hidden"}}>{x.name}</div>
+            <div style={{fontFamily:PRICE_FONT,fontSize:13,fontWeight:800,color:C.primary,marginTop:2}}>₹{effectivePrice(x)}</div>
+          </button>
+        );})}
+      </div>
+      <button className="press" onClick={()=>{ fbt.forEach(x=>addToCart(x,1)); }}
+        style={{marginTop:8,width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+        ＋ Add these {fbt.length} to cart
+      </button>
+    </div>
+  );
+}
+
+/* Recently viewed rail on the product page */
+function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
+  const items=useMemo(()=>loadRecentlyViewed().filter(id=>id!==currentId).map(id=>products.find(p=>p.id===id)).filter(Boolean).slice(0,8),[products,currentId]);
+  if(items.length<2) return null;
+  return(
+    <div style={{margin:"22px 0 0"}}>
+      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>👀 Recently viewed</div>
+      <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch"}}>
+        {items.map(x=>{ const img=getCardImg(x,mediaCache); const m=CAT_META[x.category]||CAT_META["Live Fish"]; return(
+          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:108,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"7px",textAlign:"left",cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
+            <div style={{height:66,borderRadius:9,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:5}}>
+              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:26}}>{m.emoji}</span>}
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:C.text,lineHeight:1.3,height:28,overflow:"hidden"}}>{x.name}</div>
+            <div style={{fontFamily:PRICE_FONT,fontSize:12.5,fontWeight:800,color:C.primary,marginTop:2}}>₹{effectivePrice(x)}</div>
+          </button>
+        );})}
+      </div>
+    </div>
+  );
+}
+
 function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,prevPage="shop",user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
   const [qty,setQty]           = useState(1);
   const [selVarId,setSelVarId] = useState(null);
@@ -4398,6 +4536,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
     setShowForm(false);
     setSubmitted(false);
     pushRecentlyViewed(p.id);
+    trackEvent("view",p.id); trackFunnel("view");
     loadReviews(p.id).then(r=>{ setReviews(r); setLoadingRev(false); if((r.length||0)!==(p.reviewCount||0)) onReviewsChanged && onReviewsChanged(p.id, r); });
     setSlide(0);
     // Auto-open the review form when the customer tapped "Rate" from their orders
@@ -4709,6 +4848,10 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           );
         })()}
 
+        {/* Delivery estimate, frequently-bought-together & recently viewed */}
+        {!p.comingSoon&&<DeliveryEstimate/>}
+        {!p.comingSoon&&<FrequentlyBought base={p} products={products} addToCart={addToCart} mediaCache={mediaCache} nav={nav}/>}
+        <RecentlyViewedRail currentId={p.id} products={products} mediaCache={mediaCache} nav={nav}/>
         {/* Trust signals — reassurance right at the buy decision */}
         {!p.comingSoon&&(
           <div style={{margin:"22px 0 6px",padding:"14px 12px",background:C.card,borderRadius:16,border:`1px solid ${C.border}`}}>
@@ -5051,6 +5194,7 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
 
 function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,updateQty,user,settings={},orders=[]}){
   const [step,setStep]=useState(1);
+  useEffect(()=>{ trackFunnel("checkout"); },[]); // funnel: reached checkout
   const [exitAsk,setExitAsk]=useState(false);
   const savingsTotal=cart.reduce((s,i)=>s+Math.max(0,((Number(i.mrp)||i.price)-i.price))*i.qty,0);
   useEffect(()=>{ if(step>=2&&cart.length===0) setStep(1); },[cart.length,step]);
@@ -6448,6 +6592,70 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
   );
 }
 
+/* ═══════════════════ ADMIN BEHAVIOUR INSIGHTS ═══════════════════ */
+function AdminInsights({stats, products=[]}){
+  if(!stats) return null;
+  const f=stats.funnel||{}, ev=stats.events||{}, srch=stats.search||{};
+  const nameOf=id=>{ const p=products.find(x=>x.id===id); return p?p.name:id; };
+  const views=Number(f.view||0), add=Number(f.addcart||0), chk=Number(f.checkout||0), ord=Number(f.order||0), paid=Number(f.paid||0);
+  const hasData = views||add||ord||Object.keys(ev).length||Object.keys(srch).length;
+  const steps=[["👁 Product views",views,"#0e7490"],["🛒 Added to cart",add,"#1d4ed8"],["💳 Reached checkout",chk,"#7c3aed"],["📦 Orders placed",ord,"#b45309"],["✅ Paid",paid,"#15803d"]];
+  const maxV=Math.max(1,views,add,chk,ord,paid);
+  const pct=(a,b)=>b>0?Math.round((a/b)*100):0;
+  const top=(obj,n)=>Object.entries(obj||{}).map(([k,v])=>({k,v:Number(v)||0})).sort((a,b)=>b.v-a.v).slice(0,n);
+  const list=(items,renderName)=>items.length?items.map((it,i)=>(
+    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:7}}>
+      <span style={{fontSize:12,color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{i+1}. {renderName(it.k)}</span>
+      <span style={{fontSize:11,fontWeight:800,color:C.primary,flexShrink:0}}>{it.v}</span>
+    </div>
+  )):<div style={{fontSize:11.5,color:C.textSub}}>No data yet — it builds as customers browse.</div>;
+  return(
+    <div style={{marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{fontSize:18}}>🔬</span>
+        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text}}>Customer Insights</span>
+      </div>
+      {!hasData?(
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",fontSize:12,color:C.textSub,lineHeight:1.6}}>
+          Collecting data… As customers view products, search, add to cart and check out, you'll see a conversion funnel, top products and top searches here. <b>Note:</b> publish the updated database rules in Firebase for this to record across devices (see the note I sent).
+        </div>
+      ):(<>
+        {/* Conversion funnel */}
+        <div className="glass" style={{borderRadius:16,padding:"14px",marginBottom:12}}>
+          <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:10,letterSpacing:.3}}>CONVERSION FUNNEL (all-time)</div>
+          {steps.map(([lbl,v,col],i)=>(
+            <div key={i} style={{marginBottom:9}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,marginBottom:3}}><span style={{color:C.text,fontWeight:700}}>{lbl}</span><span style={{color:C.textSub,fontWeight:700}}>{v}</span></div>
+              <div style={{height:8,background:"#e2e8f0",borderRadius:6,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${Math.max(2,(v/maxV)*100)}%`,background:col,borderRadius:6,transition:"width .5s ease"}}/>
+              </div>
+            </div>
+          ))}
+          <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+            <span style={{fontSize:11,fontWeight:800,color:"#1d4ed8",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:20,padding:"4px 11px"}}>Add-to-cart {pct(add,views)}%</span>
+            <span style={{fontSize:11,fontWeight:800,color:"#7c3aed",background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:20,padding:"4px 11px"}}>Checkout {pct(chk,add)}%</span>
+            <span style={{fontSize:11,fontWeight:800,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:20,padding:"4px 11px"}}>View→Paid {pct(paid,views)}%</span>
+          </div>
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+          <div style={{flex:"1 1 calc(50% - 5px)",minWidth:150,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
+            <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>👁 MOST VIEWED</div>
+            {list(top(ev.view,6),nameOf)}
+          </div>
+          <div style={{flex:"1 1 calc(50% - 5px)",minWidth:150,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
+            <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>🛒 MOST ADDED TO CART</div>
+            {list(top(ev.addcart,6),nameOf)}
+          </div>
+          <div style={{flex:"1 1 100%",background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
+            <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>🔍 TOP SEARCHES</div>
+            {list(top(srch,10),k=>k.replace(/_/g," "))}
+          </div>
+        </div>
+      </>)}
+    </div>
+  );
+}
+
 /* ═══════════════════ ADMIN ORDER DETAIL (Phase 4) ═══════════════════ */
 function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,settings={}}){
   const [status,setStatus]=useState(o.status);
@@ -7269,6 +7477,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             })()}
             <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {settings.gaId?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
           </div>
+          {/* Behaviour insights — funnel, most viewed/added, top searches */}
+          <AdminInsights stats={visitStats} products={products}/>
           {/* DOA insights — loss patterns by species × zone × season */}
           <DoaInsights orders={orders}/>
           {/* Payment destination — glance-check that money still routes to you */}
@@ -9173,6 +9383,8 @@ function RequestPage({nav,user,onSubmit,myRequests}){
 function NemoStore(){
   const [page,setPage]             = useState("home");
   const [products,setProducts]     = useState(DEFAULT_PRODUCTS);
+  // Cold-start skeleton: true once we have real/cached data (returning visitors keep instant paint)
+  const [hydrated,setHydrated]     = useState(()=>{ try{ return !!localProducts(); }catch(e){ return false; } });
   const [orders,setOrders]         = useState([]);
   const [requests,setRequests]     = useState([]);
   const [guides,setGuides]         = useState(DEFAULT_GUIDES);
@@ -9262,6 +9474,7 @@ function NemoStore(){
     if(prods!==null && prods.length===0){ const seed=(localProducts()||DEFAULT_PRODUCTS).map(normalizeProduct); await saveProd(seed); prods=seed; }
     const finalProds=(prods&&prods.length)?prods.map(normalizeProduct):null;
     if(finalProds) setProducts(finalProds);
+    setHydrated(true);
     // Guides — seed if empty
     let gds=await fbGetColl("guides");
     if(gds!==null && gds.length===0){ const seed=localGuidesData()||DEFAULT_GUIDES; await saveGuides(seed); gds=seed; }
@@ -9299,6 +9512,8 @@ function NemoStore(){
       try{ if(localStorage.getItem("nemo-settings")) setSettingsReady(true); }catch(e){}
       const u=await loadUser(); if(u){setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));loadFavorites(userKey(u)).then(setFavorites);setInterestedSet(loadIntLocal(userKey(u)));}
       setLoading(false);
+      // Safety: never leave skeletons up indefinitely (e.g. Firebase off) — reveal after a short wait
+      setTimeout(()=>setHydrated(true),2500);
       // Remove the boot splash now that the app has painted
       try{ const sp=document.getElementById("splash"); if(sp){ sp.classList.add("hide"); setTimeout(()=>sp.remove(),450); } }catch(e){}
       hydrateMedia(prods,reqs,guideList);      // Seed defaults locally if first run
@@ -9415,7 +9630,7 @@ function NemoStore(){
       const nextQty=Math.min(maxAllowed, curQty+qty);
       if(nextQty<=0) return prev.filter(i=>i.key!==key);
       if(qty>0 && curQty+qty>maxAllowed) setTimeout(()=>showToast(`Only ${maxAllowed} available per order`,"error"),0);
-      else if(qty>0) setTimeout(()=>showToast("Added to cart"),0);
+      else if(qty>0){ setTimeout(()=>showToast("Added to cart"),0); trackEvent("addcart",product.id); trackFunnel("addcart"); }
       if(ex) return prev.map(i=>i.key===key?{...i,qty:nextQty}:i);
       return [...prev,{key,id:product.id,name:product.name,category:product.category,price:unitPrice,mrp:(v?variantBasePrice(product,v):(product.price||unitPrice)),qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,suggestedPacking:product.suggestedPacking||null,suggestSpecialDelivery:!!product.suggestSpecialDelivery,stockCount:stock}];
     });
@@ -9711,6 +9926,7 @@ function NemoStore(){
     setCart([]);
     setOrders(prev=>[o,...prev]);
     saveOneOrder(o);
+    trackFunnel("order");
     // NOTE: loyalty points are earned ONLY when the order is delivered (see updateOrderHandler),
     // never at placement — an unpaid/cancelled order earns nothing.
     // Atomically decrement stock in the cloud (prevents overselling across devices)
@@ -9785,6 +10001,7 @@ function NemoStore(){
     const updated={...order,...pay,status:"Payment Review",paymentStatus:"Submitted",paidAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
+    trackFunnel("paid");
     // Notify owner (email copy via EmailJS) + WhatsApp handled in the panel optionally
     sendOrderEmail(updated, settings.orderEmail||BUSINESS_EMAIL, settings);
     return updated;
@@ -9942,15 +10159,16 @@ function NemoStore(){
       {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
       {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap} walletPts={walletPts}/>}
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
-        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit}/>}
-        {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
+        <div key={page} className="page-swap">
+        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
+        {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
         {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings}/>}
         {page==="checkout" &&(user
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
         {page==="orders"   &&(user
-          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} settings={settings} favorites={favorites}/>
+          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
           : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={()=>nav("home")}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={()=>nav("home")}/>}
         {page==="request"  &&<RequestPage nav={nav} user={user} onSubmit={submitRequest}/>}
@@ -9961,6 +10179,7 @@ function NemoStore(){
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
+        </div>
       </div>
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
     </div>
