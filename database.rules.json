@@ -28,6 +28,14 @@
       }
     },
 
+    "experienceReviews": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE') || !data.exists() )",
+        ".validate": "!newData.exists() || (newData.hasChild('service') && newData.hasChild('packing') && newData.child('service').isNumber() && newData.child('packing').isNumber())"
+      }
+    },
+
     "orders": {
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === 'PASTE_FRIEND_UID_HERE')",
       "$uid": {

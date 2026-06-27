@@ -651,11 +651,74 @@ function compressImage(file, maxDim=1100, quality=0.82){
     img.onerror=(err)=>{ URL.revokeObjectURL(url); reject(err); }; img.src=url;
   });
 }
+/* Make a small catalog thumbnail (JPEG data-URL) from a full-size image data-URL.
+   Used so the product grid downloads ~tiny images instead of full-res ones — the
+   single biggest first-load win. Returns null for anything that isn't a data-URL image. */
+function makeThumb(dataUrl, maxDim=420, quality=0.7){
+  return new Promise(resolve=>{
+    try{
+      if(typeof dataUrl!=="string" || !dataUrl.startsWith("data:image")){ resolve(null); return; }
+      const img=new Image();
+      img.onload=()=>{ try{
+        let w=img.width, h=img.height;
+        if(w>h){ if(w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; } }
+        else   { if(h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; } }
+        const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+        const ctx=cv.getContext("2d"); ctx.imageSmoothingQuality="high"; ctx.drawImage(img,0,0,w,h);
+        resolve(cv.toDataURL("image/jpeg",quality));
+      }catch(e){ resolve(null); } };
+      img.onerror=()=>resolve(null);
+      img.src=dataUrl;
+    }catch(e){ resolve(null); }
+  });
+}
+/* Like makeThumb but also accepts a remote (Storage) URL. Remote draws need CORS on the
+   bucket; if that's not configured the canvas read throws and we return null (caller skips). */
+async function makeThumbFromAny(src, maxDim=420, quality=0.7){
+  if(typeof src!=="string") return null;
+  if(src.startsWith("data:")) return makeThumb(src, maxDim, quality);
+  return new Promise(resolve=>{
+    const img=new Image(); img.crossOrigin="anonymous";
+    img.onload=()=>{ try{
+      let w=img.width, h=img.height;
+      if(w>h){ if(w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; } }
+      else   { if(h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; } }
+      const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+      const ctx=cv.getContext("2d"); ctx.imageSmoothingQuality="high"; ctx.drawImage(img,0,0,w,h);
+      resolve(cv.toDataURL("image/jpeg",quality));
+    }catch(e){ resolve(null); } };
+    img.onerror=()=>resolve(null);
+    img.src=src;
+  });
+}
+/* Persist ONE gallery image the major-ecommerce way and return {url, thumbUrl} to embed
+   directly on the product record. Bytes go to Firebase Storage (CDN); only short URLs touch
+   the database. If Storage is unavailable it falls back to the legacy base64-in-RTDB path so
+   nothing breaks \u2014 callers then get an empty object and readers use the media/<key> cache. */
+async function persistImage(key, b64, withThumb=true){
+  const out={};
+  if(FB_STORAGE){
+    const url=await uploadToStorage("media/"+key+".jpg", b64);
+    if(url){
+      out.url=url; try{ await mediaSet("nemo-m-"+key, url); }catch(e){}
+      if(withThumb){
+        const t=await makeThumb(b64);
+        if(t){ const tu=await uploadToStorage("media/"+key+"_thumb.jpg", t); if(tu){ out.url_thumb=tu; out.thumbData=t; } }
+      }
+      return out;
+    }
+  }
+  // Storage off / upload failed — keep the original behaviour (heavier, but never loses data)
+  await saveMediaItem(key, b64);
+  return out;
+}
 /* Resolve a product's gallery from the media cache (with backward-compat) */
 function getProductMedia(p, cache={}){
   const images=[]; let video=null;
   if(Array.isArray(p.media)&&p.media.length){
-    p.media.forEach(m=>{ const src=cache["m-"+m.key]; if(m.type==="video"){ if(src)video=src; } else if(src)images.push(src); });
+    // Prefer the URL embedded on the product (zero extra DB reads — the major-ecommerce pattern);
+    // fall back to the per-key media cache for legacy items whose URL isn't embedded yet.
+    p.media.forEach(m=>{ const src=m.url||cache["m-"+m.key]; if(m.type==="video"){ if(src)video=src; } else if(src)images.push(src); });
   }
   if(!images.length){ // legacy single-image fields
     if(p.imageUrl) images.push(p.imageUrl);
@@ -663,6 +726,19 @@ function getProductMedia(p, cache={}){
   }
   if(!video && cache["vid-"+p.id]) video=cache["vid-"+p.id];
   return {images, video};
+}
+/* Catalog-card image: prefer the small thumbnail so the grid stays light. Order: an
+   instant just-saved local thumbnail → the stored thumbnail URL → full image URL → legacy cache. */
+function getCardImg(p, cache={}){
+  if(Array.isArray(p.media)&&p.media.length){
+    const first=p.media.find(m=>m.type!=="video");
+    if(first){
+      if(first.thumb && cache["thumb-"+first.key]) return cache["thumb-"+first.key];
+      if(first.thumbUrl) return first.thumbUrl;
+      if(first.url) return first.url;
+    }
+  }
+  return getProductMedia(p,cache).images[0];
 }
 
 async function loadReviews(pid){
@@ -3745,7 +3821,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
             {recentlyViewed.map(p=>(
               <div key={p.id} style={{flexShrink:0,width:150}}>
-                <ProductCard product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+                <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
                   onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
                   isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
               </div>
@@ -3767,7 +3843,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             </div>
             <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               {offerProducts.map(p=>(
-                <ProductCard key={p.id} product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+                <ProductCard key={p.id} product={p} imgSrc={getCardImg(p,mediaCache)}
                   onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
                   isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
               ))}
@@ -3785,7 +3861,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
               {related.map(p=>(
                 <div key={p.id} style={{flexShrink:0,width:150}}>
-                  <ProductCard product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+                  <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
                     onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
                     isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
                 </div>
@@ -3802,7 +3878,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           </div>
           <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             {featured.map(p=>(
-              <ProductCard key={p.id} product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+              <ProductCard key={p.id} product={p} imgSrc={getCardImg(p,mediaCache)}
                 onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
                 isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
             ))}
@@ -4036,7 +4112,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
           <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             {list.map(p=>(
               <div key={p.id}>
-                <ProductCard product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+                <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
                   onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
                   isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
                 <RestockBtn product={p} user={null} restockSet={restockSet} onSubscribe={onRestock}/>
@@ -4058,7 +4134,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
               <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
                 {rel.map(p=>(
                   <div key={p.id} style={{flexShrink:0,width:150}}>
-                    <ProductCard product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+                    <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
                       onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
                       isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
                   </div>
@@ -4376,8 +4452,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
                 {cross.map(cp=>{
                   const cm=CAT_META[cp.category]||CAT_META["Live Fish"];
-                  const cMedia=getProductMedia(cp,mediaCache);
-                  const cImg=cMedia.images&&cMedia.images[0];
+                  const cImg=getCardImg(cp,mediaCache);
                   const cPrice=effectivePrice(cp);
                   const cOnSale=(cp.discountPct||0)>0;
                   return(
@@ -5692,19 +5767,37 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     if(!form.price||isNaN(form.price)||Number(form.price)<=0){showToast("Enter a valid price","error");return;}
     setSaving(true);
     const id=product?.id||uid();
-    // Persist any newly-added media items
+    // Persist any newly-added media items.
+    // Major-ecommerce pattern: bytes -> Storage (CDN), only the short URL + thumbUrl ride on the
+    // product record, so the catalog renders from one `products` read with no per-image DB lookups.
     const media=[];
+    const prevMedia=product?.media||[];
+    const thumbPatch={};
     for(const im of images){
-      if(im.b64){ await saveMediaItem(im.key,im.b64); }
-      media.push({key:im.key,type:"image"});
+      const prev=prevMedia.find(m=>m.key===im.key)||{};
+      const entry={key:im.key,type:"image"};
+      if(im.b64){
+        const r=await persistImage(im.key, im.b64, true);
+        if(r.url) entry.url=r.url;
+        if(r.url_thumb){ entry.thumbUrl=r.url_thumb; entry.thumb=1; thumbPatch["thumb-"+im.key]=r.thumbData; }
+      } else {
+        // Untouched existing image — carry its embedded URLs/flags forward.
+        if(prev.url) entry.url=prev.url;
+        if(prev.thumbUrl){ entry.thumbUrl=prev.thumbUrl; entry.thumb=1; }
+        else if(prev.thumb) entry.thumb=1;
+      }
+      media.push(entry);
     }
     if(video && !video.tooLarge){
-      if(video.b64){ await saveMediaItem(video.key,video.b64); }
-      media.push({key:video.key,type:"video"});
+      const prevV=prevMedia.find(m=>m.key===video.key)||{};
+      const entry={key:video.key,type:"video"};
+      if(video.b64){ const r=await persistImage(video.key, video.b64, false); if(r.url) entry.url=r.url; }
+      else if(prevV.url) entry.url=prevV.url;
+      media.push(entry);
     }
     // Clean up removed media items (were on the product, now gone)
     const keptKeys=new Set(media.map(m=>m.key));
-    (product?.media||[]).forEach(m=>{ if(!keptKeys.has(m.key)) delMediaItem(m.key); });
+    (product?.media||[]).forEach(m=>{ if(!keptKeys.has(m.key)){ delMediaItem(m.key); delMediaItem(m.key+"_thumb"); } });
 
     const firstImg=images.find(i=>i.src)?.src || "";
     const saved={id,name:form.name,category:form.category,tag:form.tag,desc:form.desc,
@@ -5729,6 +5822,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     // Build a cache patch so the UI shows new media immediately
     const cachePatch={};
     images.forEach(im=>{ if(im.src) cachePatch["m-"+im.key]=im.src; });
+    Object.assign(cachePatch,thumbPatch);
     if(video&&!video.tooLarge&&video.src) cachePatch["m-"+video.key]=video.b64||video.src;
     await onSave(saved, cachePatch);
     setSaving(false);
@@ -6540,7 +6634,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   const [editGuide,setEditGuide]=useState(null);
   const [guideFormOpen,setGuideFormOpen]=useState(false);
@@ -6555,6 +6649,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [viewOrder,setViewOrder]=useState(null);
   const [cleanMonths,setCleanMonths]=useState(6);
   const [cleanConfirm,setCleanConfirm]=useState(false);
+  const [thumbBusy,setThumbBusy]=useState(false);
+  const [thumbMsg,setThumbMsg]=useState("");
   const [visitStats,setVisitStats]=useState(null);
   useEffect(()=>{ loadAnalytics().then(setVisitStats); },[]);
   const [orderFilter,setOrderFilter]=useState("All");
@@ -6877,6 +6973,34 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             })()}
           </div>
 
+          {/* Speed up the storefront — migrate product photos to the fast catalog model */}
+          {(()=>{
+            const needOpt=products.filter(p=>Array.isArray(p.media)&&p.media.some(m=>!m.url||(m.type!=="video"&&!m.thumbUrl))).length;
+            return(
+              <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                  <span style={{fontSize:16}}>⚡</span>
+                  <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Speed Up Catalog</span>
+                </div>
+                <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
+                  Generates small thumbnails &amp; moves product photos to fast CDN storage so the shop grid loads much quicker and uses far less database space. Safe to run anytime — your full-size photos are never deleted. {needOpt>0?<b>{needOpt} product{needOpt!==1?"s":""} can be optimised.</b>:<span style={{color:C.success,fontWeight:700}}>All products optimised ✓</span>}
+                </div>
+                <button className="press" disabled={thumbBusy||!needOpt} onClick={async()=>{
+                  setThumbBusy(true); setThumbMsg("Optimising…");
+                  try{
+                    const n=await onBackfillThumbs(d=>setThumbMsg(`Optimising… ${d} done`));
+                    setThumbMsg(n?`✓ Optimised ${n} product${n!==1?"s":""}`:"Nothing changed — if photos didn't optimise, your Storage bucket may need CORS enabled (or re-save the product in the editor).");
+                  }catch(e){ setThumbMsg("⚠ Something went wrong — please try again."); }
+                  setThumbBusy(false);
+                }}
+                  style={{width:"100%",background:(thumbBusy||!needOpt)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+                  {thumbBusy?"Optimising…":"⚡ Optimise Catalog Images"}
+                </button>
+                {thumbMsg&&<div style={{fontSize:11.5,color:thumbMsg.startsWith("⚠")?C.danger:C.textSub,fontWeight:600,marginTop:8,lineHeight:1.5}}>{thumbMsg}</div>}
+              </div>
+            );
+          })()}
+
           {filteredOrders.length===0?(
             <div style={{textAlign:"center",padding:"50px 0",color:C.textSub}}>
               <div style={{fontSize:48,marginBottom:14}}>📋</div>
@@ -7042,7 +7166,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           )}
           <div style={{fontSize:12,color:C.textSub,fontWeight:500,marginBottom:12}}>{filteredProds.length} product{filteredProds.length!==1?"s":""}</div>
           {filteredProds.map(p=>{
-            const imgSrc=getProductMedia(p,mediaCache).images[0];
+            const imgSrc=getCardImg(p,mediaCache);
             const m=CAT_META[p.category]||CAT_META["Live Fish"];
             const attn=needsStockAttn(p);
             return(
@@ -8375,7 +8499,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
           <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             {saved.map(p=>(
               <div key={p.id}>
-                <ProductCard product={p} imgSrc={getProductMedia(p,mediaCache).images[0]}
+                <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
                   onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
                   isFav={true} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
                 <RestockBtn product={p} user={user} restockSet={restockSet} onSubscribe={onRestock}/>
@@ -8657,7 +8781,14 @@ function NemoStore(){
     try{
       const firstWave={};
       await Promise.all(prods.map(async p=>{
-        if(Array.isArray(p.media)&&p.media.length){ const b=await loadMediaItem(p.media[0].key); if(b)firstWave["m-"+p.media[0].key]=b; }
+        if(Array.isArray(p.media)&&p.media.length){
+          const first=p.media.find(m=>m.type!=="video")||p.media[0];
+          if(first && !first.url){
+            // Legacy item (no embedded URL): prefer the tiny thumbnail; fall back to full image.
+            if(first.thumb){ const t=await loadMediaItem(first.key+"_thumb"); if(t){ firstWave["thumb-"+first.key]=t; return; } }
+            const b=await loadMediaItem(first.key); if(b)firstWave["m-"+first.key]=b;
+          }
+        }
         else if(p.hasImg){ const b=await loadImg(p.id); if(b)firstWave["img-"+p.id]=b; }
       }));
       if(Object.keys(firstWave).length) setMediaCache(c=>({...c,...firstWave}));
@@ -8667,9 +8798,14 @@ function NemoStore(){
     const cache={};
     await Promise.all([
       ...prods.map(async p=>{
-        // New multi-media gallery — load all items in parallel (was serial for-loop: bug)
+        // New multi-media gallery. Items whose URL is embedded on the product need NO DB read
+        // (rendered straight from m.url / m.thumbUrl) — only legacy items hit loadMediaItem.
         if(Array.isArray(p.media)&&p.media.length){
-          await Promise.all(p.media.map(async m=>{ const b=await loadMediaItem(m.key); if(b)cache["m-"+m.key]=b; }));
+          await Promise.all(p.media.map(async m=>{
+            if(m.url) return; // embedded URL — zero extra reads
+            if(m.thumb){ const t=await loadMediaItem(m.key+"_thumb"); if(t)cache["thumb-"+m.key]=t; }
+            const b=await loadMediaItem(m.key); if(b)cache["m-"+m.key]=b;
+          }));
         }
         // Legacy single image/video
         if(p.hasImg){const b=await loadImg(p.id);if(b)cache["img-"+p.id]=b;}
@@ -9078,6 +9214,44 @@ function NemoStore(){
     for(const o of old){ await deleteOrderHandler(o); }
     return old.length;
   };
+  /* Opt-in migration: bring existing products onto the major-ecommerce model — embed each
+     image's Storage URL (+ a generated thumbnail URL) directly on the product record, so the
+     catalog renders from a single `products` read with no per-image DB lookups. Purely additive:
+     full-size images are never deleted. Legacy base64 images are uploaded to Storage; images that
+     already have a Storage URL just get that URL embedded (+ a thumb when the bucket allows it). */
+  const backfillThumbs=async(onProgress)=>{
+    let done=0;
+    for(const p of products){
+      if(!Array.isArray(p.media)||!p.media.length) continue;
+      let changed=false; const patch={}; const newMedia=[];
+      for(const m of p.media){
+        if(m.url && (m.type==="video" || m.thumbUrl)){ newMedia.push(m); continue; } // already fully embedded
+        const entry={...m};
+        const cur = m.url || mediaCache["m-"+m.key] || await loadMediaItem(m.key);
+        if(typeof cur==="string" && /^https?:/.test(cur)){
+          // Already in Storage — just embed the URL (kills the per-key read) and add a thumb if CORS allows.
+          if(!entry.url){ entry.url=cur; changed=true; }
+          if(m.type!=="video" && !entry.thumbUrl){
+            const t=await makeThumbFromAny(cur);
+            if(t){ const tu=await uploadToStorage("media/"+m.key+"_thumb.jpg",t); if(tu){ entry.thumbUrl=tu; entry.thumb=1; patch["thumb-"+m.key]=t; changed=true; } }
+          }
+        } else if(typeof cur==="string" && cur.startsWith("data:")){
+          // Legacy base64 in the DB — move bytes to Storage, embed URL + thumb, shrink the DB.
+          const r=await persistImage(m.key, cur, m.type!=="video");
+          if(r.url){ entry.url=r.url; changed=true; if(r.url_thumb){ entry.thumbUrl=r.url_thumb; entry.thumb=1; patch["thumb-"+m.key]=r.thumbData; } }
+        }
+        newMedia.push(entry);
+      }
+      if(changed){
+        const saved={...p,media:newMedia};
+        setProducts(prev=>{ const next=prev.map(x=>x.id===saved.id?saved:x); saveProd(next); return next; });
+        setMediaCache(c=>({...c,...patch}));
+        done++;
+      }
+      if(onProgress) onProgress(done);
+    }
+    return done;
+  };
 
   // Keep each product's rating/count in sync with its REAL reviews
   const recomputeProductRating=(pid, reviews)=>{
@@ -9306,7 +9480,7 @@ function NemoStore(){
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
-          onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
+          onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
       </div>
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
     </div>

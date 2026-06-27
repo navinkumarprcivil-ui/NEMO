@@ -39,7 +39,7 @@
 <link rel="manifest" href="manifest.webmanifest"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
-<meta name="apple-mobile-web-app-title" content="Nemo"/>
+<meta name="apple-mobile-web-app-title" content="NEMO"/>
 <!-- Favicons — what Google shows beside your search result. Multiple sizes (all 48px multiples) + root /favicon.ico that Google's crawler probes by default. -->
 <link rel="icon" href="/favicon.ico" sizes="any"/>
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png"/>
@@ -105,6 +105,7 @@
 <script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+<script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
 <!-- EmailJS (customer confirmation emails) -->
 <script async src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
@@ -128,10 +129,10 @@
 </div>
 <div id="root"></div>
 <!-- PWA install banner (revealed after splash, auto-hides) -->
-<div id="installBanner" role="dialog" aria-label="Install Nemo app">
+<div id="installBanner" role="dialog" aria-label="Install Nemo Aqua Store">
   <img src="assets/favicon-192.png" alt="" class="ib-icon"/>
   <div class="ib-text">
-    <div class="ib-title">Install the Nemo app</div>
+    <div class="ib-title">Install Nemo Aqua Store</div>
     <div class="ib-sub" id="ib-sub">Add to your home screen for faster shopping</div>
   </div>
   <button id="ib-action" class="ib-action" type="button">Install</button>
@@ -202,7 +203,7 @@
 (function(){
   // ── PWA install banner: slides down for a few seconds on every visit ──
   // Skips entirely when the app is already installed (running standalone).
-  var deferred=null, AUTO_HIDE=7000, el, shownAt=0, hideTimer;
+  var deferred=null, AUTO_HIDE=4500, el, shownAt=0, hideTimer;
   var standalone=(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;
   function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream; }
   // Chrome/Android fires this when the app is installable — stash it to trigger the native prompt later.

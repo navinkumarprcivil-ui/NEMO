@@ -25,6 +25,7 @@ sitemap.xml             ← page list for Google
 google….html            ← Google Search Console verification file
 vercel.json             ← static config + security headers
 database.rules.json     ← Firebase security rules (NOT served — paste into Firebase, see below)
+storage.rules           ← Firebase STORAGE rules (NOT served — paste into Firebase, see below)
 seo/                    ← build-time script only; the LIVE site does NOT need it
 README.md               ← this file
 LAUNCH_CHECKLIST.md     ← pre-launch checklist
@@ -34,6 +35,7 @@ LAUNCH_CHECKLIST.md     ← pre-launch checklist
 > ⚠️ **Keep the folder structure exactly as above — upload the `assets/` and `p/` folders WITH their contents (including `p/og/`).** `index.html` and the product pages reference files *inside* these folders by path, so if a folder uploads empty you'll get a broken logo/favicons and 404s on every `/p/...` product link. Only `seo/` is safe to leave off the live host (it's a build script). If your host's uploader skips folder contents, see **"Uploading"** at the bottom — zip-and-extract or `git push` keeps the structure intact.
 
 ## ⭐ NEW since last version
+- **Faster storefront + smaller database (big one):** product photos now live in **Firebase Storage** (served over a CDN) with the short URL + an auto-generated **thumbnail** stored on each product — the catalog grid loads tiny images and reads from a single fetch with no per-image database lookups. Needs the new **`storage.rules`** published (see step 4b) and **Storage enabled**. Falls back safely to the old method if Storage is off. Admin → Orders tab has a one-tap **“Speed Up Catalog”** button to migrate existing photos.
 - **Installable app (PWA):** customers get an "Install Nemo App" button + browser "Add to Home Screen". Needs `manifest.webmanifest` + `sw.js` in the repo (already included).
 - **Per-customer order security + admin-only writes:** new `database.rules.json` — see "Lock admin" below. Orders are now stored per user so customers can only read their own.
 - **Inventory truth:** stock is decremented with an atomic Firebase transaction at checkout, so two buyers can't oversell the last item.
@@ -77,6 +79,13 @@ Also confirm **Authentication → Sign-in method** has **Google** and **Anonymou
 
 Firebase Console → **Realtime Database → Rules** → paste the contents of
 `database.rules.json` → **Publish**. (This replaces the temporary open test rules.)
+
+## 4b. Enable Storage & publish the storage rules
+
+1. Firebase Console → **Build → Storage** → **Get started** (enable it) if you haven't already.
+2. Go to the **Rules** tab → paste the contents of `storage.rules` → **Publish**.
+
+This lets the app upload product photos to fast CDN storage (admin-only writes, public reads). **Until this is published, photo uploads silently fall back to the slower old method.** Same admin UID is already filled in; replace `PASTE_FRIEND_UID_HERE` only if you use a second admin.
 
 ## 5. Configure the store (in the app)
 
