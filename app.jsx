@@ -3597,6 +3597,18 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   const onSale = (p.discountPct||0) > 0;
   const eff = effectivePrice(p);
   const remaining = Math.max(0, stk - inCart);
+  // Live cursor-reactive tilt + spotlight (desktop fine-pointer only; honors reduced-motion)
+  const cardRef = useRef(null);
+  const fine = typeof window!=="undefined" && window.matchMedia && window.matchMedia("(pointer:fine)").matches && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const onTilt = e=>{
+    const el=cardRef.current; if(!fine||!el) return;
+    const r=el.getBoundingClientRect();
+    const px=(e.clientX-r.left)/r.width, py=(e.clientY-r.top)/r.height;
+    el.style.transition="transform .08s ease-out"; // snappy tracking while the cursor moves
+    el.style.transform=`perspective(820px) rotateX(${(0.5-py)*7}deg) rotateY(${(px-0.5)*7}deg) translateY(-6px) scale(1.02)`;
+    el.style.setProperty("--mx",(px*100)+"%"); el.style.setProperty("--my",(py*100)+"%"); el.style.setProperty("--spot","1");
+  };
+  const onTiltEnd = ()=>{ const el=cardRef.current; if(!el) return; el.style.transition=""; el.style.transform=""; el.style.setProperty("--spot","0"); }; // springy release
   const Heart = onFav ? (
     <button className="press" onClick={e=>{e.stopPropagation();onFav(p);}} aria-label="Save"
       style={{position:"absolute",top:8,right:8,width:30,height:30,borderRadius:"50%",border:"none",background:"rgba(255,255,255,.9)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,.18)"}}>
@@ -3610,8 +3622,9 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
     </button>
   );
   return(
-    <div className="lift" onClick={()=>onPress(p)}
-      style={{background:C.card,borderRadius:24,overflow:"hidden",border:"none",boxShadow:"0 4px 20px rgba(15,23,42,0.05)",cursor:"pointer"}}>
+    <div className="lift" ref={cardRef} onClick={()=>onPress(p)} onMouseMove={onTilt} onMouseLeave={onTiltEnd}
+      style={{background:C.card,borderRadius:24,overflow:"hidden",border:"none",boxShadow:"0 4px 20px rgba(15,23,42,0.05)",cursor:"pointer",position:"relative"}}>
+      {fine&&<div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:5,opacity:"var(--spot,0)",transition:"opacity .3s ease",background:"radial-gradient(200px circle at var(--mx,50%) var(--my,50%),rgba(14,165,233,.14),transparent 62%)"}}/>}
       <div style={{height:120,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",
         background:imgSrc?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`}}>
         {imgSrc
