@@ -2189,7 +2189,7 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
   .home-hero-chrome{display:none !important;}
   /* Desktop opening banner: tall gradient hero with left-aligned headline + CTA */
   .home-hero{padding:38px 48px 34px !important;display:flex !important;flex-direction:column;align-items:flex-start;text-align:left;}
-  .home-hero .hero-tagline{font-size:36px !important;text-align:left !important;max-width:600px;margin-bottom:12px !important;}
+  .home-hero .hero-tagline{font-size:clamp(34px,4vw,54px) !important;text-align:left !important;max-width:640px;margin-bottom:12px !important;}
   .home-hero .hero-sub{font-size:16px !important;text-align:left !important;letter-spacing:.3px;}
   /* Desktop: surface the left-slide category sidebar from inside the banner, just above the quote */
   .home-hero .hero-browse{display:inline-flex !important;}
@@ -3592,6 +3592,22 @@ function SkeletonGrid({n=6}){
 }
 
 /* ═══════════════════ PRODUCT CARD ═══════════════════ */
+/* Spring-count number — tweens from the previous value to the new one (eased) */
+function AnimatedNumber({value,prefix="",suffix="",dur=480}){
+  const [disp,setDisp]=useState(value);
+  const fromRef=useRef(value), rafRef=useRef(0);
+  useEffect(()=>{
+    const from=fromRef.current, to=Number(value)||0;
+    if(from===to){ setDisp(to); return; }
+    if(typeof requestAnimationFrame==="undefined"){ fromRef.current=to; setDisp(to); return; }
+    const start=performance.now();
+    const tick=t=>{ const p=Math.min(1,(t-start)/dur); const e=1-Math.pow(1-p,3); setDisp(Math.round(from+(to-from)*e)); if(p<1){ rafRef.current=requestAnimationFrame(tick); } else { fromRef.current=to; } };
+    cancelAnimationFrame(rafRef.current); rafRef.current=requestAnimationFrame(tick);
+    return ()=>cancelAnimationFrame(rafRef.current);
+  },[value]);
+  return <>{prefix}{(Number(disp)||0).toLocaleString("en-IN")}{suffix}</>;
+}
+
 /* ── Shared live-interaction helpers (desktop fine-pointer) ── */
 function _fine(){ return typeof window!=="undefined" && window.matchMedia && window.matchMedia("(pointer:fine)").matches; }
 function magnetMove(e){
@@ -4054,7 +4070,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
         </button>
         {/* Tagline */}
-        <div className="hero-tagline" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:30,fontWeight:800,letterSpacing:"-0.03em",color:C.text,lineHeight:1.1,marginBottom:7,textWrap:"balance",textAlign:"center"}}>
+        <div className="hero-tagline" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(26px,7vw,44px)",fontWeight:800,letterSpacing:"-0.03em",color:C.text,lineHeight:1.1,marginBottom:7,textWrap:"balance",textAlign:"center"}}>
           {settings.heroHeadline||"Bring Colour to Your Life"}
         </div>
         <div className="hero-sub" style={{fontSize:13.5,fontWeight:500,color:C.textSub,marginBottom:0,textAlign:"center"}}>
@@ -4444,7 +4460,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             <div style={{fontSize:12}}>Try adjusting your filters</div>
           </div>
         ):(
-          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="prod-grid js-stagger" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             {list.map(p=>(
               <div key={p.id}>
                 <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
@@ -4999,7 +5015,7 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
         <div style={{background:C.card,borderRadius:18,padding:"18px",marginTop:18,border:`1px solid ${C.border}`}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
             <span style={{fontSize:13,color:C.textSub}}>Subtotal</span>
-            <span style={{fontSize:13,fontWeight:700,color:C.text}}>₹{total}</span>
+            <span style={{fontSize:13,fontWeight:700,color:C.text}}><AnimatedNumber value={total} prefix="₹"/></span>
           </div>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
             <span style={{fontSize:13,color:C.textSub}}>Shipping</span>
@@ -5008,7 +5024,7 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
           <div style={{height:1,background:C.border,margin:"12px 0"}}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:15,fontWeight:700,color:C.text}}>Subtotal (excl. shipping)</span>
-            <span style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,color:C.primary}}>₹{total}</span>
+            <span style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
           </div>
         </div>
         {settings.loyaltyEnabled!==false && (()=>{
@@ -10098,15 +10114,25 @@ function NemoStore(){
   // Progressive enhancement — only JS adds the hidden state, so content stays visible if this never runs.
   useEffect(()=>{
     if(typeof IntersectionObserver==="undefined") return;
-    let io;
+    const ios=[];
     const raf=requestAnimationFrame(()=>{
+      // Section reveals
       const els=document.querySelectorAll(".js-reveal:not(.reveal-in)");
-      if(!els.length) return;
       els.forEach(el=>el.classList.add("reveal"));
-      io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("reveal-in"); io.unobserve(en.target); } }); },{threshold:0.06,rootMargin:"0px 0px -40px 0px"});
-      els.forEach(el=>io.observe(el));
+      if(els.length){
+        const io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("reveal-in"); io.unobserve(en.target); } }); },{threshold:0.06,rootMargin:"0px 0px -40px 0px"});
+        els.forEach(el=>io.observe(el)); ios.push(io);
+      }
+      // Staggered child reveals (e.g. product grids — each card springs in +55ms after the last)
+      document.querySelectorAll(".js-stagger").forEach(cont=>{
+        const kids=Array.from(cont.children).filter(k=>!k.classList.contains("reveal-in"));
+        if(!kids.length) return;
+        kids.forEach((k,i)=>{ k.classList.add("reveal"); k.style.transitionDelay=Math.min(i*55,520)+"ms"; });
+        const io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ Array.from(en.target.children).forEach(k=>k.classList.add("reveal-in")); io.unobserve(en.target); } }); },{threshold:0.04});
+        io.observe(cont); ios.push(io);
+      });
     });
-    return ()=>{ cancelAnimationFrame(raf); if(io) io.disconnect(); };
+    return ()=>{ cancelAnimationFrame(raf); ios.forEach(io=>io.disconnect()); };
   },[page]);
   // When in admin mode, a page refresh/close prompts for confirmation so you don't exit admin by accident.
   useEffect(()=>{
