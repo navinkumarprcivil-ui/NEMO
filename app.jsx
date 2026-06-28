@@ -2097,6 +2097,9 @@ input:focus,textarea:focus,select:focus{border-color:#0ea5e9 !important;box-shad
 .cta{transition:transform .3s cubic-bezier(0.34,1.56,0.64,1),box-shadow .3s,filter .2s;}
 .cta:hover{transform:scale(1.05);box-shadow:0 8px 24px rgba(244,63,94,.3);filter:brightness(1.05);}
 .cta:active{transform:scale(.95);}
+/* Reveal-on-scroll — sections spring up as they enter view (JS adds .reveal, then .reveal-in) */
+.reveal{opacity:0;transform:translateY(26px);transition:opacity .6s cubic-bezier(.22,1,.36,1),transform .6s cubic-bezier(.22,1,.36,1);}
+.reveal-in{opacity:1;transform:none;}
 @keyframes slideUp{from{transform:translateY(22px);opacity:0}to{transform:none;opacity:1}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-9px)}75%{transform:translateX(9px)}}
@@ -2654,7 +2657,7 @@ function CategoryPills({selected,onSelect,all,counts}){
   return(
     <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
       {list.map(c=>(
-        <button key={c} className="press" onClick={()=>onSelect(c)} style={{
+        <button key={c} className="press" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={()=>onSelect(c)} style={{
           flexShrink:0,background:selected===c?"#ffffff":"#f8fafc",color:selected===c?C.text:C.textSub,
           border:`2px solid ${selected===c?C.accent:"transparent"}`,borderRadius:99,padding:"8px 16px",
           fontSize:12.5,fontWeight:selected===c?700:600,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .3s cubic-bezier(0.34,1.56,0.64,1)",
@@ -3589,6 +3592,32 @@ function SkeletonGrid({n=6}){
 }
 
 /* ═══════════════════ PRODUCT CARD ═══════════════════ */
+/* ── Shared live-interaction helpers (desktop fine-pointer) ── */
+function _fine(){ return typeof window!=="undefined" && window.matchMedia && window.matchMedia("(pointer:fine)").matches; }
+function magnetMove(e){
+  if(!_fine())return;
+  const el=e.currentTarget,r=el.getBoundingClientRect();
+  el.style.transition="transform .12s ease-out";
+  el.style.transform=`translate(${(e.clientX-r.left-r.width/2)*0.25}px,${(e.clientY-r.top-r.height/2)*0.35}px) scale(1.04)`;
+}
+function magnetLeave(e){ const el=e.currentTarget; el.style.transition=""; el.style.transform=""; }
+/* Fly a coral burst from (x,y) into the cart icon, then pop the cart */
+function flyToCart(x,y){
+  try{
+    const els=document.querySelectorAll("[data-cart-target]");
+    let tgt=null; els.forEach(e=>{ if(e.offsetParent!==null) tgt=e; }); if(!tgt) tgt=els[0];
+    if(!tgt) return;
+    const tr=tgt.getBoundingClientRect();
+    const dot=document.createElement("div");
+    dot.style.cssText=`position:fixed;left:${x-8}px;top:${y-8}px;width:16px;height:16px;border-radius:50%;background:#f43f5e;box-shadow:0 4px 14px rgba(244,63,94,.5);z-index:9999;pointer-events:none;transition:transform .7s cubic-bezier(.5,-0.2,.3,1),opacity .7s ease;`;
+    document.body.appendChild(dot);
+    requestAnimationFrame(()=>{ dot.style.transform=`translate(${tr.left+tr.width/2-x}px,${tr.top+tr.height/2-y}px) scale(.3)`; dot.style.opacity="0.2"; });
+    setTimeout(()=>dot.remove(),720);
+    tgt.style.transition="transform .3s cubic-bezier(0.34,1.56,0.64,1)"; tgt.style.transform="scale(1.35)";
+    setTimeout(()=>{ tgt.style.transform=""; },330);
+  }catch(e){}
+}
+
 function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,isInterested=false,onInterest}){
   const m   = CAT_META[p.category]||CAT_META["Live Fish"];
   const stk = typeof p.stockCount==="number" ? p.stockCount : DEFAULT_STOCK;
@@ -3668,7 +3697,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
                 style={{background:"transparent",border:"none",color:"white",fontSize:16,fontWeight:700,width:22,height:22,lineHeight:1,cursor:remaining>0?"pointer":"not-allowed",opacity:remaining>0?1:.45}}>+</button>
             </div>
           ) : (
-            <button className="cta" onClick={e=>{e.stopPropagation();if(!oos)onAdd(p,1);}} disabled={oos}
+            <button className="cta" onClick={e=>{e.stopPropagation();if(!oos){onAdd(p,1);flyToCart(e.clientX,e.clientY);}}} disabled={oos}
               style={{background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"7px 16px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:oos?"not-allowed":"pointer"}}>
               + Add
             </button>
@@ -4113,7 +4142,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Categories */}
         {/* Recently viewed — replaces the old category grid */}
         {recentlyViewed.length>0&&(
-        <div style={{marginBottom:24}}>
+        <div className="js-reveal" style={{marginBottom:24}}>
           <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
             <span style={{fontSize:18}}>🕒</span>
             <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Recently Viewed</span>
@@ -4171,7 +4200,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         )}
 
         {/* Featured */}
-        <div style={{marginBottom:26}}>
+        <div className="js-reveal" style={{marginBottom:26}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
             <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Featured</span>
             <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.accent,fontWeight:700,background:"none",border:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View All →</button>
@@ -4919,7 +4948,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <span style={{fontSize:16,fontWeight:700,color:C.text,minWidth:18,textAlign:"center"}}>{qty}</span>
           <button className="press" onClick={()=>setQty(q=>Math.min(maxQty,q+1))} disabled={qty>=maxQty} style={{background:"none",border:"none",fontSize:20,color:qty>=maxQty?C.textSub:C.primary,fontWeight:700,lineHeight:1,opacity:qty>=maxQty?.5:1}}>+</button>
         </div>
-        <button className="cta" onClick={()=>{if(!oos){addToCart(p,qty,selVar);}}} disabled={oos}
+        <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={e=>{if(!oos){addToCart(p,qty,selVar);flyToCart(e.clientX,e.clientY);}}} disabled={oos}
           style={{flex:1,background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
           {oos?"Out of Stock":`Add to Cart · ₹${unitPrice*qty}`}
         </button>
@@ -5004,7 +5033,7 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
           🚚 Shipping is calculated at checkout based on your location &amp; order weight
           {hasLiveFish&&<span style={{display:"block",fontSize:11,fontWeight:500,marginTop:3,color:C.primary}}>🐠 Live fish shipping rates apply</span>}
         </div>
-        <button className="cta" onClick={()=>nav("checkout")}
+        <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={()=>nav("checkout")}
           style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
           Proceed to Checkout →
         </button>
@@ -5870,7 +5899,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           </div>
 
           {placeErr&&<div style={{marginTop:14,background:"#fef2f2",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
-          <button className="cta" onClick={handlePlaceOrder} disabled={placing}
+          <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={handlePlaceOrder} disabled={placing}
             style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,opacity:placing?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
             {placing?"Checking stock…":<>Place Order &amp; Pay ₹{grand} →</>}
           </button>
@@ -5948,7 +5977,7 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
   const walletWarn=!!(wexp&&(wexp.expiringSoon||wexp.expired));
   const linkStyle=on=>({background:on?"#eef9fa":"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:on?800:600,color:on?C.primary:C.text,padding:"8px 12px",borderRadius:10,fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"});
   return(
-    <div className="desk-nav" style={{flexShrink:0,alignItems:"center",gap:4,background:C.card,borderBottom:`1px solid ${C.border}`,padding:"10px 22px",position:"sticky",top:0,zIndex:60,boxShadow:"0 2px 12px rgba(11,110,114,.06)"}}>
+    <div className="desk-nav" style={{flexShrink:0,alignSelf:"center",alignItems:"center",gap:6,background:"rgba(255,255,255,0.8)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",border:"1px solid rgba(15,23,42,0.06)",borderRadius:99,padding:"8px 14px",margin:"14px auto 6px",position:"sticky",top:14,zIndex:60,boxShadow:"0 10px 34px rgba(15,23,42,.09)",maxWidth:"calc(100% - 28px)",overflowX:"auto"}}>
       {page!=="home"&&(
         <button className="press" onClick={()=>nav("home")} title="Back to home"
           style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 14px",marginRight:12,fontSize:14,fontWeight:800,color:C.primary,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"}}>← Home</button>
@@ -5968,7 +5997,7 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
             {walletWarn&&<span style={{position:"absolute",top:-6,right:-6,minWidth:16,height:16,padding:"0 3px",borderRadius:9,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${C.card}`}}>⏳</span>}
           </button>
         )}
-        <button className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+        <button data-cart-target="" className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
           🛒 Cart
           {cartCount>0&&<span key={cartCount} className="cart-pop" style={{position:"absolute",top:-6,right:-6,background:C.coral,color:"white",fontSize:10,fontWeight:800,borderRadius:10,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{cartCount>99?"99+":cartCount}</span>}
         </button>
@@ -5995,7 +6024,7 @@ function BottomNav({page,nav,cartCount}){
           return(
             <button key={t.id} className="press" onClick={()=>nav(t.id)}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <div style={{position:"relative"}}>
+              <div style={{position:"relative"}} {...(t.id==="cart"?{"data-cart-target":""}:{})}>
                 <span style={{fontSize:24,filter:on?"none":"grayscale(1) opacity(.45)",transition:"filter .2s",display:"block"}}>{t.icon}</span>
                 {t.id==="cart"&&cartCount>0&&(
                   <span key={cartCount} className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
@@ -10070,6 +10099,20 @@ function NemoStore(){
   const cartTotal=useMemo(()=>cart.reduce((s,i)=>s+i.price*i.qty,0),[cart]);
   const cartMap=useMemo(()=>{ const m={}; cart.forEach(i=>{m[i.id]=(m[i.id]||0)+i.qty;}); return m; },[cart]);
   const isAdminPage=["admin-login","admin"].includes(page);
+  // Reveal-on-scroll: tagged (.js-reveal) sections spring up as they enter the viewport.
+  // Progressive enhancement — only JS adds the hidden state, so content stays visible if this never runs.
+  useEffect(()=>{
+    if(typeof IntersectionObserver==="undefined") return;
+    let io;
+    const raf=requestAnimationFrame(()=>{
+      const els=document.querySelectorAll(".js-reveal:not(.reveal-in)");
+      if(!els.length) return;
+      els.forEach(el=>el.classList.add("reveal"));
+      io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("reveal-in"); io.unobserve(en.target); } }); },{threshold:0.06,rootMargin:"0px 0px -40px 0px"});
+      els.forEach(el=>io.observe(el));
+    });
+    return ()=>{ cancelAnimationFrame(raf); if(io) io.disconnect(); };
+  },[page]);
   // When in admin mode, a page refresh/close prompts for confirmation so you don't exit admin by accident.
   useEffect(()=>{
     if(page!=="admin") return;
