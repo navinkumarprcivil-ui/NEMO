@@ -2082,6 +2082,7 @@ body,#root{background:#040a15;color:#e0f2fe;}
 *{-ms-overflow-style:none;scrollbar-width:none;}
 input,textarea,select{font-family:'Outfit',sans-serif;color:#e0f2fe;background:#0a1c20;caret-color:#38bdf8;}
 input::placeholder,textarea::placeholder{color:#64748b;}
+input:focus,textarea:focus,select:focus{border-color:#38bdf8 !important;box-shadow:0 0 0 3px rgba(56,189,248,.18);outline:none;}
 *{-webkit-tap-highlight-color:transparent;}
 button,a,label,.press,.lift{touch-action:manipulation;}
 .press{transition:transform .12s,opacity .12s;cursor:pointer;}
@@ -3654,6 +3655,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           : productExpectsImage(p)
             ? <div className="shimmer-bar" style={{position:"absolute",inset:0}}/>
             : <span style={{fontSize:54}}>{m.emoji}</span>}
+        {imgSrc&&<div style={{position:"absolute",inset:0,pointerEvents:"none",boxShadow:"inset 0 0 0 1px rgba(224,242,254,0.06), inset 0 -34px 32px -22px rgba(4,10,21,0.85)"}}/>}
         {p.tag&&<span style={{position:"absolute",top:8,left:8,background:"rgba(0,0,0,.32)",color:"white",fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,backdropFilter:"blur(4px)"}}>{p.tag}</span>}
         {onSale&&!soon&&<span style={{position:"absolute",bottom:8,left:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:20}}>-{p.discountPct}%</span>}
         {Heart}
@@ -5999,7 +6001,7 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
         )}
         <button className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
           🛒 Cart
-          {cartCount>0&&<span key={cartCount} className="cart-pop" style={{position:"absolute",top:-6,right:-6,background:C.coral,color:"white",fontSize:10,fontWeight:800,borderRadius:10,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{cartCount>99?"99+":cartCount}</span>}
+          {cartCount>0&&<span key={cartCount} className="cart-pop" style={{position:"absolute",top:-6,right:-6,background:C.coral,color:C.bg,fontSize:10,fontWeight:800,borderRadius:10,padding:"1px 6px",minWidth:18,textAlign:"center",boxShadow:"0 0 10px rgba(251,113,133,.8)"}}>{cartCount>99?"99+":cartCount}</span>}
         </button>
         <button className="press" onClick={()=>nav("orders")} style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:`1px solid ${C.border}`,borderRadius:30,padding:"5px 12px 5px 5px",cursor:"pointer",fontFamily:"'Outfit',sans-serif"}}>
           <span style={{width:28,height:28,borderRadius:"50%",background:C.primary,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>{user?(user.name||"U").charAt(0).toUpperCase():"👤"}</span>
@@ -6025,15 +6027,15 @@ function BottomNav({page,nav,cartCount}){
             <button key={t.id} className="press" onClick={()=>nav(t.id)}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
               <div style={{position:"relative"}}>
-                <span style={{fontSize:24,filter:on?"none":"grayscale(1) opacity(.45)",transition:"filter .2s",display:"block"}}>{t.icon}</span>
+                <span style={{fontSize:24,filter:on?"drop-shadow(0 0 8px rgba(56,189,248,.65))":"grayscale(1) opacity(.45)",transition:"filter .2s",display:"block"}}>{t.icon}</span>
                 {t.id==="cart"&&cartCount>0&&(
-                  <span key={cartCount} className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
+                  <span key={cartCount} className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:C.bg,fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center",boxShadow:"0 0 10px rgba(251,113,133,.8)"}}>
                     {cartCount>99?"99+":cartCount}
                   </span>
                 )}
               </div>
               <span style={{fontSize:10,fontWeight:on?700:500,color:on?C.primary:C.textSub,fontFamily:"'Outfit',sans-serif"}}>{t.label}</span>
-              {on&&<div style={{width:5,height:5,borderRadius:"50%",background:C.primary,marginTop:-2}}/>}
+              {on&&<div style={{width:5,height:5,borderRadius:"50%",background:C.primary,marginTop:-2,boxShadow:"0 0 8px rgba(56,189,248,.9)"}}/>}
             </button>
           );
         })}
