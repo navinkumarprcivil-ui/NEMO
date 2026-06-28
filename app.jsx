@@ -4263,10 +4263,11 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <div style={{fontSize:12,color:C.textSub,marginTop:3,lineHeight:1.5,maxWidth:300}}>{settings.tagline||"Hand-picked healthy fish, live plants & quality accessories — delivered with care across India."}</div>
           </div>
 
-          {/* Link columns */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"22px 16px",marginBottom:22}}>
+          {/* Footer columns — responsive auto-fit grid: spreads into columns on desktop, stacks neatly on mobile */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"26px 20px",marginBottom:22,borderTop:`1px solid ${C.border}`,paddingTop:22}}>
+            {/* Shop */}
             <div>
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:8}}>Shop</div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Shop</div>
               {CATEGORIES.map(cat=>(
                 <button key={cat} className="press" onClick={()=>{setCategory(cat);nav("shop");}}
                   style={{display:"flex",alignItems:"center",gap:7,background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
@@ -4274,8 +4275,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                 </button>
               ))}
             </div>
+            {/* Company */}
             <div>
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:8}}>Company</div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Company</div>
               {[
                 {label:"About Us",to:"about"},
                 {label:"Care Guides",to:"guides"},
@@ -4287,12 +4289,16 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                   {l.label}
                 </button>
               ))}
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,margin:"14px 0 8px"}}>Policies</div>
+            </div>
+            {/* Policies */}
+            <div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Policies</div>
               {[
                 {label:"Live Guarantee",to:"policy-guarantee"},
                 {label:"Returns & Refunds",to:"policy-returns"},
                 {label:"Terms & Conditions",to:"policy-terms"},
                 {label:"Privacy Policy",to:"policy-privacy"},
+                {label:"Contact Us",to:"about"},
               ].map(l=>(
                 <button key={l.label} className="press" onClick={()=>nav(l.to)}
                   style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
@@ -4300,56 +4306,45 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Contact */}
-          <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18,marginBottom:18}}>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Contact Us</div>
-            {settings.storeAddress&&(
-              <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}>
-                <span>📍</span><span>{settings.storeAddress}</span>
-              </div>
-            )}
-            {settings.storeHours&&(
-              <div style={{fontSize:12.5,color:C.textSub,marginBottom:8,display:"flex",gap:7}}><span>🕒</span><span>{settings.storeHours}</span></div>
-            )}
-            {settings.ownerWhatsapp&&(
-              <a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
-                style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",marginBottom:8}}>
-                <span style={{fontSize:14}}>💬</span> +{settings.ownerWhatsapp.replace(/\D/g,"")}
+            {/* Contact */}
+            <div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Contact Us</div>
+              {settings.storeAddress&&(
+                <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>📍</span><span>{settings.storeAddress}</span></div>
+              )}
+              {settings.storeHours&&(
+                <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>🕒</span><span>{settings.storeHours}</span></div>
+              )}
+              {settings.ownerWhatsapp&&(
+                <a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
+                  style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",marginBottom:8}}>
+                  <span style={{fontSize:14}}>💬</span> +{settings.ownerWhatsapp.replace(/\D/g,"")}
+                </a>
+              )}
+              <a href={`mailto:${settings.orderEmail||BUSINESS_EMAIL}`}
+                style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:C.accent,textDecoration:"none",wordBreak:"break-all"}}>
+                <span style={{fontSize:14}}>✉️</span> {settings.orderEmail||BUSINESS_EMAIL}
               </a>
-            )}
-            <a href={`mailto:${settings.orderEmail||BUSINESS_EMAIL}`}
-              style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:C.accent,textDecoration:"none"}}>
-              <span style={{fontSize:14}}>✉️</span> {settings.orderEmail||BUSINESS_EMAIL}
-            </a>
-          </div>
-
-          {/* Follow us */}
-          {(settings.instagramUrl||settings.facebookUrl||settings.ownerWhatsapp)&&(
-            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18,marginBottom:18}}>
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Follow Us</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
-                {settings.instagramUrl&&(
-                  <a href={settings.instagramUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#c13584",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>📷 Instagram</a>
-                )}
-                {settings.facebookUrl&&(
-                  <a href={settings.facebookUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#1877f2",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>👍 Facebook</a>
-                )}
-                {settings.ownerWhatsapp&&(
-                  <a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>💬 WhatsApp</a>
-                )}
-              </div>
             </div>
-          )}
-
-          {/* Secure payment */}
-          <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18,marginBottom:18}}>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Secure Payment</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-              {["UPI","VISA","Mastercard","RuPay"].map(b=>(
-                <span key={b} style={{fontSize:11,fontWeight:800,letterSpacing:.3,color:C.textSub,background:C.bg||"#f1f7f7",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 11px"}}>{b}</span>
-              ))}
+            {/* Follow Us */}
+            {(settings.instagramUrl||settings.facebookUrl||settings.ownerWhatsapp)&&(
+              <div>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Follow Us</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {settings.instagramUrl&&(<a href={settings.instagramUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#c13584",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>📷 Instagram</a>)}
+                  {settings.facebookUrl&&(<a href={settings.facebookUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#1877f2",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>👍 Facebook</a>)}
+                  {settings.ownerWhatsapp&&(<a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>💬 WhatsApp</a>)}
+                </div>
+              </div>
+            )}
+            {/* Secure Payment */}
+            <div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Secure Payment</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {["UPI","VISA","Mastercard","RuPay"].map(b=>(
+                  <span key={b} style={{fontSize:11,fontWeight:800,letterSpacing:.3,color:C.textSub,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 11px"}}>{b}</span>
+                ))}
+              </div>
             </div>
           </div>
 
