@@ -1,15 +1,16 @@
 const { useState, useEffect, useRef, useMemo } = React;
 
 /* ═══════════════════ THEME ═══════════════════ */
+/* ── LUMEN REEF — deep aquatic dark theme ── */
 const C = {
-  bg:"#eef9fa", card:"#fff", primary:"#0b6e72", primaryDark:"#084f53",
-  accent:"#12b5bc", accentLight:"#d4f4f5", coral:"#ff5a40",
-  text:"#0a2426", textSub:"#5a8085", border:"#cce8ea",
-  navBg:"rgba(255,255,255,0.97)", adminBg:"#0b6e72",
-  success:"#16a34a", danger:"#dc2626",
+  bg:"#040a15", card:"#0a1c20", primary:"#38bdf8", primaryDark:"#0ea5e9",
+  accent:"#38bdf8", accentLight:"#0b2630", coral:"#fb7185",
+  text:"#e0f2fe", textSub:"#64748b", border:"rgba(224,242,254,0.12)",
+  navBg:"rgba(4,10,21,0.85)", adminBg:"#040a15",
+  success:"#34d399", danger:"#f43f5e",
 };
 const STORE_NAME     = "Nemo";
-const PRICE_FONT     = "'Space Grotesk','Baloo 2',sans-serif"; // distinct font for prices / amounts
+const PRICE_FONT     = "'Space Grotesk','Outfit',sans-serif"; // distinct font for prices / amounts
 const ADMIN_PASS_HASH = "hlltu9q"; // default admin password stored as a non-reversible hash (never plaintext). Change it right after launch: tap the logo 10× → Settings → Admin Security.
 const ADMIN_OVERRIDE_HASH = "h11ya21j"; // secret-answer fallback when the OTP email can't be sent. Clue shown: "IITM Roll Number". (hash, never plaintext)
 const ADMIN_UID      = "cI2HmMt6FdR7fO7uUnugH85GeZt2"; // your Google account — must match Firebase rules
@@ -2072,17 +2073,23 @@ async function downloadFullBackup(){
 
 /* ═══════════════════ GLOBAL STYLES ═══════════════════ */
 const STYLES = `
-/* @import temporarily disabled for sandbox testing — re-enabled before delivery */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body,#root{height:100%;}
+body,#root{background:#040a15;color:#e0f2fe;}
 .nemo-app{height:100vh;}@supports(height:100dvh){.nemo-app{height:100dvh;}}
 ::-webkit-scrollbar{display:none;}
 *{-ms-overflow-style:none;scrollbar-width:none;}
-input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
+input,textarea,select{font-family:'Outfit',sans-serif;color:#e0f2fe;background:#0a1c20;caret-color:#38bdf8;}
+input::placeholder,textarea::placeholder{color:#64748b;}
+*{-webkit-tap-highlight-color:transparent;}
+button,a,label,.press,.lift{touch-action:manipulation;}
 .press{transition:transform .12s,opacity .12s;cursor:pointer;}
 .press:active{transform:scale(.95);opacity:.85;}
-.lift{transition:transform .2s,box-shadow .2s;}
-.lift:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(11,110,114,.18);}
+.lift{transition:transform .2s,box-shadow .2s,border-color .2s;}
+.lift:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(56,189,248,.20);border-color:rgba(56,189,248,.35);}
+/* Tactile response on touch devices (no hover): cards & tiles react to the press */
+.lift:active{transform:translateY(-1px) scale(.99);box-shadow:0 6px 18px rgba(56,189,248,.18);border-color:rgba(56,189,248,.3);}
 @keyframes slideUp{from{transform:translateY(22px);opacity:0}to{transform:none;opacity:1}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-9px)}75%{transform:translateX(9px)}}
@@ -2127,7 +2134,7 @@ input,textarea,select{font-family:'Nunito',sans-serif;color:#0a2426;}
   background:linear-gradient(120deg,#12b5bc,#0b6e72,#1d4ed8,#12b5bc);background-size:300% 300%;animation:auroraShift 14s ease infinite;}
 @keyframes floatSoft{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 .float-soft{animation:floatSoft 4.5s ease-in-out infinite;}
-.glass{background:rgba(255,255,255,.65);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border:1px solid rgba(255,255,255,.55);}
+.glass{background:rgba(6,32,36,.5);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border:1px solid rgba(224,242,254,.1);}
 @keyframes sheen{0%{transform:translateX(-120%)}60%,100%{transform:translateX(220%)}}
 .glow-btn{position:relative;overflow:hidden;}
 .glow-btn::after{content:"";position:absolute;top:0;bottom:0;width:38%;left:0;
@@ -2160,7 +2167,7 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
 @media(min-width:1000px){
   /* Surround matches the app background exactly, so the centred column blends into the page
      (no visible frame / dark band, regardless of window width) */
-  #root{background:#eef9fa !important;}
+  #root{background:#040a15 !important;}
   .nemo-app{max-width:min(1180px,100%) !important;min-height:100vh;box-shadow:none;}
   .desk-nav{display:flex;}
   .mobile-bottom-nav{display:none !important;}
@@ -2194,7 +2201,7 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
 }
 .home-footer{display:none;}
 @media(min-width:1000px){ .home-footer{display:block;} }
-.desk-link:hover{background:#eef9fa !important;}
+.desk-link:hover{background:#0b2630 !important;}
 `;
 
 /* ═══════════════════ TINY COMPONENTS ═══════════════════ */
@@ -2228,7 +2235,7 @@ function Toast({msg,type,onDone}){
   return(
     <div style={{position:"fixed",top:16,left:"50%",background:ok?C.success:C.danger,color:"white",
       borderRadius:14,padding:"11px 20px",fontSize:13,fontWeight:700,zIndex:9999,
-      fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:8,
+      fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",gap:8,
       boxShadow:"0 4px 20px rgba(0,0,0,.25)",whiteSpace:"nowrap",
       animation:"toastIn .3s ease both"}}>
       {ok?"✓":"✕"} {msg}
@@ -2294,19 +2301,19 @@ function MiniCountdown({endsAt,compact=false}){
   const s=Math.floor((ms%60000)/1000);
   const fmt=n=>String(n).padStart(2,"0");
   if(compact)return(
-    <div style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"3px 7px",marginTop:4}}>
+    <div style={{display:"inline-flex",alignItems:"center",gap:4,background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:8,padding:"3px 7px",marginTop:4}}>
       <span style={{fontSize:9,color:"#c2410c"}}>⏱</span>
       <span style={{fontFamily:PRICE_FONT,fontSize:10.5,fontWeight:800,color:"#c2410c",letterSpacing:.5}}>
         {h>0?`${fmt(h)}h `:""}{fmt(m)}:{fmt(s)}
       </span>
-      <span style={{fontSize:9,color:"#9a3412",fontWeight:600}}>left</span>
+      <span style={{fontSize:9,color:"#fdba74",fontWeight:600}}>left</span>
     </div>
   );
   return(
-    <div style={{display:"flex",alignItems:"center",gap:10,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"9px 14px",marginBottom:10}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:12,padding:"9px 14px",marginBottom:10}}>
       <span style={{fontSize:18}}>⏱</span>
       <div>
-        <div style={{fontSize:10,color:"#9a3412",fontWeight:700,textTransform:"uppercase",letterSpacing:.5}}>Flash sale ends in</div>
+        <div style={{fontSize:10,color:"#fdba74",fontWeight:700,textTransform:"uppercase",letterSpacing:.5}}>Flash sale ends in</div>
         <div style={{fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:"#c2410c",letterSpacing:1}}>
           {h>0&&<span>{fmt(h)}<span style={{fontSize:10,fontWeight:600,marginRight:4}}>h</span></span>}
           {fmt(m)}<span style={{fontSize:10,fontWeight:600,marginRight:4}}>m</span>
@@ -2336,7 +2343,7 @@ function WelcomeBanner({settings,orders=[]}){
         </div>
       </div>
       <button className="press" onClick={()=>{try{navigator.clipboard.writeText(code);}catch(e){}}}
-        style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 11px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0,cursor:"pointer"}}>
+        style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 11px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif",flexShrink:0,cursor:"pointer"}}>
         Copy
       </button>
     </div>
@@ -2376,13 +2383,13 @@ function LoyaltyWidget({points,settings,onRedeem,redeemApplied,subtotal=0}){
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:22}}>👛</span>
           <div>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,color:"white",lineHeight:1}}>{points} pts</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:17,fontWeight:800,color:"white",lineHeight:1}}>{points} pts</div>
             <div style={{fontSize:10.5,color:"rgba(255,255,255,.8)"}}>Wallet = ₹{totalWorth}</div>
           </div>
         </div>
         {!redeemApplied&&(
           <button className="press" onClick={onRedeem} disabled={!canRedeem}
-            style={{background:canRedeem?"rgba(255,255,255,.2)":"rgba(255,255,255,.08)",border:`1px solid ${canRedeem?"rgba(255,255,255,.5)":"rgba(255,255,255,.2)"}`,borderRadius:10,padding:"8px 14px",color:canRedeem?"white":"rgba(255,255,255,.45)",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:canRedeem?"pointer":"not-allowed"}}>
+            style={{background:canRedeem?"rgba(255,255,255,.2)":"rgba(255,255,255,.08)",border:`1px solid ${canRedeem?"rgba(255,255,255,.5)":"rgba(255,255,255,.2)"}`,borderRadius:10,padding:"8px 14px",color:canRedeem?"white":"rgba(255,255,255,.45)",fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif",cursor:canRedeem?"pointer":"not-allowed"}}>
             {points<min?`Need ${min-points} more pts`:!orderOk?`Min order ₹${minOrder}`:`Redeem ₹${worth}`}
           </button>
         )}
@@ -2444,19 +2451,19 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,mode="full"}){
     <div style={{marginBottom:26}}>
       {showGallery&&<React.Fragment>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>🪸 Customer Tanks</span>
+        <span style={{fontFamily:"'Outfit',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>🪸 Customer Tanks</span>
         {liveShowcase.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{liveShowcase.length} shared · 24h</span>}
       </div>
       {minePending&&(
-        <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+        <div style={{background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={mine.imgData} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your tank photo is awaiting approval. Once approved it goes live for everyone for 24 hours.</div>
+          <div style={{fontSize:11.5,color:"#fdba74",fontWeight:600,lineHeight:1.45}}>⏳ Your tank photo is awaiting approval. Once approved it goes live for everyone for 24 hours.</div>
         </div>
       )}
       {mine&&!minePending&&(
-        <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+        <div style={{background:"rgba(52,211,153,0.12)",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={mine.imgData} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#15803d",fontWeight:600,lineHeight:1.45}}>✓ Your tank photo is live in the gallery — thanks for sharing! Upload a new one below anytime to replace it.</div>
+          <div style={{fontSize:11.5,color:"#34d399",fontWeight:600,lineHeight:1.45}}>✓ Your tank photo is live in the gallery — thanks for sharing! Upload a new one below anytime to replace it.</div>
         </div>
       )}
       {liveShowcase.length>0&&(
@@ -2477,7 +2484,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,mode="full"}){
       </React.Fragment>}
       {showUpload&&(
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Replace Your Tank Photo":"Upload Your Aquarium to be Telecasted"}</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Replace Your Tank Photo":"Upload Your Aquarium to be Telecasted"}</div>
           <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>{mine?"Upload a new photo — it replaces your current one and is telecasted again after we approve it.":"One photo per customer · admin-approved · telecasted in our gallery for 24 hours"}</div>
           {preview?(
             <div style={{position:"relative",borderRadius:12,overflow:"hidden",marginBottom:8}}>
@@ -2497,10 +2504,10 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,mode="full"}){
             <span style={{marginLeft:"auto",fontSize:10,color:C.textSub,fontWeight:600,flexShrink:0}}>from your Google account</span>
           </div>
           <input value={caption} onChange={e=>setCaption(e.target.value.slice(0,100))} placeholder="Describe your tank… (optional)"
-            style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6}}/>
+            style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card,marginBottom:6}}/>
           {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:note[0]==="🎉"?C.success:C.primary,fontWeight:600,marginBottom:6}}>{note}</div>}
           <button className="press" onClick={submit} disabled={uploading}
-            style={{width:"100%",background:uploading?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+            style={{width:"100%",background:uploading?"#475569":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
             {uploading?"Uploading…":(mine?"Update My Tank 🐠":"Share My Tank 🐠")}
           </button>
         </div>
@@ -2513,7 +2520,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,mode="full"}){
             <div style={{color:"white",fontWeight:700,fontSize:14}}>🐠 {fullImg.ownerName}</div>
             {fullImg.caption&&<div style={{color:"rgba(255,255,255,.8)",fontSize:12,marginTop:4}}>{fullImg.caption}</div>}
           </div>
-          <button onClick={()=>setFullImg(null)} style={{marginTop:16,background:"rgba(255,255,255,.18)",border:"1px solid rgba(255,255,255,.3)",borderRadius:12,padding:"10px 24px",color:"white",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Close</button>
+          <button onClick={()=>setFullImg(null)} style={{marginTop:16,background:"rgba(255,255,255,.18)",border:"1px solid rgba(255,255,255,.3)",borderRadius:12,padding:"10px 24px",color:"white",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Close</button>
         </div>
         </Portal>
       )}
@@ -2544,7 +2551,7 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
   return(
     <div style={{marginBottom:26}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>💬 Testimonials</span>
+        <span style={{fontFamily:"'Outfit',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>💬 Testimonials</span>
         {list.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{list.length} from our customers</span>}
       </div>
       {list.length>0&&(
@@ -2565,27 +2572,27 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
       )}
       {user?(
         mine?(
-          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}!</div>
+          <div style={{background:"rgba(52,211,153,0.12)",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#34d399",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}!</div>
         ):(
           <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:8}}>Share your experience</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:8}}>Share your experience</div>
             <div style={{display:"flex",gap:4,marginBottom:8}}>
               {[1,2,3,4,5].map(s=>(
                 <button key={s} onClick={()=>setRating(s)} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,padding:0,lineHeight:1,color:s<=rating?"#f59e0b":"#d1d5db"}}>★</button>
               ))}
             </div>
             <textarea value={text} onChange={e=>setText(e.target.value.slice(0,280))} placeholder="How was your experience with Nemo Aqua Store?"
-              rows={3} style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6,resize:"vertical",fontFamily:"'Nunito',sans-serif"}}/>
+              rows={3} style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:C.card,marginBottom:6,resize:"vertical",fontFamily:"'Outfit',sans-serif"}}/>
             {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:C.success,fontWeight:600,marginBottom:6}}>{note}</div>}
             <button className="press" onClick={submit} disabled={busy}
-              style={{width:"100%",background:busy?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              style={{width:"100%",background:busy?"#475569":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
               {busy?"Posting…":"Post Testimonial 💬"}
             </button>
           </div>
         )
       ):(
         <button className="press" onClick={onSignIn}
-          style={{width:"100%",background:C.card,color:C.primary,border:`1.5px dashed ${C.accent}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+          style={{width:"100%",background:C.card,color:C.primary,border:`1.5px dashed ${C.accent}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
           Sign in to write a testimonial
         </button>
       )}
@@ -2599,7 +2606,7 @@ function RestockBtn({product,user,restockSet,onSubscribe}){
   if((product.stockCount??DEFAULT_STOCK)>0||product.comingSoon)return null;
   return(
     <button className="press" onClick={()=>{if(!already&&onSubscribe)onSubscribe(product);}} disabled={already}
-      style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:already?"#dcfce7":"#fff7ed",color:already?"#15803d":"#c2410c",border:`1.5px solid ${already?"#86efac":"#fed7aa"}`,borderRadius:12,padding:"10px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginTop:8}}>
+      style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:already?"rgba(52,211,153,0.12)":"rgba(251,146,60,0.12)",color:already?"#34d399":"#c2410c",border:`1.5px solid ${already?"rgba(52,211,153,0.35)":"rgba(251,146,60,0.30)"}`,borderRadius:12,padding:"10px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",marginTop:8}}>
       {already?"🔔 You'll be alerted when it's back!":"🔔 Notify me when back in stock"}
     </button>
   );
@@ -2616,7 +2623,7 @@ function GuideNotifBtn(){
   if(perm==="denied")return null;
   return(
     <button className="press" onClick={()=>requestNotifPerm(ok=>setPerm(ok?"granted":"denied"))}
-      style={{display:"flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:C.primary,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+      style={{display:"flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:C.primary,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
       🔔 Notify me of new guides
     </button>
   );
@@ -2624,13 +2631,13 @@ function GuideNotifBtn(){
 
 function StockBadge({stockCount}){
   // Show the exact count only once it drops below 10 (low-stock urgency). Otherwise just "In Stock".
-  const m = stockCount<=0 ? {c:"#dc2626",bg:"#fee2e2",l:"✕ Out of Stock"}
-          : stockCount<10 ? {c:"#c2410c",bg:"#fff7ed",l:`⚠ Only ${stockCount} left`}
-          : {c:"#15803d",bg:"#dcfce7",l:"● In Stock"};
+  const m = stockCount<=0 ? {c:"#dc2626",bg:"rgba(244,63,94,0.12)",l:"✕ Out of Stock"}
+          : stockCount<10 ? {c:"#c2410c",bg:"rgba(251,146,60,0.12)",l:`⚠ Only ${stockCount} left`}
+          : {c:"#34d399",bg:"rgba(52,211,153,0.12)",l:"● In Stock"};
   return <span style={{fontSize:10,fontWeight:700,color:m.c,background:m.bg,padding:"3px 9px",borderRadius:20}}>{m.l}</span>;
 }
 function StatusBadge({status}){
-  const m={"Awaiting Payment":{c:"#b45309",bg:"#fef3c7",icon:"⏳"},"Payment Review":{c:"#7c3aed",bg:"#ede9fe",icon:"🔎"},Placed:{c:"#1d4ed8",bg:"#dbeafe",icon:"📋"},Confirmed:{c:"#15803d",bg:"#dcfce7",icon:"✅"},Shipped:{c:"#c2410c",bg:"#fff7ed",icon:"🚚"},Delivered:{c:"#15803d",bg:"#dcfce7",icon:"🎉"},Cancelled:{c:"#b91c1c",bg:"#fee2e2",icon:"✕"}};
+  const m={"Awaiting Payment":{c:"#fbbf24",bg:"rgba(251,191,36,0.12)",icon:"⏳"},"Payment Review":{c:"#7c3aed",bg:"rgba(167,139,250,0.14)",icon:"🔎"},Placed:{c:"#38bdf8",bg:"#dbeafe",icon:"📋"},Confirmed:{c:"#34d399",bg:"rgba(52,211,153,0.12)",icon:"✅"},Shipped:{c:"#c2410c",bg:"rgba(251,146,60,0.12)",icon:"🚚"},Delivered:{c:"#34d399",bg:"rgba(52,211,153,0.12)",icon:"🎉"},Cancelled:{c:"#fb7185",bg:"rgba(244,63,94,0.12)",icon:"✕"}};
   const s=m[status]||m.Placed;
   return <span style={{fontSize:10,fontWeight:700,color:s.c,background:s.bg,padding:"3px 10px",borderRadius:20}}>{s.icon} {status}</span>;
 }
@@ -2643,7 +2650,7 @@ function CategoryPills({selected,onSelect,all,counts}){
         <button key={c} className="press" onClick={()=>onSelect(c)} style={{
           flexShrink:0,background:selected===c?C.primary:C.card,color:selected===c?"white":C.textSub,
           border:`1.5px solid ${selected===c?C.primary:C.border}`,borderRadius:20,padding:"7px 14px",
-          fontSize:12,fontWeight:600,fontFamily:"'Nunito',sans-serif",transition:"all .2s",
+          fontSize:12,fontWeight:600,fontFamily:"'Outfit',sans-serif",transition:"all .2s",
           display:"flex",alignItems:"center",gap:5}}>
           <span>{icons[c]}</span>{c}
           {counts&&<span style={{marginLeft:3,background:selected===c?"rgba(255,255,255,.25)":C.border,color:selected===c?"white":C.textSub,borderRadius:10,padding:"0 6px",fontSize:10,fontWeight:800,minWidth:14,textAlign:"center"}}>{counts[c]||0}</span>}
@@ -2678,7 +2685,7 @@ function RatingSummary({reviews,avgRating}){
     <div style={{display:"flex",gap:16,alignItems:"center",background:C.card,borderRadius:16,padding:"16px",border:`1px solid ${C.border}`,marginBottom:16}}>
       {/* Big score */}
       <div style={{textAlign:"center",flexShrink:0}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:42,fontWeight:800,color:C.text,lineHeight:1}}>{avgRating.toFixed(1)}</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:42,fontWeight:800,color:C.text,lineHeight:1}}>{avgRating.toFixed(1)}</div>
         <ReviewStars value={Math.round(avgRating)} size={14}/>
         <div style={{fontSize:11,color:C.textSub,marginTop:4}}>{total} review{total!==1?"s":""}</div>
       </div>
@@ -2740,9 +2747,9 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid}){
   return(
     <div className="slide-up" style={{background:C.card,borderRadius:18,padding:"18px",border:`1.5px solid ${C.border}`,marginBottom:16}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-        <span style={{fontSize:10,fontWeight:800,color:C.success,background:"#dcfce7",padding:"3px 9px",borderRadius:20}}>✓ VERIFIED PURCHASE</span>
+        <span style={{fontSize:10,fontWeight:800,color:C.success,background:"rgba(52,211,153,0.12)",padding:"3px 9px",borderRadius:20}}>✓ VERIFIED PURCHASE</span>
       </div>
-      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,color:C.text,marginBottom:14}}>Write a Review</div>
+      <div style={{fontFamily:"'Outfit',sans-serif",fontSize:17,fontWeight:800,color:C.text,marginBottom:14}}>Write a Review</div>
 
       {/* Star picker */}
       <div style={{marginBottom:14}}>
@@ -2788,11 +2795,11 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid}){
 
       <div style={{display:"flex",gap:10}}>
         <button className="press" onClick={onCancel}
-          style={{flex:1,padding:"12px",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textSub,fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+          style={{flex:1,padding:"12px",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textSub,fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
           Cancel
         </button>
         <button className="press" onClick={submit} disabled={saving}
-          style={{flex:2,padding:"12px",borderRadius:12,border:"none",background:C.primary,color:"white",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
+          style={{flex:2,padding:"12px",borderRadius:12,border:"none",background:C.primary,color:"white",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
           {saving?<><Spinner/>Submitting…</>:"⭐ Submit Review"}
         </button>
       </div>
@@ -2819,20 +2826,20 @@ function CountdownBanner({endsAt, title="Limited Time Offer", subtitle="Don't mi
       <div style={{position:"absolute",bottom:-40,left:-30,width:100,height:100,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
       <div style={{position:"relative"}}>
         <div style={{display:"inline-block",background:"rgba(0,0,0,.18)",borderRadius:20,padding:"3px 10px",fontSize:10,fontWeight:800,letterSpacing:1.5,marginBottom:8}}>⚡ OFFER</div>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,marginBottom:2}}>{title}</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:800,marginBottom:2}}>{title}</div>
         <div style={{fontSize:12,opacity:.88,marginBottom:14}}>{subtitle}</div>
         <div style={{fontSize:11,fontWeight:700,opacity:.85,marginBottom:6,letterSpacing:.8}}>Ends in:</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:stockNote?12:14}}>
           {cells.map((c,i)=>(
             <div key={i} className={c.l==="Secs"?"countdown-cell":""} style={{background:"rgba(255,255,255,.95)",color:C.coral,borderRadius:10,padding:"8px 4px",textAlign:"center"}}>
-              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,lineHeight:1}}>{c.v}</div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:800,lineHeight:1}}>{c.v}</div>
               <div style={{fontSize:9,fontWeight:700,color:"#7a1a08",marginTop:3,textTransform:"uppercase",letterSpacing:.8}}>{c.l}</div>
             </div>
           ))}
         </div>
         {stockNote&&<div style={{fontSize:12,fontWeight:700,marginBottom:12,opacity:.95}}>🔥 {stockNote}</div>}
         <button className="press" onClick={onShop}
-          style={{background:"white",color:C.coral,border:"none",borderRadius:12,padding:"11px 22px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif",boxShadow:"0 4px 14px rgba(0,0,0,.18)"}}>
+          style={{background:C.card,color:C.coral,border:"none",borderRadius:12,padding:"11px 22px",fontSize:13,fontWeight:800,fontFamily:"'Outfit',sans-serif",boxShadow:"0 4px 14px rgba(0,0,0,.18)"}}>
           Shop Now →
         </button>
       </div>
@@ -2860,7 +2867,7 @@ function VariantPicker({product, variants, selectedId, onSelect}){
                 borderRadius:14, padding:"12px 14px",
                 display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
                 opacity:v.soldOut?.55:1,cursor:v.soldOut?"not-allowed":"pointer",
-                fontFamily:"'Nunito',sans-serif",
+                fontFamily:"'Outfit',sans-serif",
               }}>
               <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
                 <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${sel?C.primary:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -2916,7 +2923,7 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
 
       <div style={{textAlign:"center",marginBottom:30,marginTop:20}}>
         <img src={STORE_LOGO} alt="Nemo" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:130,height:130,objectFit:"contain",margin:"0 auto",display:"block",filter:"drop-shadow(0 10px 24px rgba(8,54,64,.35))"}}/>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:26,fontWeight:800,color:C.text,marginTop:16,marginBottom:6}}>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:26,fontWeight:800,color:C.text,marginTop:16,marginBottom:6}}>
           {mode==="checkout"?"Sign in to checkout":"Welcome to Nemo"}
         </div>
         <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.55,maxWidth:300,margin:"0 auto"}}>
@@ -2926,7 +2933,7 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
 
       <div style={{maxWidth:360,width:"100%",margin:"0 auto"}}>
         <button className="press" onClick={doGoogle} disabled={busy}
-          style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",cursor:"pointer",fontFamily:"'Nunito',sans-serif",fontSize:15,fontWeight:700,color:C.text,boxShadow:"0 2px 10px rgba(0,0,0,.05)",opacity:busy?.7:1}}>
+          style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:12,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:700,color:C.text,boxShadow:"0 2px 10px rgba(0,0,0,.05)",opacity:busy?.7:1}}>
           {busy?<Spinner/>:<svg width="22" height="22" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>}
           Continue with Google
         </button>
@@ -2937,7 +2944,7 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
           <div style={{marginTop:16}}>
             {DEMO_GOOGLE_ACCOUNTS.map(acc=>(
               <button key={acc.email} className="press" onClick={()=>onSuccess({name:acc.name,phone:acc.phone,email:acc.email,method:"demo",loginAt:new Date().toISOString(),keep:true})}
-                style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:10,cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left"}}>
+                style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:10,cursor:"pointer",fontFamily:"'Outfit',sans-serif",textAlign:"left"}}>
                 <span style={{width:34,height:34,borderRadius:"50%",background:acc.color,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,flexShrink:0}}>{acc.name.charAt(0)}</span>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13.5,fontWeight:700,color:C.text}}>{acc.name}</div>
@@ -2965,16 +2972,16 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
       <div onClick={e=>e.stopPropagation()} className="drawer-panel"
         style={{background:C.card,width:"86%",maxWidth:340,height:"100%",padding:"22px 20px 28px",overflowY:"auto",boxShadow:"4px 0 30px rgba(10,36,38,.25)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>Filter &amp; Sort</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>Filter &amp; Sort</div>
           <button className="press" onClick={onClose} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,width:34,height:34,fontSize:17,color:C.textSub,cursor:"pointer"}}>✕</button>
         </div>
-        <button className="press" onClick={onClear} style={{background:"none",border:"none",fontSize:12,fontWeight:700,color:C.accent,fontFamily:"'Nunito',sans-serif",padding:0,marginBottom:18,cursor:"pointer"}}>↺ Clear all filters</button>
+        <button className="press" onClick={onClear} style={{background:"none",border:"none",fontSize:12,fontWeight:700,color:C.accent,fontFamily:"'Outfit',sans-serif",padding:0,marginBottom:18,cursor:"pointer"}}>↺ Clear all filters</button>
 
         <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Sort by</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:22}}>
           {SORT_OPTS.map(o=>(
             <button key={o.id} className="press" onClick={()=>setSort(o.id)}
-              style={{padding:"8px 14px",borderRadius:20,border:`1.5px solid ${sort===o.id?C.primary:C.border}`,background:sort===o.id?C.primary:"transparent",color:sort===o.id?"white":C.textSub,fontSize:12,fontWeight:600,fontFamily:"'Nunito',sans-serif"}}>
+              style={{padding:"8px 14px",borderRadius:20,border:`1.5px solid ${sort===o.id?C.primary:C.border}`,background:sort===o.id?C.primary:"transparent",color:sort===o.id?"white":C.textSub,fontSize:12,fontWeight:600,fontFamily:"'Outfit',sans-serif"}}>
               {o.label}
             </button>
           ))}
@@ -2984,7 +2991,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
         <div style={{display:"flex",gap:8,marginBottom:22}}>
           {[{id:"all",l:"All"},{id:"instock",l:"In stock"},{id:"limited",l:"Limited"}].map(o=>(
             <button key={o.id} className="press" onClick={()=>setAvailability(o.id)}
-              style={{flex:1,padding:"9px 12px",borderRadius:14,border:`1.5px solid ${availability===o.id?C.primary:C.border}`,background:availability===o.id?C.primary:"transparent",color:availability===o.id?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              style={{flex:1,padding:"9px 12px",borderRadius:14,border:`1.5px solid ${availability===o.id?C.primary:C.border}`,background:availability===o.id?C.primary:"transparent",color:availability===o.id?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
               {o.l}
             </button>
           ))}
@@ -3000,7 +3007,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
           style={{width:"100%",accentColor:C.primary,marginBottom:24}}/>
 
         <button className="press" onClick={onClose}
-          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
           Show {count} result{count!==1?"s":""}
         </button>
       </div>
@@ -3019,7 +3026,7 @@ function ExperienceReview({order, uk, user}){
   const [saving,setSaving]=useState(false);
   if(done) return(
     <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-      <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",fontSize:12,color:"#15803d",fontWeight:700}}>✓ Thanks for rating our service &amp; packing!</div>
+      <div style={{background:"rgba(52,211,153,0.12)",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",fontSize:12,color:"#34d399",fontWeight:700}}>✓ Thanks for rating our service &amp; packing!</div>
     </div>
   );
   const ready=service>0&&packing>0;
@@ -3048,9 +3055,9 @@ function ExperienceReview({order, uk, user}){
           <ReviewStars value={packing} onChange={setPacking} size={22}/>
         </div>
         <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={2} placeholder="Anything about delivery, packing or service? (optional)"
-          style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:12.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",boxSizing:"border-box",marginBottom:9,fontFamily:"'Nunito',sans-serif"}}/>
+          style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:12.5,outline:"none",resize:"none",lineHeight:1.5,background:C.card,boxSizing:"border-box",marginBottom:9,fontFamily:"'Outfit',sans-serif"}}/>
         <button className="press" onClick={submit} disabled={!ready||saving}
-          style={{width:"100%",background:ready?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:ready?"pointer":"default"}}>
+          style={{width:"100%",background:ready?C.primary:"#334155",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:ready?"pointer":"default"}}>
           {saving?<><Spinner/>Submitting…</>:"Submit rating"}
         </button>
       </div>
@@ -3071,18 +3078,18 @@ function SelfCancelBtn({o, onCancel}){
   if(!confirm) return(
     <div style={{marginTop:10}}>
       <button className="press" onClick={()=>setConfirm(true)}
-        style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+        style={{width:"100%",background:C.card,color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>
         ✕ Cancel this order{mins!=null?` · ${mins} min left`:""}
       </button>
     </div>
   );
   return(
-    <div style={{marginTop:10,background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
+    <div style={{marginTop:10,background:"rgba(244,63,94,0.12)",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
       <div style={{fontSize:12.5,fontWeight:800,color:C.danger,marginBottom:4}}>Cancel this order?</div>
-      <div style={{fontSize:11.5,color:"#7f1d1d",lineHeight:1.5,marginBottom:10}}>{paid?"Your order will be cancelled and a refund of the paid amount will be processed to your original payment method.":"Your order will be cancelled."} This can't be undone.</div>
+      <div style={{fontSize:11.5,color:"#fda4af",lineHeight:1.5,marginBottom:10}}>{paid?"Your order will be cancelled and a refund of the paid amount will be processed to your original payment method.":"Your order will be cancelled."} This can't be undone.</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <button className="press" onClick={()=>setConfirm(false)} style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Keep order</button>
-        <button className="press" onClick={()=>{setConfirm(false);onCancel&&onCancel(o);}} style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Yes, cancel</button>
+        <button className="press" onClick={()=>setConfirm(false)} style={{background:C.card,color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Keep order</button>
+        <button className="press" onClick={()=>{setConfirm(false);onCancel&&onCancel(o);}} style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Yes, cancel</button>
       </div>
     </div>
   );
@@ -3105,7 +3112,7 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
   const pickPhoto=async(file)=>{ if(!file)return; setBusy(true); try{ const d=await compressImage(file,1100,.8); setPhoto(d); }catch(e){} setBusy(false); };
   const submit=async()=>{ if(!sel.length)return; await onRequestReturn(o,{itemIds:sel,reason:reason.trim(),resolution,photo}); setOpen(false); };
   const disclaimer=(
-    <div style={{fontSize:10.5,color:"#9a3412",lineHeight:1.55,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",marginBottom:10}}>
+    <div style={{fontSize:10.5,color:"#fdba74",lineHeight:1.55,background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",marginBottom:10}}>
       <b>Eligible only for damaged dry goods.</b> Item must be unused and returned with all parts in the original packing cover. <b>Feeds, medicines, live fish, plants, pumps &amp; tubes are not eligible.</b> Refunds/coins exclude packing &amp; shipping charges.
     </div>
   );
@@ -3118,7 +3125,7 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
     Resolved:"Resolved ✓ — your refund / coins have been processed. Thank you!",
   };
   if(rr){
-    const tone=rr.status==="Declined"?{bg:"#fef2f2",bd:"#fecaca"}:rr.status==="Resolved"?{bg:"#ecfdf5",bd:"#a7f3d0"}:{bg:"#eff6ff",bd:"#bfdbfe"};
+    const tone=rr.status==="Declined"?{bg:"rgba(244,63,94,0.12)",bd:"rgba(244,63,94,0.30)"}:rr.status==="Resolved"?{bg:"rgba(52,211,153,0.12)",bd:"rgba(52,211,153,0.30)"}:{bg:"rgba(56,189,248,0.12)",bd:"rgba(56,189,248,0.30)"};
     const retAddr=settings.returnAddress||"Please contact us on WhatsApp for the return shipping address before sending the parcel.";
     return(
       <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
@@ -3129,14 +3136,14 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
           {rr.status==="Approved"&&(
             <div style={{marginTop:10}}>
               <div style={{fontSize:11,fontWeight:800,color:C.text,marginBottom:4}}>📦 Courier it back to:</div>
-              <div style={{fontSize:11.5,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5,background:"white",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{retAddr}</div>
+              <div style={{fontSize:11.5,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{retAddr}</div>
               <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Attach the consignment bill inside/with the parcel, then enter your courier partner &amp; consignment number below.</div>
               <input value={courier} onChange={e=>setCourier(e.target.value)} placeholder="Courier partner (e.g. DTDC, ST Courier)"
-                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:8}}/>
+                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:C.card,marginBottom:8}}/>
               <input value={consign} onChange={e=>setConsign(e.target.value)} placeholder="Consignment / tracking number"
-                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:10,fontFamily:"monospace"}}/>
+                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:C.card,marginBottom:10,fontFamily:"monospace"}}/>
               <button className="press" disabled={!courier.trim()||!consign.trim()} onClick={()=>onSubmitReturnShipment(o,{courier:courier.trim(),consignment:consign.trim()})}
-                style={{width:"100%",background:(courier.trim()&&consign.trim())?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>Submit return shipment details</button>
+                style={{width:"100%",background:(courier.trim()&&consign.trim())?C.primary:"#334155",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>Submit return shipment details</button>
             </div>
           )}
           {(rr.status==="Shipped"||rr.status==="Received & Verified"||rr.status==="Resolved")&&(rr.courier||rr.consignment)&&(
@@ -3151,7 +3158,7 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
     <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
       {!open?(
         <button className="press" onClick={()=>setOpen(true)}
-          style={{background:"none",border:"none",padding:0,color:C.textSub,fontSize:11,fontWeight:600,fontFamily:"'Nunito',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
+          style={{background:"none",border:"none",padding:0,color:C.textSub,fontSize:11,fontWeight:600,fontFamily:"'Outfit',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
           Item arrived damaged? Request a return / replacement →
         </button>
       ):(
@@ -3168,7 +3175,7 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
             ))}
           </div>
           <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder="Describe the damage…"
-            style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",resize:"none",background:"white",marginBottom:10}}/>
+            style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",resize:"none",background:C.card,marginBottom:10}}/>
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Photo proof</div>
           {photo?(
             <div style={{position:"relative",display:"inline-block",marginBottom:10}}>
@@ -3176,7 +3183,7 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
               <button onClick={()=>setPhoto("")} style={{position:"absolute",top:-6,right:-6,width:22,height:22,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:13,cursor:"pointer"}}>×</button>
             </div>
           ):(
-            <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:10,border:`1.5px dashed ${C.border}`,background:"white",padding:"12px",cursor:"pointer",color:C.textSub,fontSize:12.5,fontWeight:600,marginBottom:10}}>
+            <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:10,border:`1.5px dashed ${C.border}`,background:C.card,padding:"12px",cursor:"pointer",color:C.textSub,fontSize:12.5,fontWeight:600,marginBottom:10}}>
               <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{pickPhoto(e.target.files[0]);e.target.value="";}}/>
               {busy?"Processing…":"📷 Add a photo of the damage"}
             </label>
@@ -3185,13 +3192,13 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
           <div style={{display:"flex",gap:8,marginBottom:12}}>
             {[["refund","💸 Refund"],["coins","🪙 Reward coins"]].map(([k,l])=>(
               <button key={k} type="button" className="press" onClick={()=>setResolution(k)}
-                style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${resolution===k?C.primary:C.border}`,background:resolution===k?C.primary:"white",color:resolution===k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{l}</button>
+                style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${resolution===k?C.primary:C.border}`,background:resolution===k?C.primary:"white",color:resolution===k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>{l}</button>
             ))}
           </div>
           <div style={{display:"flex",gap:8}}>
-            <button className="press" onClick={()=>setOpen(false)} style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
+            <button className="press" onClick={()=>setOpen(false)} style={{background:C.card,color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Cancel</button>
             <button className="press" disabled={!sel.length||busy} onClick={submit}
-              style={{flex:1,background:sel.length?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>Submit request</button>
+              style={{flex:1,background:sel.length?C.primary:"#334155",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>Submit request</button>
           </div>
         </div>
       )}
@@ -3264,7 +3271,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
           <div>
             <div style={{fontSize:11,color:C.textSub,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Signed in</div>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>{user.name||"My Orders"}</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>{user.name||"My Orders"}</div>
             {(user.phone||user.email)&&(
               <div style={{fontSize:12,color:C.textSub,marginTop:2}}>
                 {user.phone?`+91 ${user.phone}`:user.email}
@@ -3272,7 +3279,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
             )}
           </div>
           <button className="press" onClick={onLogout}
-            style={{background:C.bg,color:C.danger,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"8px 14px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+            style={{background:C.bg,color:C.danger,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"8px 14px",fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
             Logout
           </button>
         </div>
@@ -3284,7 +3291,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:16,cursor:"pointer",textAlign:"left"}}>
           <span style={{fontSize:22,color:C.coral}}>♥</span>
           <div style={{flex:1}}>
-            <div style={{fontSize:14,fontWeight:800,color:C.text,fontFamily:"'Baloo 2',sans-serif"}}>Saved Items</div>
+            <div style={{fontSize:14,fontWeight:800,color:C.text,fontFamily:"'Outfit',sans-serif"}}>Saved Items</div>
             <div style={{fontSize:11.5,color:C.textSub}}>{favorites.length>0?`${favorites.length} item${favorites.length!==1?"s":""} saved`:"Your wishlist is empty"}</div>
           </div>
           <span style={{fontSize:18,color:C.textSub}}>›</span>
@@ -3294,7 +3301,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
             <div style={{position:"absolute",top:-24,right:-16,width:90,height:90,borderRadius:"50%",background:"rgba(255,255,255,.12)"}}/>
             <div style={{position:"relative"}}>
               <div style={{fontSize:26,marginBottom:6}}>🌟</div>
-              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,marginBottom:4}}>How was your order?</div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:18,fontWeight:800,marginBottom:4}}>How was your order?</div>
               <div style={{fontSize:12.5,opacity:.9,lineHeight:1.5,marginBottom:14}}>Your delivery is complete — please take a moment to rate your {toReview.length===1?"purchase":"purchases"}. It really helps us & other fishkeepers!</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {toReview.slice(0,4).map(({prod,name,category})=>{
@@ -3302,7 +3309,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                   const img=prod.media?.images?.[0]?.src||mediaCache["img-"+prod.id];
                   return(
                     <button key={prod.id} className="press" onClick={()=>onWriteReview(prod)}
-                      style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,.95)",borderRadius:14,padding:"10px 12px",border:"none",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left"}}>
+                      style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,.95)",borderRadius:14,padding:"10px 12px",border:"none",cursor:"pointer",fontFamily:"'Outfit',sans-serif",textAlign:"left"}}>
                       <div style={{width:40,height:40,borderRadius:10,flexShrink:0,overflow:"hidden",background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
                         {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
                       </div>
@@ -3324,7 +3331,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
             <div style={{position:"absolute",top:-20,right:-14,width:84,height:84,borderRadius:"50%",background:"rgba(255,255,255,.12)"}}/>
             <div style={{position:"relative"}}>
               <div style={{fontSize:24,marginBottom:4}}>💜</div>
-              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Refer a friend &amp; earn rewards</div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Refer a friend &amp; earn rewards</div>
               <div style={{fontSize:12,opacity:.92,lineHeight:1.5,marginBottom:12}}>Thanks for shopping with us! Share your personal code — your friend gets a welcome reward on their first order, and you earn wallet coins once their order is delivered.</div>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.5)",borderRadius:10,padding:"10px 12px",fontFamily:"monospace",fontSize:17,fontWeight:800,letterSpacing:2,textAlign:"center"}}>{refCode}</div>
@@ -3333,7 +3340,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     try{navigator.share&&navigator.share({text:`Use my code ${refCode} at ${STORE_NAME} Aqua Store and get a welcome reward on your order! 🐠`});}catch(e){}
                     setRefCopied(true);setTimeout(()=>setRefCopied(false),2000);
                   }}
-                  style={{background:refCopied?"rgba(255,255,255,.95)":"rgba(255,255,255,.25)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"11px 16px",color:refCopied?"#7c3aed":"white",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                  style={{background:refCopied?"rgba(255,255,255,.95)":"rgba(255,255,255,.25)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"11px 16px",color:refCopied?"#7c3aed":"white",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
                   {refCopied?"✓ Copied!":"Share"}
                 </button>
               </div>
@@ -3346,19 +3353,19 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
             <div style={{fontSize:64,marginBottom:14}}>📦</div>
             <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:6}}>No orders yet</div>
             <div style={{fontSize:13,marginBottom:20}}>Your orders will appear here.</div>
-            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Start Shopping</button>
+            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Start Shopping</button>
           </div>
         ):(
           <>
           {myOrders.some(o=>o.status==="Delivered"&&o.items.some(it=>it.category==="Live Fish"))&&(
-            <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:16,padding:"14px 16px",marginBottom:16}}>
-              <div style={{fontSize:13,fontWeight:800,color:"#9a3412",marginBottom:4}}>🐟 Report a Dead-on-Arrival (DOA)</div>
-              <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.55,marginBottom:10}}>Enter your order number to start a claim. Have your unboxing video ready — share it on WhatsApp within 2 hours of delivery.</div>
+            <div style={{background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:16,padding:"14px 16px",marginBottom:16}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#fdba74",marginBottom:4}}>🐟 Report a Dead-on-Arrival (DOA)</div>
+              <div style={{fontSize:11.5,color:"#fdba74",lineHeight:1.55,marginBottom:10}}>Enter your order number to start a claim. Have your unboxing video ready — share it on WhatsApp within 2 hours of delivery.</div>
               <div style={{display:"flex",gap:8}}>
                 <input value={doaOrderNo} onChange={e=>{setDoaOrderNo(e.target.value);setDoaLookupMsg("");}} placeholder="Your order number"
-                  style={{flex:1,borderRadius:12,border:`1.5px solid ${doaLookupMsg?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",fontFamily:"monospace"}}/>
+                  style={{flex:1,borderRadius:12,border:`1.5px solid ${doaLookupMsg?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.card,fontFamily:"monospace"}}/>
                 <button className="press" onClick={submitDoaByNumber}
-                  style={{background:"#25D366",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>Report DOA</button>
+                  style={{background:"#25D366",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>Report DOA</button>
               </div>
               {doaLookupMsg&&<div style={{fontSize:11.5,color:C.danger,fontWeight:600,marginTop:4}}>{doaLookupMsg}</div>}
             </div>
@@ -3393,7 +3400,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                       already
                         ? <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ Reviewed</span>
                         : <button className="press" onClick={()=>onWriteReview(prod, o.id)}
-                            style={{background:C.accentLight,border:`1px solid ${C.accent}`,color:C.primary,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                            style={{background:C.accentLight,border:`1px solid ${C.accent}`,color:C.primary,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
                             ★ Review
                           </button>
                     )}
@@ -3411,11 +3418,11 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 const sub = d<0 ? `Expected by ${eta.dateLabel} \u2014 should reach you any moment now` : `Expected by ${eta.dateLabel}`;
                 const urgent = d<=1;
                 return(
-                  <div style={{marginTop:10,display:"flex",alignItems:"center",gap:11,background:urgent?"#fff7ed":C.accentLight,border:`1.5px solid ${urgent?"#fdba74":C.accent}`,borderRadius:14,padding:"11px 13px"}}>
+                  <div style={{marginTop:10,display:"flex",alignItems:"center",gap:11,background:urgent?"rgba(251,146,60,0.12)":C.accentLight,border:`1.5px solid ${urgent?"#fdba74":C.accent}`,borderRadius:14,padding:"11px 13px"}}>
                     <span style={{fontSize:22,lineHeight:1}}>🚚</span>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:14,fontWeight:800,color:urgent?"#9a3412":C.primaryDark,fontFamily:"'Baloo 2',sans-serif",lineHeight:1.15}}>{headline}</div>
-                      <div style={{fontSize:11.5,color:urgent?"#9a3412":C.textSub,fontWeight:600,marginTop:2}}>{sub}{o.status==="Shipped"?" \u00b7 on the way":""}</div>
+                      <div style={{fontSize:14,fontWeight:800,color:urgent?"#fdba74":C.primaryDark,fontFamily:"'Outfit',sans-serif",lineHeight:1.15}}>{headline}</div>
+                      <div style={{fontSize:11.5,color:urgent?"#fdba74":C.textSub,fontWeight:600,marginTop:2}}>{sub}{o.status==="Shipped"?" \u00b7 on the way":""}</div>
                     </div>
                   </div>
                 );
@@ -3423,30 +3430,30 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               {o.trackingNumber&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>Consignment: <b style={{color:C.text}}>{o.trackingNumber}</b>{o.courierName?<> · {o.courierName}</>:null}</div>}
               {(o.status==="Shipped"||o.status==="Delivered")&&o.courierTrackUrl&&(
                 <button className="press" onClick={()=>trackParcel(o)}
-                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
                   🚚 Track Parcel{o.courierName?` · ${o.courierName}`:""}
                 </button>
               )}
               {o.shippingReward&&(
-                <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"11px 13px"}}>
-                  <div style={{fontSize:12.5,fontWeight:800,color:"#15803d",marginBottom:3}}>🎁 Shipping refund — ₹{o.shippingReward.amount} added to your wallet!</div>
-                  <div style={{fontSize:11.5,color:"#166534",lineHeight:1.55}}>Your parcel cost us less than you paid for shipping, so we've credited the difference to your 👛 wallet. Redeem it at checkout on any future order.</div>
+                <div style={{marginTop:10,background:"rgba(52,211,153,0.12)",border:"1px solid #a7f3d0",borderRadius:12,padding:"11px 13px"}}>
+                  <div style={{fontSize:12.5,fontWeight:800,color:"#34d399",marginBottom:3}}>🎁 Shipping refund — ₹{o.shippingReward.amount} added to your wallet!</div>
+                  <div style={{fontSize:11.5,color:"#34d399",lineHeight:1.55}}>Your parcel cost us less than you paid for shipping, so we've credited the difference to your 👛 wallet. Redeem it at checkout on any future order.</div>
                 </div>
               )}
               {/* Bill button */}
               <div style={{display:"flex",gap:8,marginTop:10}}>
               <button className="press" onClick={()=>openBill(o,settings)}
-                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                 🧾 Quick Bill
               </button>
               <button className="press" onClick={()=>openInvoice(o,settings)}
-                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                 📄 Invoice (PDF)
               </button>
               </div>
               {o.status==="Delivered"&&(
                 <button className="press" onClick={()=>reorder(o)}
-                  style={{width:"100%",marginTop:8,background:C.accentLight,color:C.primary,border:`1.5px solid ${C.accent}`,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+                  style={{width:"100%",marginTop:8,background:C.accentLight,color:C.primary,border:`1.5px solid ${C.accent}`,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>
                   🔁 Reorder these items
                 </button>
               )}
@@ -3458,23 +3465,23 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     <PaymentPanel order={o} settings={settings} compact onSubmitPayment={onSubmitPayment} onCancelled={onCancelled}/>
                   ):(
                     <>
-                      <div style={{background:"#fef3c7",border:`1px solid #fde68a`,borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:12,color:"#92400e",fontWeight:600,lineHeight:1.5}}>⏳ Payment pending — complete it to confirm this order (auto-cancels if unpaid).</div>
+                      <div style={{background:"rgba(251,191,36,0.12)",border:`1px solid #fde68a`,borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:12,color:"#fdba74",fontWeight:600,lineHeight:1.5}}>⏳ Payment pending — complete it to confirm this order (auto-cancels if unpaid).</div>
                       <button className="press" onClick={()=>setPayOpen(o.id)}
-                        style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>💳 Complete Payment · ₹{o.amountDue??(o.total+o.fee)}</button>
+                        style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>💳 Complete Payment · ₹{o.amountDue??(o.total+o.fee)}</button>
                     </>
                   )}
                 </div>
               )}
               {o.status==="Payment Review"&&(
-                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>🔎 Payment submitted{o.txnId?` (Ref: ${o.txnId})`:""} — under verification. We'll confirm within 1–2 days.</div>
+                <div style={{marginTop:10,background:"rgba(167,139,250,0.14)",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#c4b5fd",fontWeight:600,lineHeight:1.5}}>🔎 Payment submitted{o.txnId?` (Ref: ${o.txnId})`:""} — under verification. We'll confirm within 1–2 days.</div>
               )}
               {o.status==="Cancelled"&&(
                 <div style={{marginTop:10}}>
-                  <div style={{background:"#fee2e2",border:`1px solid #fecaca`,borderRadius:10,padding:"10px 12px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.55}}>
+                  <div style={{background:"rgba(244,63,94,0.12)",border:`1px solid #fecaca`,borderRadius:10,padding:"10px 12px",fontSize:12.5,color:"#fb7185",fontWeight:600,lineHeight:1.55}}>
                     ✕ Your order has been cancelled.{o.cancelReason?` Reason: ${o.cancelReason}.`:o.paymentStatus&&/unpaid/i.test(o.paymentStatus)?" Payment wasn't completed in time.":""}
                   </div>
                   {o.refund&&o.refund.due&&(
-                    <div style={{marginTop:8,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"11px 12px",fontSize:12.5,color:"#1e3a8a",lineHeight:1.6}}>
+                    <div style={{marginTop:8,background:"rgba(56,189,248,0.12)",border:"1px solid #bfdbfe",borderRadius:10,padding:"11px 12px",fontSize:12.5,color:"#7dd3fc",lineHeight:1.6}}>
                       <div style={{fontWeight:800,marginBottom:3}}>💸 Refund {o.refund.status==="refunded"?"completed":o.refund.status==="processing"?"in progress":"being arranged"}</div>
                       {o.refund.method==="gateway"?(
                         <div>A refund of <b>₹{o.refund.amount}</b> {o.refund.status==="refunded"?"has been":"is being"} returned automatically to your original payment method. Please allow 3–7 working days for it to reflect.</div>
@@ -3489,42 +3496,42 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 </div>
               )}
               {o.status==="Confirmed"&&(
-                <div style={{marginTop:10,background:"#dcfce7",border:`1px solid #bbf7d0`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#15803d",fontWeight:600,lineHeight:1.5}}>✅ Payment verified — your order is confirmed &amp; being prepared!</div>
+                <div style={{marginTop:10,background:"rgba(52,211,153,0.12)",border:`1px solid #bbf7d0`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#34d399",fontWeight:600,lineHeight:1.5}}>✅ Payment verified — your order is confirmed &amp; being prepared!</div>
               )}
               {/* Dead-on-Arrival reporting — only for delivered orders that contained live fish */}
               {o.status==="Delivered" && o.items.some(it=>it.category==="Live Fish") && (
                 <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
                   {o.doa?(
-                    <div style={{background:o.doa.status==="Declined"?"#fef2f2":(o.doa.status||"").startsWith("Approved")?"#ecfdf5":"#fff7ed",border:`1px solid ${o.doa.status==="Declined"?"#fecaca":(o.doa.status||"").startsWith("Approved")?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 12px"}}>
+                    <div style={{background:o.doa.status==="Declined"?"rgba(244,63,94,0.12)":(o.doa.status||"").startsWith("Approved")?"rgba(52,211,153,0.12)":"rgba(251,146,60,0.12)",border:`1px solid ${o.doa.status==="Declined"?"rgba(244,63,94,0.30)":(o.doa.status||"").startsWith("Approved")?"rgba(52,211,153,0.30)":"rgba(251,146,60,0.30)"}`,borderRadius:10,padding:"11px 12px"}}>
                       <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:3}}>🐟 Dead-on-Arrival request</div>
                       <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>{doaStatusText[o.doa.status]||"Submitted."}</div>
                       {o.doa.note&&<div style={{fontSize:11.5,color:C.text,marginTop:6,lineHeight:1.5}}><b>Note from store:</b> {o.doa.note}</div>}
                       {(o.doa.status==="Requested"||o.doa.status==="Under Review")&&(
                         <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${orderId(o.id)} — here is my unboxing video.`))}
-                          style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>💬 Send video on WhatsApp</button>
+                          style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>💬 Send video on WhatsApp</button>
                       )}
                     </div>
                   ):doaOpen===o.id?(
-                    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px"}}>
-                      <div style={{fontSize:12.5,fontWeight:800,color:"#9a3412",marginBottom:6}}>Report Dead on Arrival (DOA)</div>
-                      <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.6,marginBottom:10}}>If a fish arrived dead, send us ONE clear, unedited unboxing video (starting from the sealed package) on WhatsApp within 2 hours of delivery. We'll review it against the Live Arrival Guarantee and, if approved, make it right <b>one time</b> — a replacement, refund to your original account, or reward coins (your choice, up to the fish's value). If that fish is unavailable, we may offer an equal-value substitute.</div>
-                      <div style={{fontSize:11,fontWeight:700,color:"#9a3412",marginBottom:6}}>Preferred resolution</div>
+                    <div style={{background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:12,padding:"13px"}}>
+                      <div style={{fontSize:12.5,fontWeight:800,color:"#fdba74",marginBottom:6}}>Report Dead on Arrival (DOA)</div>
+                      <div style={{fontSize:11.5,color:"#fdba74",lineHeight:1.6,marginBottom:10}}>If a fish arrived dead, send us ONE clear, unedited unboxing video (starting from the sealed package) on WhatsApp within 2 hours of delivery. We'll review it against the Live Arrival Guarantee and, if approved, make it right <b>one time</b> — a replacement, refund to your original account, or reward coins (your choice, up to the fish's value). If that fish is unavailable, we may offer an equal-value substitute.</div>
+                      <div style={{fontSize:11,fontWeight:700,color:"#fdba74",marginBottom:6}}>Preferred resolution</div>
                       <div style={{display:"flex",gap:6,marginBottom:10}}>
                         {[["replacement","🐟 Replace"],["refund","💸 Refund"],["coins","🪙 Coins"]].map(([k,l])=>(
                           <button key={k} type="button" className="press" onClick={()=>setDoaReso(k)}
-                            style={{flex:1,padding:"8px 4px",borderRadius:9,border:`1.5px solid ${doaReso===k?"#9a3412":"#fed7aa"}`,background:doaReso===k?"#9a3412":"white",color:doaReso===k?"white":"#9a3412",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{l}</button>
+                            style={{flex:1,padding:"8px 4px",borderRadius:9,border:`1.5px solid ${doaReso===k?"#fdba74":"rgba(251,146,60,0.30)"}`,background:doaReso===k?"#fdba74":"white",color:doaReso===k?"white":"#fdba74",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>{l}</button>
                         ))}
                       </div>
                       <div style={{display:"flex",gap:8}}>
                         <button className="press" onClick={()=>{ openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${orderId(o.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`)); onReportDoa&&onReportDoa(o,{resolution:doaReso}); setDoaOpen(null); }}
-                          style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>💬 Share video on WhatsApp</button>
+                          style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>💬 Share video on WhatsApp</button>
                         <button className="press" onClick={()=>setDoaOpen(null)}
-                          style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
+                          style={{background:C.card,color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Cancel</button>
                       </div>
                     </div>
                   ):(
                     <button className="press" onClick={()=>setDoaOpen(o.id)}
-                      style={{background:"none",border:"none",padding:0,color:C.textSub,fontSize:11,fontWeight:600,fontFamily:"'Nunito',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
+                      style={{background:"none",border:"none",padding:0,color:C.textSub,fontSize:11,fontWeight:600,fontFamily:"'Outfit',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
                       Received a fish Dead on Arrival? Report DOA →
                     </button>
                   )}
@@ -3553,6 +3560,49 @@ function productExpectsImage(p){
   if(!p) return false;
   if(Array.isArray(p.media) && p.media.some(m=>m && m.type!=="video")) return true;
   return !!p.imageUrl;
+}
+
+/* Interactive reef background — drifting bioluminescent bubbles that react to touch/cursor.
+   Fixed full-viewport canvas behind the app; pointer-events:none so taps pass through to the UI.
+   Listens on window so it reacts to touches anywhere without blocking them. Honors reduced-motion. */
+function ReefBackground(){
+  const ref=useRef(null);
+  useEffect(()=>{
+    const cv=ref.current; if(!cv) return;
+    const ctx=cv.getContext("2d"); if(!ctx) return;
+    const dpr=Math.min(2,window.devicePixelRatio||1);
+    const reduce=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    let w=0,h=0,raf=0,bubbles=[];
+    const pointer={x:-9999,y:-9999};
+    const N=()=> (window.innerWidth<700?26:window.innerWidth<1100?40:56);
+    const spawn=(fromBottom)=>({x:Math.random()*w, y:fromBottom?h+Math.random()*40:Math.random()*h, r:1+Math.random()*4.5, s:0.15+Math.random()*0.7, drift:(Math.random()-0.5)*0.4, o:0.12+Math.random()*0.4});
+    const resize=()=>{ w=window.innerWidth; h=window.innerHeight; cv.width=w*dpr; cv.height=h*dpr; cv.style.width=w+"px"; cv.style.height=h+"px"; ctx.setTransform(dpr,0,0,dpr,0,0); };
+    const init=()=>{ resize(); bubbles=Array.from({length:N()},()=>spawn(false)); };
+    const paintBubble=(b)=>{ ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,6.2832); ctx.fillStyle="rgba(125,211,252,"+b.o+")"; ctx.fill(); };
+    const draw=()=>{
+      ctx.clearRect(0,0,w,h);
+      if(pointer.x>0){ const g=ctx.createRadialGradient(pointer.x,pointer.y,0,pointer.x,pointer.y,170); g.addColorStop(0,"rgba(56,189,248,0.12)"); g.addColorStop(1,"rgba(56,189,248,0)"); ctx.fillStyle=g; ctx.fillRect(0,0,w,h); }
+      for(const b of bubbles){
+        b.y-=b.s; b.x+=b.drift+Math.sin(b.y*0.012)*0.25;
+        if(pointer.x>0){ const dx=b.x-pointer.x, dy=b.y-pointer.y, d2=dx*dx+dy*dy; if(d2<15000){ const d=Math.sqrt(d2)||1; const f=(1-d/123)*1.6; b.x+=dx/d*f; b.y+=dy/d*f; } }
+        if(b.y<-12||b.x<-20||b.x>w+20) Object.assign(b,spawn(true));
+        paintBubble(b);
+      }
+      raf=requestAnimationFrame(draw);
+    };
+    init();
+    if(reduce){ ctx.clearRect(0,0,w,h); bubbles.forEach(paintBubble); }
+    else draw();
+    const move=(e)=>{ const t=(e.touches&&e.touches[0])||e; if(t&&t.clientX!=null){ pointer.x=t.clientX; pointer.y=t.clientY; } };
+    const clear=()=>{ pointer.x=-9999; pointer.y=-9999; };
+    window.addEventListener("pointermove",move,{passive:true});
+    window.addEventListener("touchmove",move,{passive:true});
+    window.addEventListener("touchend",clear,{passive:true});
+    window.addEventListener("mouseleave",clear,{passive:true});
+    window.addEventListener("resize",init);
+    return ()=>{ cancelAnimationFrame(raf); window.removeEventListener("pointermove",move); window.removeEventListener("touchmove",move); window.removeEventListener("touchend",clear); window.removeEventListener("mouseleave",clear); window.removeEventListener("resize",init); };
+  },[]);
+  return <canvas ref={ref} aria-hidden="true" style={{position:"fixed",inset:0,width:"100%",height:"100%",zIndex:0,pointerEvents:"none",background:"radial-gradient(125% 80% at 50% 0%,#072530 0%,#040a15 58%)"}}/>;
 }
 
 /* Shimmer skeleton grid — shown on a cold first load until product data hydrates */
@@ -3585,7 +3635,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   const Heart = onFav ? (
     <button className="press" onClick={e=>{e.stopPropagation();onFav(p);}} aria-label="Save"
       style={{position:"absolute",top:8,right:8,width:30,height:30,borderRadius:"50%",border:"none",background:"rgba(255,255,255,.9)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,.18)"}}>
-      <span key={isFav?"f":"e"} className={isFav?"heart-pop":""} style={{fontSize:16,lineHeight:1,color:isFav?C.coral:"#9ca3af"}}>{isFav?"♥":"♡"}</span>
+      <span key={isFav?"f":"e"} className={isFav?"heart-pop":""} style={{fontSize:16,lineHeight:1,color:isFav?C.coral:"#475569"}}>{isFav?"♥":"♡"}</span>
     </button>
   ) : null;
   const ShareBtn = (
@@ -3596,7 +3646,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   );
   return(
     <div className="lift" onClick={()=>onPress(p)}
-      style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`,cursor:"pointer"}}>
+      style={{background:"rgba(6,32,36,0.4)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderRadius:16,overflow:"hidden",border:"1px solid rgba(224,242,254,0.1)",cursor:"pointer"}}>
       <div style={{height:120,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",
         background:imgSrc?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`}}>
         {imgSrc
@@ -3618,7 +3668,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
             <div style={{fontSize:10.5,color:C.accent,fontWeight:700}}>Launching soon</div>
             <button className="press" onClick={e=>{e.stopPropagation();if(!isInterested&&onInterest)onInterest(p);}} disabled={isInterested}
-              style={{background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:10,padding:"6px 12px",fontSize:11,fontWeight:800,fontFamily:"'Nunito',sans-serif",cursor:isInterested?"default":"pointer"}}>
+              style={{background:isInterested?"rgba(52,211,153,0.12)":C.accent,color:isInterested?"#34d399":"white",border:"none",borderRadius:10,padding:"6px 12px",fontSize:11,fontWeight:800,fontFamily:"'Outfit',sans-serif",cursor:isInterested?"default":"pointer"}}>
               {isInterested?"✓ Interested":"🔔 Interested"}
             </button>
           </div>
@@ -3641,7 +3691,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
             </div>
           ) : (
             <button className="press" onClick={e=>{e.stopPropagation();if(!oos)onAdd(p,1);}} disabled={oos}
-              style={{background:oos?"#e5e7eb":C.primary,color:"white",border:"none",borderRadius:10,padding:"6px 14px",fontSize:11.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",cursor:oos?"not-allowed":"pointer"}}>
+              style={{background:oos?"#1e293b":C.coral,color:oos?C.textSub:C.bg,border:"none",borderRadius:99,padding:"6px 15px",fontSize:11,fontWeight:600,fontFamily:"'Outfit',sans-serif",textTransform:"uppercase",letterSpacing:".06em",cursor:oos?"not-allowed":"pointer"}}>
               + Add
             </button>
           )}
@@ -3680,18 +3730,18 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
         <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"46px 20px 18px",color:"white",position:"relative"}}>
           <button className="press" onClick={onClose} aria-label="Close menu"
             style={{position:"absolute",top:42,right:14,width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:18,cursor:"pointer",lineHeight:1}}>×</button>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800}}>Browse</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:800}}>Browse</div>
           <div style={{fontSize:11.5,color:"rgba(255,255,255,.8)",marginTop:2}}>Shop by category</div>
         </div>
         <div style={{padding:"12px 12px 18px"}}>
           <button className="press" onClick={()=>onSelect("All")}
-            style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderRadius:13,padding:"13px 12px",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left"}}>
+            style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderRadius:13,padding:"13px 12px",cursor:"pointer",fontFamily:"'Outfit',sans-serif",textAlign:"left"}}>
             <span style={{fontSize:22,width:28,textAlign:"center"}}>🌊</span>
             <span style={{fontSize:14.5,fontWeight:800,color:C.text}}>All Products</span>
           </button>
           {CATEGORIES.map(cat=>(
             <button key={cat} className="press" onClick={()=>onSelect(cat)}
-              style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderTop:`1px solid ${C.border}`,padding:"13px 12px",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left"}}>
+              style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderTop:`1px solid ${C.border}`,padding:"13px 12px",cursor:"pointer",fontFamily:"'Outfit',sans-serif",textAlign:"left"}}>
               <span style={{fontSize:22,width:28,textAlign:"center"}}>{CAT_META[cat].emoji}</span>
               <span style={{fontSize:14.5,fontWeight:700,color:C.text}}>{cat}</span>
               <span style={{marginLeft:"auto",color:C.textSub,fontSize:16}}>›</span>
@@ -3701,12 +3751,12 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
             <div style={{marginTop:18,paddingTop:6}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 12px",marginBottom:8}}>
                 <span style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6}}>Recent searches</span>
-                <button className="press" onClick={()=>onRecent&&onRecent(null)} style={{background:"none",border:"none",color:C.textSub,fontSize:10.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Clear</button>
+                <button className="press" onClick={()=>onRecent&&onRecent(null)} style={{background:"none",border:"none",color:C.textSub,fontSize:10.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>Clear</button>
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:7,padding:"0 12px"}}>
                 {recent.map(r=>(
                   <button key={r} className="press" onClick={()=>onRecent&&onRecent(r)}
-                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 12px",fontSize:12,fontWeight:600,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 12px",fontSize:12,fontWeight:600,color:C.text,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
                     🔍 {r}
                   </button>
                 ))}
@@ -3718,12 +3768,12 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
               <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",marginBottom:4}}>Company</div>
               {COMPANY.map(l=>(
                 <button key={l.label} className="press" onClick={()=>go(l.to)}
-                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>{l.label}</button>
+                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>{l.label}</button>
               ))}
               <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",margin:"20px 0 4px",borderTop:`1px solid ${C.border}`,paddingTop:16}}>Policies</div>
               {POLICIES.map(l=>(
                 <button key={l.label} className="press" onClick={()=>go(l.to)}
-                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>{l.label}</button>
+                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>{l.label}</button>
               ))}
             </div>
           )}
@@ -3749,14 +3799,14 @@ function PincodeChecker({settings={}}){
     <div style={{margin:"28px 0 0",background:`linear-gradient(135deg,${C.primaryDark},${C.primary})`,borderRadius:20,padding:"22px 20px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
         <span style={{fontSize:22}}>📍</span>
-        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,color:"#fff"}}>Check delivery to your area</span>
+        <span style={{fontFamily:"'Outfit',sans-serif",fontSize:17,fontWeight:800,color:"#fff"}}>Check delivery to your area</span>
       </div>
       <div style={{fontSize:12.5,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>Enter your 6-digit pincode to see if we deliver — and whether live fish reach your area.</div>
       <div style={{display:"flex",gap:8}}>
         <input value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,6));setRes(null);}}
           onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric" placeholder="e.g. 600001"
           style={{flex:1,borderRadius:12,border:"none",padding:"13px 14px",fontSize:15,outline:"none",letterSpacing:2,fontFamily:PRICE_FONT,minWidth:0}}/>
-        <button className="press" onClick={check} style={{background:"#fff",color:C.primary,border:"none",borderRadius:12,padding:"0 20px",fontSize:14,fontWeight:800,fontFamily:"'Nunito',sans-serif",flexShrink:0,cursor:"pointer"}}>Check</button>
+        <button className="press" onClick={check} style={{background:C.card,color:C.primary,border:"none",borderRadius:12,padding:"0 20px",fontSize:14,fontWeight:800,fontFamily:"'Outfit',sans-serif",flexShrink:0,cursor:"pointer"}}>Check</button>
       </div>
       {res&&(
         <div style={{marginTop:14,background:"rgba(255,255,255,.96)",borderRadius:14,padding:"13px 15px"}}>
@@ -3767,7 +3817,7 @@ function PincodeChecker({settings={}}){
             {res.live?(
               <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.5}}>🐠 Live fish, plants &amp; accessories — all available, with our Live Arrival Guarantee.</div>
             ):(
-              <div style={{fontSize:12.5,color:"#b45309",lineHeight:1.5,fontWeight:600}}>📦 Accessories, food &amp; plants ship here. Live fish aren't delivered to this region yet — for their safety we ship live stock only within Tamil Nadu &amp; South India.</div>
+              <div style={{fontSize:12.5,color:"#fbbf24",lineHeight:1.5,fontWeight:600}}>📦 Accessories, food &amp; plants ship here. Live fish aren't delivered to this region yet — for their safety we ship live stock only within Tamil Nadu &amp; South India.</div>
             )}
           </>)}
         </div>
@@ -3784,18 +3834,18 @@ function FoodReorderBanner({orders,products,addToCart,nav}){
   const reorder=()=>{ if(inStock){ addToCart(due.product,1); nav("cart"); } else if(due.product){ nav("detail",due.product); } };
   const dismiss=()=>{ try{ localStorage.setItem("nemo-reorder-dismiss",due.key); }catch{} setDismissed(true); };
   return(
-    <div style={{marginBottom:22,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:18,padding:"14px 30px 14px 16px",display:"flex",alignItems:"center",gap:13,position:"relative"}}>
+    <div style={{marginBottom:22,background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:18,padding:"14px 30px 14px 16px",display:"flex",alignItems:"center",gap:13,position:"relative"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"#ffedd5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>🥣</div>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14.5,fontWeight:800,color:"#9a3412",lineHeight:1.2}}>Running low on fish food?</div>
-        <div style={{fontSize:11.5,color:"#9a3412",opacity:.85,marginTop:2,lineHeight:1.4}}>You bought {due.item.name} about {due.ageDays} days ago — keep your fish well-fed.</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:14.5,fontWeight:800,color:"#fdba74",lineHeight:1.2}}>Running low on fish food?</div>
+        <div style={{fontSize:11.5,color:"#fdba74",opacity:.85,marginTop:2,lineHeight:1.4}}>You bought {due.item.name} about {due.ageDays} days ago — keep your fish well-fed.</div>
       </div>
       <button className="press" onClick={reorder}
-        style={{flexShrink:0,background:C.coral,color:"white",border:"none",borderRadius:11,padding:"10px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+        style={{flexShrink:0,background:C.coral,color:"white",border:"none",borderRadius:11,padding:"10px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>
         {inStock?"Reorder":"View"}
       </button>
       <button className="press" onClick={dismiss} aria-label="Dismiss"
-        style={{position:"absolute",top:6,right:8,background:"none",border:"none",color:"#9a3412",opacity:.5,fontSize:16,cursor:"pointer",lineHeight:1,padding:4}}>×</button>
+        style={{position:"absolute",top:6,right:8,background:"none",border:"none",color:"#fdba74",opacity:.5,fontSize:16,cursor:"pointer",lineHeight:1,padding:4}}>×</button>
     </div>
   );
 }
@@ -3824,7 +3874,7 @@ function DoaInsights({orders=[]}){
   const [open,setOpen]=useState(false);
   if(data.total===0) return null;
   const overall=data.total?((data.doa/data.total)*100):0;
-  const rateColor=r=>r>=20?"#dc2626":r>=10?"#c2410c":"#15803d";
+  const rateColor=r=>r>=20?"#dc2626":r>=10?"#c2410c":"#34d399";
   const rows=(map,{onlyDoa=false,sortByRate=false}={})=>{
     let arr=Object.entries(map).map(([k,v])=>({k,...v,rate:v.d?(v.doa/v.d)*100:0}));
     if(onlyDoa) arr=arr.filter(x=>x.doa>0);
@@ -3852,14 +3902,14 @@ function DoaInsights({orders=[]}){
       <button className="press" onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left"}}>
         <span style={{fontSize:18}}>🩺</span>
         <div style={{flex:1}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>DOA Insights</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>DOA Insights</div>
           <div style={{fontSize:11,color:C.textSub,marginTop:1}}>{data.doa} DOA of {data.total} delivered live-fish orders</div>
         </div>
         <span style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,color:rateColor(overall)}}>{overall.toFixed(1)}%</span>
         <span style={{fontSize:13,color:C.textSub,marginLeft:6}}>{open?"▲":"▼"}</span>
       </button>
       {open&&(data.doa===0?(
-        <div style={{marginTop:12,fontSize:12,color:"#15803d",fontWeight:600,background:"#ecfdf5",borderRadius:10,padding:"10px 12px"}}>✓ No DOA reported yet — your fish are arriving safe!</div>
+        <div style={{marginTop:12,fontSize:12,color:"#34d399",fontWeight:600,background:"rgba(52,211,153,0.12)",borderRadius:10,padding:"10px 12px"}}>✓ No DOA reported yet — your fish are arriving safe!</div>
       ):(
         <div>
           <Section title="By species (most losses)" map={data.species} opts={{onlyDoa:true,sortByRate:true}}/>
@@ -3883,8 +3933,8 @@ function ArrivedAliveGallery({products=[]}){
   return(
     <div style={{marginBottom:26}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>🐠 Arrived Alive</span>
-        <span style={{fontSize:11,color:C.success,fontWeight:700,background:"#dcfce7",padding:"3px 9px",borderRadius:20}}>✓ Real buyer photos</span>
+        <span style={{fontFamily:"'Outfit',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>🐠 Arrived Alive</span>
+        <span style={{fontSize:11,color:C.success,fontWeight:700,background:"rgba(52,211,153,0.12)",padding:"3px 9px",borderRadius:20}}>✓ Real buyer photos</span>
       </div>
       <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.45}}>Unboxing photos shared by verified customers — see how healthy our fish arrive.</div>
       <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6}}>
@@ -3907,7 +3957,7 @@ function ArrivedAliveGallery({products=[]}){
         <div onClick={()=>setZoom(null)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:9000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
           <img src={zoom.photo} alt="" style={{maxWidth:"100%",maxHeight:"72vh",objectFit:"contain",borderRadius:12}}/>
           <div style={{marginTop:14,color:"white",textAlign:"center"}}>
-            <div style={{fontWeight:800,fontSize:15}}>🐠 {zoom.name} <span style={{fontSize:11,fontWeight:700,color:"#86efac",marginLeft:6}}>✓ Verified buyer</span></div>
+            <div style={{fontWeight:800,fontSize:15}}>🐠 {zoom.name} <span style={{fontSize:11,fontWeight:700,color:"rgba(52,211,153,0.35)",marginLeft:6}}>✓ Verified buyer</span></div>
             {nameFor(zoom.pid)&&<div style={{fontSize:12,opacity:.8,marginTop:3}}>{nameFor(zoom.pid)}</div>}
           </div>
           <button className="press" onClick={()=>setZoom(null)} style={{position:"absolute",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22,cursor:"pointer"}}>×</button>
@@ -3949,8 +3999,14 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         onRecent={handleRecent}/>
       <WalletModal open={walletOpen} onClose={()=>setWalletOpen(false)} points={walletPts} user={user} settings={settings}/>
       {/* Hero */}
-      <div className="home-hero" style={{background:`linear-gradient(165deg,${C.primaryDark} 0%,${C.primary} 55%,${C.accent} 100%)`,
+      <div className="home-hero" style={{background:"linear-gradient(165deg,#040a15 0%,#062024 60%,#04111a 100%)",
         padding:"42px 22px 30px",borderRadius:"0 0 32px 32px",position:"relative",overflow:"hidden"}}>
+        {settings.heroVideo&&(
+          <video src={settings.heroVideo} autoPlay loop muted playsInline preload="auto" aria-hidden="true"
+            style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:.5,pointerEvents:"none"}}/>
+        )}
+        {/* Readability scrim so hero text stays crisp over video/gradient */}
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(4,10,21,.35) 0%,rgba(4,10,21,.82) 100%)",pointerEvents:"none"}}/>
         <div className="aurora-layer"/>
         <div style={{position:"absolute",top:-50,right:-40,width:180,height:180,borderRadius:"50%",border:"2px solid rgba(255,255,255,.08)"}}/>
         <div style={{position:"absolute",top:40,right:50,width:70,height:70,borderRadius:"50%",border:"2px solid rgba(255,255,255,.1)"}}/>
@@ -3959,22 +4015,22 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Hamburger — opens category drawer */}
         <button className="press home-hero-chrome" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
           style={{position:"absolute",top:46,left:16,width:38,height:38,borderRadius:12,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",backdropFilter:"blur(8px)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,cursor:"pointer",zIndex:3}}>
-          <span style={{width:17,height:2,background:"white",borderRadius:2}}/>
-          <span style={{width:17,height:2,background:"white",borderRadius:2}}/>
-          <span style={{width:17,height:2,background:"white",borderRadius:2}}/>
+          <span style={{width:17,height:2,background:C.card,borderRadius:2}}/>
+          <span style={{width:17,height:2,background:C.card,borderRadius:2}}/>
+          <span style={{width:17,height:2,background:C.card,borderRadius:2}}/>
         </button>
         {/* Account chip */}
         <div className="home-hero-chrome" style={{position:"absolute",top:46,right:16,display:"flex",alignItems:"center",gap:8}}>
           {user&&settings.loyaltyEnabled!==false&&(
             <button className="press" onClick={()=>setWalletOpen(true)} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your coins & history"}
-              style={{position:"relative",display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",borderRadius:30,padding:"7px 12px",color:"white",fontFamily:"'Nunito',sans-serif",backdropFilter:"blur(8px)",cursor:"pointer"}}>
+              style={{position:"relative",display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",borderRadius:30,padding:"7px 12px",color:"white",fontFamily:"'Outfit',sans-serif",backdropFilter:"blur(8px)",cursor:"pointer"}}>
               <span style={{fontSize:14,lineHeight:1}}>👛</span>
-              <span style={{fontSize:12.5,fontWeight:800,fontFamily:"'Baloo 2',sans-serif"}}>{walletPts}</span>
+              <span style={{fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>{walletPts}</span>
               {walletWarn&&<span style={{position:"absolute",top:-5,right:-4,minWidth:16,height:16,padding:"0 3px",borderRadius:9,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid rgba(13,90,94,.9)"}}>⏳</span>}
             </button>
           )}
           <button className="press" onClick={()=>nav("orders")}
-            style={{display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",borderRadius:30,padding:"6px 12px 6px 6px",color:"white",fontFamily:"'Nunito',sans-serif",backdropFilter:"blur(8px)",cursor:"pointer"}}>
+            style={{display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.28)",borderRadius:30,padding:"6px 12px 6px 6px",color:"white",fontFamily:"'Outfit',sans-serif",backdropFilter:"blur(8px)",cursor:"pointer"}}>
             <span style={{width:26,height:26,borderRadius:"50%",background:"rgba(255,255,255,.9)",color:C.primary,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>
               {user?(user.name||"U").charAt(0).toUpperCase():"👤"}
             </span>
@@ -3993,12 +4049,12 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Browse categories — opens the left-slide category sidebar (icon only; shown on desktop, just above the quote). On mobile the top-left hamburger already does this. */}
         <button className="press hero-browse" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
           style={{display:"none",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:4,width:46,height:46,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.3)",backdropFilter:"blur(8px)",borderRadius:13,color:"white",cursor:"pointer",marginBottom:18}}>
-          <span style={{width:18,height:2,background:"white",borderRadius:2}}/>
-          <span style={{width:18,height:2,background:"white",borderRadius:2}}/>
-          <span style={{width:18,height:2,background:"white",borderRadius:2}}/>
+          <span style={{width:18,height:2,background:C.card,borderRadius:2}}/>
+          <span style={{width:18,height:2,background:C.card,borderRadius:2}}/>
+          <span style={{width:18,height:2,background:C.card,borderRadius:2}}/>
         </button>
         {/* Tagline */}
-        <div className="hero-tagline" style={{fontFamily:"'Baloo 2',sans-serif",fontSize:27,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:6,textWrap:"balance",textAlign:"center"}}>
+        <div className="hero-tagline" style={{fontFamily:"'Outfit',sans-serif",fontSize:27,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:6,textWrap:"balance",textAlign:"center"}}>
           {settings.heroHeadline||"Bring Colour to Your Life"}
         </div>
         <div className="hero-sub" style={{fontSize:13,color:"rgba(255,255,255,.78)",marginBottom:0,textAlign:"center"}}>
@@ -4021,7 +4077,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           )}
           {query&&(
             <button onClick={()=>{setSuggOpen(false);nav("shop");}} className="press"
-              style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 13px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Go</button>
+              style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 13px",fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>Go</button>
           )}
           {/* Live search suggestions — tap a match to jump straight to the product */}
           {suggOpen&&query.trim()&&suggestions.length>0&&(
@@ -4045,7 +4101,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                 );
               })}
               <button className="press" onMouseDown={e=>e.preventDefault()} onClick={()=>{setSuggOpen(false);nav("shop");}}
-                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",padding:"11px 12px",background:C.bg,border:"none",cursor:"pointer",color:C.primary,fontWeight:800,fontSize:12.5,fontFamily:"'Nunito',sans-serif"}}>
+                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",padding:"11px 12px",background:C.bg,border:"none",cursor:"pointer",color:C.primary,fontWeight:800,fontSize:12.5,fontFamily:"'Outfit',sans-serif"}}>
                 See all results for "{query.trim()}" →
               </button>
             </div>
@@ -4056,12 +4112,12 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <span style={{fontSize:11,color:C.textSub,fontWeight:700,flexShrink:0}}>Recent:</span>
             {recent.slice(0,6).map(r=>(
               <button key={r} className="press" onClick={()=>{setQuery(r);nav("shop");}}
-                style={{flexShrink:0,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:600,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer",whiteSpace:"nowrap"}}>
+                style={{flexShrink:0,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:600,color:C.text,fontFamily:"'Outfit',sans-serif",cursor:"pointer",whiteSpace:"nowrap"}}>
                 {r}
               </button>
             ))}
             <button className="press" onClick={()=>handleRecent(null)} title="Clear your recent searches"
-              style={{flexShrink:0,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.3)",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,color:"white",fontFamily:"'Nunito',sans-serif",cursor:"pointer",whiteSpace:"nowrap"}}>
+              style={{flexShrink:0,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.3)",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,color:"white",fontFamily:"'Outfit',sans-serif",cursor:"pointer",whiteSpace:"nowrap"}}>
               ✕ Clear
             </button>
           </div>
@@ -4089,7 +4145,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         <div style={{marginBottom:24}}>
           <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
             <span style={{fontSize:18}}>🕒</span>
-            <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Recently Viewed</span>
+            <span style={{fontFamily:"'Outfit',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Recently Viewed</span>
           </div>
           <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
             {recentlyViewed.map(p=>(
@@ -4109,10 +4165,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
               <span style={{display:"flex",alignItems:"center",gap:7}}>
                 <span style={{fontSize:20}}>🔥</span>
-                <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Offer Zone</span>
+                <span style={{fontFamily:"'Outfit',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Offer Zone</span>
                 <span style={{background:C.coral,color:"#fff",fontSize:10.5,fontWeight:800,padding:"2px 8px",borderRadius:20}}>{offerProducts.length}</span>
               </span>
-              <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.coral,fontWeight:700,background:"none",border:"none",fontFamily:"'Nunito',sans-serif"}}>View All →</button>
+              <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.coral,fontWeight:700,background:"none",border:"none",fontFamily:"'Outfit',sans-serif"}}>View All →</button>
             </div>
             <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               {offerProducts.map(p=>(
@@ -4129,7 +4185,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <div style={{marginBottom:26}}>
             <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
               <span style={{fontSize:18}}>✨</span>
-              <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Based on Your Searches</span>
+              <span style={{fontFamily:"'Outfit',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Based on Your Searches</span>
             </div>
             <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
               {related.map(p=>(
@@ -4146,8 +4202,8 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Featured */}
         <div style={{marginBottom:26}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-            <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Featured</span>
-            <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.accent,fontWeight:700,background:"none",border:"none",fontFamily:"'Nunito',sans-serif"}}>View All →</button>
+            <span style={{fontFamily:"'Outfit',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Featured</span>
+            <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.accent,fontWeight:700,background:"none",border:"none",fontFamily:"'Outfit',sans-serif"}}>View All →</button>
           </div>
           {!hydrated ? <SkeletonGrid n={6}/> : (
           <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -4166,9 +4222,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {Number(settings.freeDeliveryThreshold) > 0 && (
         <div style={{background:`linear-gradient(135deg,${C.accent},${C.primary})`,borderRadius:20,padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",color:"white",marginBottom:14}}>
           <div>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Free Delivery</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Free Delivery</div>
             <div style={{fontSize:12,opacity:.88,marginBottom:12}}>On orders above ₹{settings.freeDeliveryThreshold}</div>
-            <button className="press" onClick={()=>nav("shop")} style={{background:"white",color:C.primary,border:"none",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Shop Now</button>
+            <button className="press" onClick={()=>nav("shop")} style={{background:C.card,color:C.primary,border:"none",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Shop Now</button>
           </div>
           <div style={{fontSize:60,userSelect:"none"}}>🚚</div>
         </div>
@@ -4177,15 +4233,15 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Care Guides + Request */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:14}}>
           <button className="press" onClick={()=>nav("guides")}
-            style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,border:"none",borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left",color:"white"}}>
+            style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,border:"none",borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Outfit',sans-serif",textAlign:"left",color:"white"}}>
             <span style={{fontSize:28}}>📖</span>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,lineHeight:1.2}}>Care Guides</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800,lineHeight:1.2}}>Care Guides</div>
             <div style={{fontSize:11,opacity:.85,lineHeight:1.4}}>Tips &amp; guides for a healthy tank</div>
           </button>
           <button className="press" onClick={()=>nav("request")}
-            style={{background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left"}}>
+            style={{background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Outfit',sans-serif",textAlign:"left"}}>
             <span style={{fontSize:28}}>🦄</span>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.2}}>Exotic Fish or Any Product on Request</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.2}}>Exotic Fish or Any Product on Request</div>
             <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Rare fish or any product? We'll source it for you</div>
           </button>
         </div>
@@ -4203,23 +4259,23 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         <div className="home-footer" style={{margin:"28px -16px 0",background:C.card,borderTop:`3px solid ${C.primary}`,padding:"26px 18px 22px"}}>
           {/* Brand + tagline */}
           <div style={{marginBottom:22}}>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>{STORE_NAME} Aqua Store</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>{STORE_NAME} Aqua Store</div>
             <div style={{fontSize:12,color:C.textSub,marginTop:3,lineHeight:1.5,maxWidth:300}}>{settings.tagline||"Hand-picked healthy fish, live plants & quality accessories — delivered with care across India."}</div>
           </div>
 
           {/* Link columns */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"22px 16px",marginBottom:22}}>
             <div>
-              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:8}}>Shop</div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:8}}>Shop</div>
               {CATEGORIES.map(cat=>(
                 <button key={cat} className="press" onClick={()=>{setCategory(cat);nav("shop");}}
-                  style={{display:"flex",alignItems:"center",gap:7,background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Nunito',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
+                  style={{display:"flex",alignItems:"center",gap:7,background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Outfit',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
                   <span style={{fontSize:14}}>{CAT_META[cat].emoji}</span>{cat}
                 </button>
               ))}
             </div>
             <div>
-              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:8}}>Company</div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:8}}>Company</div>
               {[
                 {label:"About Us",to:"about"},
                 {label:"Care Guides",to:"guides"},
@@ -4227,11 +4283,11 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                 {label:"Track My Orders",to:"orders"},
               ].map(l=>(
                 <button key={l.label} className="press" onClick={()=>nav(l.to)}
-                  style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Nunito',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
+                  style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Outfit',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
                   {l.label}
                 </button>
               ))}
-              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,margin:"14px 0 8px"}}>Policies</div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,margin:"14px 0 8px"}}>Policies</div>
               {[
                 {label:"Live Guarantee",to:"policy-guarantee"},
                 {label:"Returns & Refunds",to:"policy-returns"},
@@ -4239,7 +4295,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                 {label:"Privacy Policy",to:"policy-privacy"},
               ].map(l=>(
                 <button key={l.label} className="press" onClick={()=>nav(l.to)}
-                  style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Nunito',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
+                  style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Outfit',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
                   {l.label}
                 </button>
               ))}
@@ -4248,7 +4304,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
           {/* Contact */}
           <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18,marginBottom:18}}>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Contact Us</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Contact Us</div>
             {settings.storeAddress&&(
               <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}>
                 <span>📍</span><span>{settings.storeAddress}</span>
@@ -4272,7 +4328,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           {/* Follow us */}
           {(settings.instagramUrl||settings.facebookUrl||settings.ownerWhatsapp)&&(
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18,marginBottom:18}}>
-              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Follow Us</div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Follow Us</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
                 {settings.instagramUrl&&(
                   <a href={settings.instagramUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#c13584",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>📷 Instagram</a>
@@ -4289,7 +4345,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
           {/* Secure payment */}
           <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18,marginBottom:18}}>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Secure Payment</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Secure Payment</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
               {["UPI","VISA","Mastercard","RuPay"].map(b=>(
                 <span key={b} style={{fontSize:11,fontWeight:800,letterSpacing:.3,color:C.textSub,background:C.bg||"#f1f7f7",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 11px"}}>{b}</span>
@@ -4351,7 +4407,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
     <div className="slide-up">
       <div className="vh-head shop-bar" style={{background:C.card,padding:"52px 14px 10px",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:20}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text,flexShrink:0}}>Shop</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:800,color:C.text,flexShrink:0}}>Shop</div>
           <div style={{display:"flex",alignItems:"center",background:C.bg,borderRadius:12,padding:"8px 12px",gap:8,flex:1,minWidth:0,border:`1.5px solid ${C.border}`}}>
             <span style={{fontSize:15}}>🔍</span>
             <input type="text" placeholder="Search…" value={query} onChange={e=>setQuery(e.target.value)}
@@ -4359,7 +4415,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             {query&&<button className="press" onClick={()=>setQuery("")} style={{background:"none",border:"none",fontSize:15,color:C.textSub}}>✕</button>}
           </div>
           <button className="press" onClick={()=>setSheet(true)}
-            style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,background:activeFilters>0?C.primary:C.card,border:`1.5px solid ${activeFilters>0?C.primary:C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:activeFilters>0?"white":C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+            style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,background:activeFilters>0?C.primary:C.card,border:`1.5px solid ${activeFilters>0?C.primary:C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:activeFilters>0?"white":C.text,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
             Filter &amp; Sort{activeFilters>0&&<span style={{background:"rgba(255,255,255,.25)",borderRadius:10,padding:"1px 6px",fontSize:10}}>{activeFilters}</span>}
           </button>
@@ -4371,12 +4427,12 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
           <div style={{marginBottom:16}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:12,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Recent searches</span>
-              <button className="press" onClick={()=>{clearRecentSearches();setRecent([]);}} style={{background:"none",border:"none",color:C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Clear</button>
+              <button className="press" onClick={()=>{clearRecentSearches();setRecent([]);}} style={{background:"none",border:"none",color:C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>Clear</button>
             </div>
             <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
               {recent.map(r=>(
                 <button key={r} className="press" onClick={()=>setQuery(r)}
-                  style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"7px 13px",fontSize:12.5,fontWeight:600,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+                  style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"7px 13px",fontSize:12.5,fontWeight:600,color:C.text,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
                   🔍 {r}
                 </button>
               ))}
@@ -4413,7 +4469,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             <div style={{marginTop:28}}>
               <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
                 <span style={{fontSize:18}}>✨</span>
-                <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:17,fontWeight:800,color:C.text}}>You might also like</span>
+                <span style={{fontFamily:"'Outfit',sans-serif",fontSize:17,fontWeight:800,color:C.text}}>You might also like</span>
               </div>
               <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
                 {rel.map(p=>(
@@ -4449,14 +4505,14 @@ function DeliveryEstimate({settings={}}){
       <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>🚚 Check delivery to your area</div>
       <div style={{display:"flex",gap:8}}>
         <input value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" placeholder="Enter 6-digit pincode"
-          style={{flex:1,boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13.5,outline:"none",background:"white",fontFamily:"monospace"}}/>
+          style={{flex:1,boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13.5,outline:"none",background:C.card,fontFamily:"monospace"}}/>
       </div>
       {pin.length===6&&(zone?(
-        <div style={{marginTop:9,fontSize:12,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
+        <div style={{marginTop:9,fontSize:12,color:"#34d399",background:"rgba(52,211,153,0.12)",border:"1px solid #a7f3d0",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
           ✓ Delivers to <b>{ZONE_LABELS[zone]}</b> · Estimated <b>{ETA[zone]||"3–6 days"}</b>. Live fish ship on selected days for safe transit.
         </div>
       ):(
-        <div style={{marginTop:9,fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
+        <div style={{marginTop:9,fontSize:12,color:"#fdba74",background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
           Pincode not recognised — please message us on WhatsApp to confirm delivery & timing.
         </div>
       ))}
@@ -4476,10 +4532,10 @@ function FrequentlyBought({base, products=[], addToCart, mediaCache={}, nav}){
   const total=fbt.reduce((s,x)=>s+effectivePrice(x),0)+effectivePrice(base);
   return(
     <div style={{margin:"18px 0 0"}}>
-      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>🧰 Frequently bought together</div>
+      <div style={{fontFamily:"'Outfit',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>🧰 Frequently bought together</div>
       <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch"}}>
         {fbt.map(x=>{ const img=getCardImg(x,mediaCache); const m=CAT_META[x.category]||CAT_META["Live Fish"]; return(
-          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:120,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"8px",textAlign:"left",cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
+          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:120,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"8px",textAlign:"left",cursor:"pointer",fontFamily:"'Outfit',sans-serif"}}>
             <div style={{height:74,borderRadius:9,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:6}}>
               {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:30}}>{m.emoji}</span>}
             </div>
@@ -4489,7 +4545,7 @@ function FrequentlyBought({base, products=[], addToCart, mediaCache={}, nav}){
         );})}
       </div>
       <button className="press" onClick={()=>{ fbt.forEach(x=>addToCart(x,1)); }}
-        style={{marginTop:8,width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+        style={{marginTop:8,width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>
         ＋ Add these {fbt.length} to cart
       </button>
     </div>
@@ -4502,10 +4558,10 @@ function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
   if(items.length<2) return null;
   return(
     <div style={{margin:"22px 0 0"}}>
-      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>👀 Recently viewed</div>
+      <div style={{fontFamily:"'Outfit',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>👀 Recently viewed</div>
       <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch"}}>
         {items.map(x=>{ const img=getCardImg(x,mediaCache); const m=CAT_META[x.category]||CAT_META["Live Fish"]; return(
-          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:108,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"7px",textAlign:"left",cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
+          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:108,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"7px",textAlign:"left",cursor:"pointer",fontFamily:"'Outfit',sans-serif"}}>
             <div style={{height:66,borderRadius:9,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:5}}>
               {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:26}}>{m.emoji}</span>}
             </div>
@@ -4618,14 +4674,14 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
           <div style={{flex:1,paddingRight:12}}>
             <div style={{fontSize:10,color:C.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:5}}>{p.category}</div>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:23,fontWeight:800,color:C.text,lineHeight:1.2}}>{p.name}</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:23,fontWeight:800,color:C.text,lineHeight:1.2}}>{p.name}</div>
             <button className="press" onClick={()=>shareProduct(p)}
-              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:C.accentLight,border:`1px solid ${C.border}`,color:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:C.accentLight,border:`1px solid ${C.border}`,color:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zM18 22a3 3 0 100-6 3 3 0 000 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               Share
             </button>
             <button className="press" onClick={()=>onFav&&onFav(p)}
-              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,marginLeft:8,background:isFav?"#fff1ee":C.accentLight,border:`1px solid ${isFav?C.coral:C.border}`,color:isFav?C.coral:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,marginLeft:8,background:isFav?"#fff1ee":C.accentLight,border:`1px solid ${isFav?C.coral:C.border}`,color:isFav?C.coral:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
               <span style={{fontSize:13,lineHeight:1}}>{isFav?"♥":"♡"}</span>{isFav?"Saved":"Save"}
             </button>
           </div>
@@ -4643,7 +4699,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               <ReviewStars value={Math.round(avgRating)} size={16}/>
               <span style={{fontSize:14,fontWeight:700,color:C.text}}>{avgRating.toFixed(1)}</span>
               <button className="press" onClick={()=>setTab("reviews")}
-                style={{fontSize:12,color:C.textSub,background:"none",border:"none",fontFamily:"'Nunito',sans-serif",textDecoration:"underline"}}>
+                style={{fontSize:12,color:C.textSub,background:"none",border:"none",fontFamily:"'Outfit',sans-serif",textDecoration:"underline"}}>
                 ({revCount} review{revCount!==1?"s":""})
               </button>
             </>
@@ -4669,7 +4725,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         <div style={{display:"flex",gap:4,marginBottom:18,background:C.card,borderRadius:14,padding:4,border:`1px solid ${C.border}`}}>
           {["desc","reviews"].map(t=>(
             <button key={t} className="press" onClick={()=>setTab(t)}
-              style={{flex:1,padding:"9px 8px",borderRadius:11,border:"none",background:tab===t?C.primary:"transparent",color:tab===t?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",transition:"all .2s",position:"relative"}}>
+              style={{flex:1,padding:"9px 8px",borderRadius:11,border:"none",background:tab===t?C.primary:"transparent",color:tab===t?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",transition:"all .2s",position:"relative"}}>
               {t==="desc"?"Description":`Reviews`}
               {t==="reviews"&&reviews.length>0&&<span style={{marginLeft:5,background:tab==="reviews"?"rgba(255,255,255,.25)":C.primary,color:"white",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:800}}>
                 {reviews.length}
@@ -4697,7 +4753,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               if(!rows.length) return null;
               return(
                 <div style={{marginTop:18,background:"#f0fbfc",borderRadius:16,padding:"14px 16px",border:`1px solid ${C.border}`}}>
-                  <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:10}}>🐠 Care Guide</div>
+                  <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:10}}>🐠 Care Guide</div>
                   <div style={{display:"flex",flexDirection:"column",gap:0}}>
                     {rows.map(([icon,label,val],i)=>(
                       <div key={label} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 0",borderTop:i?`1px solid ${C.border}`:"none"}}>
@@ -4719,11 +4775,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <div className="fade-in">
             {/* Success banner */}
             {submitted&&(
-              <div style={{background:"#dcfce7",borderRadius:14,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,border:"1px solid #86efac"}}>
+              <div style={{background:"rgba(52,211,153,0.12)",borderRadius:14,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,border:"1px solid #86efac"}}>
                 <span style={{fontSize:20}}>🎉</span>
                 <div>
-                  <div style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Review submitted!</div>
-                  <div style={{fontSize:11,color:"#166534"}}>Thank you for sharing your feedback.</div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#34d399"}}>Review submitted!</div>
+                  <div style={{fontSize:11,color:"#34d399"}}>Thank you for sharing your feedback.</div>
                 </div>
               </div>
             )}
@@ -4735,7 +4791,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             {!showForm&&!submitted&&(
               canReview ? (
                 <button className="press" onClick={()=>setShowForm(true)}
-                  style={{width:"100%",background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:16,padding:"14px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"center",gap:10,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+                  style={{width:"100%",background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:16,padding:"14px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"center",gap:10,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
                   <span style={{fontSize:20}}>✏️</span>
                   <span style={{fontSize:14,fontWeight:700,color:C.accent}}>Write a Review</span>
                 </button>
@@ -4747,7 +4803,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                     <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5}}>
                       {user ? "Review unlocks once you've ordered & received this product." : "Sign in and purchase this product to leave a review."}
                     </div>
-                    {!user&&<button className="press" onClick={goAuth} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 14px",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Sign in</button>}
+                    {!user&&<button className="press" onClick={goAuth} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 14px",fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Sign in</button>}
                   </div>
                 </div>
               )
@@ -4777,7 +4833,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                       <div>
                         <div style={{fontSize:13,fontWeight:700,color:C.text,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                           {r.name}
-                          {r.verified!==false&&<span style={{fontSize:9,fontWeight:800,color:C.success,background:"#dcfce7",padding:"2px 7px",borderRadius:20,display:"inline-flex",alignItems:"center",gap:3}}>✓ Verified Buyer</span>}
+                          {r.verified!==false&&<span style={{fontSize:9,fontWeight:800,color:C.success,background:"rgba(52,211,153,0.12)",padding:"2px 7px",borderRadius:20,display:"inline-flex",alignItems:"center",gap:3}}>✓ Verified Buyer</span>}
                         </div>
                         <div style={{fontSize:10,color:C.textSub}}>{new Date(r.date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}</div>
                       </div>
@@ -4810,7 +4866,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             <div style={{marginTop:26}}>
               <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
                 <span style={{fontSize:18}}>🧩</span>
-                <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Goes well with</span>
+                <span style={{fontFamily:"'Outfit',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Goes well with</span>
               </div>
               <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.45}}>{p.category==="Live Fish"?"Keep your new fish healthy — food, care & tank essentials.":"Pairs nicely with these."}</div>
               <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
@@ -4872,7 +4928,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         background:"rgba(255,255,255,.97)",backdropFilter:"blur(16px)",padding:"14px 20px",borderTop:`1px solid ${C.border}`,display:"flex",gap:12,alignItems:"center",zIndex:50}}>
         {p.comingSoon ? (
           <button className="press" onClick={()=>{if(!isInterested&&onInterest)onInterest(p);}} disabled={isInterested}
-            style={{flex:1,background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:14,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+            style={{flex:1,background:isInterested?"rgba(52,211,153,0.12)":C.accent,color:isInterested?"#34d399":"white",border:"none",borderRadius:14,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>
             {isInterested?"✓ We'll notify you when it's in!":"🔔 Coming Soon — I'm Interested"}
           </button>
         ) : inCart>0 ? (<>
@@ -4883,7 +4939,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             <button className="press" onClick={()=>{if(inCart<maxQty)addToCart(p,1,selVar);}} disabled={inCart>=maxQty} style={{background:"none",border:"none",fontSize:20,color:inCart>=maxQty?C.textSub:C.primary,fontWeight:700,lineHeight:1,opacity:inCart>=maxQty?.5:1}}>+</button>
           </div>
           <button className="press" onClick={()=>nav("cart")}
-            style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:14,padding:"14px 12px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+            style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:14,padding:"14px 12px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
             ✓ In Cart · View Cart →
           </button>
         </>) : (<>
@@ -4893,7 +4949,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <button className="press" onClick={()=>setQty(q=>Math.min(maxQty,q+1))} disabled={qty>=maxQty} style={{background:"none",border:"none",fontSize:20,color:qty>=maxQty?C.textSub:C.primary,fontWeight:700,lineHeight:1,opacity:qty>=maxQty?.5:1}}>+</button>
         </div>
         <button className="press" onClick={()=>{if(!oos){addToCart(p,qty,selVar);}}} disabled={oos}
-          style={{flex:1,background:oos?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"14px 12px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",transition:"background .25s"}}>
+          style={{flex:1,background:oos?"#1e293b":C.coral,color:oos?C.textSub:C.bg,border:"none",borderRadius:99,padding:"14px 12px",fontSize:14,fontWeight:600,fontFamily:"'Outfit',sans-serif",textTransform:"uppercase",letterSpacing:".08em",transition:"background .25s"}}>
           {oos?"Out of Stock":`Add to Cart · ₹${unitPrice*qty}`}
         </button>
         </>)}
@@ -4917,15 +4973,15 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
   if(!cart.length)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"20px",textAlign:"center"}}>
       <div style={{fontSize:80,marginBottom:20}}>🛒</div>
-      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Cart is empty</div>
+      <div style={{fontFamily:"'Outfit',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Cart is empty</div>
       <div style={{fontSize:13,color:C.textSub,marginBottom:28}}>Browse our fish and accessories!</div>
-      <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px 32px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Start Shopping</button>
+      <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px 32px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Start Shopping</button>
     </div>
   );
   return(
     <div className="slide-up">
       <div className="vh-head dt-read" style={{padding:"52px 16px 100px"}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:20}}>My Cart ({cart.reduce((s,i)=>s+i.qty,0)})</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:20}}>My Cart ({cart.reduce((s,i)=>s+i.qty,0)})</div>
         {cart.map(item=>{
           const m=CAT_META[item.category]||CAT_META["Live Fish"];
           const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
@@ -4967,7 +5023,7 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
           const worth=Math.floor(pts*val);
           if(worth<=0) return null;
           return (
-            <div style={{background:"#ecfdf5",borderRadius:12,padding:"11px 14px",marginTop:10,fontSize:12.5,color:"#15803d",fontWeight:700,border:"1px solid #a7f3d0",display:"flex",alignItems:"center",gap:8}}>
+            <div style={{background:"rgba(52,211,153,0.12)",borderRadius:12,padding:"11px 14px",marginTop:10,fontSize:12.5,color:"#34d399",fontWeight:700,border:"1px solid #a7f3d0",display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:16}}>👛</span>
               <span>Earn ₹{worth} back in wallet points — credited when your order is delivered.</span>
             </div>
@@ -4978,7 +5034,7 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
           {hasLiveFish&&<span style={{display:"block",fontSize:11,fontWeight:500,marginTop:3,color:C.primary}}>🐠 Live fish shipping rates apply</span>}
         </div>
         <button className="press" onClick={()=>nav("checkout")}
-          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"17px 16px",fontSize:15,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          style={{width:"100%",background:C.coral,color:C.bg,border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:600,fontFamily:"'Outfit',sans-serif",textTransform:"uppercase",letterSpacing:".08em",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
           Proceed to Checkout →
         </button>
       </div>
@@ -5032,14 +5088,14 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
     <div style={{width:"100%",maxWidth:compact?"100%":360,margin:"0 auto"}}>
       {/* Countdown */}
       {deadline>0&&(
-        <div style={{background:expired?"#fee2e2":"#fff7ed",border:`1px solid ${expired?"#fca5a5":"#fed7aa"}`,borderRadius:14,padding:"12px 14px",marginBottom:14,textAlign:"center"}}>
+        <div style={{background:expired?"rgba(244,63,94,0.12)":"rgba(251,146,60,0.12)",border:`1px solid ${expired?"rgba(244,63,94,0.35)":"rgba(251,146,60,0.30)"}`,borderRadius:14,padding:"12px 14px",marginBottom:14,textAlign:"center"}}>
           {expired?(
-            <div style={{fontSize:12.5,color:"#b91c1c",fontWeight:700,lineHeight:1.5}}>⌛ Payment window closed. This order will be cancelled. Please place a new order.</div>
+            <div style={{fontSize:12.5,color:"#fb7185",fontWeight:700,lineHeight:1.5}}>⌛ Payment window closed. This order will be cancelled. Please place a new order.</div>
           ):(
             <>
-              <div style={{fontSize:11,color:"#9a3412",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>⚠ Pay within {PAY_WINDOW_MIN} minutes</div>
+              <div style={{fontSize:11,color:"#fdba74",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>⚠ Pay within {PAY_WINDOW_MIN} minutes</div>
               <div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"#c2410c",letterSpacing:1}}>{mm}:{ss}</div>
-              <div style={{fontSize:11,color:"#9a3412",marginTop:2,lineHeight:1.4}}>Orders not paid within {PAY_WINDOW_MIN} min are auto-cancelled.</div>
+              <div style={{fontSize:11,color:"#fdba74",marginTop:2,lineHeight:1.4}}>Orders not paid within {PAY_WINDOW_MIN} min are auto-cancelled.</div>
             </>
           )}
         </div>
@@ -5060,11 +5116,11 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
             </a>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.bg,borderRadius:10,padding:"10px 14px",marginBottom:14}}>
               <div><div style={{fontSize:10,color:C.textSub,fontWeight:700}}>UPI ID</div><div style={{fontSize:13,fontWeight:700,color:C.text}}>{settings.upiId}</div></div>
-              <button className="press" onClick={()=>{navigator.clipboard?.writeText(settings.upiId);}} style={{background:C.accentLight,border:"none",color:C.primary,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Copy</button>
+              <button className="press" onClick={()=>{navigator.clipboard?.writeText(settings.upiId);}} style={{background:C.accentLight,border:"none",color:C.primary,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Copy</button>
             </div>
           </>
         ):(
-          <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:"#9a3412",lineHeight:1.5}}>⚠ Store UPI not set yet. Please contact us on WhatsApp to pay.</div>
+          <div style={{background:"rgba(251,146,60,0.12)",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:"#fdba74",lineHeight:1.5}}>⚠ Store UPI not set yet. Please contact us on WhatsApp to pay.</div>
         )}
         {settings.razorpayLink&&(
           <a className="press" href={settings.razorpayLink} target="_blank" rel="noopener"
@@ -5080,7 +5136,7 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
 
         <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5}}>Transaction / UPI Ref ID</div>
         <input value={txn} onChange={e=>{setTxn(e.target.value);setProofNote("");}} placeholder="e.g. 4198XXXXXX27"
-          style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",marginBottom:12}}/>
+          style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.card,marginBottom:12}}/>
 
         <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5}}>Payment Screenshot</div>
         {proof?(
@@ -5098,7 +5154,7 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
         {proofNote&&<div style={{fontSize:11.5,color:proofNote[0]==="⚠"?C.danger:C.success,fontWeight:600,marginBottom:8}}>{proofNote}</div>}
 
         <button className="press" onClick={submit} disabled={busy||expired}
-          style={{width:"100%",background:(busy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,fontFamily:"'Nunito',sans-serif",marginTop:6}}>
+          style={{width:"100%",background:(busy||expired)?"#475569":C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,fontFamily:"'Outfit',sans-serif",marginTop:6}}>
           {busy?"Submitting…":expired?"Payment window closed":"✓ Submit Payment & Confirm Order"}
         </button>
       </div>
@@ -5156,20 +5212,20 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
   const REASONS=["Found a better deal elsewhere","Facing technical issue on the website","Change my mind","Price issue","Others"];
   const toggle=r=>setReasons(p=>p.includes(r)?p.filter(x=>x!==r):[...p,r]);
   const overlay={position:"fixed",inset:0,background:"rgba(17,24,39,.55)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:4000};
-  const sheet={width:"100%",maxWidth:440,background:"#fff",borderRadius:"20px 20px 0 0",padding:"22px 20px calc(22px + env(safe-area-inset-bottom))",boxShadow:"0 -12px 40px rgba(0,0,0,.25)"};
+  const sheet={width:"100%",maxWidth:440,background:C.card,borderRadius:"20px 20px 0 0",padding:"22px 20px calc(22px + env(safe-area-inset-bottom))",boxShadow:"0 -12px 40px rgba(0,0,0,.25)"};
   const savingsBar=(emoji)=>savings>0?(
-    <div style={{background:"linear-gradient(90deg,#dcfce7,#bbf7d0)",borderRadius:12,padding:"10px 14px",marginBottom:18,fontSize:13,fontWeight:700,color:"#15803d",textAlign:"center"}}>{emoji} You might miss out on savings of <span style={{fontFamily:PRICE_FONT}}>₹{Math.round(savings)}</span></div>
+    <div style={{background:"linear-gradient(90deg,#dcfce7,#bbf7d0)",borderRadius:12,padding:"10px 14px",marginBottom:18,fontSize:13,fontWeight:700,color:"#34d399",textAlign:"center"}}>{emoji} You might miss out on savings of <span style={{fontFamily:PRICE_FONT}}>₹{Math.round(savings)}</span></div>
   ):null;
   return(
     <div style={overlay} onClick={onStay}>
       <div className="slide-up" style={sheet} onClick={e=>e.stopPropagation()}>
         {stage===1?(<>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:12}}>Are you sure you want to exit?</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:12}}>Are you sure you want to exit?</div>
           {savingsBar("🐠")}
-          <button className="press" onClick={()=>setStage(2)} style={{width:"100%",background:"#fff",color:C.text,border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",marginBottom:10,cursor:"pointer"}}>Yes, exit checkout</button>
-          <button className="press" onClick={onStay} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>No, continue checkout</button>
+          <button className="press" onClick={()=>setStage(2)} style={{width:"100%",background:C.card,color:C.text,border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",marginBottom:10,cursor:"pointer"}}>Yes, exit checkout</button>
+          <button className="press" onClick={onStay} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>No, continue checkout</button>
         </>):(<>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:8}}>Sorry to see you go…</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:8}}>Sorry to see you go…</div>
           {savingsBar("🚚")}
           <div style={{fontSize:13.5,fontWeight:700,color:C.text,marginBottom:12}}>What stopped you from completing your purchase?</div>
           <div style={{display:"flex",flexDirection:"column",gap:11,marginBottom:14}}>
@@ -5182,10 +5238,10 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
           </div>
           {reasons.includes("Others")&&(
             <textarea value={other} onChange={e=>setOther(e.target.value)} rows={3} placeholder="Others (please specify)"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",marginBottom:14,background:"#fff"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",marginBottom:14,background:C.card}}/>
           )}
-          <button className="press" onClick={()=>onLeave&&onLeave({reasons,other})} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Skip and exit</button>
-          <button className="press" onClick={onStay} style={{width:"100%",background:"none",color:C.textSub,border:"none",padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginTop:4,cursor:"pointer"}}>← Continue checkout instead</button>
+          <button className="press" onClick={()=>onLeave&&onLeave({reasons,other})} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>Skip and exit</button>
+          <button className="press" onClick={onStay} style={{width:"100%",background:"none",color:C.textSub,border:"none",padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif",marginTop:4,cursor:"pointer"}}>← Continue checkout instead</button>
         </>)}
       </div>
     </div>
@@ -5396,7 +5452,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     <div style={{flex:half?"1":"auto",minWidth:half?"0":"auto",marginBottom:14}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>{label}{opt&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}> (optional)</span>}</div>
       <input type={type} value={addr[key]} onChange={e=>f(key,e.target.value)} placeholder={ph}
-        style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs[key]?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+        style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs[key]?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.card}}/>
       {errs[key]&&<div style={{fontSize:11,color:C.danger,marginTop:4,fontWeight:600}}>{errs[key]}</div>}
     </div>
   );
@@ -5405,8 +5461,8 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",minHeight:"90vh",padding:"40px 18px 100px",textAlign:"center"}}>
       {submitted?(
         <>
-          <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Submitted! 🎉</div>
+          <div style={{width:80,height:80,borderRadius:"50%",background:"rgba(52,211,153,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Submitted! 🎉</div>
           {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
           <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,marginBottom:20,maxWidth:320}}>Thank you! We'll <b style={{color:C.text}}>verify your payment</b> and confirm your order within <b style={{color:C.text}}>1–2 days</b>. You can track status anytime under <b style={{color:C.text}}>Orders</b>.</div>
           {/* Care-guide reminder — tailored to what was purchased */}
@@ -5418,17 +5474,17 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               // Show the acclimatization steps inline right after payment so the customer is ready when the fish arrive.
               const steps=String(settings.acclimatizationTips||DEFAULT_SETTINGS.acclimatizationTips).split("\n").map(s=>s.replace(/^\s*\d+[.)]\s*/,"").trim()).filter(Boolean);
               return(
-                <div style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"15px 16px",marginBottom:16,textAlign:"left"}}>
+                <div style={{width:"100%",maxWidth:340,background:"rgba(52,211,153,0.12)",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"15px 16px",marginBottom:16,textAlign:"left"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                     <span style={{fontSize:22}}>🐠</span>
-                    <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14.5,fontWeight:800,color:"#065f46"}}>How to acclimatize your fish</span>
+                    <span style={{fontFamily:"'Outfit',sans-serif",fontSize:14.5,fontWeight:800,color:"#34d399"}}>How to acclimatize your fish</span>
                   </div>
-                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5,marginBottom:10}}>Save these steps for when your parcel arrives — they keep your new fish safe and stress-free.</div>
+                  <div style={{fontSize:11.5,color:"#34d399",lineHeight:1.5,marginBottom:10}}>Save these steps for when your parcel arrives — they keep your new fish safe and stress-free.</div>
                   <ol style={{margin:0,paddingLeft:18,display:"flex",flexDirection:"column",gap:6}}>
-                    {steps.map((st,i)=>(<li key={i} style={{fontSize:12.5,color:"#065f46",lineHeight:1.5}}>{st}</li>))}
+                    {steps.map((st,i)=>(<li key={i} style={{fontSize:12.5,color:"#34d399",lineHeight:1.5}}>{st}</li>))}
                   </ol>
                   <button className="press" onClick={()=>nav("guides")}
-                    style={{marginTop:12,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
+                    style={{marginTop:12,background:"none",border:"none",padding:0,color:"#34d399",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
                     📖 See full care guides →
                   </button>
                 </div>
@@ -5436,11 +5492,11 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             }
             return(
               <button className="press" onClick={()=>nav("guides")}
-                style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,textAlign:"left",cursor:"pointer"}}>
+                style={{width:"100%",maxWidth:340,background:"rgba(52,211,153,0.12)",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,textAlign:"left",cursor:"pointer"}}>
                 <span style={{fontSize:30,flexShrink:0}}>📖</span>
                 <div>
-                  <div style={{fontSize:13.5,fontWeight:800,color:"#065f46",marginBottom:2}}>Please read the Care Guide</div>
-                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5}}>Settle your new plants in correctly for healthy growth. Tap to read →</div>
+                  <div style={{fontSize:13.5,fontWeight:800,color:"#34d399",marginBottom:2}}>Please read the Care Guide</div>
+                  <div style={{fontSize:11.5,color:"#34d399",lineHeight:1.5}}>Settle your new plants in correctly for healthy growth. Tap to read →</div>
                 </div>
               </button>
             );
@@ -5473,7 +5529,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                     try{navigator.clipboard.writeText(refCode);}catch(e){}
                     try{navigator.share&&navigator.share({text:`Use my code ${refCode} at Nemo Aqua Store and get a welcome reward on your order! 🐠`});}catch(e){}
                     setReferralCopied(true);setTimeout(()=>setReferralCopied(false),2000);
-                  }} style={{background:referralCopied?"rgba(255,255,255,.9)":"rgba(255,255,255,.25)",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"7px 12px",color:referralCopied?"#7c3aed":"white",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                  }} style={{background:referralCopied?"rgba(255,255,255,.9)":"rgba(255,255,255,.25)",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"7px 12px",color:referralCopied?"#7c3aed":"white",fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
                     {referralCopied?"✓ Copied!":"Share"}
                   </button>
                 </div>
@@ -5482,22 +5538,22 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           })()}
           <div style={{display:"flex",gap:10,width:"100%",maxWidth:340}}>
             <button className="press" onClick={()=>nav("home")}
-              style={{flex:1,background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Home</button>
+              style={{flex:1,background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Home</button>
             <button className="press" onClick={()=>nav("orders")}
-              style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>View Orders</button>
+              style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>View Orders</button>
           </div>
         </>
       ):(
         <>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:4}}>Almost there — complete payment</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:4}}>Almost there — complete payment</div>
           <div style={{fontSize:12.5,color:C.textSub,marginBottom:18,maxWidth:330,lineHeight:1.5}}>Your order is reserved. Pay the full amount now &amp; submit proof to confirm it.</div>
           {placed&&<PaymentPanel order={placed} settings={settings} onSubmitPayment={submitPaymentHere} onCancelled={(o)=>{onCancelled&&onCancelled(o);}}/>}
           <button className="press" onClick={()=>nav("orders")}
-            style={{marginTop:16,background:"none",border:"none",color:C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",textDecoration:"underline"}}>
+            style={{marginTop:16,background:"none",border:"none",color:C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",textDecoration:"underline"}}>
             I'll pay later — go to Orders
           </button>
           <button className="press" onClick={()=>{ if(placed){onCancelled&&onCancelled(placed);} nav("home"); }}
-            style={{marginTop:6,background:"none",border:"none",color:C.danger,fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",textDecoration:"underline"}}>
+            style={{marginTop:6,background:"none",border:"none",color:C.danger,fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",textDecoration:"underline"}}>
             ✕ Cancel payment &amp; order
           </button>
         </>
@@ -5513,7 +5569,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
           <button className="press" onClick={()=>{ if(step!==1){ setStep(1); } else if(cart.length){ setExitAsk(true); } else { nav("cart"); } }}
             style={{background:"none",border:"none",fontSize:20,color:C.textSub}}>←</button>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>
             {step===1?"Shipping Details":"Review & Place Order"}
           </div>
         </div>
@@ -5536,14 +5592,14 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
         <div className="dt-read" style={{padding:"20px 16px 100px"}}>
           {/* Add more items — keep shopping; cart is preserved */}
           <button className="press" onClick={()=>nav("shop")}
-            style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            style={{width:"100%",background:C.card,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
             ＋ Add more items to this order
           </button>
           {/* Shipping rates info */}
           <div style={{background:C.accentLight,borderRadius:14,padding:"12px 14px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{fontSize:13,fontWeight:700,color:C.primaryDark}}>🚚 Shipping rates vary by location &amp; weight</div>
             {zone&&<div style={{fontSize:11.5,color:C.primary,fontWeight:700,marginTop:4}}>📍 Detected zone: <b>{ZONE_LABELS[zone]}</b></div>}
-            {!zone&&addr.pincode.length===6&&<div style={{fontSize:11.5,color:"#b45309",marginTop:4}}>⚠ Pincode not recognized — enter your city below and we'll confirm shipping</div>}
+            {!zone&&addr.pincode.length===6&&<div style={{fontSize:11.5,color:"#fbbf24",marginTop:4}}>⚠ Pincode not recognized — enter your city below and we'll confirm shipping</div>}
             {hasLiveFish&&(()=>{
               const r2=settings.shippingRates||DEFAULT_SHIPPING_RATES;
               const fishWt=cart.filter(i=>i.category==="Live Fish").reduce((s,i)=>{const wt=Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2;return s+wt*i.qty;},0);
@@ -5553,19 +5609,19 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             })()}
           </div>
           {liveBlocked&&(
-            <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:14,padding:"13px 15px",marginBottom:14}}>
-              <div style={{fontSize:13,fontWeight:800,color:"#b91c1c",marginBottom:3}}>🚫 Live fish not deliverable to {zone?ZONE_LABELS[zone]:"this region"}</div>
-              <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.5}}>For the safety of the fish we currently ship live stock only within <b>Tamil Nadu</b> and <b>South India</b>. Please use a delivery address in those regions, or remove the live-fish items to continue with the rest of your order.</div>
+            <div style={{background:"rgba(244,63,94,0.12)",border:"1.5px solid #fecaca",borderRadius:14,padding:"13px 15px",marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#fb7185",marginBottom:3}}>🚫 Live fish not deliverable to {zone?ZONE_LABELS[zone]:"this region"}</div>
+              <div style={{fontSize:12,color:"#fda4af",lineHeight:1.5}}>For the safety of the fish we currently ship live stock only within <b>Tamil Nadu</b> and <b>South India</b>. Please use a delivery address in those regions, or remove the live-fish items to continue with the rest of your order.</div>
             </div>
           )}
           {hasLiveFish&&(
             <>
-            <div style={{background:"#dcfce7",border:`1px solid #86efac`,borderRadius:16,padding:"14px 16px",marginBottom:12}}>
+            <div style={{background:"rgba(52,211,153,0.12)",border:`1px solid #86efac`,borderRadius:16,padding:"14px 16px",marginBottom:12}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                 <span style={{fontSize:20}}>🛡️</span>
-                <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:"#15803d"}}>Live Arrival Guarantee</span>
+                <span style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800,color:"#34d399"}}>Live Arrival Guarantee</span>
               </div>
-              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish arrives dead (DOA), share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery and we'll make it right <b>one time</b> — a replacement, store credit, or refund of the fish's value (our choice). Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
+              <div style={{fontSize:12.5,color:"#34d399",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish arrives dead (DOA), share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery and we'll make it right <b>one time</b> — a replacement, store credit, or refund of the fish's value (our choice). Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
             </div>
             </>
           )}
@@ -5585,13 +5641,13 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Delivery Notes <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <textarea value={addr.notes} onChange={e=>f("notes",e.target.value)} rows={3}
               placeholder="Landmark, gate code, special instructions…"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:C.card}}/>
           </div>
           <div style={{marginBottom:14}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Order Summary / Special Requests <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <textarea value={addr.summary} onChange={e=>f("summary",e.target.value)} rows={3}
               placeholder="e.g. Please pack fish with extra oxygen, specific colour preference…"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:C.card}}/>
             <div style={{fontSize:11,color:C.textSub,marginTop:4}}>📝 Tell us anything special about your order — we'll see it with your order.</div>
           </div>
           {/* Special delivery — recommended parcel that carries the Live Arrival Guarantee for live fish */}
@@ -5599,37 +5655,37 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           {hasLiveFish ? (
             <div style={{marginBottom:14}}>
               <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>🐠 Choose Live-Fish Packing</div>
-              <div style={{fontSize:11.5,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> applies when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer option above it. Whatever you choose, we always pack with the utmost care to keep your fish safe in transit.</div>
+              <div style={{fontSize:11.5,color:"#34d399",background:"rgba(52,211,153,0.12)",border:"1px solid #86efac",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> applies when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer option above it. Whatever you choose, we always pack with the utmost care to keep your fish safe in transit.</div>
               {PACKING_OPTIONS.map(opt=>{
                 const sel=packing===opt.key;
                 const isSug=opt.key===suggestedPacking;
                 const covered=opt.rank>=packingOpt(suggestedPacking).rank;
                 const optFee=calcShipping(cart,zone,{packing:opt.key},settings);
                 return(
-                  <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:11,background:sel?"#eff6ff":"#fff",borderRadius:13,padding:"12px 13px",marginBottom:8,cursor:"pointer",userSelect:"none",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
+                  <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:11,background:sel?"rgba(56,189,248,0.12)":"#fff",borderRadius:13,padding:"12px 13px",marginBottom:8,cursor:"pointer",userSelect:"none",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
                     <input type="radio" name="packing" checked={sel} onChange={()=>setPacking(opt.key)} style={{width:18,height:18,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
                     <div style={{flex:1}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                        <span style={{fontSize:12.5,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
-                        {isSug&&<span style={{fontSize:9,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"2px 7px",letterSpacing:.3}}>RECOMMENDED</span>}
-                        {covered&&<span style={{fontSize:9.5,fontWeight:700,color:"#15803d"}}>🛡️ Guaranteed</span>}
+                        <span style={{fontSize:12.5,fontWeight:800,color:sel?"#38bdf8":C.text}}>{opt.label}</span>
+                        {isSug&&<span style={{fontSize:9,fontWeight:800,color:"#34d399",background:"rgba(52,211,153,0.12)",borderRadius:20,padding:"2px 7px",letterSpacing:.3}}>RECOMMENDED</span>}
+                        {covered&&<span style={{fontSize:9.5,fontWeight:700,color:"#34d399"}}>🛡️ Guaranteed</span>}
                       </div>
                       <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>{opt.blurb}</div>
                     </div>
-                    <span style={{fontSize:12.5,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>{zone?`₹${optFee}`:"—"}</span>
+                    <span style={{fontSize:12.5,fontWeight:800,color:sel?"#38bdf8":C.text,whiteSpace:"nowrap"}}>{zone?`₹${optFee}`:"—"}</span>
                   </label>
                 );
               })}
               {selPack.rank < packingOpt(suggestedPacking).rank &&(
-                <div style={{fontSize:11,color:"#9a3412",lineHeight:1.45,marginTop:2,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px"}}>⚠ You've chosen a lighter packing than we recommend for these fish — that's okay, but <b>live arrival won't be guaranteed</b>.</div>
+                <div style={{fontSize:11,color:"#fdba74",lineHeight:1.45,marginTop:2,background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px"}}>⚠ You've chosen a lighter packing than we recommend for these fish — that's okay, but <b>live arrival won't be guaranteed</b>.</div>
               )}
             </div>
           ) : anySuggestSpecial ? (
-            <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"#eff6ff":"#fff",borderRadius:14,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
+            <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"rgba(56,189,248,0.12)":"#fff",borderRadius:14,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
               <input type="checkbox" checked={specialDelivery} onChange={e=>setSpecialDelivery(e.target.checked)} style={{width:20,height:20,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
               <div>
-                <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ Premium Delivery</div>
-                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{zone?speedCourierForZone(zone,settings,cart):(settings.specialDeliveryPrice||200)}</b> to shipping.</div>
+                <div style={{fontSize:13,fontWeight:800,color:"#38bdf8"}}>⚡ Premium Delivery</div>
+                <div style={{fontSize:11.5,color:"#38bdf8",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{zone?speedCourierForZone(zone,settings,cart):(settings.specialDeliveryPrice||200)}</b> to shipping.</div>
               </div>
             </label>
           ) : null}
@@ -5652,16 +5708,16 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                     const needed=c.minOrder?Math.max(0,Number(c.minOrder)-total):0;
                     const discount=c.type==="percent"?`${c.discount}% off`:`₹${c.discount} off`;
                     return(
-                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:minOk?"#f0fdf4":"#fefce8",border:`1px solid ${minOk?"#86efac":"#fde68a"}`,borderRadius:10,padding:"7px 12px"}}>
+                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:minOk?"rgba(52,211,153,0.12)":"#fefce8",border:`1px solid ${minOk?"rgba(52,211,153,0.35)":"rgba(251,191,36,0.30)"}`,borderRadius:10,padding:"7px 12px"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:12,color:minOk?C.success:"#92400e",background:minOk?"#dcfce7":"#fef3c7",padding:"2px 8px",borderRadius:6}}>{c.code}</span>
-                          <span style={{fontSize:11.5,color:minOk?"#15803d":"#92400e",fontWeight:600}}>{discount}</span>
+                          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:12,color:minOk?C.success:"#fdba74",background:minOk?"rgba(52,211,153,0.12)":"rgba(251,191,36,0.12)",padding:"2px 8px",borderRadius:6}}>{c.code}</span>
+                          <span style={{fontSize:11.5,color:minOk?"#34d399":"#fdba74",fontWeight:600}}>{discount}</span>
                         </div>
                         {minOk?(
                           <button className="press" onClick={()=>{setCouponCode(c.code);}}
-                            style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Apply</button>
+                            style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Apply</button>
                         ):(
-                          <span style={{fontSize:10.5,color:"#92400e",fontWeight:600}}>Add ₹{needed} more</span>
+                          <span style={{fontSize:10.5,color:"#fdba74",fontWeight:600}}>Add ₹{needed} more</span>
                         )}
                       </div>
                     );
@@ -5672,9 +5728,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <div style={{display:"flex",gap:8}}>
               <input value={couponCode} onChange={e=>{setCouponCode(e.target.value);setCouponMsg({text:"",ok:false});setCouponApplied(null);}}
                 placeholder="Enter coupon code"
-                style={{flex:1,borderRadius:12,border:`1.5px solid ${couponMsg.ok?"#22c55e":couponMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+                style={{flex:1,borderRadius:12,border:`1.5px solid ${couponMsg.ok?"#22c55e":couponMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.card}}/>
               <button className="press" onClick={applyCoupon}
-                style={{background:C.primary,color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                style={{background:C.primary,color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
                 Apply
               </button>
             </div>
@@ -5688,9 +5744,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <div style={{display:"flex",gap:8}}>
               <input value={refInput} onChange={e=>{setRefInput(e.target.value.replace(/\D/g,"").slice(0,6));setRefMsg({text:"",ok:false});setRefApplied(false);}}
                 inputMode="numeric" placeholder="6-digit friend's code"
-                style={{flex:1,borderRadius:12,border:`1.5px solid ${refMsg.ok?"#22c55e":refMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",letterSpacing:2,fontFamily:"monospace"}}/>
+                style={{flex:1,borderRadius:12,border:`1.5px solid ${refMsg.ok?"#22c55e":refMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.card,letterSpacing:2,fontFamily:"monospace"}}/>
               <button className="press" onClick={applyReferral} disabled={refInput.length!==6}
-                style={{background:refInput.length===6?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                style={{background:refInput.length===6?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
                 Apply
               </button>
             </div>
@@ -5709,13 +5765,13 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <div key={k} style={{marginBottom:10}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:4}}>{k.charAt(0).toUpperCase()+k.slice(1)}</div>
                   <input value={billing[k]} onChange={e=>fb(k,e.target.value)}
-                    style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                    style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:C.card}}/>
                 </div>
               ))}
             </div>
           )}
           <button className="press" onClick={()=>{if(validate())setStep(2);}}
-            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
             Continue to Review →
           </button>
         </div>
@@ -5723,13 +5779,13 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
 
       {step===2&&(
         <div className="dt-read" style={{padding:"20px 16px 100px"}}>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:12}}>Order Items</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:12}}>Order Items</div>
           <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,marginTop:-4}}>You can still adjust quantities or remove items below before placing your order.</div>
           <div style={{display:"flex",gap:8,marginBottom:12}}>
             <button className="press" onClick={()=>nav("shop")}
-              style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>＋ Add more items</button>
+              style={{flex:1,background:C.card,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>＋ Add more items</button>
             <button className="press" onClick={()=>setStep(1)}
-              style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>🚚 Change shipping</button>
+              style={{flex:1,background:C.card,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>🚚 Change shipping</button>
           </div>
           {cart.map(item=>{
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
@@ -5747,7 +5803,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                         <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:16,textAlign:"center"}}>{item.qty}</span>
                         <button className="press" onClick={()=>updateQty(item.key,1)} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:17,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,lineHeight:1,cursor:item.qty>=maxAllowed?"default":"pointer"}}>+</button>
                       </div>
-                      <button className="press" onClick={()=>updateQty(item.key,-item.qty)} style={{background:"none",border:"none",fontSize:12,color:C.danger,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>Remove</button>
+                      <button className="press" onClick={()=>updateQty(item.key,-item.qty)} style={{background:"none",border:"none",fontSize:12,color:C.danger,fontWeight:700,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>Remove</button>
                     </div>
                   ):(
                     <div style={{fontSize:12,color:C.textSub}}>Qty: {item.qty}</div>
@@ -5773,13 +5829,13 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <span style={{fontSize:13,fontWeight:600,color:C.text}}>{shipBreak.freeShip?"Free":`₹${shipBreak.courier}`}</span>
               </div>
               {shipBreak.special>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
-                <span style={{fontSize:13,color:"#1d4ed8"}}>⚡ Premium Courier extra</span>
+                <span style={{fontSize:13,color:"#38bdf8"}}>⚡ Premium Courier extra</span>
                 {!hasLiveFish?(
                   <span style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:13,fontWeight:600,color:"#1d4ed8"}}>₹{shipBreak.special}</span>
-                    <button className="press" onClick={()=>setSpecialDelivery(false)} title="Remove" style={{width:22,height:22,borderRadius:"50%",background:"#dbeafe",color:"#1d4ed8",border:"none",fontSize:14,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
+                    <span style={{fontSize:13,fontWeight:600,color:"#38bdf8"}}>₹{shipBreak.special}</span>
+                    <button className="press" onClick={()=>setSpecialDelivery(false)} title="Remove" style={{width:22,height:22,borderRadius:"50%",background:"#dbeafe",color:"#38bdf8",border:"none",fontSize:14,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
                   </span>
-                ):<span style={{fontSize:13,fontWeight:600,color:"#1d4ed8"}}>₹{shipBreak.special}</span>}
+                ):<span style={{fontSize:13,fontWeight:600,color:"#38bdf8"}}>₹{shipBreak.special}</span>}
               </div>}
               {shipBreak.thermacol>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
                 <span style={{fontSize:13,color:C.textSub}}>🧊 Thermacol packaging</span>
@@ -5798,8 +5854,8 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             ) : null}
             {zone&&fee>0&&<div style={{fontSize:10.5,color:C.textSub,lineHeight:1.5,marginTop:-2,marginBottom:8,background:C.accentLight,borderRadius:8,padding:"7px 10px"}}>ℹ️ Shipping is charged as an estimate. If your parcel actually costs less to send, we credit the difference back to your 👛 wallet as loyalty coins after it's dispatched.</div>}
             {guaranteeActive&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
-              <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Arrival Guarantee</span>
-              <span style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Included</span>
+              <span style={{fontSize:13,color:"#34d399"}}>🛡️ Live Arrival Guarantee</span>
+              <span style={{fontSize:13,fontWeight:700,color:"#34d399"}}>Included</span>
             </div>}
             {couponApplied&&couponDiscount>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:13,color:C.success}}>🎟 Coupon ({couponCode.toUpperCase()})</span>
@@ -5830,21 +5886,21 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <span style={{fontSize:12,color:C.text,fontWeight:600}}>{r.v}</span>
               </div>
             ))}
-            <button className="press" onClick={()=>setStep(1)} style={{marginTop:10,background:"none",border:"none",fontSize:12,color:C.accent,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>✏ Edit Address</button>
+            <button className="press" onClick={()=>setStep(1)} style={{marginTop:10,background:"none",border:"none",fontSize:12,color:C.accent,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>✏ Edit Address</button>
           </div>
 
           {/* Prepayment notice */}
-          <div style={{marginTop:16,background:"#eff6ff",border:`1px solid #bfdbfe`,borderRadius:14,padding:"14px"}}>
+          <div style={{marginTop:16,background:"rgba(56,189,248,0.12)",border:`1px solid #bfdbfe`,borderRadius:14,padding:"14px"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
               <span style={{fontSize:18}}>💳</span>
-              <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:"#1e40af"}}>Prepaid order — pay ₹{grand} to confirm</span>
+              <span style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800,color:"#38bdf8"}}>Prepaid order — pay ₹{grand} to confirm</span>
             </div>
-            <div style={{fontSize:12,color:"#1e3a8a",lineHeight:1.55}}>On the next screen, pay the <b>full amount</b> by UPI and upload your payment screenshot. We verify &amp; confirm within 1–2 days. Orders unpaid within {PAY_WINDOW_MIN} minutes are auto-cancelled.</div>
+            <div style={{fontSize:12,color:"#7dd3fc",lineHeight:1.55}}>On the next screen, pay the <b>full amount</b> by UPI and upload your payment screenshot. We verify &amp; confirm within 1–2 days. Orders unpaid within {PAY_WINDOW_MIN} minutes are auto-cancelled.</div>
           </div>
 
-          {placeErr&&<div style={{marginTop:14,background:"#fef2f2",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
+          {placeErr&&<div style={{marginTop:14,background:"rgba(244,63,94,0.12)",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12.5,color:"#fb7185",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
           <button className="press" onClick={handlePlaceOrder} disabled={placing}
-            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Nunito',sans-serif",marginTop:18,opacity:placing?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+            style={{width:"100%",background:C.coral,color:C.bg,border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:600,fontFamily:"'Outfit',sans-serif",textTransform:"uppercase",letterSpacing:".08em",marginTop:18,opacity:placing?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
             {placing?"Checking stock…":<>Place Order &amp; Pay ₹{grand} →</>}
           </button>
           <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:7,lineHeight:1.5}}>
@@ -5871,16 +5927,16 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
             <button onClick={onClose} aria-label="Close" style={{background:"rgba(255,255,255,.18)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:15,cursor:"pointer"}}>✕</button>
           </div>
           <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:8}}>
-            <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:34,fontWeight:800,lineHeight:1}}>{points}</span>
+            <span style={{fontFamily:"'Outfit',sans-serif",fontSize:34,fontWeight:800,lineHeight:1}}>{points}</span>
             <span style={{fontSize:13,opacity:.9}}>coins · ₹1 each</span>
           </div>
         </div>
         {(()=>{ const ex=walletExpiryInfo(data,settings); if(!ex) return null;
           const ds=ex.expiry.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
           return(
-            <div style={{display:"flex",gap:9,alignItems:"flex-start",background:ex.expired?"#fef2f2":"#fff7ed",borderBottom:`1px solid ${C.border}`,padding:"12px 22px"}}>
+            <div style={{display:"flex",gap:9,alignItems:"flex-start",background:ex.expired?"rgba(244,63,94,0.12)":"rgba(251,146,60,0.12)",borderBottom:`1px solid ${C.border}`,padding:"12px 22px"}}>
               <span style={{fontSize:16,lineHeight:1.2}}>{ex.expired?"⌛":"⏳"}</span>
-              <div style={{fontSize:12,fontWeight:700,color:ex.expired?"#b91c1c":"#9a3412",lineHeight:1.45}}>
+              <div style={{fontSize:12,fontWeight:700,color:ex.expired?"#fb7185":"#fdba74",lineHeight:1.45}}>
                 {ex.expired
                   ? `These coins lapsed on ${ds} from inactivity. Place an order to start earning again!`
                   : `Your ${points} coins expire on ${ds}— use them at checkout before they're gone!`}
@@ -5901,7 +5957,7 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
                   <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
                   {d&&<div style={{fontSize:11,color:C.textSub,marginTop:2}}>{d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</div>}
                 </div>
-                <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:pos?C.primary:C.coral,flexShrink:0}}>{pos?"+":"−"}{Math.abs(h.pts||0)}</div>
+                <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:pos?C.primary:C.coral,flexShrink:0}}>{pos?"+":"−"}{Math.abs(h.pts||0)}</div>
               </div>
             );
           })}
@@ -5919,12 +5975,12 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
   const [walletOpen,setWalletOpen]=useState(false);
   const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
   const walletWarn=!!(wexp&&(wexp.expiringSoon||wexp.expired));
-  const linkStyle=on=>({background:on?"#eef9fa":"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:on?800:600,color:on?C.primary:C.text,padding:"8px 12px",borderRadius:10,fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap"});
+  const linkStyle=on=>({background:on?"#eef9fa":"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:on?800:600,color:on?C.primary:C.text,padding:"8px 12px",borderRadius:10,fontFamily:"'Outfit',sans-serif",whiteSpace:"nowrap"});
   return(
     <div className="desk-nav" style={{flexShrink:0,alignItems:"center",gap:4,background:C.card,borderBottom:`1px solid ${C.border}`,padding:"10px 22px",position:"sticky",top:0,zIndex:60,boxShadow:"0 2px 12px rgba(11,110,114,.06)"}}>
       {page!=="home"&&(
         <button className="press" onClick={()=>nav("home")} title="Back to home"
-          style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 14px",marginRight:12,fontSize:14,fontWeight:800,color:C.primary,cursor:"pointer",fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap"}}>← Home</button>
+          style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 14px",marginRight:12,fontSize:14,fontWeight:800,color:C.primary,cursor:"pointer",fontFamily:"'Outfit',sans-serif",whiteSpace:"nowrap"}}>← Home</button>
       )}
       <div className="press" onClick={onSecretTap} title="Nemo Aqua Store" style={{display:"flex",flexDirection:"column",alignItems:"flex-start",cursor:"pointer",marginRight:16,lineHeight:1}}>
         <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{height:34,width:"auto",objectFit:"contain",display:"block",pointerEvents:"none"}}/>
@@ -5936,16 +5992,16 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
         <button className="desk-link" onClick={()=>nav("orders")} style={linkStyle(active==="orders")}>📦 Orders</button>
         {user&&settings.loyaltyEnabled!==false&&(
           <button className="press" onClick={()=>setWalletOpen(true)} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your coins & history"}
-            style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,color:C.primary,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:800,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+            style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,color:C.primary,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:800,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
             <span style={{fontSize:15,lineHeight:1}}>👛</span>{walletPts}
             {walletWarn&&<span style={{position:"absolute",top:-6,right:-6,minWidth:16,height:16,padding:"0 3px",borderRadius:9,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${C.card}`}}>⏳</span>}
           </button>
         )}
-        <button className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+        <button className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
           🛒 Cart
           {cartCount>0&&<span key={cartCount} className="cart-pop" style={{position:"absolute",top:-6,right:-6,background:C.coral,color:"white",fontSize:10,fontWeight:800,borderRadius:10,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{cartCount>99?"99+":cartCount}</span>}
         </button>
-        <button className="press" onClick={()=>nav("orders")} style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:`1px solid ${C.border}`,borderRadius:30,padding:"5px 12px 5px 5px",cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
+        <button className="press" onClick={()=>nav("orders")} style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:`1px solid ${C.border}`,borderRadius:30,padding:"5px 12px 5px 5px",cursor:"pointer",fontFamily:"'Outfit',sans-serif"}}>
           <span style={{width:28,height:28,borderRadius:"50%",background:C.primary,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>{user?(user.name||"U").charAt(0).toUpperCase():"👤"}</span>
           <span style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap"}}>{user?(user.name||"").split(" ")[0]||"Account":"Sign in"}</span>
         </button>
@@ -5976,7 +6032,7 @@ function BottomNav({page,nav,cartCount}){
                   </span>
                 )}
               </div>
-              <span style={{fontSize:10,fontWeight:on?700:500,color:on?C.primary:C.textSub,fontFamily:"'Nunito',sans-serif"}}>{t.label}</span>
+              <span style={{fontSize:10,fontWeight:on?700:500,color:on?C.primary:C.textSub,fontFamily:"'Outfit',sans-serif"}}>{t.label}</span>
               {on&&<div style={{width:5,height:5,borderRadius:"50%",background:C.primary,marginTop:-2}}/>}
             </button>
           );
@@ -6010,7 +6066,7 @@ function AdminLogin({onSuccess,onBack,settings={}}){
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100%",background:C.bg,padding:"24px",position:"relative"}}>
       <button className="press" onClick={onBack} style={{position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
       <div style={{fontSize:56,marginBottom:14}}>🔐</div>
-      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:6}}>Admin Access</div>
+      <div style={{fontFamily:"'Outfit',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:6}}>Admin Access</div>
       <div style={{fontSize:13.5,color:C.textSub,marginBottom:28,textAlign:"center"}}>Enter your admin password</div>
 
       <div className={shaking?"shake":""} style={{width:"100%",maxWidth:320}}>
@@ -6028,8 +6084,8 @@ function AdminLogin({onSuccess,onBack,settings={}}){
               border:`1.5px solid ${err?C.danger:C.border}`,
               padding:"16px 50px 16px 18px",
               fontSize:16,outline:"none",
-              background:"white",
-              fontFamily:"'Nunito',sans-serif",
+              background:C.card,
+              fontFamily:"'Outfit',sans-serif",
               letterSpacing: show?0:2,
             }}
           />
@@ -6045,10 +6101,10 @@ function AdminLogin({onSuccess,onBack,settings={}}){
           {err&&<div style={{fontSize:12.5,color:C.danger,fontWeight:600}}>✕ Incorrect password</div>}
         </div>
         <button className="press" onClick={submit} disabled={!pw}
-          style={{width:"100%",background:pw?C.primary:"#9ca3af",color:"white",
+          style={{width:"100%",background:pw?C.primary:"#475569",color:"white",
             border:"none",borderRadius:14,padding:"16px",
             fontSize:15,fontWeight:700,
-            fontFamily:"'Nunito',sans-serif",
+            fontFamily:"'Outfit',sans-serif",
             transition:"background .2s"}}>
           Unlock Admin →
         </button>
@@ -6243,8 +6299,8 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     <div style={{marginBottom:16}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>{label}</div>
       {opts.textarea
-        ?<textarea value={form[key]} onChange={e=>f(key,e.target.value)} rows={4} placeholder={ph} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,resize:"vertical",outline:"none",lineHeight:1.6,background:"white"}}/>
-        :<input type={type} value={form[key]} onChange={e=>f(key,e.target.value)} placeholder={ph} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+        ?<textarea value={form[key]} onChange={e=>f(key,e.target.value)} rows={4} placeholder={ph} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,resize:"vertical",outline:"none",lineHeight:1.6,background:C.card}}/>
+        :<input type={type} value={form[key]} onChange={e=>f(key,e.target.value)} placeholder={ph} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.card}}/>
       }
     </div>
   );
@@ -6253,7 +6309,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     <div className="slide-up">
       <div style={{background:C.adminBg,padding:"52px 16px 16px",display:"flex",alignItems:"center",gap:12}}>
         <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:20,fontWeight:800,color:"white"}}>{isEdit?"Edit Product":"Add Product"}</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:800,color:"white"}}>{isEdit?"Edit Product":"Add Product"}</div>
       </div>
       <div className="dt-read" style={{padding:"20px 16px 100px"}}>
         {fld("Product Name","name","text","e.g. Betta Splendens")}
@@ -6262,7 +6318,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
             {CATEGORIES.map(cat=>(
               <button key={cat} className="press" onClick={()=>f("category",cat)}
-                style={{padding:"8px 14px",borderRadius:20,border:`1.5px solid ${form.category===cat?C.primary:C.border}`,background:form.category===cat?C.primary:"transparent",color:form.category===cat?"white":C.textSub,fontSize:12,fontWeight:600,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5}}>
+                style={{padding:"8px 14px",borderRadius:20,border:`1.5px solid ${form.category===cat?C.primary:C.border}`,background:form.category===cat?C.primary:"transparent",color:form.category===cat?"white":C.textSub,fontSize:12,fontWeight:600,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",gap:5}}>
                 {CAT_META[cat].emoji} {cat}
               </button>
             ))}
@@ -6271,26 +6327,26 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Price (₹)</div>
-            <input type="number" value={form.price} onChange={e=>f("price",e.target.value)} placeholder="350" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+            <input type="number" value={form.price} onChange={e=>f("price",e.target.value)} placeholder="350" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.card}}/>
           </div>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Stock Count</div>
-            <input type="number" value={form.stockCount} onChange={e=>f("stockCount",e.target.value)} placeholder="10" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+            <input type="number" value={form.stockCount} onChange={e=>f("stockCount",e.target.value)} placeholder="10" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.card}}/>
             <div style={{fontSize:11,color:C.textSub,marginTop:4}}>Customers can order up to this many (max {MAX_PER_ORDER}).</div>
           </div>
         </div>
 
         {/* Offer / discount */}
-        <div style={{background:"#fff7ed",borderRadius:14,padding:"14px",marginBottom:16,border:`1px solid #fed7aa`}}>
+        <div style={{background:"rgba(251,146,60,0.12)",borderRadius:14,padding:"14px",marginBottom:16,border:`1px solid #fed7aa`}}>
           <div style={{fontSize:12,fontWeight:800,color:"#c2410c",textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>⚡ Offer &amp; Discount</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:12}}>
             <div>
               <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Discount %</div>
-              <input type="number" value={form.discountPct} onChange={e=>f("discountPct",e.target.value)} placeholder="0" min="0" max="100" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+              <input type="number" value={form.discountPct} onChange={e=>f("discountPct",e.target.value)} placeholder="0" min="0" max="100" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.card}}/>
             </div>
             <div>
               <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Offer ends (optional)</div>
-              <input type="datetime-local" value={form.offerEndsAt} onChange={e=>f("offerEndsAt",e.target.value)} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              <input type="datetime-local" value={form.offerEndsAt} onChange={e=>f("offerEndsAt",e.target.value)} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:C.card}}/>
             </div>
           </div>
           {Number(form.discountPct)>0&&form.price&&(
@@ -6320,12 +6376,12 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.45}}>Customers pick one of these on the product page. Set a label, price and packing weight (kg) for each. The weight is used to calculate live-fish shipping accurately.</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {variants.map((v,idx)=>(
-                <div key={v.id} style={{background:"white",borderRadius:12,padding:"10px",border:`1px solid ${C.border}`}}>
+                <div key={v.id} style={{background:C.card,borderRadius:12,padding:"10px",border:`1px solid ${C.border}`}}>
                   <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
                     <input value={v.label} onChange={e=>setVar(v.id,"label",e.target.value)} placeholder="e.g. 1 Pair — Male & Female"
-                      style={{flex:1,borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white"}}/>
+                      style={{flex:1,borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:C.card}}/>
                     <button className="press" onClick={()=>removeVariant(v.id)} title="Remove"
-                      style={{flexShrink:0,width:30,height:30,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
+                      style={{flexShrink:0,width:30,height:30,borderRadius:8,background:"rgba(244,63,94,0.12)",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                     <div>
@@ -6346,14 +6402,14 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
                     </div>
                   </div>
                   <button className="press" onClick={()=>setVar(v.id,"soldOut",!v.soldOut)}
-                    style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${v.soldOut?C.danger:C.border}`,background:v.soldOut?"#fee2e2":"transparent",color:v.soldOut?C.danger:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+                    style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${v.soldOut?C.danger:C.border}`,background:v.soldOut?"rgba(244,63,94,0.12)":"transparent",color:v.soldOut?C.danger:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
                     {v.soldOut?"Sold out":"In stock"}
                   </button>
                 </div>
               ))}
             </div>
             <button className="press" onClick={addVariant}
-              style={{width:"100%",marginTop:10,background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              style={{width:"100%",marginTop:10,background:C.card,border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
               ＋ Add a type
             </button>
           </div>
@@ -6382,7 +6438,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
                   <div key={k} style={{gridColumn:k==="careTankMates"?"1 / -1":"auto"}}>
                     <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>{label}</div>
                     <input value={form[k]} onChange={e=>f(k,e.target.value)} placeholder={ph}
-                      style={{width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white",boxSizing:"border-box"}}/>
+                      style={{width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:C.card,boxSizing:"border-box"}}/>
                   </div>
                 ))}
               </div>
@@ -6399,14 +6455,14 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
               <div>
                 <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>📍 Inside Tamil Nadu</div>
                 <select value={form.suggestedPackingTN||"carton_special"} onChange={e=>f("suggestedPackingTN",e.target.value)}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif"}}>
+                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:C.card,fontFamily:"'Outfit',sans-serif"}}>
                   {PACKING_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
                 </select>
               </div>
               <div>
                 <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>🚚 Outside TN (Others)</div>
                 <select value={form.suggestedPackingOther||"thermacol_special"} onChange={e=>f("suggestedPackingOther",e.target.value)}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif"}}>
+                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:C.card,fontFamily:"'Outfit',sans-serif"}}>
                   {PACKING_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
                 </select>
               </div>
@@ -6418,7 +6474,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5}}>packaging weight (kg)</div>
             <input type="number" step="0.1" min="0" value={form.packagingWeight} onChange={e=>f("packagingWeight",e.target.value)} placeholder="e.g. 0.2"
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:C.card}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Weight of product + packaging in kg, used for shipping.</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-start",paddingTop:4}}>
@@ -6469,7 +6525,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
               {video.tooLarge&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(220,38,38,.9)",color:"white",fontSize:10,fontWeight:700,padding:"4px 8px",textAlign:"center"}}>Too large to save — won't persist</div>}
             </div>
           ):(
-            <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:12,border:`1.5px dashed ${C.border}`,background:C.bg,padding:"16px",cursor:"pointer",color:C.textSub,fontSize:13,fontWeight:600,fontFamily:"'Nunito',sans-serif"}}>
+            <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:12,border:`1.5px dashed ${C.border}`,background:C.bg,padding:"16px",cursor:"pointer",color:C.textSub,fontSize:13,fontWeight:600,fontFamily:"'Outfit',sans-serif"}}>
               <input type="file" accept="video/*,.gif" style={{display:"none"}} onChange={e=>{if(e.target.files[0])handleVid(e.target.files[0]);e.target.value="";}}/>
               🎬 Add a short video
             </label>
@@ -6478,18 +6534,18 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
         {busyNote&&<div style={{fontSize:12,color:busyNote.startsWith("⚠")?C.danger:C.textSub,fontWeight:600,marginBottom:12,marginTop:-4}}>{busyNote}</div>}
 
         <button className="press" onClick={handleSave} disabled={saving}
-          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?.7:1}}>
+          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Outfit',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?.7:1}}>
           {saving?<><Spinner/> Saving…</>:isEdit?"💾 Save Changes":"✓ Add Product"}
         </button>
         {isEdit&&!delConfirm&&(
-          <button className="press" onClick={()=>setDelConfirm(true)} style={{width:"100%",background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:16,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>🗑 Delete Product</button>
+          <button className="press" onClick={()=>setDelConfirm(true)} style={{width:"100%",background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:16,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>🗑 Delete Product</button>
         )}
         {delConfirm&&(
-          <div style={{background:"#fee2e2",borderRadius:16,padding:"16px",border:`1.5px solid ${C.danger}`}}>
+          <div style={{background:"rgba(244,63,94,0.12)",borderRadius:16,padding:"16px",border:`1.5px solid ${C.danger}`}}>
             <div style={{fontSize:14,fontWeight:700,color:C.danger,marginBottom:12,textAlign:"center"}}>Delete "{product.name}"?</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <button className="press" onClick={()=>setDelConfirm(false)} style={{padding:"12px",borderRadius:12,border:`1px solid ${C.border}`,background:"white",color:C.text,fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
-              <button className="press" onClick={()=>onDelete(product.id)} style={{padding:"12px",borderRadius:12,border:"none",background:C.danger,color:"white",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Yes, Delete</button>
+              <button className="press" onClick={()=>setDelConfirm(false)} style={{padding:"12px",borderRadius:12,border:`1px solid ${C.border}`,background:C.card,color:C.text,fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Cancel</button>
+              <button className="press" onClick={()=>onDelete(product.id)} style={{padding:"12px",borderRadius:12,border:"none",background:C.danger,color:"white",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Yes, Delete</button>
             </div>
           </div>
         )}
@@ -6538,7 +6594,7 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
     <div style={{marginBottom:16}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
         <span style={{fontSize:18}}>📊</span>
-        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text}}>Sales Dashboard</span>
+        <span style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text}}>Sales Dashboard</span>
       </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:12}}>
         {kpi("💰",`${d.paidCount} paid order${d.paidCount!==1?"s":""}`,inr(d.revenue),"Total revenue",`linear-gradient(135deg,${C.primaryDark},${C.primary})`)}
@@ -6561,9 +6617,9 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
       {/* Alerts */}
       {(d.openReturns>0||d.openDoa>0||d.low.length>0)&&(
         <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
-          {d.openDoa>0&&<span style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#9a3412",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>🐟 {d.openDoa} DOA open</span>}
-          {d.openReturns>0&&<span style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1e40af",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>↩️ {d.openReturns} return{d.openReturns!==1?"s":""} open</span>}
-          {d.low.length>0&&<span style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>📦 {d.low.length} low stock</span>}
+          {d.openDoa>0&&<span style={{background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",color:"#fdba74",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>🐟 {d.openDoa} DOA open</span>}
+          {d.openReturns>0&&<span style={{background:"rgba(56,189,248,0.12)",border:"1px solid #bfdbfe",color:"#38bdf8",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>↩️ {d.openReturns} return{d.openReturns!==1?"s":""} open</span>}
+          {d.low.length>0&&<span style={{background:"rgba(244,63,94,0.12)",border:"1px solid #fecaca",color:"#fb7185",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>📦 {d.low.length} low stock</span>}
         </div>
       )}
       <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
@@ -6583,7 +6639,7 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
           {d.low.length?d.low.map((p,i)=>(
             <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:7}}>
               <span style={{fontSize:12,color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</span>
-              <span style={{fontSize:11,fontWeight:800,color:(p.stockCount??0)<=0?C.danger:"#b45309",flexShrink:0}}>{(p.stockCount??0)<=0?"OUT":`${p.stockCount} left`}</span>
+              <span style={{fontSize:11,fontWeight:800,color:(p.stockCount??0)<=0?C.danger:"#fbbf24",flexShrink:0}}>{(p.stockCount??0)<=0?"OUT":`${p.stockCount} left`}</span>
             </div>
           )):<div style={{fontSize:11.5,color:C.textSub}}>All products well stocked ✓</div>}
         </div>
@@ -6599,7 +6655,7 @@ function AdminInsights({stats, products=[]}){
   const nameOf=id=>{ const p=products.find(x=>x.id===id); return p?p.name:id; };
   const views=Number(f.view||0), add=Number(f.addcart||0), chk=Number(f.checkout||0), ord=Number(f.order||0), paid=Number(f.paid||0);
   const hasData = views||add||ord||Object.keys(ev).length||Object.keys(srch).length;
-  const steps=[["👁 Product views",views,"#0e7490"],["🛒 Added to cart",add,"#1d4ed8"],["💳 Reached checkout",chk,"#7c3aed"],["📦 Orders placed",ord,"#b45309"],["✅ Paid",paid,"#15803d"]];
+  const steps=[["👁 Product views",views,"#0e7490"],["🛒 Added to cart",add,"#38bdf8"],["💳 Reached checkout",chk,"#7c3aed"],["📦 Orders placed",ord,"#fbbf24"],["✅ Paid",paid,"#34d399"]];
   const maxV=Math.max(1,views,add,chk,ord,paid);
   const pct=(a,b)=>b>0?Math.round((a/b)*100):0;
   const top=(obj,n)=>Object.entries(obj||{}).map(([k,v])=>({k,v:Number(v)||0})).sort((a,b)=>b.v-a.v).slice(0,n);
@@ -6613,7 +6669,7 @@ function AdminInsights({stats, products=[]}){
     <div style={{marginBottom:14}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
         <span style={{fontSize:18}}>🔬</span>
-        <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text}}>Customer Insights</span>
+        <span style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text}}>Customer Insights</span>
       </div>
       {!hasData?(
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",fontSize:12,color:C.textSub,lineHeight:1.6}}>
@@ -6632,9 +6688,9 @@ function AdminInsights({stats, products=[]}){
             </div>
           ))}
           <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
-            <span style={{fontSize:11,fontWeight:800,color:"#1d4ed8",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:20,padding:"4px 11px"}}>Add-to-cart {pct(add,views)}%</span>
-            <span style={{fontSize:11,fontWeight:800,color:"#7c3aed",background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:20,padding:"4px 11px"}}>Checkout {pct(chk,add)}%</span>
-            <span style={{fontSize:11,fontWeight:800,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:20,padding:"4px 11px"}}>View→Paid {pct(paid,views)}%</span>
+            <span style={{fontSize:11,fontWeight:800,color:"#38bdf8",background:"rgba(56,189,248,0.12)",border:"1px solid #bfdbfe",borderRadius:20,padding:"4px 11px"}}>Add-to-cart {pct(add,views)}%</span>
+            <span style={{fontSize:11,fontWeight:800,color:"#7c3aed",background:"rgba(167,139,250,0.14)",border:"1px solid #ddd6fe",borderRadius:20,padding:"4px 11px"}}>Checkout {pct(chk,add)}%</span>
+            <span style={{fontSize:11,fontWeight:800,color:"#34d399",background:"rgba(52,211,153,0.12)",border:"1px solid #a7f3d0",borderRadius:20,padding:"4px 11px"}}>View→Paid {pct(paid,views)}%</span>
           </div>
         </div>
         <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
@@ -6703,13 +6759,13 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
     showToast("Refund details saved");
     setSaving(false);
   };
-  const refundFld={width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif",boxSizing:"border-box"};
+  const refundFld={width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:C.card,fontFamily:"'Outfit',sans-serif",boxSizing:"border-box"};
   const refundEditor=()=>(
     <div>
       <div style={{display:"flex",gap:8,marginBottom:10}}>
         {[{k:"upi",l:"Manual UPI"},{k:"gateway",l:"Auto / Gateway"}].map(m=>(
           <button key={m.k} className="press" type="button" onClick={()=>setRefundMethod(m.k)}
-            style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${refundMethod===m.k?C.primary:C.border}`,background:refundMethod===m.k?C.primary:"transparent",color:refundMethod===m.k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{m.l}</button>
+            style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${refundMethod===m.k?C.primary:C.border}`,background:refundMethod===m.k?C.primary:"transparent",color:refundMethod===m.k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>{m.l}</button>
         ))}
       </div>
       <div style={{display:"flex",gap:8,marginBottom:10}}>
@@ -6835,7 +6891,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
     showToast(`Opening WhatsApp — ${st} message`);
   };
 
-  const statusColor={Placed:"#1d4ed8",Confirmed:C.success,Shipped:"#c2410c",Delivered:C.success};
+  const statusColor={Placed:"#38bdf8",Confirmed:C.success,Shipped:"#c2410c",Delivered:C.success};
 
   return(
     <div className="slide-up">
@@ -6843,7 +6899,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
         <div>
           <div style={{fontSize:11,color:"rgba(255,255,255,.65)",fontWeight:600,letterSpacing:1}}>ORDER {orderId(o.id)}</div>
-          <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,color:"white"}}>{o.address.name}</div>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:18,fontWeight:800,color:"white"}}>{o.address.name}</div>
         </div>
       </div>
 
@@ -6871,12 +6927,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           {/* Status selector */}
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>Update Status</div>
           {o.closed&&(
-            <div style={{fontSize:11.5,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5,fontWeight:600}}>🔒 This order is closed, so its status is locked. Reopen it below if you really need to change anything.</div>
+            <div style={{fontSize:11.5,color:"#34d399",background:"rgba(52,211,153,0.12)",border:"1px solid #a7f3d0",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5,fontWeight:600}}>🔒 This order is closed, so its status is locked. Reopen it below if you really need to change anything.</div>
           )}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12,opacity:o.closed?.55:1,pointerEvents:o.closed?"none":"auto"}}>
             {ORDER_STATUSES.map(s=>(
               <button key={s} className="press" disabled={o.closed} onClick={()=>setStatus(s)}
-                style={{padding:"9px 12px",borderRadius:12,border:`1.5px solid ${status===s?C.primary:C.border}`,background:status===s?C.primary:"transparent",color:status===s?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:o.closed?"default":"pointer"}}>
+                style={{padding:"9px 12px",borderRadius:12,border:`1.5px solid ${status===s?C.primary:C.border}`,background:status===s?C.primary:"transparent",color:status===s?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif",cursor:o.closed?"default":"pointer"}}>
                 {s}
               </button>
             ))}
@@ -6888,13 +6944,13 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                 <div style={{marginBottom:10}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Courier Partner</div>
                   <select value={courierId} onChange={e=>setCourierId(e.target.value)}
-                    style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.bg,fontFamily:"'Nunito',sans-serif"}}>
+                    style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.bg,fontFamily:"'Outfit',sans-serif"}}>
                     <option value="">— Select courier —</option>
                     {couriers.map(c=><option key={c.id} value={c.id}>{c.name||"(unnamed)"}</option>)}
                   </select>
                 </div>
               ) : (
-                <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px",marginBottom:10,lineHeight:1.45}}>Add your courier partners in <b>Settings → Live-Fish Packing &amp; Couriers</b> to give customers a Track button.</div>
+                <div style={{fontSize:11,color:"#fdba74",background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px",marginBottom:10,lineHeight:1.45}}>Add your courier partners in <b>Settings → Live-Fish Packing &amp; Couriers</b> to give customers a Track button.</div>
               )}
               <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Consignment / Tracking Number</div>
               <input value={tracking} onChange={e=>setTracking(e.target.value)} placeholder="e.g. DTDC123456789IN"
@@ -6915,7 +6971,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             <div style={{fontSize:12,color:C.textSub,textAlign:"center",padding:"4px 0",lineHeight:1.5}}>Status editing is disabled while the order is closed.</div>
           ) : (
           <button className="press" onClick={handleUpdate} disabled={saving}
-            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
+            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
             {saving?<><Spinner/>Saving…</>:"💾 Save Status Update"}
           </button>
           )}
@@ -6926,19 +6982,19 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${C.border}`}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>✅ Complete Order</div>
             {o.closed ? (
-              <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"12px"}}>
-                <div style={{fontSize:13,fontWeight:800,color:"#15803d",marginBottom:3}}>✓ Order closed — all done</div>
-                <div style={{fontSize:11.5,color:"#166534",lineHeight:1.5,marginBottom:10}}>Delivered safely and finalised{o.closedAt?` on ${fmtDate(o.closedAt)}`:""}. Nothing more to do here.</div>
+              <div style={{background:"rgba(52,211,153,0.12)",border:"1px solid #a7f3d0",borderRadius:12,padding:"12px"}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#34d399",marginBottom:3}}>✓ Order closed — all done</div>
+                <div style={{fontSize:11.5,color:"#34d399",lineHeight:1.5,marginBottom:10}}>Delivered safely and finalised{o.closedAt?` on ${fmtDate(o.closedAt)}`:""}. Nothing more to do here.</div>
                 <button className="press" onClick={doReopen} disabled={saving}
-                  style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 14px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>↺ Reopen order</button>
+                  style={{background:C.card,color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 14px",fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>↺ Reopen order</button>
               </div>
             ) : !doaResolved ? (
-              <div style={{fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"11px 13px",lineHeight:1.5}}>⏳ A Dead-on-Arrival request is still open. Resolve the DOA below before closing this order.</div>
+              <div style={{fontSize:12,color:"#fdba74",background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:10,padding:"11px 13px",lineHeight:1.5}}>⏳ A Dead-on-Arrival request is still open. Resolve the DOA below before closing this order.</div>
             ) : (
               <>
                 <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>Everything delivered safely and no DOA is pending. Close this order to mark it fully complete.</div>
                 <button className="press" onClick={doClose} disabled={saving}
-                  style={{width:"100%",background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>✓ Close this order</button>
+                  style={{width:"100%",background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>✓ Close this order</button>
               </>
             )}
           </div>
@@ -6949,14 +7005,14 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${C.border}`}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>🎁 Shipping Reward</div>
             {o.shippingReward ? (
-              <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"12px"}}>
-                <div style={{fontSize:13,fontWeight:800,color:"#15803d",marginBottom:3}}>✓ Reward issued — ₹{o.shippingReward.amount}</div>
-                <div style={{fontSize:12,color:"#166534",lineHeight:1.55}}>₹{o.shippingReward.amount} has been credited to the customer's 👛 wallet. (Courier charged ₹{o.shippingReward.charged} · actual ₹{o.shippingReward.actual}.)</div>
+              <div style={{background:"rgba(52,211,153,0.12)",border:"1px solid #a7f3d0",borderRadius:12,padding:"12px"}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#34d399",marginBottom:3}}>✓ Reward issued — ₹{o.shippingReward.amount}</div>
+                <div style={{fontSize:12,color:"#34d399",lineHeight:1.55}}>₹{o.shippingReward.amount} has been credited to the customer's 👛 wallet. (Courier charged ₹{o.shippingReward.charged} · actual ₹{o.shippingReward.actual}.)</div>
               </div>
             ) : (
               <>
                 <div style={{fontSize:12,color:C.textSub,marginBottom:6,lineHeight:1.55}}>Customer paid <b style={{color:C.text}}>₹{chargedShip}</b> in <b>courier charges</b> for this order{Number(o.thermacolFee||0)>0?<> (₹{o.fee} shipping − ₹{o.thermacolFee} thermacol packaging, which is not rewardable)</>:null}. If the courier actually cost you less (by ≥ ₹{rewardMin}), give the difference back as a reward code.</div>
-                <div style={{fontSize:11,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:9,padding:"7px 10px",marginBottom:10,lineHeight:1.45}}>ℹ️ Reward is based on the <b>courier partner charge only</b> — packaging costs are excluded.</div>
+                <div style={{fontSize:11,color:"#34d399",background:"rgba(52,211,153,0.12)",border:"1px solid #a7f3d0",borderRadius:9,padding:"7px 10px",marginBottom:10,lineHeight:1.45}}>ℹ️ Reward is based on the <b>courier partner charge only</b> — packaging costs are excluded.</div>
                 <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
                   <span style={{fontSize:12,color:C.text,fontWeight:700,whiteSpace:"nowrap"}}>Actual courier cost ₹</span>
                   <input type="number" min="0" value={actualShip} onChange={e=>{setActualShip(e.target.value);setRewardConfirm(false);}} placeholder="0"
@@ -6968,18 +7024,18 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   )}
                 </div>
                 {rewardConfirm ? (
-                  <div style={{background:"#ecfdf5",border:`1.5px solid #34d399`,borderRadius:12,padding:"12px"}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:"#15803d",marginBottom:10,textAlign:"center",lineHeight:1.5}}>Credit <b>{o.address.name}</b>'s 👛 wallet with ₹{Math.max(0,Math.round(chargedShip-Number(actualShip)))}? They can redeem it at checkout on a future order.</div>
+                  <div style={{background:"rgba(52,211,153,0.12)",border:`1.5px solid #34d399`,borderRadius:12,padding:"12px"}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:"#34d399",marginBottom:10,textAlign:"center",lineHeight:1.5}}>Credit <b>{o.address.name}</b>'s 👛 wallet with ₹{Math.max(0,Math.round(chargedShip-Number(actualShip)))}? They can redeem it at checkout on a future order.</div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                       <button className="press" onClick={()=>setRewardConfirm(false)} disabled={saving}
-                        style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
+                        style={{background:C.card,color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Cancel</button>
                       <button className="press" onClick={issueShippingReward} disabled={saving}
-                        style={{background:C.success,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>✓ Yes, issue</button>
+                        style={{background:C.success,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>✓ Yes, issue</button>
                     </div>
                   </div>
                 ) : (
                   <button className="press" onClick={()=>{ if(actualShip===""){showToast("Enter the actual courier cost","error");return;} if((chargedShip-Number(actualShip))<rewardMin){showToast(`Difference must be at least ₹${rewardMin}`,"error");return;} setRewardConfirm(true); }} disabled={saving||actualShip===""}
-                    style={{width:"100%",background:(actualShip!==""&&(chargedShip-Number(actualShip))>=rewardMin)?C.success:"#9ca3af",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+                    style={{width:"100%",background:(actualShip!==""&&(chargedShip-Number(actualShip))>=rewardMin)?C.success:"#475569",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>
                     🎁 Create Reward Code
                   </button>
                 )}
@@ -7008,21 +7064,21 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           )}
           {(o.status==="Payment Review"||o.status==="Awaiting Payment")&&(
             rejectConfirm?(
-              <div style={{background:"#fee2e2",borderRadius:12,padding:"12px",border:`1.5px solid ${C.danger}`}}>
+              <div style={{background:"rgba(244,63,94,0.12)",borderRadius:12,padding:"12px",border:`1.5px solid ${C.danger}`}}>
                 <div style={{fontSize:12.5,fontWeight:700,color:C.danger,marginBottom:10,textAlign:"center"}}>Reject this payment &amp; cancel the order? This can't be undone.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   <button className="press" onClick={()=>setRejectConfirm(false)} disabled={saving}
-                    style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Keep order</button>
+                    style={{background:C.card,color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Keep order</button>
                   <button className="press" onClick={()=>{setRejectConfirm(false);verifyPayment(false);}} disabled={saving}
-                    style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Yes, reject</button>
+                    style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Yes, reject</button>
                 </div>
               </div>
             ):(
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <button className="press" onClick={()=>verifyPayment(true)} disabled={saving}
-                style={{background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>✓ Verify &amp; Confirm</button>
+                style={{background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>✓ Verify &amp; Confirm</button>
               <button className="press" onClick={()=>setRejectConfirm(true)} disabled={saving}
-                style={{background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>✕ Reject / Cancel</button>
+                style={{background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>✕ Reject / Cancel</button>
             </div>
             )
           )}
@@ -7043,12 +7099,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:4}}>💬 Send WhatsApp Update</div>
           <div style={{fontSize:12,color:C.textSub,marginBottom:4}}>Customer: {o.address.whatsapp||o.address.phone}</div>
           {o.waUpdates===false
-            ? <div style={{fontSize:11.5,color:"#c2410c",fontWeight:600,marginBottom:10,background:"#fff7ed",borderRadius:8,padding:"7px 10px"}}>⚠ Customer opted out of WhatsApp updates — only message if needed.</div>
+            ? <div style={{fontSize:11.5,color:"#c2410c",fontWeight:600,marginBottom:10,background:"rgba(251,146,60,0.12)",borderRadius:8,padding:"7px 10px"}}>⚠ Customer opted out of WhatsApp updates — only message if needed.</div>
             : <div style={{fontSize:11.5,color:C.success,fontWeight:600,marginBottom:10}}>✓ Customer opted in to WhatsApp updates</div>}
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {["Confirmed","Shipped","Delivered"].map(s=>(
               <button key={s} className="press" onClick={()=>sendWA(s)}
-                style={{background:"#25D366",color:"white",border:"none",borderRadius:12,padding:"12px 16px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:8}}>
+                style={{background:"#25D366",color:"white",border:"none",borderRadius:12,padding:"12px 16px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",gap:8}}>
                 <span>💬</span>Send "{s}" Message
               </button>
             ))}
@@ -7075,7 +7131,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             {[
               {l:"Subtotal",v:`₹${o.total}`},
               {l:`Shipping${o.shippingZoneLabel?" ("+o.shippingZoneLabel+")":""}${o.specialDelivery?" + Special":""}`,v:`₹${o.fee||0}`},
-              ...(o.liveGuarantee?[{l:"Live Arrival Guarantee",v:o.liveGuaranteeFee>0?`₹${o.liveGuaranteeFee}`:"Included",color:"#15803d"}]:[]),
+              ...(o.liveGuarantee?[{l:"Live Arrival Guarantee",v:o.liveGuaranteeFee>0?`₹${o.liveGuaranteeFee}`:"Included",color:"#34d399"}]:[]),
               ...(o.coupon&&o.couponDiscount?[{l:`Coupon (${o.coupon})`,v:`-₹${o.couponDiscount}`,color:"#16a34a"}]:[]),
             ].map((r,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
@@ -7104,7 +7160,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 
         {/* Customer order summary */}
         {o.summary&&(
-          <div style={{background:"#fff7ed",borderRadius:16,padding:"16px",border:`1px solid #fed7aa`,marginTop:14}}>
+          <div style={{background:"rgba(251,146,60,0.12)",borderRadius:16,padding:"16px",border:`1px solid #fed7aa`,marginTop:14}}>
             <div style={{fontSize:12,fontWeight:700,color:"#c2410c",textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>📝 Customer's Order Summary</div>
             <div style={{fontSize:13,color:C.text,lineHeight:1.6}}>{o.summary}</div>
           </div>
@@ -7113,11 +7169,11 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         {/* Bill / Invoice */}
         <div style={{marginTop:14,display:"flex",gap:10}}>
           <button className="press" onClick={()=>openBill(o,settings)}
-            style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:13.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            style={{flex:1,background:C.card,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:13.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
             🧾 Quick Bill
           </button>
           <button className="press" onClick={()=>openInvoice(o,settings)}
-            style={{flex:1,background:C.primary,color:"#fff",border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:13.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            style={{flex:1,background:C.primary,color:"#fff",border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:13.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
             📄 Invoice (PDF)
           </button>
         </div>
@@ -7134,12 +7190,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>No DOA reported yet. You can still record an outcome here if the customer contacted you directly.</div>
             )}
             <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding the Dead-on-Arrival report for order ${orderId(o.id)} — please share your unboxing video so we can help.`))}
-              style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>💬 Message customer on WhatsApp</button>
+              style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>💬 Message customer on WhatsApp</button>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Outcome</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               {["Under Review","Approved - Replacement","Approved - Store Credit","Approved - Refund","Declined"].map(s=>(
                 <button key={s} className="press" onClick={()=>setDoaStatus(s)}
-                  style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${doaStatus===s?C.primary:C.border}`,background:doaStatus===s?C.primary:"transparent",color:doaStatus===s?"white":C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{s.replace("Approved - ","✓ ")}</button>
+                  style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${doaStatus===s?C.primary:C.border}`,background:doaStatus===s?C.primary:"transparent",color:doaStatus===s?"white":C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>{s.replace("Approved - ","✓ ")}</button>
               ))}
             </div>
             {doaStatus==="Approved - Replacement"&&(
@@ -7153,7 +7209,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             <textarea value={doaNote} onChange={e=>setDoaNote(e.target.value)} rows={2} placeholder="e.g. Replacement will ship with your next order, or refund sent to your UPI"
               style={{...refundFld,resize:"none",lineHeight:1.5,marginBottom:10}}/>
             <button className="press" onClick={saveDoa} disabled={saving}
-              style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",opacity:saving?.7:1}}>💾 Save DOA Outcome</button>
+              style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",opacity:saving?.7:1}}>💾 Save DOA Outcome</button>
           </div>
         )}
 
@@ -7171,12 +7227,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               <div style={{fontSize:11.5,color:C.text,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>📦 Return courier: <b>{rr.courier||"—"}</b>{rr.consignment?<> · Consignment <span style={{fontFamily:"monospace"}}>{rr.consignment}</span></>:null}</div>
             )}
             <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding your return request for order ${orderId(o.id)} —`))}
-              style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginBottom:12}}>💬 Message customer on WhatsApp</button>
+              style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",marginBottom:12}}>💬 Message customer on WhatsApp</button>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Status</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               {["Requested","Approved","Shipped","Received & Verified","Declined"].map(s=>(
                 <button key={s} className="press" onClick={()=>setRetStatus(s)}
-                  style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${retStatus===s?C.primary:C.border}`,background:retStatus===s?C.primary:"transparent",color:retStatus===s?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{s}</button>
+                  style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${retStatus===s?C.primary:C.border}`,background:retStatus===s?C.primary:"transparent",color:retStatus===s?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>{s}</button>
               ))}
             </div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Note to customer <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
@@ -7184,19 +7240,19 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               style={{...refundFld,resize:"none",lineHeight:1.5,marginBottom:10}}/>
             <div style={{display:"flex",gap:8}}>
               <button className="press" onClick={()=>saveReturn(false)} disabled={saving}
-                style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif",opacity:saving?.7:1}}>💾 Save</button>
+                style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Outfit',sans-serif",opacity:saving?.7:1}}>💾 Save</button>
               <button className="press" onClick={()=>saveReturn(true)} disabled={saving}
-                style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif",opacity:saving?.7:1}}>✓ Resolve {rr.resolution==="coins"?`· ${Math.ceil(retValue/(Number(settings.loyaltyRedeemValue||1)||1))} coins`:`· ₹${retValue}`}</button>
+                style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Outfit',sans-serif",opacity:saving?.7:1}}>✓ Resolve {rr.resolution==="coins"?`· ${Math.ceil(retValue/(Number(settings.loyaltyRedeemValue||1)||1))} coins`:`· ₹${retValue}`}</button>
             </div>
           </div>
         )}
 
         {/* Cancellation & Refund */}
-        <div style={{background:C.card,borderRadius:16,padding:"16px",marginTop:14,border:`1px solid ${o.status==="Cancelled"?"#fecaca":C.border}`}}>
+        <div style={{background:C.card,borderRadius:16,padding:"16px",marginTop:14,border:`1px solid ${o.status==="Cancelled"?"rgba(244,63,94,0.30)":C.border}`}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>✕ Cancellation &amp; Refund</div>
           {o.status==="Cancelled"?(
             <>
-              <div style={{background:"#fee2e2",border:"1px solid #fecaca",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>
+              <div style={{background:"rgba(244,63,94,0.12)",border:"1px solid #fecaca",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12.5,color:"#fb7185",fontWeight:600,lineHeight:1.5}}>
                 This order is cancelled.{o.cancelReason?` Reason: ${o.cancelReason}`:""}
               </div>
               {paidish?(
@@ -7204,7 +7260,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:10}}>Refund of ₹{amtDue} is due to the customer:</div>
                   {refundEditor()}
                   <button className="press" onClick={saveRefund} disabled={saving}
-                    style={{width:"100%",marginTop:12,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",opacity:saving?.7:1}}>
+                    style={{width:"100%",marginTop:12,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Outfit',sans-serif",opacity:saving?.7:1}}>
                     💾 Save Refund Details
                   </button>
                 </>
@@ -7213,13 +7269,13 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               )}
             </>
           ):cancelOpen?(
-            <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:12,padding:"14px"}}>
+            <div style={{background:"rgba(244,63,94,0.12)",border:"1.5px solid #fecaca",borderRadius:12,padding:"14px"}}>
               <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Reason <span style={{fontWeight:400,textTransform:"none"}}>(optional, shown to customer)</span></div>
               <input value={cancelReason} onChange={e=>setCancelReason(e.target.value)} placeholder="e.g. Out of stock"
                 style={{...refundFld,marginBottom:12}}/>
               {paidish?(
                 <>
-                  <div style={{fontSize:12,fontWeight:700,color:"#b91c1c",marginBottom:8}}>₹{amtDue} was collected — record the refund:</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#fb7185",marginBottom:8}}>₹{amtDue} was collected — record the refund:</div>
                   {refundEditor()}
                 </>
               ):(
@@ -7227,16 +7283,16 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               )}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14}}>
                 <button className="press" onClick={()=>setCancelOpen(false)} disabled={saving}
-                  style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Keep order</button>
+                  style={{background:C.card,color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Keep order</button>
                 <button className="press" onClick={doCancel} disabled={saving}
-                  style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{saving?"Cancelling…":"Confirm cancellation"}</button>
+                  style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>{saving?"Cancelling…":"Confirm cancellation"}</button>
               </div>
             </div>
           ):(
             <>
               <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Cancel this order and record any refund owed. Stock is automatically returned, and the customer sees the cancellation &amp; refund status on their order page.</div>
               <button className="press" onClick={()=>setCancelOpen(true)}
-                style={{width:"100%",background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+                style={{width:"100%",background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
                 ✕ Cancel Order
               </button>
             </>
@@ -7247,19 +7303,19 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         {onDeleteOrder&&(
           <div style={{marginTop:14}}>
             {delOrderConfirm?(
-              <div style={{background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"14px"}}>
+              <div style={{background:"rgba(244,63,94,0.12)",border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"14px"}}>
                 <div style={{fontSize:13,fontWeight:700,color:C.danger,marginBottom:4,textAlign:"center"}}>Delete order {orderId(o.id)} permanently?</div>
-                <div style={{fontSize:11,color:"#7f1d1d",marginBottom:10,textAlign:"center",lineHeight:1.5}}>This also removes its payment screenshot and can't be undone.</div>
+                <div style={{fontSize:11,color:"#fda4af",marginBottom:10,textAlign:"center",lineHeight:1.5}}>This also removes its payment screenshot and can't be undone.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   <button className="press" onClick={()=>setDelOrderConfirm(false)}
-                    style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
+                    style={{background:C.card,color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Cancel</button>
                   <button className="press" onClick={()=>{setDelOrderConfirm(false);onDeleteOrder(o);}}
-                    style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Yes, delete</button>
+                    style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Yes, delete</button>
                 </div>
               </div>
             ):(
             <button className="press" onClick={()=>setDelOrderConfirm(true)}
-              style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              style={{width:"100%",background:C.card,color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
               🗑 Delete This Order
             </button>
             )}
@@ -7406,15 +7462,15 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <div>
             <div style={{fontSize:11,color:"rgba(255,255,255,.65)",fontWeight:600,letterSpacing:1,marginBottom:4}}>ADMIN — {STORE_NAME.toUpperCase()}</div>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{tab==="products"?"Products":tab==="reviews"?"Reviews":tab==="requests"?"Requests":"Orders"}</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{tab==="products"?"Products":tab==="reviews"?"Reviews":tab==="requests"?"Requests":"Orders"}</div>
           </div>
           <div style={{display:"flex",gap:8}}>
             <button className="press" onClick={onBack}
-              style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
               🛍 Store
             </button>
             {tab==="products"&&<button className="press" onClick={()=>{setEditProduct(null);setTab("form");}}
-              style={{background:"white",border:"none",borderRadius:10,padding:"8px 14px",color:C.primary,fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              style={{background:C.card,border:"none",borderRadius:10,padding:"8px 14px",color:C.primary,fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
               + Add
             </button>}
           </div>
@@ -7424,7 +7480,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           {stats.map(s=>(
             <div key={s.l} style={{background:"rgba(255,255,255,.12)",borderRadius:"12px 12px 0 0",padding:"10px 8px",textAlign:"center"}}>
               <div style={{fontSize:16,marginBottom:4}}>{s.i}</div>
-              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,color:"white"}}>{s.v}</div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:18,fontWeight:800,color:"white"}}>{s.v}</div>
               <div style={{fontSize:9,color:"rgba(255,255,255,.7)",fontWeight:600}}>{s.l}</div>
             </div>
           ))}
@@ -7433,10 +7489,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         <div style={{display:"flex",background:"rgba(0,0,0,.2)",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
           {["orders","products","wallets","reviews","requests","guides","settings"].map(t=>(
             <button key={t} className="press" onClick={()=>setTab(t)}
-              style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
+              style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
               {t==="orders"?"📋 Orders":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
               {t==="orders"&&newOrderCount>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{newOrderCount}</span>}
-              {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":attnProds.some(p=>(p.stockCount??DEFAULT_STOCK)<=0)?"#dc2626":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Products needing restock — tap Products to see which">{stockAlertCount}</span>}
+              {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#fbbf24":attnProds.some(p=>(p.stockCount??DEFAULT_STOCK)<=0)?"#dc2626":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Products needing restock — tap Products to see which">{stockAlertCount}</span>}
               {t==="requests"&&requests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{requests.length}</span>}
             </button>
           ))}
@@ -7444,14 +7500,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       </div>
 
       {!isAdminSignedIn()&&(
-        <div style={{margin:"14px 16px 0",background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:14,padding:"14px"}}>
+        <div style={{margin:"14px 16px 0",background:"rgba(251,146,60,0.12)",border:`1px solid #fed7aa`,borderRadius:14,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
             <span style={{fontSize:18}}>⚠️</span>
-            <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:"#9a3412"}}>Sign in to load orders &amp; save changes</span>
+            <span style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800,color:"#fdba74"}}>Sign in to load orders &amp; save changes</span>
           </div>
-          <div style={{fontSize:12.5,color:"#9a3412",lineHeight:1.55,marginBottom:10}}>The admin password unlocks this screen, but for customer privacy <b>order details only load after you sign in with your Google admin account</b>. Products, posters &amp; settings also won't sync to customers until you sign in.</div>
+          <div style={{fontSize:12.5,color:"#fdba74",lineHeight:1.55,marginBottom:10}}>The admin password unlocks this screen, but for customer privacy <b>order details only load after you sign in with your Google admin account</b>. Products, posters &amp; settings also won't sync to customers until you sign in.</div>
           <button className="press" onClick={onAdminSignIn}
-            style={{display:"inline-flex",alignItems:"center",gap:8,background:"white",border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif"}}>
+            style={{display:"inline-flex",alignItems:"center",gap:8,background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Outfit',sans-serif"}}>
             <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.2 35.9 26.7 37 24 37c-5.3 0-9.7-2.6-11.3-7l-6.5 5C9.2 41.4 16 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.3 5.3C41.9 35.5 45 30.2 45 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
             Sign in with Google
           </button>
@@ -7467,7 +7523,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           <div style={{background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
               <span style={{fontSize:16}}>📈</span>
-              <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800}}>Store Visitors</span>
+              <span style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800}}>Store Visitors</span>
             </div>
             {(()=>{
               const d=(visitStats&&visitStats.daily)||{}; const today=new Date().toISOString().slice(0,10);
@@ -7482,16 +7538,16 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           {/* DOA insights — loss patterns by species × zone × season */}
           <DoaInsights orders={orders}/>
           {/* Payment destination — glance-check that money still routes to you */}
-          <div style={{background:(settings.upiId||settings.razorpayLink)?"#ecfdf5":"#fff7ed",border:`1px solid ${(settings.upiId||settings.razorpayLink)?"#a7f3d0":"#fed7aa"}`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
-            <div style={{fontSize:11,fontWeight:800,color:(settings.upiId||settings.razorpayLink)?"#15803d":"#9a3412",letterSpacing:.4,marginBottom:5}}>💰 PAYMENTS GO TO</div>
+          <div style={{background:(settings.upiId||settings.razorpayLink)?"rgba(52,211,153,0.12)":"rgba(251,146,60,0.12)",border:`1px solid ${(settings.upiId||settings.razorpayLink)?"rgba(52,211,153,0.30)":"rgba(251,146,60,0.30)"}`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:800,color:(settings.upiId||settings.razorpayLink)?"#34d399":"#fdba74",letterSpacing:.4,marginBottom:5}}>💰 PAYMENTS GO TO</div>
             {(settings.upiId||settings.razorpayLink)?(
               <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                {settings.upiId&&<div style={{fontSize:13,fontWeight:700,color:"#166534"}}>UPI: <span style={{fontFamily:"monospace"}}>{settings.upiId}</span>{settings.upiName?` · ${settings.upiName}`:""}</div>}
-                {settings.razorpayLink&&<div style={{fontSize:11.5,color:"#166534",wordBreak:"break-all"}}>Gateway: {settings.razorpayLink}</div>}
-                <div style={{fontSize:10.5,color:"#15803d",marginTop:3,lineHeight:1.5}}>Changing these now requires an emailed code. If this ever looks wrong, fix it in Settings → Online Payment immediately.</div>
+                {settings.upiId&&<div style={{fontSize:13,fontWeight:700,color:"#34d399"}}>UPI: <span style={{fontFamily:"monospace"}}>{settings.upiId}</span>{settings.upiName?` · ${settings.upiName}`:""}</div>}
+                {settings.razorpayLink&&<div style={{fontSize:11.5,color:"#34d399",wordBreak:"break-all"}}>Gateway: {settings.razorpayLink}</div>}
+                <div style={{fontSize:10.5,color:"#34d399",marginTop:3,lineHeight:1.5}}>Changing these now requires an emailed code. If this ever looks wrong, fix it in Settings → Online Payment immediately.</div>
               </div>
             ):(
-              <div style={{fontSize:12.5,color:"#9a3412",fontWeight:600}}>⚠ No payment method set — add your UPI ID or gateway link in Settings so customers can pay.</div>
+              <div style={{fontSize:12.5,color:"#fdba74",fontWeight:600}}>⚠ No payment method set — add your UPI ID or gateway link in Settings so customers can pay.</div>
             )}
           </div>
           {/* Search orders by number / name / phone */}
@@ -7499,14 +7555,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:.5}}>🔍</span>
             <input value={orderSearch} onChange={e=>setOrderSearch(e.target.value)}
               placeholder="Search order # / name / phone…"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 36px 11px 36px",fontSize:13.5,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 36px 11px 36px",fontSize:13.5,outline:"none",background:C.card,fontFamily:"'Outfit',sans-serif"}}/>
             {orderSearch&&<button className="press" onClick={()=>setOrderSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,color:C.textSub,cursor:"pointer"}}>×</button>}
           </div>
           {/* Status filter */}
           <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:14}}>
             {["All",...ALL_STATUSES].map(s=>(
               <button key={s} className="press" onClick={()=>setOrderFilter(s)}
-                style={{flexShrink:0,background:orderFilter===s?C.primary:C.card,color:orderFilter===s?"white":C.textSub,border:`1.5px solid ${orderFilter===s?C.primary:C.border}`,borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:600,fontFamily:"'Nunito',sans-serif"}}>
+                style={{flexShrink:0,background:orderFilter===s?C.primary:C.card,color:orderFilter===s?"white":C.textSub,border:`1.5px solid ${orderFilter===s?C.primary:C.border}`,borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:600,fontFamily:"'Outfit',sans-serif"}}>
                 {s}
                 {s!=="All"&&<span style={{marginLeft:4,background:orderFilter===s?"rgba(255,255,255,.25)":C.border,borderRadius:10,padding:"1px 6px",fontSize:10}}>
                   {orders.filter(o=>o.status===s).length}
@@ -7522,14 +7578,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               <div style={{background:"linear-gradient(135deg,#107c41,#0b5e31)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                   <span style={{fontSize:18}}>🗓️</span>
-                  <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800}}>Monthly report reminder</span>
+                  <span style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800}}>Monthly report reminder</span>
                 </div>
                 <div style={{fontSize:12,opacity:.93,lineHeight:1.55,marginBottom:10}}>It's a new month — download &amp; save your <b>{pm.label}</b> orders report (Excel) for your records and accounts.</div>
                 <div style={{display:"flex",gap:8}}>
                   <button className="press" onClick={()=>{const n=exportOrdersCSV(orders,pm.from,pm.to,settings,walletBalances);stampExport();showToast(n?`Downloaded ${n} order${n!==1?"s":""} for ${pm.label}`:`No orders in ${pm.label} — marked done`);}}
-                    style={{flex:1,background:"white",color:"#0b5e31",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>⬇ Download {pm.label}</button>
+                    style={{flex:1,background:C.card,color:"#34d399",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>⬇ Download {pm.label}</button>
                   <button className="press" onClick={stampExport}
-                    style={{background:"rgba(255,255,255,.18)",color:"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"10px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Dismiss</button>
+                    style={{background:"rgba(255,255,255,.18)",color:"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"10px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Dismiss</button>
                 </div>
               </div>
             );
@@ -7539,18 +7595,18 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
               <span style={{fontSize:16}}>📊</span>
-              <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Export Orders to Excel</span>
+              <span style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Export Orders to Excel</span>
             </div>
             <div style={{display:"flex",gap:8,marginBottom:10}}>
               <div style={{flex:1}}>
                 <div style={{fontSize:10.5,color:C.textSub,fontWeight:700,marginBottom:4}}>FROM</div>
                 <input type="date" value={csvFrom} onChange={e=>setCsvFrom(e.target.value)}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif",color:C.text}}/>
+                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:C.card,fontFamily:"'Outfit',sans-serif",color:C.text}}/>
               </div>
               <div style={{flex:1}}>
                 <div style={{fontSize:10.5,color:C.textSub,fontWeight:700,marginBottom:4}}>TO</div>
                 <input type="date" value={csvTo} onChange={e=>setCsvTo(e.target.value)}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white",fontFamily:"'Nunito',sans-serif",color:C.text}}/>
+                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:C.card,fontFamily:"'Outfit',sans-serif",color:C.text}}/>
               </div>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
@@ -7558,12 +7614,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 <button key={lbl} className="press" onClick={()=>{
                   const to=new Date(); const from=new Date(); if(d>0)from.setDate(from.getDate()-d);
                   setCsvFrom(from.toISOString().slice(0,10)); setCsvTo(to.toISOString().slice(0,10));
-                }} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:16,padding:"5px 12px",fontSize:11,fontWeight:700,color:C.primary,fontFamily:"'Nunito',sans-serif"}}>{lbl}</button>
+                }} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:16,padding:"5px 12px",fontSize:11,fontWeight:700,color:C.primary,fontFamily:"'Outfit',sans-serif"}}>{lbl}</button>
               ))}
-              {(csvFrom||csvTo)&&<button className="press" onClick={()=>{setCsvFrom("");setCsvTo("");}} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:16,padding:"5px 12px",fontSize:11,fontWeight:700,color:C.textSub,fontFamily:"'Nunito',sans-serif"}}>Clear</button>}
+              {(csvFrom||csvTo)&&<button className="press" onClick={()=>{setCsvFrom("");setCsvTo("");}} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:16,padding:"5px 12px",fontSize:11,fontWeight:700,color:C.textSub,fontFamily:"'Outfit',sans-serif"}}>Clear</button>}
             </div>
             <button className="press" onClick={()=>{const n=exportOrdersCSV(orders,csvFrom,csvTo,settings,walletBalances);stampExport();showToast(n?`Exported ${n} order${n!==1?"s":""} to Excel`:"No orders in that range","error");}}
-              style={{width:"100%",background:"#107c41",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+              style={{width:"100%",background:"#107c41",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               ⬇ Download Excel (CSV){(csvFrom||csvTo)?" — selected range":" — all orders"}
             </button>
           </div>
@@ -7572,12 +7628,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
               <span style={{fontSize:16}}>🧹</span>
-              <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Clean Up Old Orders</span>
+              <span style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Clean Up Old Orders</span>
             </div>
             <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Permanently deletes <b>Delivered</b> &amp; <b>Cancelled</b> orders (and their payment screenshots) older than the chosen age — frees Firebase space. Active &amp; recent orders are kept. 💡 Download a backup first (Settings → Data &amp; Backup).</div>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
               <select value={cleanMonths} onChange={e=>{setCleanMonths(Number(e.target.value));setCleanConfirm(false);}}
-                style={{flexShrink:0,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px",fontSize:12.5,background:"white",fontFamily:"'Nunito',sans-serif",color:C.text}}>
+                style={{flexShrink:0,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px",fontSize:12.5,background:C.card,fontFamily:"'Outfit',sans-serif",color:C.text}}>
                 <option value={3}>Older than 3 months</option>
                 <option value={6}>Older than 6 months</option>
                 <option value={12}>Older than 1 year</option>
@@ -7588,7 +7644,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 if(!due){ showToast("No old orders to delete","error"); return; }
                 setCleanConfirm(true);
               }}
-                style={{flex:1,background:"#b91c1c",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+                style={{flex:1,background:"#fb7185",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
                 🗑 Delete Old Orders
               </button>
             </div>
@@ -7596,18 +7652,18 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               const cutoff=Date.now()-cleanMonths*30*24*60*60*1000;
               const due=orders.filter(o=>(o.status==="Delivered"||o.status==="Cancelled")&&new Date(o.placedAt||0).getTime()<cutoff).length;
               return(
-                <div style={{marginTop:10,background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
+                <div style={{marginTop:10,background:"rgba(244,63,94,0.12)",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
                   <div style={{fontSize:12.5,fontWeight:700,color:C.danger,marginBottom:4,lineHeight:1.5}}>Permanently delete {due} delivered/cancelled order{due!==1?"s":""} older than {cleanMonths} months?</div>
-                  <div style={{fontSize:11,color:"#7f1d1d",marginBottom:10,lineHeight:1.5}}>This also removes their payment screenshots and <b>cannot be undone</b>. Download a backup or CSV first if you want to keep the records.</div>
+                  <div style={{fontSize:11,color:"#fda4af",marginBottom:10,lineHeight:1.5}}>This also removes their payment screenshots and <b>cannot be undone</b>. Download a backup or CSV first if you want to keep the records.</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     <button className="press" onClick={()=>setCleanConfirm(false)}
-                      style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
+                      style={{background:C.card,color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Cancel</button>
                     <button className="press" onClick={async()=>{
                       setCleanConfirm(false);
                       const n=await onCleanupOrders(cleanMonths);
                       showToast(n?`Deleted ${n} old order${n!==1?"s":""} ✓`:"Nothing deleted");
                     }}
-                      style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Yes, delete</button>
+                      style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Yes, delete</button>
                   </div>
                 </div>
               );
@@ -7625,7 +7681,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                   <span style={{fontSize:16}}>⚡</span>
-                  <span style={{fontFamily:"'Baloo 2',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Speed Up Catalog</span>
+                  <span style={{fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Speed Up Catalog</span>
                 </div>
                 <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
                   Sets each product's <b>first photo</b> as its catalog thumbnail and shrinks it so the shop grid loads fast (full-size photos still open on the product page). Run it after adding products &amp; photos. Safe anytime — your full-size photos are never deleted. {needOpt>0?<b>{needOpt} product{needOpt!==1?"s":""} can be optimised.</b>:<span style={{color:C.success,fontWeight:700}}>All products optimised ✓</span>}
@@ -7638,7 +7694,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   }catch(e){ setThumbMsg("⚠ Something went wrong — please try again."); }
                   setThumbBusy(false);
                 }}
-                  style={{width:"100%",background:(thumbBusy||!needOpt)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+                  style={{width:"100%",background:(thumbBusy||!needOpt)?"#475569":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
                   {thumbBusy?"Optimising…":"⚡ Optimise Catalog Images"}
                 </button>
                 {thumbMsg&&<div style={{fontSize:11.5,color:thumbMsg.startsWith("⚠")?C.danger:C.textSub,fontWeight:600,marginTop:8,lineHeight:1.5}}>{thumbMsg}</div>}
@@ -7685,16 +7741,16 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             const avgPack=(expReviews.reduce((s,r)=>s+(Number(r.packing)||0),0)/n);
             return(
               <div style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
-                <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:10}}>📦 Service &amp; Packing Feedback</div>
+                <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:10}}>📦 Service &amp; Packing Feedback</div>
                 <div style={{display:"flex",gap:12,marginBottom:14}}>
                   <div style={{flex:1,background:C.bg,borderRadius:12,padding:"11px 12px",textAlign:"center"}}>
                     <div style={{fontSize:11,color:C.textSub,fontWeight:700,marginBottom:3}}>SERVICE</div>
-                    <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,color:C.primary,lineHeight:1}}>{avgSvc.toFixed(1)}</div>
+                    <div style={{fontFamily:"'Outfit',sans-serif",fontSize:24,fontWeight:800,color:C.primary,lineHeight:1}}>{avgSvc.toFixed(1)}</div>
                     <div style={{marginTop:4}}><ReviewStars value={Math.round(avgSvc)} size={12}/></div>
                   </div>
                   <div style={{flex:1,background:C.bg,borderRadius:12,padding:"11px 12px",textAlign:"center"}}>
                     <div style={{fontSize:11,color:C.textSub,fontWeight:700,marginBottom:3}}>PACKING</div>
-                    <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,color:C.primary,lineHeight:1}}>{avgPack.toFixed(1)}</div>
+                    <div style={{fontFamily:"'Outfit',sans-serif",fontSize:24,fontWeight:800,color:C.primary,lineHeight:1}}>{avgPack.toFixed(1)}</div>
                     <div style={{marginTop:4}}><ReviewStars value={Math.round(avgPack)} size={12}/></div>
                   </div>
                 </div>
@@ -7708,7 +7764,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                         {r.comment&&<div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginTop:4}}>{r.comment}</div>}
                       </div>
                       <button className="press" onClick={async()=>{await deleteExperienceReview(r.id);setExpReviews(list=>list.filter(x=>x.id!==r.id));showToast("Feedback deleted");}}
-                        style={{background:"#fee2e2",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:C.danger,fontFamily:"'Nunito',sans-serif",flexShrink:0,marginLeft:8}}>
+                        style={{background:"rgba(244,63,94,0.12)",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:C.danger,fontFamily:"'Outfit',sans-serif",flexShrink:0,marginLeft:8}}>
                         Delete
                       </button>
                     </div>
@@ -7751,7 +7807,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                         <div style={{fontSize:10,color:C.textSub}}>{new Date(r.date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}</div>
                       </div>
                       <button className="press" onClick={()=>handleDeleteReview(p.id,r.id)}
-                        style={{background:"#fee2e2",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:C.danger,fontFamily:"'Nunito',sans-serif"}}>
+                        style={{background:"rgba(244,63,94,0.12)",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:C.danger,fontFamily:"'Outfit',sans-serif"}}>
                         Delete
                       </button>
                     </div>
@@ -7789,24 +7845,24 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           </div>
           <div style={{marginBottom:14}}><CategoryPills selected={catFilter} onSelect={setCatFilter} all/></div>
           {attnProds.length>0&&(
-            <div style={{background:"#fff7ed",border:`1.5px solid #fed7aa`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+            <div style={{background:"rgba(251,146,60,0.12)",border:`1.5px solid #fed7aa`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
               <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}>
                 <span style={{fontSize:15}}>⚠️</span>
-                <span style={{fontSize:13,fontWeight:800,color:"#9a3412"}}>{attnProds.length} product{attnProds.length!==1?"s":""} need restocking</span>
+                <span style={{fontSize:13,fontWeight:800,color:"#fdba74"}}>{attnProds.length} product{attnProds.length!==1?"s":""} need restocking</span>
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
                 {attnProds.map(p=>{
                   const s=p.stockCount??DEFAULT_STOCK; const out=s<=0;
                   return(
                     <button key={p.id} className="press" onClick={()=>openProduct(p)} title="Open this product — clears the alert"
-                      style={{display:"inline-flex",alignItems:"center",gap:6,background:"white",border:`1px solid ${out?"#fecaca":"#fed7aa"}`,borderRadius:20,padding:"5px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+                      style={{display:"inline-flex",alignItems:"center",gap:6,background:C.card,border:`1px solid ${out?"rgba(244,63,94,0.30)":"rgba(251,146,60,0.30)"}`,borderRadius:20,padding:"5px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
                       <span style={{width:7,height:7,borderRadius:"50%",background:out?"#dc2626":"#f59e0b",flexShrink:0}}/>
                       {p.name} <span style={{color:out?"#dc2626":"#c2410c",fontWeight:800}}>{out?"· Out":`· ${s} left`}</span>
                     </button>
                   );
                 })}
               </div>
-              <div style={{fontSize:10.5,color:"#9a3412",marginTop:8,opacity:.8}}>Tap a product to open it — that clears it from this alert.</div>
+              <div style={{fontSize:10.5,color:"#fdba74",marginTop:8,opacity:.8}}>Tap a product to open it — that clears it from this alert.</div>
             </div>
           )}
           <div style={{fontSize:12,color:C.textSub,fontWeight:500,marginBottom:12}}>{filteredProds.length} product{filteredProds.length!==1?"s":""}</div>
@@ -7827,13 +7883,13 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                     {p.comingSoon
                       ? <span style={{fontSize:10,fontWeight:800,color:C.accent,background:C.accentLight,padding:"2px 7px",borderRadius:12}}>🔜 Coming Soon · {interestCounts[p.id]||0} interested</span>
                       : <StockBadge stockCount={p.stockCount ?? DEFAULT_STOCK}/>}
-                    {(p.discountPct||0)>0&&!p.comingSoon&&<span style={{fontSize:10,fontWeight:800,color:C.coral,background:"#fff7ed",padding:"2px 7px",borderRadius:12}}>-{p.discountPct}%</span>}
+                    {(p.discountPct||0)>0&&!p.comingSoon&&<span style={{fontSize:10,fontWeight:800,color:C.coral,background:"rgba(251,146,60,0.12)",padding:"2px 7px",borderRadius:12}}>-{p.discountPct}%</span>}
                     {p.hasImg&&<span style={{fontSize:10,color:C.accent}}>📷</span>}
                     {p.hasVid&&<span style={{fontSize:10,color:C.accent}}>🎬</span>}
                   </div>
                 </div>
                 <button className="press" onClick={()=>openProduct(p)}
-                  style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                  style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
                   Edit
                 </button>
               </div>
@@ -7877,9 +7933,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                     <div style={{fontSize:12,color:C.text,fontWeight:600}}>{r.name} · {r.phone}</div>
                     <div style={{display:"flex",gap:8}}>
                       <button className="press" onClick={()=>openWA(waNum,encodeURIComponent(`Hi ${r.name}! Regarding your request for "${r.product}" at ${STORE_NAME}…`))}
-                        style={{background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>💬 Reply</button>
+                        style={{background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>💬 Reply</button>
                       <button className="press" onClick={()=>onDeleteRequest(r.id)}
-                        style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Delete</button>
+                        style={{background:"rgba(244,63,94,0.12)",color:C.danger,border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Delete</button>
                     </div>
                   </div>
                 </div>
@@ -7900,7 +7956,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           ):(
             <>
             <button className="press" onClick={()=>{setEditGuide(null);setGuideFormOpen(true);}}
-              style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginBottom:16}}>
+              style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif",marginBottom:16}}>
               + Add Care Guide / Poster
             </button>
             {guides.length===0?(
@@ -7923,9 +7979,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
                     <button className="press" onClick={()=>{setEditGuide(g);setGuideFormOpen(true);}}
-                      style={{background:C.accentLight,color:C.primary,border:"none",borderRadius:9,padding:"6px 10px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Edit</button>
+                      style={{background:C.accentLight,color:C.primary,border:"none",borderRadius:9,padding:"6px 10px",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Edit</button>
                     <button className="press" onClick={()=>onDeleteGuide(g.id)}
-                      style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:9,padding:"6px 10px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Del</button>
+                      style={{background:"rgba(244,63,94,0.12)",color:C.danger,border:"none",borderRadius:9,padding:"6px 10px",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Del</button>
                   </div>
                 </div>
               );
@@ -7940,11 +7996,11 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         <div style={{padding:"16px 16px 100px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div>
-              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>👛 Customer Wallets</div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>👛 Customer Wallets</div>
               <div style={{fontSize:11.5,color:C.textSub}}>{customers.length} customer{customers.length!==1?"s":""} · ₹{Number(settings.loyaltyRedeemValue||1)}/coin</div>
             </div>
             <button className="press" onClick={loadWallets} disabled={loadingWallets}
-              style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 12px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Nunito',sans-serif"}}>
+              style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 12px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Outfit',sans-serif"}}>
               {loadingWallets?"…":"↻ Refresh"}
             </button>
           </div>
@@ -7955,7 +8011,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               <div style={{display:"flex",gap:10,marginBottom:14}}>
                 <div style={{flex:1,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:14,padding:"13px 15px",color:"white"}}>
                   <div style={{fontSize:11,opacity:.85,fontWeight:600}}>Total coins outstanding</div>
-                  <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800}}>{totalCoins}</div>
+                  <div style={{fontFamily:"'Outfit',sans-serif",fontSize:22,fontWeight:800}}>{totalCoins}</div>
                   <div style={{fontSize:10.5,opacity:.85}}>≈ ₹{Math.floor(totalCoins*val)} liability</div>
                 </div>
               </div>
@@ -7979,11 +8035,11 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                         <div style={{fontSize:11,color:C.textSub}}>{c.phone||c.email||c.uid.slice(0,12)} · {c.orders} order{c.orders!==1?"s":""}</div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0}}>
-                        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.primary}}>{bal==null?"—":bal} <span style={{fontSize:11,fontWeight:600,color:C.textSub}}>pts</span></div>
+                        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:16,fontWeight:800,color:C.primary}}>{bal==null?"—":bal} <span style={{fontSize:11,fontWeight:600,color:C.textSub}}>pts</span></div>
                         {bal!=null&&<div style={{fontSize:10.5,color:C.textSub}}>≈ ₹{Math.floor(bal*val)}</div>}
                       </div>
                       <button className="press" onClick={()=>{ setAdjUid(adjUid===c.uid?null:c.uid); setAdjAmt(""); setAdjNote(""); }}
-                        style={{flexShrink:0,background:adjUid===c.uid?C.primary:C.accentLight,color:adjUid===c.uid?"white":C.primary,border:`1px solid ${C.border}`,borderRadius:9,padding:"7px 10px",fontSize:11.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+                        style={{flexShrink:0,background:adjUid===c.uid?C.primary:C.accentLight,color:adjUid===c.uid?"white":C.primary,border:`1px solid ${C.border}`,borderRadius:9,padding:"7px 10px",fontSize:11.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
                         {adjUid===c.uid?"Close":"Adjust"}
                       </button>
                     </div>
@@ -7992,12 +8048,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                         <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.4}}>Enter points to <b>add</b> (e.g. <b>50</b>) or <b>deduct</b> (e.g. <b>-50</b>). A confirmation will show the new balance.</div>
                         <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
                           <input type="number" value={adjAmt} onChange={e=>setAdjAmt(e.target.value)} placeholder="± points"
-                            style={{width:110,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                            style={{width:110,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
                           <input type="text" value={adjNote} onChange={e=>setAdjNote(e.target.value)} placeholder="Reason (optional)"
-                            style={{flex:1,minWidth:120,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                            style={{flex:1,minWidth:120,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
                         </div>
                         <button className="press" onClick={()=>doAdjust(c)} disabled={adjBusy}
-                          style={{width:"100%",background:adjBusy?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:11,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>
+                          style={{width:"100%",background:adjBusy?"#475569":C.primary,color:"white",border:"none",borderRadius:11,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>
                           {adjBusy?"Updating…":"Review & Confirm"}
                         </button>
                       </div>
@@ -8016,7 +8072,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           {/* Start Fresh — bulk-clear all customer submissions */}
           <div style={{padding:"16px 16px 0"}}>
             <div style={{background:"#fff5f5",borderRadius:16,padding:"16px",border:`1.5px solid ${C.danger}`}}>
-              <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.danger,marginBottom:4}}>🧹 Start Fresh</div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.danger,marginBottom:4}}>🧹 Start Fresh</div>
               <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Permanently delete all customer-submitted content so you can launch with a clean slate. Each clear cannot be undone.</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {[
@@ -8026,7 +8082,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 ].map(b=>(
                   <button key={b.label} className="press" disabled={!b.count}
                     onClick={()=>{ if(b.count&&window.confirm(`Delete ALL ${b.count} ${b.word}${b.count>1?"s":""}?\n\nThis permanently removes them from the website and cannot be undone.`)){ b.fn&&b.fn(); } }}
-                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:b.count?"#fee2e2":C.bg,color:b.count?C.danger:C.textSub,border:`1.5px solid ${b.count?C.danger:C.border}`,borderRadius:12,padding:"11px 14px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:b.count?"pointer":"default",opacity:b.count?1:.6}}>
+                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:b.count?"rgba(244,63,94,0.12)":C.bg,color:b.count?C.danger:C.textSub,border:`1.5px solid ${b.count?C.danger:C.border}`,borderRadius:12,padding:"11px 14px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif",cursor:b.count?"pointer":"default",opacity:b.count?1:.6}}>
                     <span>Clear all {b.label}</span>
                     <span style={{fontSize:12,fontWeight:800,background:b.count?"rgba(220,38,38,.12)":"transparent",borderRadius:20,padding:b.count?"2px 9px":"0"}}>{b.count}</span>
                   </button>
@@ -8040,7 +8096,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             const pending=showcase.filter(s=>!showcaseApproved(s)&&!showcaseExpired(s,now));
             const live=showcase.filter(s=>showcaseApproved(s)&&!showcaseExpired(s,now));
             const row=(s,isPending)=>(
-              <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"8px 10px",border:`1px solid ${isPending?"#fed7aa":C.border}`}}>
+              <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"8px 10px",border:`1px solid ${isPending?"rgba(251,146,60,0.30)":C.border}`}}>
                 <img src={s.imgData} alt={s.ownerName} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.ownerName}</div>
@@ -8049,12 +8105,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 </div>
                 {isPending&&(
                   <button className="press" onClick={()=>onApproveShowcase&&onApproveShowcase(s)}
-                    style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"5px 11px",fontSize:11,fontWeight:800,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                    style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"5px 11px",fontSize:11,fontWeight:800,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
                     Approve
                   </button>
                 )}
                 <button className="press" onClick={()=>onDeleteShowcase&&onDeleteShowcase(s.id)}
-                  style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                  style={{background:"rgba(244,63,94,0.12)",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
                   {isPending?"Reject":"Remove"}
                 </button>
               </div>
@@ -8062,10 +8118,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             return(
             <div style={{padding:"16px 16px 0"}}>
               <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:0,border:`1px solid ${C.border}`}}>
-                <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase</div>
+                <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase</div>
                 {pending.length>0&&(
                   <div style={{marginBottom:14}}>
-                    <div style={{fontSize:11.5,fontWeight:800,color:"#9a3412",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>⏳ Pending approval ({pending.length})</div>
+                    <div style={{fontSize:11.5,fontWeight:800,color:"#fdba74",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>⏳ Pending approval ({pending.length})</div>
                     <div style={{display:"flex",flexDirection:"column",gap:8}}>{pending.map(s=>row(s,true))}</div>
                   </div>
                 )}
@@ -8083,7 +8139,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           {testimonials.length>0&&(
             <div style={{padding:"16px 16px 0"}}>
               <div style={{background:C.card,borderRadius:16,padding:"16px",border:`1px solid ${C.border}`}}>
-                <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:4}}>💬 Testimonials ({testimonials.length})</div>
+                <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:4}}>💬 Testimonials ({testimonials.length})</div>
                 <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Posted by signed-in customers and shown on the home page. Remove any you don't want public.</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {testimonials.map(t=>(
@@ -8096,7 +8152,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                         <div style={{fontSize:12,color:C.textSub,lineHeight:1.4}}>{t.text}</div>
                       </div>
                       <button className="press" onClick={()=>{ if(window.confirm(`Remove ${t.name||"this customer"}'s testimonial?\n\n"${(t.text||"").slice(0,120)}${(t.text||"").length>120?"…":""}"\n\nThis permanently deletes it from the home page and cannot be undone.`)){ onDeleteTestimonial&&onDeleteTestimonial(t.id); } }}
-                        style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",flexShrink:0}}>
+                        style={{background:"rgba(244,63,94,0.12)",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
                         Remove
                       </button>
                     </div>
@@ -8130,7 +8186,7 @@ function SettingsPanel({settings,onSave}){
     const used=promoToday[type]||0; const lim=Number(limit||0);
     const full=lim>0&&used>=lim;
     return (
-      <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,fontWeight:800,color:full?C.danger:lim>0?"#9a6a00":C.textSub,background:full?"#fee2e2":lim>0?"#fffbeb":C.bg,border:`1px solid ${full?"#fecaca":lim>0?"#fde68a":C.border}`,borderRadius:20,padding:"3px 9px",marginLeft:8}}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,fontWeight:800,color:full?C.danger:lim>0?"#9a6a00":C.textSub,background:full?"rgba(244,63,94,0.12)":lim>0?"rgba(251,146,60,0.12)":C.bg,border:`1px solid ${full?"rgba(244,63,94,0.30)":lim>0?"rgba(251,191,36,0.30)":C.border}`,borderRadius:20,padding:"3px 9px",marginLeft:8}}>
         {full?"●":"○"} {used}{lim>0?` of ${lim}`:""} used today{full?" — full":""}
       </span>
     );
@@ -8222,7 +8278,7 @@ function SettingsPanel({settings,onSave}){
     <div style={{marginBottom:16}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>{label}</div>
       <input type={type} value={f[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph}
-        style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white"}}/>
+        style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:C.card}}/>
       {note&&<div style={{fontSize:11,color:C.textSub,marginTop:4,lineHeight:1.45}}>{note}</div>}
     </div>
   );
@@ -8230,7 +8286,7 @@ function SettingsPanel({settings,onSave}){
     <div style={{marginBottom:14}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>{label}</div>
       <textarea value={f[k]||""} onChange={e=>set(k,e.target.value)} rows={4}
-        style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:13,outline:"none",resize:"vertical",lineHeight:1.6,background:"white"}}/>
+        style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:13,outline:"none",resize:"vertical",lineHeight:1.6,background:C.card}}/>
     </div>
   );
   return(
@@ -8239,7 +8295,7 @@ function SettingsPanel({settings,onSave}){
       <div style={{display:"flex",gap:8,overflowX:"auto",marginBottom:16,paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
         {[["store","🏪 Store"],["payship","🚚 Payments & Shipping"],["promos","🎁 Promotions"],["content","📄 Content"],["emails","🔐 Email & Security"]].map(([k,label])=>(
           <button key={k} className="press" onClick={()=>setSec(k)}
-            style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${sec===k?C.primary:C.border}`,background:sec===k?C.primary:"white",color:sec===k?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap",cursor:"pointer"}}>
+            style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${sec===k?C.primary:C.border}`,background:sec===k?C.primary:"white",color:sec===k?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",whiteSpace:"nowrap",cursor:"pointer"}}>
             {label}
           </button>
         ))}
@@ -8247,7 +8303,7 @@ function SettingsPanel({settings,onSave}){
       {sec==="store"&&(<>
       {/* WhatsApp */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:14}}>💬 WhatsApp Notifications</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:14}}>💬 WhatsApp Notifications</div>
         {field("Your WhatsApp Number","ownerWhatsapp","919876543210","With country code, no + or spaces. New orders open here. Changing this needs a code emailed to your admin email.")}
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
           <input type="checkbox" checked={!!f.supporterEnabled} onChange={e=>set("supporterEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
@@ -8258,7 +8314,7 @@ function SettingsPanel({settings,onSave}){
 
       {/* Store contact (shown on home page) */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🖼️ Store Logo</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🖼️ Store Logo</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Upload your logo (PNG with transparent background works best). It updates everywhere for all customers.</div>
         <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:10}}>
           <div style={{width:72,height:72,borderRadius:14,background:C.bg,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
@@ -8269,7 +8325,7 @@ function SettingsPanel({settings,onSave}){
               Choose Logo
               <input type="file" accept="image/*" onChange={e=>handleLogo(e.target.files&&e.target.files[0])} style={{display:"none"}}/>
             </label>
-            {f.storeLogo&&<button className="press" onClick={()=>{set("storeLogo","");setLogoNote("Reset to default — tap Save");}} style={{marginLeft:8,background:"#fee2e2",color:C.danger,border:"none",borderRadius:10,padding:"9px 12px",fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Reset</button>}
+            {f.storeLogo&&<button className="press" onClick={()=>{set("storeLogo","");setLogoNote("Reset to default — tap Save");}} style={{marginLeft:8,background:"rgba(244,63,94,0.12)",color:C.danger,border:"none",borderRadius:10,padding:"9px 12px",fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Reset</button>}
             {logoNote&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>{logoNote}</div>}
           </div>
         </div>
@@ -8277,7 +8333,7 @@ function SettingsPanel({settings,onSave}){
 
       {/* Home-page marketing copy */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>✍️ Home Page Text</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>✍️ Home Page Text</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>The headline & taglines customers see on the home page. Type your own, or tap a suggestion.</div>
         {(()=>{
           const presets={
@@ -8290,7 +8346,7 @@ function SettingsPanel({settings,onSave}){
               {presets[key].map((opt,i)=>{
                 const on=(f[key]||"")===opt;
                 return <button key={i} className="press" onClick={()=>set(key,opt)}
-                  style={{background:on?C.primary:C.bg,color:on?"white":C.text,border:`1px solid ${on?C.primary:C.border}`,borderRadius:20,padding:"5px 11px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",lineHeight:1.3,textAlign:"left",maxWidth:"100%",whiteSpace:"normal"}}>{opt.length>46?opt.slice(0,44)+"…":opt}</button>;
+                  style={{background:on?C.primary:C.bg,color:on?"white":C.text,border:`1px solid ${on?C.primary:C.border}`,borderRadius:20,padding:"5px 11px",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif",lineHeight:1.3,textAlign:"left",maxWidth:"100%",whiteSpace:"normal"}}>{opt.length>46?opt.slice(0,44)+"…":opt}</button>;
               })}
             </div>
           );
@@ -8307,7 +8363,7 @@ function SettingsPanel({settings,onSave}){
 
       {/* Store contact (shown on home page) */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📍 Store Contact</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📍 Store Contact</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Shown at the bottom of the home page for customers.</div>
         {field("Store Address","storeAddress","e.g. 12 Lake View Rd, Chennai 600001")}
         {field("Opening Hours (optional)","storeHours","e.g. Mon–Sat, 10am–8pm")}
@@ -8320,7 +8376,7 @@ function SettingsPanel({settings,onSave}){
       {sec==="emails"&&(<>
       {/* Customer confirmation emails (EmailJS) */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📧 Customer Confirmation Emails</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📧 Customer Confirmation Emails</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Auto-emails customers an order confirmation. Create a free account at emailjs.com → add an Email Service + Template, then paste the 3 IDs here. Template should use variables: to_email, to_name, order_no, order_items, order_total, payment_method, store_name.</div>
         {field("EmailJS Service ID","emailjsService","service_xxxxxxx")}
         {field("EmailJS Template ID","emailjsTemplate","template_xxxxxxx")}
@@ -8354,29 +8410,29 @@ function SettingsPanel({settings,onSave}){
 
       {/* Visitor analytics */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📈 Visitor Analytics</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📈 Visitor Analytics</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Basic visit counts already appear on your Orders dashboard — no setup needed. For detailed reports (traffic sources, devices, locations), create a free Google Analytics 4 property and paste its Measurement ID here.</div>
         {field("Google Analytics ID (optional)","gaId","G-XXXXXXXXXX","From analytics.google.com → Admin → Data Streams → your web stream.")}
       </div>
 
       {/* Admin security */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🔐 Admin Security</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🔐 Admin Security</div>
 
         {/* Change password — only the signed-in Google admin can save it */}
         <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Change Admin Password</div>
         {adminOk ? (
           <div style={{marginBottom:14}}>
             <input type="password" value={npw} onChange={e=>{setNpw(e.target.value);setPwMsg("");}} placeholder="New password"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white",marginBottom:8}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:C.card,marginBottom:8}}/>
             <input type="password" value={npw2} onChange={e=>{setNpw2(e.target.value);setPwMsg("");}} placeholder="Confirm new password"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white",marginBottom:8}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:C.card,marginBottom:8}}/>
             <button className="press" onClick={changePassword} disabled={!npw}
-              style={{background:npw?C.primary:"#9ca3af",color:"white",border:"none",borderRadius:10,padding:"10px 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Set New Password</button>
+              style={{background:npw?C.primary:"#475569",color:"white",border:"none",borderRadius:10,padding:"10px 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Set New Password</button>
             {pwMsg&&<div style={{fontSize:11.5,color:pwMsg[0]==="✓"?C.success:C.danger,fontWeight:600,marginTop:8}}>{pwMsg}</div>}
           </div>
         ) : (
-          <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:"#9a3412",lineHeight:1.5}}>
+          <div style={{background:"rgba(251,146,60,0.12)",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:"#fdba74",lineHeight:1.5}}>
             🔒 Sign in with your Google admin account (banner at the top of Admin) to change the password. This keeps it changeable <b>only by you</b>.
           </div>
         )}
@@ -8386,14 +8442,14 @@ function SettingsPanel({settings,onSave}){
         <div style={{display:"flex",alignItems:"center",gap:8,background:C.bg,borderRadius:10,padding:"10px 12px"}}>
           <code style={{flex:1,fontSize:12,color:C.text,wordBreak:"break-all"}}>{adminOk?FB_AUTH.currentUser.uid:"— sign in with Google to view —"}</code>
           {adminOk&&(
-            <button className="press" onClick={()=>{navigator.clipboard?.writeText(FB_AUTH.currentUser.uid);}} style={{background:C.accentLight,border:"none",color:C.primary,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Copy</button>
+            <button className="press" onClick={()=>{navigator.clipboard?.writeText(FB_AUTH.currentUser.uid);}} style={{background:C.accentLight,border:"none",color:C.primary,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Copy</button>
           )}
         </div>
 
         {/* ── Change Admin Google Account ── */}
         <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:14}}>
           <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:10}}>🔄 Change Admin Google Account</div>
-          <div style={{background:"#f0f9ff",border:`1px solid #bae6fd`,borderRadius:10,padding:"11px 13px",marginBottom:10,fontSize:12,color:"#0c4a6e",lineHeight:1.6}}>
+          <div style={{background:"rgba(56,189,248,0.12)",border:`1px solid rgba(56,189,248,0.3)`,borderRadius:10,padding:"11px 13px",marginBottom:10,fontSize:12,color:"#7dd3fc",lineHeight:1.6}}>
             <b>Currently configured admin UID(s):</b><br/>
             {ADMIN_UIDS.map(u=>(<code key={u} style={{fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:4,padding:"2px 6px",display:"inline-block",marginTop:4,marginRight:4}}>{u}</code>))}
           </div>
@@ -8402,15 +8458,15 @@ function SettingsPanel({settings,onSave}){
             <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:6}}>🤝 Co-admin Google UID (optional)</div>
             <input value={f.coAdminUid||""} onChange={e=>set("coAdminUid",e.target.value.trim())}
               placeholder="Paste your helper's Google UID"
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:12.5,fontFamily:"monospace",outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:12.5,fontFamily:"monospace",outline:"none",background:C.card}}/>
             <div style={{fontSize:10.5,color:C.textSub,marginTop:5,lineHeight:1.55}}>Lets a second person open Admin. You must <b>also</b> add this UID to <code style={{fontSize:10,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 4px"}}>database.rules.json</code> + the Firebase console so their changes sync to the cloud. Save Settings after pasting.</div>
           </div>
           {FB_OK && FB_AUTH?.currentUser && !isAdminUid(FB_AUTH.currentUser.uid) && (
-            <div style={{background:"#f0fdf4",border:`1px solid #86efac`,borderRadius:10,padding:"11px 13px",marginBottom:10,fontSize:12,color:"#14532d",lineHeight:1.6}}>
+            <div style={{background:"rgba(52,211,153,0.12)",border:`1px solid #86efac`,borderRadius:10,padding:"11px 13px",marginBottom:10,fontSize:12,color:"#34d399",lineHeight:1.6}}>
               <b>✓ New account UID (signed in now):</b><br/>
               <code style={{fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:4,padding:"2px 6px",display:"inline-block",marginTop:4}}>{FB_AUTH.currentUser.uid}</code>
               <button className="press" onClick={()=>navigator.clipboard?.writeText(FB_AUTH.currentUser.uid)}
-                style={{display:"block",marginTop:8,background:"#16a34a",color:"white",border:"none",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:700,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+                style={{display:"block",marginTop:8,background:"#16a34a",color:"white",border:"none",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
                 📋 Copy New UID
               </button>
             </div>
@@ -8429,15 +8485,15 @@ function SettingsPanel({settings,onSave}){
 
       {/* Data & Backup */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💾 Data &amp; Backup</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💾 Data &amp; Backup</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Download a complete copy of your store — products, orders, settings, reviews and photos — as one file. Keep it safe (email it to yourself or save to Google Drive). To restore, use Firebase Console → Realtime Database → ⋮ → Import JSON.</div>
         {adminOk ? (
           <button className="press" onClick={async()=>{ setBackupMsg("Preparing backup…"); try{ const keys=await downloadFullBackup(); setBackupMsg("✓ Backup downloaded ("+keys.length+" sections)"); }catch(e){ setBackupMsg("⚠ Backup failed — try again"); } }}
-            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
             ⬇ Download Full Backup (JSON)
           </button>
         ) : (
-          <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",fontSize:12,color:"#9a3412",lineHeight:1.5}}>🔒 Sign in with your Google admin account to download the full backup (it includes orders, which only you can read).</div>
+          <div style={{background:"rgba(251,146,60,0.12)",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",fontSize:12,color:"#fdba74",lineHeight:1.5}}>🔒 Sign in with your Google admin account to download the full backup (it includes orders, which only you can read).</div>
         )}
         {backupMsg&&<div style={{fontSize:11.5,color:backupMsg[0]==="✓"?C.success:backupMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8}}>{backupMsg}</div>}
       </div>
@@ -8446,13 +8502,14 @@ function SettingsPanel({settings,onSave}){
       {sec==="content"&&(<>
       {/* About & Policies content */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📄 About &amp; Policies</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📄 About &amp; Policies</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Shown on the About page. Edit these to your real policies.</div>
         {area("Our Story","aboutStory")}
         {area("Delivery Areas","deliveryAreas")}
         {area("Live Arrival Guarantee","liveArrivalGuarantee")}
         {area("Returns & DOA Policy","returnPolicy")}
         {area("Return Shipping Address","returnAddress")}
+        {area("Hero Background Video URL (optional)","heroVideo")}
         {area("Acclimatization Guide","acclimatizationTips")}
         {area("Terms & Conditions","termsPolicy")}
         {area("Privacy Policy","privacyPolicy")}
@@ -8460,7 +8517,7 @@ function SettingsPanel({settings,onSave}){
 
       {/* Business / legal identity */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🏛️ Business &amp; Legal Info</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🏛️ Business &amp; Legal Info</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Shown on the About page and your invoices for legitimacy. <b>Never enter PAN or other private data here</b> — only business-level details customers may see.</div>
         {field("Registered Business Name","legalName","NEMO AQUA STORE")}
         {field("Entity Type","legalEntity","Proprietorship · Udyam-registered Micro Enterprise")}
@@ -8477,7 +8534,7 @@ function SettingsPanel({settings,onSave}){
       {sec==="payship"&&(<>
       {/* Payment */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💳 Online Payment</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💳 Online Payment</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Two ways to collect payment — use either or both:<br/><b>1. UPI ID</b> — direct to your phone (good while starting out; this is temporary).<br/><b>2. Payment Gateway link</b> — once your current account &amp; gateway (Razorpay etc.) are ready, paste the link below and it takes over. To stop UPI later, clear the UPI ID field and Save.</div>
         {field("UPI ID","upiId","yourname@oksbi","Direct UPI collection. Clear this field + Save to remove it once your gateway is live.")}
         {field("UPI Display Name","upiName","Nemo Aqua Store")}
@@ -8488,21 +8545,21 @@ function SettingsPanel({settings,onSave}){
 
       {/* Shipping rates editor */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🚚 Shipping Rates</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🚚 Shipping Rates</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Edit shipping prices per zone. Leave blank to use default rates. Changes apply immediately after Save.</div>
         <div style={{marginBottom:10}}>
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:4}}>Base packaging weight for <b>Dry Goods</b> orders (kg)</div>
           <input type="number" step="0.25" min="0"
             value={(f.shippingRates||DEFAULT_SHIPPING_RATES).basePackagingKg||0.5}
             onChange={e=>{const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};set("shippingRates",{...cur,basePackagingKg:Number(e.target.value)||0.5});}}
-            style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+            style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
         </div>
         <div style={{marginBottom:14}}>
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:4}}>Base packaging weight for <b>Live Fish</b> orders (kg) — oxygen bag + box</div>
           <input type="number" step="0.25" min="0"
             value={(f.shippingRates||DEFAULT_SHIPPING_RATES).liveBasePackagingKg??0.5}
             onChange={e=>{const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};set("shippingRates",{...cur,liveBasePackagingKg:Number(e.target.value)||0.5});}}
-            style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+            style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
           <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Each fish's per-variant packaging weight is set in the product form. Total = fish weights + this base.</div>
         </div>
         {["dryGoods","liveFish"].map(type=>{
@@ -8533,7 +8590,7 @@ function SettingsPanel({settings,onSave}){
                                 typeRates[bracket]={...(typeRates[bracket]||{}),[z]:Number(e.target.value)||0};
                                 set("shippingRates",{...cur,[type]:typeRates});
                               }}
-                              style={{width:"54px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 6px",fontSize:12,outline:"none",background:"white",textAlign:"right"}}/>
+                              style={{width:"54px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 6px",fontSize:12,outline:"none",background:C.card,textAlign:"right"}}/>
                           </td>
                         ))}
                       </tr>
@@ -8548,9 +8605,9 @@ function SettingsPanel({settings,onSave}){
 
       {/* Live-fish packing: thermacol charge chart + courier partners */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📦 Live-Fish Packing &amp; Couriers</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📦 Live-Fish Packing &amp; Couriers</div>
         {/* Live-fish delivery region restriction */}
-        <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none",background:f.liveFishRestrictNCIndia!==false?"#fef2f2":C.bg,borderRadius:12,padding:"11px 13px",border:`1.5px solid ${f.liveFishRestrictNCIndia!==false?"#fecaca":C.border}`}}>
+        <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none",background:f.liveFishRestrictNCIndia!==false?"rgba(244,63,94,0.12)":C.bg,borderRadius:12,padding:"11px 13px",border:`1.5px solid ${f.liveFishRestrictNCIndia!==false?"rgba(244,63,94,0.30)":C.border}`}}>
           <input type="checkbox" checked={f.liveFishRestrictNCIndia!==false} onChange={e=>set("liveFishRestrictNCIndia",e.target.checked)} style={{width:18,height:18,accentColor:C.danger,flexShrink:0,marginTop:1}}/>
           <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>🚫 Don't deliver live fish to Central &amp; North India</span><br/><span style={{fontSize:11,color:C.textSub,lineHeight:1.45}}>Detected from the customer's pincode. When on, live-fish orders to those regions are blocked at checkout (dry goods still ship everywhere). Turn off to allow all of India.</span></span>
         </label>
@@ -8566,7 +8623,7 @@ function SettingsPanel({settings,onSave}){
                 <span style={{fontSize:12,color:C.textSub,fontWeight:700}}>₹</span>
                 <input type="number" min="0" value={therm[t]||0}
                   onChange={e=>{const c2=f.shippingRates||{...DEFAULT_SHIPPING_RATES};const th={...(c2.thermacol||DEFAULT_SHIPPING_RATES.thermacol)};th[t]=Number(e.target.value)||0;set("shippingRates",{...c2,thermacol:th});}}
-                  style={{width:"58px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 8px",fontSize:12,outline:"none",background:"white",textAlign:"right"}}/>
+                  style={{width:"58px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 8px",fontSize:12,outline:"none",background:C.card,textAlign:"right"}}/>
               </div>
             );
           })}
@@ -8583,7 +8640,7 @@ function SettingsPanel({settings,onSave}){
                 <span style={{fontSize:12,color:C.textSub,fontWeight:700}}>₹</span>
                 <input type="number" min="0" value={crt[t]||0}
                   onChange={e=>{const c2=f.shippingRates||{...DEFAULT_SHIPPING_RATES};const cb={...(c2.carton||DEFAULT_SHIPPING_RATES.carton)};cb[t]=Number(e.target.value)||0;set("shippingRates",{...c2,carton:cb});}}
-                  style={{width:"58px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 8px",fontSize:12,outline:"none",background:"white",textAlign:"right"}}/>
+                  style={{width:"58px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 8px",fontSize:12,outline:"none",background:C.card,textAlign:"right"}}/>
               </div>
             );
           })}
@@ -8595,7 +8652,7 @@ function SettingsPanel({settings,onSave}){
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
           <span style={{fontSize:11.5,color:C.text,fontWeight:700}}>Minimum difference to reward (₹)</span>
           <input type="number" min="0" value={f.shippingRewardMin??10} onChange={e=>set("shippingRewardMin",Number(e.target.value)||0)}
-            style={{width:"80px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:13,outline:"none",background:"white"}}/>
+            style={{width:"80px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:13,outline:"none",background:C.card}}/>
         </div>
         <div style={{height:1,background:C.border,margin:"14px 0"}}/>
         {/* Courier partners */}
@@ -8606,29 +8663,29 @@ function SettingsPanel({settings,onSave}){
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
               <input value={c.name||""} onChange={e=>{const arr=[...(f.couriers||[])];arr[i]={...arr[i],name:e.target.value};set("couriers",arr);}}
                 placeholder="Courier name (e.g. DTDC, ST Courier)"
-                style={{flex:1,borderRadius:8,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",background:"white"}}/>
+                style={{flex:1,borderRadius:8,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",background:C.card}}/>
               <button className="press" onClick={()=>{const arr=(f.couriers||[]).filter((_,j)=>j!==i);set("couriers",arr);}}
-                style={{flexShrink:0,width:28,height:28,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
+                style={{flexShrink:0,width:28,height:28,borderRadius:8,background:"rgba(244,63,94,0.12)",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
             </div>
             <input value={c.trackUrl||""} onChange={e=>{const arr=[...(f.couriers||[])];arr[i]={...arr[i],trackUrl:e.target.value.trim()};set("couriers",arr);}}
               placeholder="https://courier.com/track  (optionally with {awb})"
-              style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:12,fontFamily:"monospace",outline:"none",background:"white",marginTop:6,boxSizing:"border-box"}}/>
+              style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:12,fontFamily:"monospace",outline:"none",background:C.card,marginTop:6,boxSizing:"border-box"}}/>
           </div>
         ))}
         <button className="press" onClick={()=>set("couriers",[...(f.couriers||[]),{id:"cr"+Date.now().toString(36),name:"",trackUrl:""}])}
-          style={{width:"100%",background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginTop:2}}>
+          style={{width:"100%",background:C.card,border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",marginTop:2}}>
           ＋ Add Courier Partner
         </button>
       </div>
 
       {/* Special delivery & live guarantee pricing */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>⚡ Premium Delivery &amp; 🛡️ Live Guarantee</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>⚡ Premium Delivery &amp; 🛡️ Live Guarantee</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr",gap:14}}>
           <div style={{maxWidth:260}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>🚚 Free Delivery above (₹)</div>
             <input type="number" min="0" value={f.freeDeliveryThreshold||0} onChange={e=>set("freeDeliveryThreshold",Number(e.target.value))}
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:C.card}}/>
             <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
           </div>
           <div>
@@ -8650,7 +8707,7 @@ function SettingsPanel({settings,onSave}){
                   {["TN","SouthIndia","CentralNorth"].map(zk=>(
                     <input key={zk} type="number" min="0" value={row[zk]||0}
                       onChange={e=>{const c2=f.shippingRates||{...DEFAULT_SHIPPING_RATES};const sp={...(c2.speedCourier||DEFAULT_SHIPPING_RATES.speedCourier)};sp[t]={...(sp[t]||{}),[zk]:Number(e.target.value)||0};set("shippingRates",{...c2,speedCourier:sp});}}
-                      style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 6px",fontSize:12,outline:"none",background:"white",textAlign:"right",boxSizing:"border-box"}}/>
+                      style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px 6px",fontSize:12,outline:"none",background:C.card,textAlign:"right",boxSizing:"border-box"}}/>
                   ))}
                 </div>
               );
@@ -8663,7 +8720,7 @@ function SettingsPanel({settings,onSave}){
       {sec==="promos"&&(<>
       {/* Coupon codes */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎟 Coupon Codes</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎟 Coupon Codes</div>
         {/* Master switch: show/hide the coupon box at checkout */}
         <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none",background:C.bg,borderRadius:12,padding:"11px 13px",border:`1.5px solid ${C.border}`}}>
           <input type="checkbox" checked={f.showCouponField!==false} onChange={e=>set("showCouponField",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
@@ -8675,46 +8732,46 @@ function SettingsPanel({settings,onSave}){
             <div style={{flex:1}}>
               <input value={c.code} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],code:e.target.value.toUpperCase()};set("coupons",arr);}}
                 placeholder="CODE"
-                style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"7px 10px",fontSize:13,fontWeight:700,fontFamily:"monospace",outline:"none",background:"white",marginBottom:4}}/>
+                style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"7px 10px",fontSize:13,fontWeight:700,fontFamily:"monospace",outline:"none",background:C.card,marginBottom:4}}/>
               <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                 <select value={c.type||"flat"} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],type:e.target.value};set("coupons",arr);}}
-                  style={{borderRadius:8,border:`1.5px solid ${C.border}`,padding:"5px 8px",fontSize:12,outline:"none",background:"white"}}>
+                  style={{borderRadius:8,border:`1.5px solid ${C.border}`,padding:"5px 8px",fontSize:12,outline:"none",background:C.card}}>
                   <option value="flat">₹ Flat off</option>
                   <option value="percent">% Percent off</option>
                 </select>
                 <input type="number" min="0" value={c.discount||""} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],discount:Number(e.target.value)};set("coupons",arr);}}
                   placeholder="Amount"
-                  style={{width:"70px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"5px 8px",fontSize:12,outline:"none",background:"white"}}/>
+                  style={{width:"70px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"5px 8px",fontSize:12,outline:"none",background:C.card}}/>
                 <div style={{display:"flex",alignItems:"center",gap:3}}>
                   <span style={{fontSize:10.5,color:C.textSub,fontWeight:600,whiteSpace:"nowrap"}}>Min&nbsp;₹</span>
                   <input type="number" min="0" value={c.minOrder||""} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],minOrder:Number(e.target.value)||0};set("coupons",arr);}}
                     placeholder="0"
                     title="Minimum cart value required (0 = no minimum)"
-                    style={{width:"68px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"5px 8px",fontSize:12,outline:"none",background:"white"}}/>
+                    style={{width:"68px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"5px 8px",fontSize:12,outline:"none",background:C.card}}/>
                 </div>
                 <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11.5,color:C.text,cursor:"pointer"}}>
                   <input type="checkbox" checked={c.active!==false} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],active:e.target.checked};set("coupons",arr);}} style={{accentColor:C.primary}}/>
                   Active
                 </label>
-                <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11.5,color:c.secret?"#b45309":C.text,cursor:"pointer",fontWeight:c.secret?700:400}} title="Hidden from the public coupon list — still works when typed">
+                <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11.5,color:c.secret?"#fbbf24":C.text,cursor:"pointer",fontWeight:c.secret?700:400}} title="Hidden from the public coupon list — still works when typed">
                   <input type="checkbox" checked={!!c.secret} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],secret:e.target.checked};set("coupons",arr);}} style={{accentColor:"#d97706"}}/>
                   🤫 Secret
                 </label>
               </div>
             </div>
             <button className="press" onClick={()=>{const arr=(f.coupons||[]).filter((_,j)=>j!==i);set("coupons",arr);}}
-              style={{flexShrink:0,width:28,height:28,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
+              style={{flexShrink:0,width:28,height:28,borderRadius:8,background:"rgba(244,63,94,0.12)",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
           </div>
         ))}
         <button className="press" onClick={()=>set("coupons",[...(f.coupons||[]),{code:"",type:"flat",discount:0,active:true,secret:false}])}
-          style={{width:"100%",background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",marginTop:4}}>
+          style={{width:"100%",background:C.card,border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",marginTop:4}}>
           ＋ Add Coupon Code
         </button>
       </div>
 
       {/* Welcome coupon */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12,display:"flex",alignItems:"center",flexWrap:"wrap"}}>🎉 First-Order Welcome Coupon{usageBadge("coupon",f.couponDailyLimit)}</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12,display:"flex",alignItems:"center",flexWrap:"wrap"}}>🎉 First-Order Welcome Coupon{usageBadge("coupon",f.couponDailyLimit)}</div>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
           <input type="checkbox" checked={f.welcomeCouponEnabled!==false} onChange={e=>set("welcomeCouponEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Show welcome coupon banner</span>
@@ -8724,24 +8781,24 @@ function SettingsPanel({settings,onSave}){
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Coupon Code</div>
             <input value={f.welcomeCoupon||"WELCOME100"} onChange={e=>set("welcomeCoupon",e.target.value.toUpperCase())}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,fontFamily:"monospace",fontWeight:700,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,fontFamily:"monospace",fontWeight:700,outline:"none",background:C.card}}/>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Discount (₹)</div>
             <input type="number" min="0" value={f.welcomeCouponAmount||100} onChange={e=>set("welcomeCouponAmount",Number(e.target.value))}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
           </div>
         </div>
         <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min Order Value (₹)</div>
             <input type="number" min="0" value={f.welcomeCouponMinOrder||999} onChange={e=>set("welcomeCouponMinOrder",Number(e.target.value))}
-              style={{width:"140px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"140px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Daily limit (0 = unlimited)</div>
             <input type="number" min="0" value={f.couponDailyLimit||0} onChange={e=>set("couponDailyLimit",Number(e.target.value))}
-              style={{width:"140px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"140px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
           </div>
         </div>
         <div style={{fontSize:10.5,color:C.textSub,marginTop:6}}>Add this code to your coupons above too — so it's actually redeemable at checkout. Daily limit caps how many customers can use coupons each day.</div>
@@ -8749,7 +8806,7 @@ function SettingsPanel({settings,onSave}){
 
       {/* Festival / seasonal banner */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎊 Seasonal / Festival Banner</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎊 Seasonal / Festival Banner</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Shown at the top of the home page. Perfect for Diwali, New Year, flash promotions etc.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer"}}>
           <input type="checkbox" checked={!!(f.festivalBanner||{}).active} onChange={e=>set("festivalBanner",{...(f.festivalBanner||{}),active:e.target.checked})} style={{width:18,height:18,accentColor:C.primary}}/>
@@ -8759,19 +8816,19 @@ function SettingsPanel({settings,onSave}){
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Emoji</div>
             <input value={(f.festivalBanner||{}).emoji||"🎉"} onChange={e=>set("festivalBanner",{...(f.festivalBanner||{}),emoji:e.target.value})}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:18,outline:"none",background:"white",textAlign:"center"}}/>
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:18,outline:"none",background:C.card,textAlign:"center"}}/>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Banner Text</div>
             <input value={(f.festivalBanner||{}).text||""} onChange={e=>set("festivalBanner",{...(f.festivalBanner||{}),text:e.target.value})} placeholder="e.g. 🎆 Happy Diwali! Extra 10% off all fish today →"
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
           </div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Background Color</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {["#7c3aed","#0b6e72","#dc2626","#c2410c","#047857","#1d4ed8","#be185d"].map(col=>(
+              {["#7c3aed","#0b6e72","#dc2626","#c2410c","#34d399","#38bdf8","#be185d"].map(col=>(
                 <button key={col} onClick={()=>set("festivalBanner",{...(f.festivalBanner||{}),bg:col})}
                   style={{width:28,height:28,borderRadius:8,background:col,border:((f.festivalBanner||{}).bg===col)?"2px solid #fff":"2px solid transparent",boxShadow:((f.festivalBanner||{}).bg===col)?"0 0 0 2px "+col:"none",cursor:"pointer"}}/>
               ))}
@@ -8780,14 +8837,14 @@ function SettingsPanel({settings,onSave}){
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Hide after date</div>
             <input type="date" value={(f.festivalBanner||{}).endsAt||""} onChange={e=>set("festivalBanner",{...(f.festivalBanner||{}),endsAt:e.target.value})}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12,outline:"none",background:C.card}}/>
           </div>
         </div>
       </div>
 
       {/* Wallet (loyalty points) */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>👛 Customer Wallet</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>👛 Customer Wallet</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Every customer has a wallet. They earn points per ₹100 spent, plus referral rewards and shipping refunds — all land in the same wallet, redeemable for ₹ off at checkout. <b>₹ per point</b> is the coin value.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,cursor:"pointer"}}>
           <input type="checkbox" checked={!!f.loyaltyEnabled} onChange={e=>set("loyaltyEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
@@ -8797,17 +8854,17 @@ function SettingsPanel({settings,onSave}){
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Pts per ₹100</div>
             <input type="number" min="1" value={f.loyaltyPointsPerHundred||10} onChange={e=>set("loyaltyPointsPerHundred",Number(e.target.value))}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:C.card}}/>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min to redeem</div>
             <input type="number" min="1" value={f.loyaltyRedeemMin||100} onChange={e=>set("loyaltyRedeemMin",Number(e.target.value))}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:C.card}}/>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>₹ per point (coin value)</div>
             <input type="number" min="0.1" step="0.1" value={f.loyaltyRedeemValue||1} onChange={e=>set("loyaltyRedeemValue",Number(e.target.value))}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:C.card}}/>
           </div>
         </div>
         <div style={{fontSize:10.5,color:C.textSub,marginTop:8}}>Example: spend ₹1000 → earn {(f.loyaltyPointsPerHundred||10)*10} pts → worth ₹{Math.floor((f.loyaltyPointsPerHundred||10)*10*(f.loyaltyRedeemValue||1))} in the wallet.</div>
@@ -8815,7 +8872,7 @@ function SettingsPanel({settings,onSave}){
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Max total discount per order (% of subtotal)</div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <input type="number" min="0" max="100" value={f.maxDiscountPct??25} onChange={e=>set("maxDiscountPct",Number(e.target.value))}
-              style={{width:"90px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"90px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
             <span style={{fontSize:11,color:C.textSub,lineHeight:1.4,flex:1}}>Coupon + referral + wallet points combined can never exceed this. <b>0 = no cap</b> (risky). Protects your margin when offers stack.</span>
           </div>
         </div>
@@ -8823,7 +8880,7 @@ function SettingsPanel({settings,onSave}){
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Coin validity (months)</div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <input type="number" min="0" value={f.walletValidityMonths??0} onChange={e=>set("walletValidityMonths",Number(e.target.value))}
-              style={{width:"90px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"90px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
             <span style={{fontSize:11,color:C.textSub,lineHeight:1.4,flex:1}}>Each batch of coins expires this many months after it's earned, with a ⏳ reminder before expiry; expired coins are removed automatically. <b>Changing this only affects coins earned afterwards</b> — coins already in wallets keep their original expiry. <b>0 = never expire.</b></span>
           </div>
         </div>
@@ -8831,7 +8888,7 @@ function SettingsPanel({settings,onSave}){
 
       {/* Referral discount */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12,display:"flex",alignItems:"center",flexWrap:"wrap"}}>💜 Referral Program{usageBadge("referral",f.referralDailyLimit)}</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12,display:"flex",alignItems:"center",flexWrap:"wrap"}}>💜 Referral Program{usageBadge("referral",f.referralDailyLimit)}</div>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
           <input type="checkbox" checked={f.referralEnabled!==false} onChange={e=>set("referralEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable referral program</span>
@@ -8841,24 +8898,24 @@ function SettingsPanel({settings,onSave}){
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Friend's discount (₹)</div>
             <input type="number" min="0" value={f.referralDiscount||50} onChange={e=>set("referralDiscount",Number(e.target.value))}
-              style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Giver's wallet coins</div>
             <input type="number" min="0" value={f.referralCoins??50} onChange={e=>set("referralCoins",Number(e.target.value))}
-              style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Points added to the code-giver's 👛 wallet when a friend uses it.</div>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min order to issue (₹)</div>
             <input type="number" min="0" value={f.referralMinOrder||0} onChange={e=>set("referralMinOrder",Number(e.target.value))}
-              style={{width:"130px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"130px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = always issue a code</div>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Daily limit</div>
             <input type="number" min="0" value={f.referralDailyLimit||0} onChange={e=>set("referralDailyLimit",Number(e.target.value))}
-              style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:C.card}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = unlimited / day</div>
           </div>
         </div>
@@ -8867,7 +8924,7 @@ function SettingsPanel({settings,onSave}){
 
       {/* Tank showcase */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Let signed-in customers upload their tank photos, displayed as a gallery on the home page.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
           <input type="checkbox" checked={!!f.showcaseEnabled} onChange={e=>set("showcaseEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
@@ -8881,7 +8938,7 @@ function SettingsPanel({settings,onSave}){
 
       </>)}
       <button className="press" onClick={()=>startSave(f)}
-        style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+        style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
         💾 Save Settings
       </button>
       <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:12,lineHeight:1.5}}>
@@ -8891,9 +8948,9 @@ function SettingsPanel({settings,onSave}){
       {otpOpen&&(
         <div style={{position:"fixed",inset:0,background:"rgba(8,30,33,.55)",backdropFilter:"blur(3px)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
           onClick={e=>{if(e.target===e.currentTarget){setOtpOpen(false);setPendingSave(null);}}}>
-          <div className="fade-in" style={{width:"100%",maxWidth:360,background:"white",borderRadius:18,padding:"22px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+          <div className="fade-in" style={{width:"100%",maxWidth:360,background:C.card,borderRadius:18,padding:"22px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
             <div style={{fontSize:40,textAlign:"center",marginBottom:8}}>🔐</div>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text,textAlign:"center",marginBottom:6}}>Confirm with email code</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:19,fontWeight:800,color:C.text,textAlign:"center",marginBottom:6}}>Confirm with email code</div>
             <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.5,marginBottom:18}}>
               We emailed a 6-digit code to<br/><b style={{color:C.text}}>{maskEmail(otpEmail)}</b>.<br/>Enter it to confirm this change (WhatsApp, email, password or payment details).
             </div>
@@ -8903,23 +8960,23 @@ function SettingsPanel({settings,onSave}){
               style={{width:"100%",borderRadius:14,border:`1.5px solid ${C.border}`,padding:"14px",fontSize:24,letterSpacing:8,textAlign:"center",fontWeight:800,fontFamily:PRICE_FONT,outline:"none",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
             {otpMsg&&<div style={{fontSize:12,fontWeight:700,textAlign:"center",marginTop:10,color:otpMsg[0]==="✓"?C.success:(otpMsg[0]==="⚠"||otpMsg[0]==="✕"||otpMsg[0]==="⌛")?C.danger:C.textSub}}>{otpMsg}</div>}
             <button className="press" onClick={verifyOtp} disabled={otpInput.length<6||otpBusy}
-              style={{width:"100%",marginTop:16,background:(otpInput.length<6||otpBusy)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14.5,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              style={{width:"100%",marginTop:16,background:(otpInput.length<6||otpBusy)?"#475569":C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14.5,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
               {otpBusy?"Sending…":"Verify & Save"}
             </button>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}>
               <button className="press" onClick={()=>{setOtpOpen(false);setPendingSave(null);}}
-                style={{background:"none",border:"none",color:C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",padding:"6px 4px"}}>Cancel</button>
+                style={{background:"none",border:"none",color:C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",padding:"6px 4px"}}>Cancel</button>
               <button className="press" onClick={resendOtp} disabled={otpBusy}
-                style={{background:"none",border:"none",color:C.primary,fontSize:12.5,fontWeight:700,fontFamily:"'Nunito',sans-serif",padding:"6px 4px",opacity:otpBusy?.5:1}}>Resend code</button>
+                style={{background:"none",border:"none",color:C.primary,fontSize:12.5,fontWeight:700,fontFamily:"'Outfit',sans-serif",padding:"6px 4px",opacity:otpBusy?.5:1}}>Resend code</button>
             </div>
             {otpSendFailed&&(
-              <div style={{marginTop:14,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"12px 13px"}}>
-                <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.55,marginBottom:4}}>📭 Code didn't arrive? You can still save by entering your secret answer.</div>
-                <div style={{fontSize:11,color:"#b45309",fontWeight:800,marginBottom:8}}>🔑 Clue: IITM Roll Number</div>
+              <div style={{marginTop:14,background:"rgba(251,146,60,0.12)",border:"1px solid #fed7aa",borderRadius:12,padding:"12px 13px"}}>
+                <div style={{fontSize:11.5,color:"#fdba74",lineHeight:1.55,marginBottom:4}}>📭 Code didn't arrive? You can still save by entering your secret answer.</div>
+                <div style={{fontSize:11,color:"#fbbf24",fontWeight:800,marginBottom:8}}>🔑 Clue: IITM Roll Number</div>
                 <input value={overrideText} onChange={e=>setOverrideText(e.target.value)} placeholder="Enter secret answer" type="password"
-                  style={{width:"100%",borderRadius:10,border:"1.5px solid #fed7aa",padding:"10px 12px",fontSize:13,letterSpacing:1,textAlign:"center",fontWeight:700,outline:"none",background:"white",boxSizing:"border-box",fontFamily:"'Nunito',sans-serif"}}/>
+                  style={{width:"100%",borderRadius:10,border:"1.5px solid #fed7aa",padding:"10px 12px",fontSize:13,letterSpacing:1,textAlign:"center",fontWeight:700,outline:"none",background:C.card,boxSizing:"border-box",fontFamily:"'Outfit',sans-serif"}}/>
                 <button className="press" disabled={hashPass(overrideText)!==ADMIN_OVERRIDE_HASH} onClick={()=>{ const nf=pendingSave; setOtpOpen(false); setOtpCode(""); setPendingSave(null); setOtpSendFailed(false); setOverrideText(""); onSave(nf); }}
-                  style={{width:"100%",marginTop:10,background:hashPass(overrideText)===ADMIN_OVERRIDE_HASH?C.danger:"#e5b89a",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>Save with secret answer</button>
+                  style={{width:"100%",marginTop:10,background:hashPass(overrideText)===ADMIN_OVERRIDE_HASH?C.danger:"#e5b89a",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Outfit',sans-serif"}}>Save with secret answer</button>
               </div>
             )}
           </div>
@@ -8962,17 +9019,17 @@ function GuideForm({guide,imgSrc,onSave,onCancel}){
 
   return(
     <div className="fade-in">
-      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:19,fontWeight:800,color:C.text,marginBottom:16}}>{isEdit?"Edit Guide":"New Care Guide"}</div>
+      <div style={{fontFamily:"'Outfit',sans-serif",fontSize:19,fontWeight:800,color:C.text,marginBottom:16}}>{isEdit?"Edit Guide":"New Care Guide"}</div>
       <div style={{marginBottom:14}}>
         <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Title</div>
         <input value={form.title} onChange={e=>f("title",e.target.value)} placeholder="e.g. Betta Fish Care Basics"
-          style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.title?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+          style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.title?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.card}}/>
         {errs.title&&<div style={{fontSize:11,color:C.danger,fontWeight:600,marginTop:4}}>{errs.title}</div>}
       </div>
       <div style={{marginBottom:14}}>
         <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Category</div>
         <select value={form.category} onChange={e=>f("category",e.target.value)}
-          style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:13,outline:"none",background:"white"}}>
+          style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:13,outline:"none",background:C.card}}>
           {GUIDE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
         </select>
       </div>
@@ -8982,12 +9039,12 @@ function GuideForm({guide,imgSrc,onSave,onCancel}){
         <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Instructions / Text <span style={{textTransform:"none",fontWeight:400,color:C.textSub}}>(optional)</span></div>
         <textarea value={form.content} onChange={e=>f("content",e.target.value)} rows={5}
           placeholder={"Optional — leave blank if your poster already has all the info.\nOr add tips: use • or 1. 2. 3. for lists; line breaks are kept."}
-          style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.content?C.danger:C.border}`,padding:"11px 14px",fontSize:13,outline:"none",resize:"vertical",lineHeight:1.7,background:"white"}}/>
+          style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.content?C.danger:C.border}`,padding:"11px 14px",fontSize:13,outline:"none",resize:"vertical",lineHeight:1.7,background:C.card}}/>
         {errs.content&&<div style={{fontSize:11,color:C.danger,fontWeight:600,marginTop:4}}>{errs.content}</div>}
       </div>
       <div style={{display:"flex",gap:10}}>
-        <button className="press" onClick={onCancel} style={{flex:1,padding:"13px",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textSub,fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Cancel</button>
-        <button className="press" onClick={submit} disabled={saving} style={{flex:2,padding:"13px",borderRadius:12,border:"none",background:C.primary,color:"white",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
+        <button className="press" onClick={onCancel} style={{flex:1,padding:"13px",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textSub,fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Cancel</button>
+        <button className="press" onClick={submit} disabled={saving} style={{flex:2,padding:"13px",borderRadius:12,border:"none",background:C.primary,color:"white",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
           {saving?<><Spinner/>Saving…</>:isEdit?"Save Changes":"Publish Guide"}
         </button>
       </div>
@@ -9020,7 +9077,7 @@ function PosterZoom({src,title,notes,onClose}){
     <div style={{position:"fixed",inset:0,background:"rgba(4,16,20,.96)",zIndex:9000,display:"flex",flexDirection:"column",animation:"fadeIn .2s ease"}}>
       {/* top bar */}
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",color:"white",flexShrink:0}}>
-        <div style={{flex:1,minWidth:0,fontFamily:"'Baloo 2',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{title||"Care Guide"}</div>
+        <div style={{flex:1,minWidth:0,fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{title||"Care Guide"}</div>
         {notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 14px",fontSize:12.5,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
         <button className="press" onClick={onClose} style={btn}>✕</button>
       </div>
@@ -9064,7 +9121,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
         <button className="press" onClick={()=>nav("home")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
           <div>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Aquarium Care Guides</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Aquarium Care Guides</div>
             <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:310}}>Aquarium care posters and tips, curated by our team.</div>
           </div>
           <div style={{flexShrink:0,marginTop:4}}>
@@ -9077,7 +9134,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
         <div style={{display:"flex",gap:8,overflowX:"auto",padding:"14px 16px 4px",WebkitOverflowScrolling:"touch"}}>
           {cats.map(c=>(
             <button key={c} className="press" onClick={()=>setCat(c)}
-              style={{flexShrink:0,padding:"8px 14px",borderRadius:20,border:`1.5px solid ${cat===c?C.primary:C.border}`,background:cat===c?C.primary:"transparent",color:cat===c?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              style={{flexShrink:0,padding:"8px 14px",borderRadius:20,border:`1.5px solid ${cat===c?C.primary:C.border}`,background:cat===c?C.primary:"transparent",color:cat===c?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>
               {c}
             </button>
           ))}
@@ -9105,7 +9162,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"inline-block",fontSize:9.5,fontWeight:800,color:C.accent,background:C.accentLight,padding:"2px 9px",borderRadius:20,marginBottom:5,letterSpacing:.5}}>{g.category}</div>
-                  <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:15.5,fontWeight:800,color:C.text,lineHeight:1.25}}>{g.title}</div>
+                  <div style={{fontFamily:"'Outfit',sans-serif",fontSize:15.5,fontWeight:800,color:C.text,lineHeight:1.25}}>{g.title}</div>
                   <div style={{fontSize:11,color:C.textSub,marginTop:3,fontWeight:600}}>{hasPoster?"":content?(open?"Tap to collapse":"Tap to read"):""}</div>
                 </div>
                 <span style={{flexShrink:0,fontSize:18,color:C.textSub,transform:(!hasPoster&&open)?"rotate(90deg)":"none",transition:"transform .2s"}}>{hasPoster?"⛶":"›"}</span>
@@ -9130,7 +9187,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
   return(
     <div className="slide-up">
       <div className="vh-head" style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>♥ Saved Items</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>♥ Saved Items</div>
         <div style={{fontSize:12.5,color:C.textSub,marginTop:2}}>{saved.length} item{saved.length!==1?"s":""} saved for later</div>
       </div>
       <div className="dt-read" style={{padding:"16px 16px 100px"}}>
@@ -9139,7 +9196,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
             <div style={{fontSize:60,marginBottom:14}}>🤍</div>
             <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:6}}>No saved items yet</div>
             <div style={{fontSize:13,marginBottom:20,lineHeight:1.5}}>Tap the ♥ on any product to save it here and order later.</div>
-            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Browse Products</button>
+            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Browse Products</button>
           </div>
         ):(
           <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -9165,7 +9222,7 @@ function AboutPage({nav,settings={}}){
     <div style={{background:C.card,borderRadius:18,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
         <div style={{width:38,height:38,borderRadius:11,background:accent||C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{icon}</div>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>{title}</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>{title}</div>
       </div>
       <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{body}</div>
     </div>
@@ -9175,7 +9232,7 @@ function AboutPage({nav,settings={}}){
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
         <button className="press" onClick={()=>nav("home")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>About Us</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>About Us</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>Who we are, how we deliver, and our promises to you.</div>
       </div>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
@@ -9184,8 +9241,8 @@ function AboutPage({nav,settings={}}){
         {/* Policies — each opens its own focused page */}
         <div style={{background:C.card,borderRadius:18,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-            <div style={{width:38,height:38,borderRadius:11,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📋</div>
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>Our Policies</div>
+            <div style={{width:38,height:38,borderRadius:11,background:"rgba(167,139,250,0.14)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📋</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>Our Policies</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {[
@@ -9196,7 +9253,7 @@ function AboutPage({nav,settings={}}){
               {icon:"🔒",label:"Privacy Policy",to:"policy-privacy"},
             ].map(l=>(
               <button key={l.to} className="press" onClick={()=>nav(l.to)}
-                style={{display:"flex",alignItems:"center",gap:11,width:"100%",textAlign:"left",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
+                style={{display:"flex",alignItems:"center",gap:11,width:"100%",textAlign:"left",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontFamily:"'Outfit',sans-serif"}}>
                 <span style={{fontSize:18}}>{l.icon}</span>
                 <span style={{flex:1,fontSize:13.5,fontWeight:700,color:C.text}}>{l.label}</span>
                 <span style={{color:C.textSub,fontSize:17}}>›</span>
@@ -9247,7 +9304,7 @@ function PolicyPage({nav,settings={},which}){
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
         <button className="press" onClick={()=>nav("about")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>{meta.icon} {meta.title}</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>{meta.icon} {meta.title}</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>{meta.sub}</div>
       </div>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
@@ -9256,7 +9313,7 @@ function PolicyPage({nav,settings={},which}){
         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
           {others.map(k=>(
             <button key={k} className="press" onClick={()=>nav("policy-"+k)}
-              style={{display:"inline-flex",alignItems:"center",gap:7,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:C.text,fontFamily:"'Nunito',sans-serif",cursor:"pointer"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:7,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:C.text,fontFamily:"'Outfit',sans-serif",cursor:"pointer"}}>
               <span>{POLICY_META[k].icon}</span>{POLICY_META[k].title}
             </button>
           ))}
@@ -9311,14 +9368,14 @@ function RequestPage({nav,user,onSubmit,myRequests}){
 
   if(done)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"80vh",padding:"24px",textAlign:"center"}}>
-      <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
-      <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Request Sent! 🙌</div>
+      <div style={{width:80,height:80,borderRadius:"50%",background:"rgba(52,211,153,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
+      <div style={{fontFamily:"'Outfit',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Request Sent! 🙌</div>
       <div style={{fontSize:14,color:C.textSub,lineHeight:1.7,marginBottom:24,maxWidth:300}}>We've received your request. We'll source it and reach out on WhatsApp if it's available.</div>
       <div style={{display:"flex",gap:10}}>
         <button className="press" onClick={()=>{setDone(false);setForm(f=>({...f,product:"",brand:"",link:"",notes:""}));setImgB64(null);setImgPrev(null);}}
-          style={{background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"13px 22px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>+ Another</button>
+          style={{background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"13px 22px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>+ Another</button>
         <button className="press" onClick={()=>nav("home")}
-          style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:14,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Back Home</button>
+          style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:14,fontWeight:700,fontFamily:"'Outfit',sans-serif"}}>Back Home</button>
       </div>
     </div>
   );
@@ -9328,50 +9385,50 @@ function RequestPage({nav,user,onSubmit,myRequests}){
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.accent},${C.primary})`,padding:"52px 18px 24px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.1)"}}/>
         <button className="press" onClick={()=>nav("home")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
-        <div style={{fontFamily:"'Baloo 2',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Request a Product</div>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Request a Product</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>Looking for a rare or <b>exotic fish</b>, a specific plant, or gear we don't stock? Tell us what you want — we specialise in sourcing exotic &amp; hard-to-find fish on request and will arrange it for you.</div>
       </div>
       <div className="dt-read" style={{padding:"20px 16px 100px"}}>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Product Name *</div>
           <input value={form.product} onChange={e=>f("product",e.target.value)} placeholder="e.g. Galaxy Koi Betta, CO2 regulator…"
-            style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.product?C.danger:C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white"}}/>
+            style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.product?C.danger:C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:C.card}}/>
           {errs.product&&<div style={{fontSize:11,color:C.danger,fontWeight:600,marginTop:4}}>{errs.product}</div>}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:12,marginBottom:16}}>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Brand <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <input value={form.brand} onChange={e=>f("brand",e.target.value)} placeholder="e.g. Sera, Eheim"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:C.card}}/>
           </div>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Qty</div>
             <input type="number" min="1" value={form.qty} onChange={e=>f("qty",e.target.value)}
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:C.card}}/>
           </div>
         </div>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Notes <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
           <textarea value={form.notes} onChange={e=>f("notes",e.target.value)} rows={3} placeholder="Size, colour, variant, budget, or paste a product link here…"
-            style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:"white"}}/>
+            style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:C.card}}/>
         </div>
         <div style={{height:1,background:C.border,margin:"4px 0 16px"}}/>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Your Name *</div>
             <input value={form.name} onChange={e=>f("name",e.target.value)} placeholder="Name"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.name?C.danger:C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.name?C.danger:C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:C.card}}/>
             {errs.name&&<div style={{fontSize:11,color:C.danger,fontWeight:600,marginTop:4}}>{errs.name}</div>}
           </div>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Phone *</div>
             <input type="tel" value={form.phone} onChange={e=>f("phone",e.target.value.replace(/\D/g,""))} maxLength={10} placeholder="9876543210"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.phone?C.danger:C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.phone?C.danger:C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:C.card}}/>
             {errs.phone&&<div style={{fontSize:11,color:C.danger,fontWeight:600,marginTop:4}}>{errs.phone}</div>}
           </div>
         </div>
         <button className="press" onClick={submit} disabled={saving}
-          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
+          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Outfit',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
           {saving?<><Spinner/>Sending…</>:"📨 Send Request"}
         </button>
       </div>
@@ -10146,7 +10203,7 @@ function NemoStore(){
   },[user,settings.loyaltyRedeemValue,settings.referralCoins,fbReady]);
 
   if(loading)return(
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:C.bg,gap:16,fontFamily:"'Nunito',sans-serif"}}>
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:C.bg,gap:16,fontFamily:"'Outfit',sans-serif"}}>
       <div style={{fontSize:52}}>🐠</div>
       <Spinner/>
       <div style={{fontSize:13,color:C.textSub}}>Loading {STORE_NAME}…</div>
@@ -10154,7 +10211,9 @@ function NemoStore(){
   );
 
   return(
-    <div className="nemo-app" style={{fontFamily:"'Nunito',sans-serif",background:C.bg,maxWidth:430,margin:"0 auto",position:"relative",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+    <>
+    {!isAdminPage&&<ReefBackground/>}
+    <div className="nemo-app" style={{fontFamily:"'Outfit',sans-serif",background:isAdminPage?C.bg:"transparent",maxWidth:430,margin:"0 auto",position:"relative",zIndex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <style>{STYLES}</style>
       {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
       {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap} walletPts={walletPts}/>}
@@ -10183,6 +10242,7 @@ function NemoStore(){
       </div>
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
     </div>
+    </>
   );
 }
 
