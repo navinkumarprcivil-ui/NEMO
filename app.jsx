@@ -5,7 +5,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 const C = {
   bg:"#040a15", card:"#0a1c20", primary:"#38bdf8", primaryDark:"#0ea5e9",
   accent:"#38bdf8", accentLight:"#0b2630", coral:"#fb7185",
-  text:"#e0f2fe", textSub:"#64748b", border:"rgba(224,242,254,0.12)",
+  text:"#e0f2fe", textSub:"#9fb2c4", border:"rgba(224,242,254,0.12)",
   navBg:"rgba(4,10,21,0.85)", adminBg:"#040a15",
   success:"#34d399", danger:"#f43f5e",
 };
@@ -2334,17 +2334,17 @@ function WelcomeBanner({settings,orders=[]}){
   if(settings.welcomeCouponEnabled===false)return null;
   if(hasRealOrder||!code)return null;
   return(
-    <div className="fade-rise" style={{background:"linear-gradient(135deg,#ff5a40 0%,#ff8c3b 100%)",borderRadius:18,padding:"14px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:12,boxShadow:"0 6px 24px rgba(255,90,64,.25)"}}>
+    <div className="fade-rise" style={{background:"linear-gradient(135deg,#0c2026,#0a1820)",border:"1px solid rgba(251,113,133,0.4)",borderRadius:18,padding:"14px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:12,boxShadow:"0 6px 24px rgba(251,113,133,.14)"}}>
       <div style={{fontSize:30,flexShrink:0}}>🎉</div>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:13,fontWeight:800,color:"white",marginBottom:2}}>First order? Save ₹{amt}!</div>
-        <div style={{fontSize:11.5,color:"rgba(255,255,255,.9)",marginBottom:6}}>On orders above ₹{min} — use code:</div>
-        <div style={{display:"inline-block",background:"rgba(255,255,255,.2)",borderRadius:8,padding:"4px 12px",border:"1px dashed rgba(255,255,255,.6)"}}>
-          <span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{code}</span>
+        <div style={{fontSize:13,fontWeight:800,color:C.coral,marginBottom:2}}>First order? Save ₹{amt}!</div>
+        <div style={{fontSize:11.5,color:C.textSub,marginBottom:6}}>On orders above ₹{min} — use code:</div>
+        <div style={{display:"inline-block",background:"rgba(251,113,133,.14)",borderRadius:8,padding:"4px 12px",border:"1px dashed rgba(251,113,133,.6)"}}>
+          <span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:C.coral,letterSpacing:2}}>{code}</span>
         </div>
       </div>
       <button className="press" onClick={()=>{try{navigator.clipboard.writeText(code);}catch(e){}}}
-        style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 11px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif",flexShrink:0,cursor:"pointer"}}>
+        style={{background:C.coral,border:"none",borderRadius:99,padding:"8px 14px",color:C.bg,fontSize:11,fontWeight:700,fontFamily:"'Outfit',sans-serif",textTransform:"uppercase",letterSpacing:".06em",flexShrink:0,cursor:"pointer"}}>
         Copy
       </button>
     </div>
@@ -4042,7 +4042,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
         {/* Real Nemo logo — secret tap target. marginTop clears the absolute account/wallet chip on mobile so the logo never overlaps Sign in. */}
         <div onClick={onSecretTap} className="home-hero-logo"
-          style={{display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",WebkitTapHighlightColor:"transparent",marginBottom:16,marginTop:46}}>
+          style={{position:"relative",zIndex:2,display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",WebkitTapHighlightColor:"transparent",marginBottom:16,marginTop:46}}>
           <div style={{width:"min(248px,70%)",aspectRatio:"600 / 311",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:"100%",height:"100%",objectFit:"contain",filter:"drop-shadow(0 6px 14px rgba(0,0,0,.28))"}}/>
           </div>
@@ -4056,10 +4056,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <span style={{width:18,height:2,background:C.card,borderRadius:2}}/>
         </button>
         {/* Tagline */}
-        <div className="hero-tagline" style={{fontFamily:"'Outfit',sans-serif",fontSize:30,fontWeight:800,letterSpacing:"-0.02em",color:"#f0f9ff",lineHeight:1.12,marginBottom:8,textWrap:"balance",textAlign:"center",textShadow:"0 2px 26px rgba(4,10,21,0.7), 0 0 18px rgba(56,189,248,0.25)"}}>
+        <div className="hero-tagline" style={{position:"relative",zIndex:2,fontFamily:"'Outfit',sans-serif",fontSize:30,fontWeight:800,letterSpacing:"-0.02em",color:"#f0f9ff",lineHeight:1.12,marginBottom:8,textWrap:"balance",textAlign:"center",textShadow:"0 2px 26px rgba(4,10,21,0.7), 0 0 18px rgba(56,189,248,0.25)"}}>
           {settings.heroHeadline||"Bring Colour to Your Life"}
         </div>
-        <div className="hero-sub" style={{fontSize:13.5,fontWeight:600,letterSpacing:".3px",color:"rgba(224,242,254,0.94)",marginBottom:0,textAlign:"center",textShadow:"0 1px 14px rgba(4,10,21,0.65)"}}>
+        <div className="hero-sub" style={{position:"relative",zIndex:2,fontSize:13.5,fontWeight:600,letterSpacing:".3px",color:"rgba(224,242,254,0.94)",marginBottom:0,textAlign:"center",textShadow:"0 1px 14px rgba(4,10,21,0.65)"}}>
           {settings.heroSub||"Quality Fishes · Plants · Accessories"}
         </div>
       </div>
@@ -4163,7 +4163,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
         {/* Offer Zone — lists only products that are currently on offer */}
         {offerProducts.length>0&&(
-          <div style={{marginBottom:26,background:"linear-gradient(135deg,#fff1ee,#ffe8e3)",border:`1.5px solid ${C.coral}`,borderRadius:20,padding:"16px 14px"}}>
+          <div style={{marginBottom:26,background:"linear-gradient(135deg,rgba(251,113,133,0.12),rgba(10,28,32,0.55))",border:`1px solid ${C.coral}`,borderRadius:20,padding:"16px 14px"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
               <span style={{display:"flex",alignItems:"center",gap:7}}>
                 <span style={{fontSize:20}}>🔥</span>
