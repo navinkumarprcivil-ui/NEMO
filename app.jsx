@@ -4054,10 +4054,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <span style={{width:18,height:2,background:C.card,borderRadius:2}}/>
         </button>
         {/* Tagline */}
-        <div className="hero-tagline" style={{fontFamily:"'Outfit',sans-serif",fontSize:27,fontWeight:700,color:"white",lineHeight:1.15,marginBottom:6,textWrap:"balance",textAlign:"center"}}>
+        <div className="hero-tagline" style={{fontFamily:"'Outfit',sans-serif",fontSize:30,fontWeight:800,letterSpacing:"-0.02em",color:"#f0f9ff",lineHeight:1.12,marginBottom:8,textWrap:"balance",textAlign:"center",textShadow:"0 2px 26px rgba(4,10,21,0.7), 0 0 18px rgba(56,189,248,0.25)"}}>
           {settings.heroHeadline||"Bring Colour to Your Life"}
         </div>
-        <div className="hero-sub" style={{fontSize:13,color:"rgba(255,255,255,.78)",marginBottom:0,textAlign:"center"}}>
+        <div className="hero-sub" style={{fontSize:13.5,fontWeight:600,letterSpacing:".3px",color:"rgba(224,242,254,0.94)",marginBottom:0,textAlign:"center",textShadow:"0 1px 14px rgba(4,10,21,0.65)"}}>
           {settings.heroSub||"Quality Fishes · Plants · Accessories"}
         </div>
       </div>
