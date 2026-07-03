@@ -1,0 +1,138 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "products": {
+      ".read": true,
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$id": {
+        "stockCount": {
+          ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.val() <= data.val())",
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        }
+      }
+    },
+
+    "guides":   { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')" },
+    "settings": { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')" },
+    "media":    { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')" },
+
+    "reviews": {
+      ".read": true,
+      "$pid": {
+        "$rid": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChild('rating') && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5"
+        }
+      }
+    },
+
+    "experienceReviews": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || !data.exists() )",
+        ".validate": "!newData.exists() || (newData.hasChild('service') && newData.hasChild('packing') && newData.child('service').isNumber() && newData.child('packing').isNumber())"
+      }
+    },
+
+    "orders": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
+        ".write": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))"
+      }
+    },
+
+    "favorites": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "interest": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$pid": {
+        ".read": true,
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+
+    "requests": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$id": {
+        ".write": "auth != null && (!data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))"
+      }
+    },
+
+    "showcase": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null && ( !data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || auth.uid === data.child('userUid').val() || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )"
+      }
+    },
+
+    "analytics": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "total": { ".write": "auth != null", ".validate": "newData.isNumber()" },
+      "daily": { "$d": { ".write": "auth != null", ".validate": "newData.isNumber()" } }
+    },
+
+    "loyalty": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (auth.uid === $uid && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= (data.exists() ? data.child('points').val() : 0)) )"
+      }
+    },
+
+    "restock": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$pid": {
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+
+    "userrefs": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && !data.exists()"
+      }
+    },
+
+    "referrals": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || !data.exists() || data.child('used').val() != true )",
+        ".validate": "newData.hasChild('owner') && (!data.exists() || data.child('owner').val() === newData.child('owner').val())",
+        "rewardCoins": {
+          ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || newData.val() === (data.exists() ? data.val() : 0)"
+        },
+        "delivered": {
+          ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || newData.val() === false || (data.exists() && newData.val() === data.val())"
+        }
+      }
+    },
+
+    "testimonials": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
+        ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))"
+      }
+    },
+
+    "promoUsage": {
+      ".read": true,
+      "$date": {
+        "$type": { ".write": "auth != null", ".validate": "newData.isNumber()" }
+      }
+    },
+
+    "__ping": { ".read": true, ".write": "auth != null" }
+  }
+}

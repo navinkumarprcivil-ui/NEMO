@@ -1,0 +1,37 @@
+rules_version = '2';
+
+// Firebase Storage security rules for Nemo Aqua Store.
+//
+// Mirrors database.rules.json: product/catalog images are publicly READABLE (it's a public
+// storefront) but only the admin Google account(s) may WRITE. Image bytes live here (served
+// over Firebase's CDN) instead of as base64 in the Realtime Database — this is what keeps the
+// database small and the storefront fast.
+//
+// HOW TO DEPLOY:
+//   Firebase Console → Build → Storage → Rules tab → paste this file → Publish.
+//   (Or with the CLI: keep this as storage.rules and run `firebase deploy --only storage`.)
+//
+// Single admin account. To add a co-admin later, change the uid line to:
+//   && (request.auth.uid == 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || request.auth.uid == 'SECOND_UID')
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // All app uploads go under media/ (product photos, thumbnails, gallery videos).
+    match /media/{allPaths=**} {
+      // Public read — these images are shown to every shopper.
+      allow read: if true;
+
+      // Admin-only write, capped size, images & short videos only.
+      allow write: if request.auth != null
+        && request.auth.uid == 'cI2HmMt6FdR7fO7uUnugH85GeZt2'
+        && request.resource.size < 12 * 1024 * 1024
+        && request.resource.contentType.matches('(image|video)/.*');
+    }
+
+    // Everything else is locked down by default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
