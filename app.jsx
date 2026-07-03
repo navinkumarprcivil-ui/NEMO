@@ -2108,6 +2108,7 @@ input:focus,textarea:focus,select:focus{border-color:#0ea5e9 !important;box-shad
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-9px)}75%{transform:translateX(9px)}}
 @keyframes toastIn{from{transform:translateY(-16px) translateX(-50%);opacity:0}to{transform:translateY(0) translateX(-50%);opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes bobUp{0%,100%{transform:translateY(0);opacity:.85}50%{transform:translateY(-7px);opacity:1}}
 @keyframes checkPop{0%{transform:scale(0)}70%{transform:scale(1.2)}100%{transform:scale(1)}}
 .slide-up{animation:slideUp .3s cubic-bezier(.22,1,.36,1) both;}
 .fade-in{animation:fadeIn .22s ease both;}
@@ -2233,10 +2234,10 @@ function Portal({children}){
   return ReactDOM.createPortal(children, elRef.current);
 }
 /* Image that fades in once decoded (no abrupt pop). Falls back instantly for cached/data-URI images. */
-function SmoothImg({src,alt,style,className}){
+function SmoothImg({src,alt,style,className,loading="lazy"}){
   const onReady=(el)=>{ if(el){ if(el.complete && el.naturalWidth>0) el.setAttribute("data-loaded","1"); } };
   return (
-    <img src={src} alt={alt||""} ref={onReady} decoding="async"
+    <img src={src} alt={alt||""} ref={onReady} decoding="async" loading={loading}
       className={"smooth-img"+(className?(" "+className):"")} style={style}
       onLoad={e=>e.currentTarget.setAttribute("data-loaded","1")}
       onError={e=>e.currentTarget.setAttribute("data-loaded","1")}/>
@@ -4792,7 +4793,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             <div key={i} onClick={()=>{ if(s.type==="image") setLightbox(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
               {s.type==="video"
                 ? <video src={s.src} controls playsInline loop style={{width:"100%",height:"100%",objectFit:"contain"}}/>
-                : <SmoothImg src={s.src} alt={p.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
+                : <SmoothImg src={s.src} alt={p.name} loading="eager" style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
             </div>
           ))}
         </div>
@@ -9201,52 +9202,153 @@ function GuideForm({guide,imgSrc,onSave,onCancel}){
   );
 }
 
-/* Fullscreen poster viewer with custom zoom (slider + / −, pinch, wheel, double-tap) and drag-to-pan. */
-function PosterZoom({src,title,notes,onClose}){
-  const [scale,setScale]=useState(1);
-  const [tx,setTx]=useState(0),[ty,setTy]=useState(0);
-  const [showNotes,setShowNotes]=useState(false);
-  const drag=React.useRef(null);
-  const pinch=React.useRef(null);
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  const applyScale=(ns)=>{ ns=clamp(ns,1,5); setScale(ns); if(ns<=1){setTx(0);setTy(0);} };
-  const onWheel=e=>{ e.preventDefault(); applyScale(scale - e.deltaY*0.0025*scale); };
-  const onDblClick=()=>{ scale>1?applyScale(1):applyScale(2.5); };
-  const onPointerDown=e=>{ if(scale<=1)return; drag.current={x:e.clientX,y:e.clientY,tx,ty}; };
-  const onPointerMove=e=>{ if(!drag.current)return; setTx(drag.current.tx+(e.clientX-drag.current.x)); setTy(drag.current.ty+(e.clientY-drag.current.y)); };
-  const endDrag=()=>{ drag.current=null; };
-  const dist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
-  const onTouchStart=e=>{ if(e.touches.length===2){ pinch.current={d:dist(e.touches),s:scale}; } };
-  const onTouchMove=e=>{ if(e.touches.length===2&&pinch.current){ e.preventDefault(); applyScale(pinch.current.s*(dist(e.touches)/pinch.current.d)); } };
-  const onTouchEnd=e=>{ if(e.touches.length<2) pinch.current=null; };
+/* Fullscreen poster REEL — swipe up/down between posters (Instagram-style), pinch / wheel / double-tap zoom, drag-to-pan, share. */
+function PosterReel({posters=[],start=0,onClose}){
+  const [idx,setIdx]       = useState(Math.max(0,Math.min(start,posters.length-1)));
+  const [scale,setScale]   = useState(1);
+  const [tx,setTx]         = useState(0),[ty,setTy]=useState(0);
+  const [showNotes,setShowNotes] = useState(false);
+  const [dragY,setDragY]   = useState(0);   // live reel-swipe offset (px)
+  const [anim,setAnim]     = useState(true); // animate track between slides
+  const [hint,setHint]     = useState(posters.length>1); // "swipe up" coach mark
+  const [shared,setShared] = useState("");
+  const drag  = React.useRef(null);  // image pan gesture
+  const swipe = React.useRef(null);  // reel swipe gesture
+  const pinch = React.useRef(null);  // two-finger pinch
+  const wheelLock = React.useRef(0);
+  const cur   = posters[idx]||{};
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const reset = ()=>{ setScale(1); setTx(0); setTy(0); };
+  const applyScale = ns=>{ ns=clamp(ns,1,5); setScale(ns); if(ns<=1){ setTx(0); setTy(0); } };
+  useEffect(()=>{ reset(); setShowNotes(false); },[idx]);
+  useEffect(()=>{ if(!hint) return; const t=setTimeout(()=>setHint(false),2600); return ()=>clearTimeout(t); },[hint]);
+  const go = d => setIdx(i=>clamp(i+d,0,posters.length-1));
+
+  useEffect(()=>{
+    const onKey=e=>{ if(e.key==="Escape")onClose(); else if(e.key==="ArrowDown"||e.key==="ArrowRight")go(1); else if(e.key==="ArrowUp"||e.key==="ArrowLeft")go(-1); };
+    window.addEventListener("keydown",onKey); return ()=>window.removeEventListener("keydown",onKey);
+  },[posters.length]);
+
+  const onWheel = e=>{
+    if(e.ctrlKey){ e.preventDefault(); applyScale(scale - e.deltaY*0.0025*scale); return; }
+    if(scale<=1){ e.preventDefault(); const now=Date.now(); if(now<wheelLock.current) return;
+      if(e.deltaY>24){ wheelLock.current=now+380; go(1); setHint(false); }
+      else if(e.deltaY<-24){ wheelLock.current=now+380; go(-1); } }
+  };
+  const onDblClick = ()=>{ scale>1?applyScale(1):applyScale(2.5); };
+  const onPointerDown = e=>{
+    if(pinch.current) return;
+    if(scale>1){ drag.current={x:e.clientX,y:e.clientY,tx,ty}; }
+    else { swipe.current={y:e.clientY,x:e.clientX,t:Date.now()}; setAnim(false); }
+  };
+  const onPointerMove = e=>{
+    if(drag.current){ setTx(drag.current.tx+(e.clientX-drag.current.x)); setTy(drag.current.ty+(e.clientY-drag.current.y)); return; }
+    if(swipe.current){
+      let dy=e.clientY-swipe.current.y;
+      if((idx===0&&dy>0)||(idx===posters.length-1&&dy<0)) dy*=0.35; // rubber-band at ends
+      setDragY(dy); if(Math.abs(dy)>8) setHint(false);
+    }
+  };
+  const endPointer = ()=>{
+    if(drag.current){ drag.current=null; return; }
+    if(swipe.current){
+      const dy=dragY, dt=Date.now()-swipe.current.t; swipe.current=null; setAnim(true);
+      const fast=Math.abs(dy)/Math.max(dt,1)>0.45;
+      if((dy<-70||(fast&&dy<-24)) && idx<posters.length-1) setIdx(idx+1);
+      else if((dy>70||(fast&&dy>24)) && idx>0) setIdx(idx-1);
+      setDragY(0);
+    }
+  };
+  const dist = t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+  const onTouchStart = e=>{ if(e.touches.length===2){ pinch.current={d:dist(e.touches),s:scale}; swipe.current=null; } };
+  const onTouchMove  = e=>{ if(e.touches.length===2&&pinch.current){ e.preventDefault(); applyScale(pinch.current.s*(dist(e.touches)/pinch.current.d)); } };
+  const onTouchEnd   = e=>{ if(e.touches.length<2) pinch.current=null; };
+
+  const share = async()=>{
+    const src=cur.src; if(!src) return;
+    try{
+      if(navigator.share){
+        try{
+          const blob=await (await fetch(src)).blob();
+          const file=new File([blob],((cur.title||"care-guide").replace(/[^\w -]+/g,"")||"care-guide")+".jpg",{type:blob.type||"image/jpeg"});
+          if(navigator.canShare && navigator.canShare({files:[file]})){
+            await navigator.share({files:[file],title:cur.title||"Care Guide",text:(cur.title?cur.title+" — ":"")+"NEMO Aqua Store care guide"});
+            return;
+          }
+        }catch(_){}
+        await navigator.share({title:cur.title||"Care Guide",text:cur.title||"Care Guide",url:location.href});
+        return;
+      }
+      const a=document.createElement("a"); a.href=src; a.download=((cur.title||"care-guide"))+".jpg"; document.body.appendChild(a); a.click(); a.remove();
+      setShared("Saved"); setTimeout(()=>setShared(""),1600);
+    }catch(e){ /* user cancelled */ }
+  };
+
+  const btn={width:38,height:38,borderRadius:11,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:19,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,backdropFilter:"blur(6px)"};
   const pct=Math.round(scale*100);
-  const btn={width:38,height:38,borderRadius:11,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:19,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0};
   return(
     <Portal>
-    <div style={{position:"fixed",inset:0,background:"rgba(4,16,20,.96)",zIndex:9000,display:"flex",flexDirection:"column",animation:"fadeIn .2s ease"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(4,16,20,.97)",zIndex:9000,display:"flex",flexDirection:"column",animation:"fadeIn .2s ease"}}>
       {/* top bar */}
-      <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",color:"white",flexShrink:0}}>
-        <div style={{flex:1,minWidth:0,fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{title||"Care Guide"}</div>
-        {notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 14px",fontSize:12.5,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
-        <button className="press" onClick={onClose} style={btn}>✕</button>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",color:"white",flexShrink:0,zIndex:5}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.title||"Care Guide"}</div>
+          {posters.length>1&&<div style={{fontSize:11,fontWeight:700,opacity:.7,marginTop:2}}>{idx+1} / {posters.length}</div>}
+        </div>
+        <button className="press" onClick={share} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800}} aria-label="Share poster">{shared||"⤴ Share"}</button>
+        {cur.notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
+        <button className="press" onClick={onClose} style={btn} aria-label="Close">✕</button>
       </div>
-      {/* stage */}
-      <div onClick={e=>{if(e.target===e.currentTarget)onClose();}} onWheel={onWheel}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerLeave={endDrag}
+
+      {/* reel stage */}
+      <div onClick={e=>{ if(e.target===e.currentTarget && scale<=1) onClose(); }} onWheel={onWheel}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointer} onPointerLeave={endPointer}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        style={{flex:1,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"none",cursor:scale>1?"grab":"zoom-in"}}>
-        <img src={src} alt={title||""} draggable={false} onDoubleClick={onDblClick} onClick={()=>{if(scale<=1)applyScale(2.5);}}
-          style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",transform:`translate(${tx}px,${ty}px) scale(${scale})`,transformOrigin:"center center",transition:drag.current||pinch.current?"none":"transform .12s ease",userSelect:"none",willChange:"transform"}}/>
+        style={{flex:1,position:"relative",overflow:"hidden",touchAction:"none",cursor:scale>1?"grab":"default"}}>
+        <div style={{position:"absolute",inset:0,transform:"translateY(calc("+(-idx*100)+"% + "+dragY+"px))",transition:anim?"transform .34s cubic-bezier(.22,1,.36,1)":"none",willChange:"transform"}}>
+          {posters.map((p,i)=>{
+            const near=Math.abs(i-idx)<=1;
+            const active=i===idx;
+            return(
+              <div key={i} style={{position:"absolute",top:(i*100)+"%",left:0,right:0,height:"100%",display:"flex",alignItems:"center",justifyContent:"center",padding:"6px 10px"}}>
+                {near
+                  ? <div onDoubleClick={active?onDblClick:undefined} onClick={active?()=>{ if(scale<=1)applyScale(2.2); }:undefined}
+                      style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",transform:active?("translate("+tx+"px,"+ty+"px) scale("+scale+")"):"scale(1)",transformOrigin:"center center",transition:(active&&(drag.current||pinch.current))?"none":"transform .14s ease",willChange:"transform"}}>
+                      <img src={p.src} alt={p.title||""} draggable={false} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:12,boxShadow:"0 18px 50px rgba(0,0,0,.55)",userSelect:"none",pointerEvents:"none"}}/>
+                    </div>
+                  : <div style={{width:40,height:40,borderRadius:"50%",border:"3px solid rgba(255,255,255,.25)",borderTopColor:"rgba(255,255,255,.7)",animation:"spin 1s linear infinite"}}/>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* vertical progress dots */}
+        {posters.length>1&&posters.length<=12&&(
+          <div style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",display:"flex",flexDirection:"column",gap:6,zIndex:4}}>
+            {posters.map((p,i)=>(
+              <div key={i} onClick={()=>setIdx(i)} style={{width:6,height:i===idx?18:6,borderRadius:6,background:i===idx?"#fff":"rgba(255,255,255,.4)",transition:"height .2s,background .2s",cursor:"pointer"}}/>
+            ))}
+          </div>
+        )}
+
+        {/* swipe-up coach mark */}
+        {hint&&scale<=1&&idx<posters.length-1&&(
+          <div style={{position:"absolute",bottom:16,left:0,right:0,display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:"rgba(255,255,255,.85)",pointerEvents:"none",zIndex:4,animation:"bobUp 1.4s ease-in-out infinite"}}>
+            <span style={{fontSize:22,lineHeight:1}}>⌃</span>
+            <span style={{fontSize:11.5,fontWeight:700,letterSpacing:.3}}>Swipe up for next</span>
+          </div>
+        )}
       </div>
+
       {/* notes panel */}
-      {notes&&showNotes&&(
-        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13.5,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{notes}</div>
+      {cur.notes&&showNotes&&(
+        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13.5,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cur.notes}</div>
       )}
+
       {/* zoom controls */}
       <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:12,padding:"12px 18px calc(14px + env(safe-area-inset-bottom))",background:"rgba(0,0,0,.35)"}}>
         <button className="press" onClick={()=>applyScale(scale-0.5)} style={btn} aria-label="Zoom out">−</button>
-        <input type="range" min="1" max="5" step="0.1" value={scale} onChange={e=>applyScale(Number(e.target.value))}
-          style={{flex:1,accentColor:C.accent,height:4}}/>
+        <input type="range" min="1" max="5" step="0.1" value={scale} onChange={e=>applyScale(Number(e.target.value))} style={{flex:1,accentColor:C.accent,height:4}}/>
         <button className="press" onClick={()=>applyScale(scale+0.5)} style={btn} aria-label="Zoom in">+</button>
         <div style={{minWidth:52,textAlign:"center",color:"white",fontSize:12.5,fontWeight:800}}>{pct}%</div>
         <button className="press" onClick={()=>applyScale(1)} style={{...btn,width:"auto",padding:"0 12px",fontSize:12,fontWeight:800}}>Fit</button>
@@ -9255,7 +9357,6 @@ function PosterZoom({src,title,notes,onClose}){
     </Portal>
   );
 }
-
 /* ═══════════════════ CARE GUIDES PAGE ═══════════════════ */
 function CareGuidesPage({nav,guides,mediaCache}){
   const [cat,setCat]=useState("All");
@@ -9263,6 +9364,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
   const [zoom,setZoom]=useState(null); // {src,title,notes}
   const cats=["All",...GUIDE_CATEGORIES.filter(c=>guides.some(g=>g.category===c))];
   const list=cat==="All"?guides:guides.filter(g=>g.category===cat);
+  const posterList=list.filter(g=>mediaCache["img-"+g.id]).map(g=>({src:mediaCache["img-"+g.id],title:g.title,notes:g.content||""}));
   return(
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 22px",color:"white",position:"relative",overflow:"hidden"}}>
@@ -9304,7 +9406,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
           const hasPoster=!!img;
           return(
             <div key={g.id} style={{background:C.card,borderRadius:16,overflow:"hidden",marginBottom:12,border:`1px solid ${C.border}`}}>
-              <button className="press" onClick={()=>{ if(hasPoster){ setZoom({src:img,title:g.title,notes:content}); } else { setOpenId(open?null:g.id); } }}
+              <button className="press" onClick={()=>{ if(hasPoster){ const pi=posterList.findIndex(x=>x.src===img); setZoom({start:pi<0?0:pi}); } else { setOpenId(open?null:g.id); } }}
                 style={{display:"flex",alignItems:"center",gap:13,width:"100%",padding:"13px 15px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
                 <div style={{flexShrink:0,width:52,height:52,borderRadius:12,overflow:"hidden",background:hasPoster?"#0c2b30":C.accentLight,display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {hasPoster? <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontSize:22}}>📋</span>}
@@ -9325,7 +9427,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
       </div>
 
       {/* Fullscreen poster viewer with custom zoom */}
-      {zoom&&<PosterZoom src={zoom.src} title={zoom.title} notes={zoom.notes} onClose={()=>setZoom(null)}/>}
+      {zoom&&<PosterReel posters={posterList} start={zoom.start} onClose={()=>setZoom(null)}/>}
     </div>
   );
 }
