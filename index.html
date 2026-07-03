@@ -96,6 +96,12 @@
     width:28px;height:28px;font-size:18px;line-height:1;cursor:pointer;}
   @media (max-width:380px){ #installBanner .ib-sub{display:none;} }
 </style>
+<!-- Warm up connections to the CDNs the app pulls from — shaves latency off the very first load -->
+<link rel="preconnect" href="https://unpkg.com" crossorigin/>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin/>
+<link rel="preconnect" href="https://firebaseio.com" crossorigin/>
+<link rel="dns-prefetch" href="https://unpkg.com"/>
+<link rel="dns-prefetch" href="https://www.gstatic.com"/>
 <!-- React 18 production builds — `defer` so they DON'T block the splash/logo from painting instantly -->
 <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
 <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
@@ -265,10 +271,10 @@
   var DPR=Math.min(window.devicePixelRatio||1,2);
   var W=0,H=0,bubbles=[],mouse={x:-9999,y:-9999,active:false},running=true;
   function mk(y){
-    var r=6+Math.random()*34;
+    var r=3+Math.random()*9;
     return {x:Math.random()*W, y:(y==null?H+r+Math.random()*H:y), r:r,
-      vy:-(0.15+Math.random()*0.5)*(0.6+r/40),
-      sway:0.4+Math.random()*1.1, phase:Math.random()*Math.PI*2, swayA:6+Math.random()*18,
+      vy:-(0.05+Math.random()*0.15)*(0.6+r/40),
+      sway:0.25+Math.random()*0.6, phase:Math.random()*Math.PI*2, swayA:4+Math.random()*10,
       ox:0, oy:0, alpha:0.20+Math.random()*0.32};
   }
   function seed(){
@@ -300,7 +306,7 @@
     ctx.clearRect(0,0,W,H); bg();
     for(var i=0;i<bubbles.length;i++){
       var b=bubbles[i];
-      b.phase+=0.01*b.sway; b.y+=b.vy;
+      b.phase+=0.006*b.sway; b.y+=b.vy;
       var sx=b.x+Math.sin(b.phase)*b.swayA;
       if(mouse.active){
         var dx=(sx+b.ox)-mouse.x, dy=(b.y+b.oy)-mouse.y, d=Math.hypot(dx,dy), R=130;

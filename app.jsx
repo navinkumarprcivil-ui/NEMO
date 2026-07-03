@@ -4674,6 +4674,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
   };
   const iconBtn={display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.16)",border:"none",color:"#fff",cursor:"pointer",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"};
   return(
+    <Portal>
       <div className="fade-in" style={{position:"fixed",inset:0,zIndex:9500,background:"rgba(3,10,14,.97)",touchAction:"none",userSelect:"none",overscrollBehavior:"contain"}}>
         <div style={{position:"absolute",top:0,left:0,right:0,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"calc(env(safe-area-inset-top,0px) + 12px) 14px 12px",zIndex:4,pointerEvents:"none"}}>
           <span style={{color:"#fff",fontSize:12.5,fontWeight:700,background:"rgba(255,255,255,.14)",padding:"6px 13px",borderRadius:20,backdropFilter:"blur(8px)"}}>
@@ -4685,9 +4686,9 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
           onClick={e=>{ if(e.target===stageRef.current && scale<=1.05) onClose(); }}
           style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",cursor:scale>1.05?"grab":"default"}}>
           {isVideo
-            ? <video src={cur.src} controls autoPlay playsInline style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}}/>
+            ? <video src={cur.src} controls autoPlay playsInline style={{width:"100%",height:"100%",objectFit:"contain"}}/>
             : <img src={cur.src} alt={name} draggable={false}
-                style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",transform:"translate("+tx+"px,"+ty+"px) scale("+scale+")",transition:g.current.mode?"none":"transform .28s cubic-bezier(.22,1,.36,1)",willChange:"transform"}}/>}
+                style={{width:"100%",height:"100%",objectFit:"contain",transform:"translate("+tx+"px,"+ty+"px) scale("+scale+")",transition:g.current.mode?"none":"transform .28s cubic-bezier(.22,1,.36,1)",willChange:"transform"}}/>}
         </div>
         {slides.length>1&&(<>
           <button className="press" onClick={()=>go(-1)} aria-label="Previous" style={{...iconBtn,position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>‹</button>
@@ -4711,6 +4712,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
           {isVideo?"":"Use + / −, double-tap or pinch to zoom · swipe to browse"}
         </div>
       </div>
+    </Portal>
   );
 }
 
