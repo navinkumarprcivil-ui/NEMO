@@ -2090,12 +2090,9 @@ input:focus,textarea:focus,select:focus{border-color:#0ea5e9 !important;box-shad
 .press:active{transform:scale(.95);}
 .lift{transition:transform .4s cubic-bezier(0.34,1.56,0.64,1),box-shadow .4s cubic-bezier(0.34,1.56,0.64,1);}
 .lift img{transition:transform .4s cubic-bezier(0.34,1.56,0.64,1);}
-.lift:hover{transform:translateY(-6px) scale(1.02);box-shadow:0 28px 54px rgba(14,165,233,.20);}
-.lift:hover img{transform:scale(1.07);}
+.lift:hover{transform:translateY(-4px) scale(1.02);box-shadow:0 20px 40px rgba(14,165,233,.13);}
+.lift:hover img{transform:scale(1.05);}
 .lift:active{transform:translateY(-2px) scale(.99);}
-/* Icon/pill micro-interaction: gentle brighten on hover (safe — no transform override) */
-.press:hover{filter:brightness(1.05);}
-.cta:hover{transform:scale(1.06);}
 /* Coral pill CTA — brighten + lift + colored shadow on hover, press-in on active */
 .cta{transition:transform .3s cubic-bezier(0.34,1.56,0.64,1),box-shadow .3s,filter .2s;}
 .cta:hover{transform:scale(1.05);box-shadow:0 8px 24px rgba(244,63,94,.3);filter:brightness(1.05);}
@@ -2108,7 +2105,6 @@ input:focus,textarea:focus,select:focus{border-color:#0ea5e9 !important;box-shad
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-9px)}75%{transform:translateX(9px)}}
 @keyframes toastIn{from{transform:translateY(-16px) translateX(-50%);opacity:0}to{transform:translateY(0) translateX(-50%);opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
-@keyframes bobUp{0%,100%{transform:translateY(0);opacity:.85}50%{transform:translateY(-7px);opacity:1}}
 @keyframes checkPop{0%{transform:scale(0)}70%{transform:scale(1.2)}100%{transform:scale(1)}}
 .slide-up{animation:slideUp .3s cubic-bezier(.22,1,.36,1) both;}
 .fade-in{animation:fadeIn .22s ease both;}
@@ -2157,8 +2153,8 @@ input:focus,textarea:focus,select:focus{border-color:#0ea5e9 !important;box-shad
 .kpi-rise{animation:kpiRise .45s cubic-bezier(.22,1,.36,1) both;}
 @keyframes heartPop{0%{transform:scale(1)}40%{transform:scale(1.45)}70%{transform:scale(.88)}100%{transform:scale(1)}}
 .heart-pop{animation:heartPop .35s ease both;display:inline-block;}
-@keyframes pageIn{from{opacity:0;transform:translateY(12px) scale(.992)}to{opacity:1;transform:none}}
-.page-swap{animation:pageIn .36s cubic-bezier(.22,1,.36,1) both;}
+@keyframes pageIn{from{opacity:0}to{opacity:1}}
+.page-swap{animation:pageIn .24s ease both;}
 @keyframes showcaseSlide{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
 .showcase-slide{animation:showcaseSlide .3s ease both;}
 /* Gentle fade + rise — for promo banners and content that appears after data loads */
@@ -2193,7 +2189,7 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
   .home-hero-chrome{display:none !important;}
   /* Desktop opening banner: tall gradient hero with left-aligned headline + CTA */
   .home-hero{padding:38px 48px 34px !important;display:flex !important;flex-direction:column;align-items:flex-start;text-align:left;}
-  .home-hero .hero-tagline{font-size:36px !important;text-align:left !important;max-width:600px;margin-bottom:12px !important;}
+  .home-hero .hero-tagline{font-size:clamp(34px,4vw,54px) !important;text-align:left !important;max-width:640px;margin-bottom:12px !important;}
   .home-hero .hero-sub{font-size:16px !important;text-align:left !important;letter-spacing:.3px;}
   /* Desktop: surface the left-slide category sidebar from inside the banner, just above the quote */
   .home-hero .hero-browse{display:inline-flex !important;}
@@ -2234,10 +2230,10 @@ function Portal({children}){
   return ReactDOM.createPortal(children, elRef.current);
 }
 /* Image that fades in once decoded (no abrupt pop). Falls back instantly for cached/data-URI images. */
-function SmoothImg({src,alt,style,className,loading="lazy"}){
+function SmoothImg({src,alt,style,className}){
   const onReady=(el)=>{ if(el){ if(el.complete && el.naturalWidth>0) el.setAttribute("data-loaded","1"); } };
   return (
-    <img src={src} alt={alt||""} ref={onReady} decoding="async" loading={loading}
+    <img src={src} alt={alt||""} ref={onReady} decoding="async"
       className={"smooth-img"+(className?(" "+className):"")} style={style}
       onLoad={e=>e.currentTarget.setAttribute("data-loaded","1")}
       onError={e=>e.currentTarget.setAttribute("data-loaded","1")}/>
@@ -3596,6 +3592,22 @@ function SkeletonGrid({n=6}){
 }
 
 /* ═══════════════════ PRODUCT CARD ═══════════════════ */
+/* Spring-count number — tweens from the previous value to the new one (eased) */
+function AnimatedNumber({value,prefix="",suffix="",dur=480}){
+  const [disp,setDisp]=useState(value);
+  const fromRef=useRef(value), rafRef=useRef(0);
+  useEffect(()=>{
+    const from=fromRef.current, to=Number(value)||0;
+    if(from===to){ setDisp(to); return; }
+    if(typeof requestAnimationFrame==="undefined"){ fromRef.current=to; setDisp(to); return; }
+    const start=performance.now();
+    const tick=t=>{ const p=Math.min(1,(t-start)/dur); const e=1-Math.pow(1-p,3); setDisp(Math.round(from+(to-from)*e)); if(p<1){ rafRef.current=requestAnimationFrame(tick); } else { fromRef.current=to; } };
+    cancelAnimationFrame(rafRef.current); rafRef.current=requestAnimationFrame(tick);
+    return ()=>cancelAnimationFrame(rafRef.current);
+  },[value]);
+  return <>{prefix}{(Number(disp)||0).toLocaleString("en-IN")}{suffix}</>;
+}
+
 /* ── Shared live-interaction helpers (desktop fine-pointer) ── */
 function _fine(){ return typeof window!=="undefined" && window.matchMedia && window.matchMedia("(pointer:fine)").matches; }
 function magnetMove(e){
@@ -3606,28 +3618,19 @@ function magnetMove(e){
 }
 function magnetLeave(e){ const el=e.currentTarget; el.style.transition=""; el.style.transform=""; }
 /* Fly a coral burst from (x,y) into the cart icon, then pop the cart */
-function flyToCart(x,y,imgSrc){
+function flyToCart(x,y){
   try{
     const els=document.querySelectorAll("[data-cart-target]");
     let tgt=null; els.forEach(e=>{ if(e.offsetParent!==null) tgt=e; }); if(!tgt) tgt=els[0];
     if(!tgt) return;
     const tr=tgt.getBoundingClientRect();
-    const cx=tr.left+tr.width/2, cy=tr.top+tr.height/2;
     const dot=document.createElement("div");
-    dot.style.cssText=`position:fixed;left:${x-12}px;top:${y-12}px;width:24px;height:24px;border-radius:50%;background:${imgSrc?`center/cover no-repeat url("${imgSrc}")`:"#f43f5e"};box-shadow:0 6px 18px rgba(244,63,94,.45);z-index:9999;pointer-events:none;border:2px solid #fff;will-change:transform,opacity;`;
+    dot.style.cssText=`position:fixed;left:${x-8}px;top:${y-8}px;width:16px;height:16px;border-radius:50%;background:#f43f5e;box-shadow:0 4px 14px rgba(244,63,94,.5);z-index:9999;pointer-events:none;transition:transform .7s cubic-bezier(.5,-0.2,.3,1),opacity .7s ease;`;
     document.body.appendChild(dot);
-    const midX=(x+cx)/2, arcLift=Math.min(150, Math.abs(cx-x)*0.5+80);
-    const anim=dot.animate([
-      {transform:"translate(0,0) scale(1)",opacity:1,offset:0},
-      {transform:`translate(${midX-x}px,${Math.min(y,cy)-y-arcLift}px) scale(1.12)`,opacity:1,offset:.55},
-      {transform:`translate(${cx-x}px,${cy-y}px) scale(.22)`,opacity:.2,offset:1}
-    ],{duration:760,easing:"cubic-bezier(.5,-0.05,.35,1)"});
-    anim.onfinish=()=>{ try{dot.remove();}catch(_){} };
-    setTimeout(()=>{ try{dot.remove();}catch(_){} },950);
-    // Cart icon springs when the puck lands
-    tgt.animate([
-      {transform:"scale(1)"},{transform:"scale(1.42)",offset:.5},{transform:"scale(.9)",offset:.72},{transform:"scale(1.08)",offset:.86},{transform:"scale(1)"}
-    ],{duration:540,delay:560,easing:"cubic-bezier(.34,1.56,.64,1)"});
+    requestAnimationFrame(()=>{ dot.style.transform=`translate(${tr.left+tr.width/2-x}px,${tr.top+tr.height/2-y}px) scale(.3)`; dot.style.opacity="0.2"; });
+    setTimeout(()=>dot.remove(),720);
+    tgt.style.transition="transform .3s cubic-bezier(0.34,1.56,0.64,1)"; tgt.style.transform="scale(1.35)";
+    setTimeout(()=>{ tgt.style.transform=""; },330);
   }catch(e){}
 }
 
@@ -3674,7 +3677,6 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           : productExpectsImage(p)
             ? <div className="shimmer-bar" style={{position:"absolute",inset:0}}/>
             : <span style={{fontSize:54}}>{m.emoji}</span>}
-        <div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(0,0,0,.16),transparent 40%)"}}/>
         {p.tag&&<span style={{position:"absolute",top:8,left:8,background:"rgba(0,0,0,.32)",color:"white",fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,backdropFilter:"blur(4px)"}}>{p.tag}</span>}
         {onSale&&!soon&&<span style={{position:"absolute",bottom:8,left:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:20}}>-{p.discountPct}%</span>}
         {Heart}
@@ -3699,8 +3701,8 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           {onSale&&<div style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{p.price}</div>}
         </div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-          <div style={{fontSize:10,color:stk<10?C.coral:C.textSub,fontWeight:700}}>
-            {oos?"Out of stock":stk<10?`Only ${stk} left`:"In stock"}
+          <div className={!oos&&stk<=3?"festival-pulse":""} style={{fontSize:10,color:stk<10?C.coral:C.textSub,fontWeight:700}}>
+            {oos?"Out of stock":stk<=3?`🔥 Only ${stk} left`:stk<10?`Only ${stk} left`:"In stock"}
           </div>
           {inCart>0 ? (
             <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:10,padding:"3px 4px",gap:4}}>
@@ -3711,7 +3713,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
                 style={{background:"transparent",border:"none",color:"white",fontSize:16,fontWeight:700,width:22,height:22,lineHeight:1,cursor:remaining>0?"pointer":"not-allowed",opacity:remaining>0?1:.45}}>+</button>
             </div>
           ) : (
-            <button className="cta" onClick={e=>{e.stopPropagation();if(!oos){onAdd(p,1);flyToCart(e.clientX,e.clientY,imgSrc);}}} disabled={oos}
+            <button className="cta" onClick={e=>{e.stopPropagation();if(!oos){onAdd(p,1);flyToCart(e.clientX,e.clientY);}}} disabled={oos}
               style={{background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"7px 16px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:oos?"not-allowed":"pointer"}}>
               + Add
             </button>
@@ -4068,7 +4070,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
         </button>
         {/* Tagline */}
-        <div className="hero-tagline" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:30,fontWeight:800,letterSpacing:"-0.03em",color:C.text,lineHeight:1.1,marginBottom:7,textWrap:"balance",textAlign:"center"}}>
+        <div className="hero-tagline" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(26px,7vw,44px)",fontWeight:800,letterSpacing:"-0.03em",color:C.text,lineHeight:1.1,marginBottom:7,textWrap:"balance",textAlign:"center"}}>
           {settings.heroHeadline||"Bring Colour to Your Life"}
         </div>
         <div className="hero-sub" style={{fontSize:13.5,fontWeight:500,color:C.textSub,marginBottom:0,textAlign:"center"}}>
@@ -4458,7 +4460,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             <div style={{fontSize:12}}>Try adjusting your filters</div>
           </div>
         ):(
-          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="prod-grid js-stagger" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             {list.map(p=>(
               <div key={p.id}>
                 <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
@@ -4583,140 +4585,6 @@ function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
   );
 }
 
-/* ═══════════════════ MEDIA LIGHTBOX — fullscreen open · pinch/scroll zoom · pan · swipe ═══════════════════ */
-function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
-  const [scale,setScale] = useState(1);
-  const [tx,setTx]       = useState(0);
-  const [ty,setTy]       = useState(0);
-  const stageRef = useRef(null);
-  const ptrs     = useRef(new Map());
-  const g        = useRef({mode:null,sx:0,sy:0,stx:0,sty:0,dist:0,sscale:1,moved:0,lastTap:0});
-  const cur      = slides[index]||{};
-  const isVideo  = cur.type==="video";
-  const reset = ()=>{ setScale(1); setTx(0); setTy(0); };
-  useEffect(()=>{ reset(); },[index]);
-  const go = dir => setIndex(i => (i+dir+slides.length)%slides.length);
-  const clamp = (sc,x,y)=>{
-    const el=stageRef.current; if(!el) return [x,y];
-    const r=el.getBoundingClientRect();
-    const mx=Math.max(0,(r.width*(sc-1))/2), my=Math.max(0,(r.height*(sc-1))/2);
-    return [Math.max(-mx,Math.min(mx,x)), Math.max(-my,Math.min(my,y))];
-  };
-  useEffect(()=>{
-    const onKey=e=>{ if(e.key==="Escape")onClose(); else if(e.key==="ArrowRight")go(1); else if(e.key==="ArrowLeft")go(-1); };
-    window.addEventListener("keydown",onKey);
-    return ()=>window.removeEventListener("keydown",onKey);
-  },[slides.length]);
-  const down = e=>{
-    if(isVideo) return;
-    ptrs.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    if(ptrs.current.size===1){
-      const now=Date.now();
-      if(now-g.current.lastTap<300){
-        if(scale>1.05){ reset(); }
-        else{
-          const el=stageRef.current, r=el.getBoundingClientRect(), ns=2.6;
-          const ox=e.clientX-(r.left+r.width/2), oy=e.clientY-(r.top+r.height/2);
-          const [nx,ny]=clamp(ns,-ox*(ns-1),-oy*(ns-1));
-          setScale(ns); setTx(nx); setTy(ny);
-        }
-        g.current.mode="tapped"; g.current.lastTap=0; return;
-      }
-      g.current.lastTap=now;
-      g.current.mode = scale>1.05?"pan":"swipe";
-      g.current.sx=e.clientX; g.current.sy=e.clientY; g.current.stx=tx; g.current.sty=ty; g.current.moved=0;
-    } else if(ptrs.current.size===2){
-      const [a,b]=[...ptrs.current.values()];
-      g.current.mode="pinch"; g.current.dist=Math.hypot(a.x-b.x,a.y-b.y)||1; g.current.sscale=scale; g.current.stx=tx; g.current.sty=ty;
-    }
-    try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
-  };
-  const move = e=>{
-    if(!ptrs.current.has(e.pointerId)) return;
-    ptrs.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    const m=g.current;
-    if(m.mode==="pinch" && ptrs.current.size>=2){
-      const [a,b]=[...ptrs.current.values()];
-      const ns=Math.max(1,Math.min(4, m.sscale*(Math.hypot(a.x-b.x,a.y-b.y)/m.dist)));
-      const [nx,ny]=clamp(ns,m.stx,m.sty); setScale(ns); setTx(nx); setTy(ny);
-    } else if(m.mode==="pan"){
-      const [nx,ny]=clamp(scale, m.stx+(e.clientX-m.sx), m.sty+(e.clientY-m.sy)); setTx(nx); setTy(ny);
-    } else if(m.mode==="swipe"){
-      m.moved=e.clientX-m.sx; setTx(m.moved*0.55);
-    }
-  };
-  const up = e=>{
-    const m=g.current;
-    ptrs.current.delete(e.pointerId);
-    if(m.mode==="swipe"){ if(m.moved<-55) go(1); else if(m.moved>55) go(-1); else setTx(0); }
-    if(ptrs.current.size===0){ m.mode=null; }
-    else if(ptrs.current.size===1){
-      const [only]=[...ptrs.current.values()];
-      m.mode = scale>1.05?"pan":"swipe"; m.sx=only.x; m.sy=only.y; m.stx=tx; m.sty=ty; m.moved=0;
-    }
-  };
-  useEffect(()=>{
-    const el=stageRef.current; if(!el) return;
-    const onWheel=e=>{
-      if(isVideo) return;
-      e.preventDefault();            // keep the page behind from scrolling while the viewer is open
-      if(!e.ctrlKey) return;         // plain scroll does nothing; trackpad-pinch / Ctrl+wheel zooms
-      const ns=Math.max(1,Math.min(4, scale*(e.deltaY<0?1.12:0.9)));
-      if(ns<=1.02){ reset(); return; }
-      const [nx,ny]=clamp(ns, tx*(ns/scale), ty*(ns/scale)); setScale(ns); setTx(nx); setTy(ny);
-    };
-    el.addEventListener("wheel", onWheel, {passive:false});
-    return ()=>el.removeEventListener("wheel", onWheel);
-  },[isVideo,scale,tx,ty]);
-  const zoomBy = f => {
-    const ns=Math.max(1,Math.min(4, scale*f));
-    if(ns<=1.02){ reset(); return; }
-    const [nx,ny]=clamp(ns, tx*(ns/scale), ty*(ns/scale)); setScale(ns); setTx(nx); setTy(ny);
-  };
-  const iconBtn={display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.16)",border:"none",color:"#fff",cursor:"pointer",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"};
-  return(
-    <Portal>
-      <div className="fade-in" style={{position:"fixed",inset:0,zIndex:9500,background:"rgba(3,10,14,.97)",touchAction:"none",userSelect:"none",overscrollBehavior:"contain"}}>
-        <div style={{position:"absolute",top:0,left:0,right:0,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"calc(env(safe-area-inset-top,0px) + 12px) 14px 12px",zIndex:4,pointerEvents:"none"}}>
-          <span style={{color:"#fff",fontSize:12.5,fontWeight:700,background:"rgba(255,255,255,.14)",padding:"6px 13px",borderRadius:20,backdropFilter:"blur(8px)"}}>
-            {isVideo?"▶ Video":(index+1)+" / "+slides.length}
-          </span>
-          <button className="press" onClick={onClose} aria-label="Close" style={{...iconBtn,pointerEvents:"auto",width:42,height:42,borderRadius:"50%",fontSize:20}}>✕</button>
-        </div>
-        <div ref={stageRef} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-          onClick={e=>{ if(e.target===stageRef.current && scale<=1.05) onClose(); }}
-          style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",cursor:scale>1.05?"grab":"default"}}>
-          {isVideo
-            ? <video src={cur.src} controls autoPlay playsInline style={{width:"100%",height:"100%",objectFit:"contain"}}/>
-            : <img src={cur.src} alt={name} draggable={false}
-                style={{width:"100%",height:"100%",objectFit:"contain",transform:"translate("+tx+"px,"+ty+"px) scale("+scale+")",transition:g.current.mode?"none":"transform .28s cubic-bezier(.22,1,.36,1)",willChange:"transform"}}/>}
-        </div>
-        {slides.length>1&&(<>
-          <button className="press" onClick={()=>go(-1)} aria-label="Previous" style={{...iconBtn,position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>‹</button>
-          <button className="press" onClick={()=>go(1)} aria-label="Next" style={{...iconBtn,position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>›</button>
-        </>)}
-        {slides.length>1&&(
-          <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 26px)",left:0,right:0,display:"flex",justifyContent:"center",gap:6,zIndex:3}}>
-            {slides.map((s,i)=>(
-              <button key={i} className="press" onClick={()=>setIndex(i)} aria-label={"Go to slide "+(i+1)}
-                style={{width:i===index?22:8,height:8,borderRadius:20,border:"none",padding:0,cursor:"pointer",background:i===index?"#fff":"rgba(255,255,255,.45)",transition:"width .2s"}}/>
-            ))}
-          </div>
-        )}
-        {!isVideo&&(
-          <div style={{position:"absolute",left:12,bottom:"calc(env(safe-area-inset-bottom,0px) + 22px)",display:"flex",flexDirection:"column",gap:8,zIndex:3}}>
-            <button className="press" onClick={()=>zoomBy(1.5)} disabled={scale>=4} aria-label="Zoom in" style={{...iconBtn,width:42,height:42,borderRadius:12,fontSize:22,opacity:scale>=4?0.4:1}}>+</button>
-            <button className="press" onClick={()=>zoomBy(1/1.5)} disabled={scale<=1.02} aria-label="Zoom out" style={{...iconBtn,width:42,height:42,borderRadius:12,fontSize:24,opacity:scale<=1.02?0.4:1}}>−</button>
-          </div>
-        )}
-        <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 6px)",left:0,right:0,textAlign:"center",color:"rgba(255,255,255,.5)",fontSize:10.5,fontWeight:600,letterSpacing:.3,pointerEvents:"none",zIndex:3}}>
-          {isVideo?"":"Use + / −, double-tap or pinch to zoom · swipe to browse"}
-        </div>
-      </div>
-    </Portal>
-  );
-}
-
 function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,prevPage="shop",user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
   const [qty,setQty]           = useState(1);
   const [selVarId,setSelVarId] = useState(null);
@@ -4728,7 +4596,6 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   const [slide,setSlide]       = useState(0); // active gallery slide
   const [justAdded,setJustAdded] = useState(false);
   const [photoZoom,setPhotoZoom] = useState(null); // review photo lightbox src
-  const [lightbox,setLightbox] = useState(-1); // product gallery lightbox — active slide index (-1 = closed)
 
   useEffect(()=>{
     setLoadingRev(true);
@@ -4790,10 +4657,10 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             </div>
           )}
           {slides.map((s,i)=>(
-            <div key={i} onClick={()=>{ if(s.type==="image") setLightbox(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
+            <div key={i} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000"}}>
               {s.type==="video"
                 ? <video src={s.src} controls playsInline loop style={{width:"100%",height:"100%",objectFit:"contain"}}/>
-                : <SmoothImg src={s.src} alt={p.name} loading="eager" style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
+                : <SmoothImg src={s.src} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
             </div>
           ))}
         </div>
@@ -4806,10 +4673,6 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               <div key={i} style={{width:i===slide?20:7,height:7,borderRadius:20,background:i===slide?"white":"rgba(255,255,255,.5)",transition:"width .2s"}}/>
             ))}
           </div>
-        )}
-        {slides[slide]&&slides[slide].type==="image"&&(
-          <button className="press" onClick={()=>setLightbox(slide)} aria-label="Open photo full screen"
-            style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
         )}
         {slides[slide]&&<span style={{position:"absolute",top:50,right:16,background:"rgba(0,0,0,.4)",color:"white",fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,backdropFilter:"blur(6px)"}}>
           {slides[slide].type==="video"?"▶ Video":`📷 ${slide+1}/${slides.length}`}
@@ -5103,9 +4966,6 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         </>)}
       </div>
 
-      {lightbox>=0&&slides[lightbox]&&(
-        <MediaLightbox slides={slides} index={lightbox} setIndex={setLightbox} onClose={()=>setLightbox(-1)} name={p.name}/>
-      )}
       {photoZoom&&(
         <Portal>
         <div onClick={()=>setPhotoZoom(null)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -5119,6 +4979,60 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
 }
 
 /* ═══════════════════ CART PAGE ═══════════════════ */
+/* Slide-in mini-cart — quick peek + checkout without leaving the page */
+function MiniCart({open,onClose,cart,total,updateQty,nav,settings={}}){
+  const count=cart.reduce((s,i)=>s+i.qty,0);
+  const thr=Number(settings.freeDeliveryThreshold||0);
+  const left=thr>0?Math.max(0,thr-total):0;
+  return(
+    <Portal>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,23,42,.35)",backdropFilter:"blur(2px)",WebkitBackdropFilter:"blur(2px)",zIndex:4000,opacity:open?1:0,pointerEvents:open?"auto":"none",transition:"opacity .3s ease"}}/>
+      <div style={{position:"fixed",top:0,right:0,height:"100%",width:"min(390px,92vw)",background:"#ffffff",zIndex:4001,boxShadow:"-10px 0 44px rgba(15,23,42,.18)",transform:open?"translateX(0)":"translateX(106%)",transition:"transform .42s cubic-bezier(.22,1,.36,1)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"20px 18px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Your Cart ({count})</div>
+          <button className="press" onClick={onClose} aria-label="Close" style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:"50%",width:34,height:34,fontSize:18,color:C.text,cursor:"pointer"}}>×</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
+          {!cart.length?(
+            <div style={{textAlign:"center",color:C.textSub,padding:"50px 0",fontSize:14}}>Your cart is empty 🐠</div>
+          ):cart.map(item=>{
+            const m=CAT_META[item.category]||CAT_META["Live Fish"];
+            const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+            return(
+              <div key={item.key} style={{display:"flex",gap:12,alignItems:"center",padding:"11px 0",borderBottom:`1px solid ${C.border}`}}>
+                <div style={{width:48,height:48,borderRadius:12,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{m.emoji}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</div>
+                  {item.variantLabel&&<div style={{fontSize:11,color:C.textSub}}>{item.variantLabel}</div>}
+                  <div style={{fontFamily:PRICE_FONT,fontSize:13,fontWeight:800,color:C.primary,marginTop:2}}>₹{item.price*item.qty}</div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8,background:"#f8fafc",borderRadius:99,padding:"4px 9px",border:`1px solid ${C.border}`}}>
+                  <button className="press" onClick={()=>updateQty(item.key,-1)} style={{background:"none",border:"none",fontSize:16,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>−</button>
+                  <span style={{fontSize:13,fontWeight:700,minWidth:14,textAlign:"center"}}>{item.qty}</span>
+                  <button className="press" onClick={()=>{if(item.qty<maxAllowed)updateQty(item.key,1);}} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:16,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,cursor:item.qty>=maxAllowed?"default":"pointer",lineHeight:1}}>+</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {cart.length>0&&(
+          <div style={{padding:"14px 18px calc(16px + env(safe-area-inset-bottom))",borderTop:`1px solid ${C.border}`,background:"#fff"}}>
+            {thr>0&&left>0&&<div style={{fontSize:11.5,color:C.textSub,marginBottom:10,textAlign:"center"}}>Add <b style={{color:C.coral}}>₹{left}</b> more for free delivery 🚚</div>}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <span style={{fontSize:14,fontWeight:700,color:C.text}}>Subtotal</span>
+              <span style={{fontFamily:PRICE_FONT,fontSize:19,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button className="press" onClick={()=>{onClose();nav("cart");}} style={{flex:1,background:"#f8fafc",color:C.text,border:`1px solid ${C.border}`,borderRadius:99,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>View Cart</button>
+              <button className="cta" onClick={()=>{onClose();nav("checkout");}} style={{flex:1.4,background:C.coral,color:"white",border:"none",borderRadius:99,padding:"13px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textTransform:"uppercase",letterSpacing:".05em",cursor:"pointer"}}>Checkout →</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Portal>
+  );
+}
+
 function CartPage({cart,updateQty,total,nav,settings={}}){
   const hasLiveFish=cart.some(i=>i.category==="Live Fish");
   if(!cart.length)return(
@@ -5133,6 +5047,22 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
     <div className="slide-up">
       <div className="vh-head dt-read" style={{padding:"52px 16px 100px"}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:20}}>My Cart ({cart.reduce((s,i)=>s+i.qty,0)})</div>
+        {(()=>{
+          const thr=Number(settings.freeDeliveryThreshold||0);
+          if(thr<=0) return null;
+          const left=Math.max(0,thr-total), done=left<=0, pct=Math.min(100,Math.round((total/thr)*100));
+          return(
+            <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:18}}>
+              <div style={{fontSize:13,fontWeight:700,color:done?C.success:C.text,marginBottom:9,display:"flex",alignItems:"center",gap:7}}>
+                <span style={{fontSize:16}}>{done?"🎉":"🚚"}</span>
+                {done?"You've unlocked FREE delivery!":<>Add <b style={{color:C.coral}}>₹{left}</b> more to unlock <b>free delivery</b></>}
+              </div>
+              <div style={{height:8,background:"#e9eef5",borderRadius:99,overflow:"hidden"}}>
+                <div style={{height:"100%",width:pct+"%",borderRadius:99,background:done?"linear-gradient(90deg,#34d399,#10b981)":`linear-gradient(90deg,${C.accent},${C.primary})`,transition:"width .5s cubic-bezier(.22,1,.36,1)"}}/>
+              </div>
+            </div>
+          );
+        })()}
         {cart.map(item=>{
           const m=CAT_META[item.category]||CAT_META["Live Fish"];
           const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
@@ -5155,7 +5085,7 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
         <div style={{background:C.card,borderRadius:18,padding:"18px",marginTop:18,border:`1px solid ${C.border}`}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
             <span style={{fontSize:13,color:C.textSub}}>Subtotal</span>
-            <span style={{fontSize:13,fontWeight:700,color:C.text}}>₹{total}</span>
+            <span style={{fontSize:13,fontWeight:700,color:C.text}}><AnimatedNumber value={total} prefix="₹"/></span>
           </div>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
             <span style={{fontSize:13,color:C.textSub}}>Shipping</span>
@@ -5164,7 +5094,7 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
           <div style={{height:1,background:C.border,margin:"12px 0"}}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:15,fontWeight:700,color:C.text}}>Subtotal (excl. shipping)</span>
-            <span style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,color:C.primary}}>₹{total}</span>
+            <span style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
           </div>
         </div>
         {settings.loyaltyEnabled!==false && (()=>{
@@ -9202,153 +9132,52 @@ function GuideForm({guide,imgSrc,onSave,onCancel}){
   );
 }
 
-/* Fullscreen poster REEL — swipe up/down between posters (Instagram-style), pinch / wheel / double-tap zoom, drag-to-pan, share. */
-function PosterReel({posters=[],start=0,onClose}){
-  const [idx,setIdx]       = useState(Math.max(0,Math.min(start,posters.length-1)));
-  const [scale,setScale]   = useState(1);
-  const [tx,setTx]         = useState(0),[ty,setTy]=useState(0);
-  const [showNotes,setShowNotes] = useState(false);
-  const [dragY,setDragY]   = useState(0);   // live reel-swipe offset (px)
-  const [anim,setAnim]     = useState(true); // animate track between slides
-  const [hint,setHint]     = useState(posters.length>1); // "swipe up" coach mark
-  const [shared,setShared] = useState("");
-  const drag  = React.useRef(null);  // image pan gesture
-  const swipe = React.useRef(null);  // reel swipe gesture
-  const pinch = React.useRef(null);  // two-finger pinch
-  const wheelLock = React.useRef(0);
-  const cur   = posters[idx]||{};
-  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
-  const reset = ()=>{ setScale(1); setTx(0); setTy(0); };
-  const applyScale = ns=>{ ns=clamp(ns,1,5); setScale(ns); if(ns<=1){ setTx(0); setTy(0); } };
-  useEffect(()=>{ reset(); setShowNotes(false); },[idx]);
-  useEffect(()=>{ if(!hint) return; const t=setTimeout(()=>setHint(false),2600); return ()=>clearTimeout(t); },[hint]);
-  const go = d => setIdx(i=>clamp(i+d,0,posters.length-1));
-
-  useEffect(()=>{
-    const onKey=e=>{ if(e.key==="Escape")onClose(); else if(e.key==="ArrowDown"||e.key==="ArrowRight")go(1); else if(e.key==="ArrowUp"||e.key==="ArrowLeft")go(-1); };
-    window.addEventListener("keydown",onKey); return ()=>window.removeEventListener("keydown",onKey);
-  },[posters.length]);
-
-  const onWheel = e=>{
-    if(e.ctrlKey){ e.preventDefault(); applyScale(scale - e.deltaY*0.0025*scale); return; }
-    if(scale<=1){ e.preventDefault(); const now=Date.now(); if(now<wheelLock.current) return;
-      if(e.deltaY>24){ wheelLock.current=now+380; go(1); setHint(false); }
-      else if(e.deltaY<-24){ wheelLock.current=now+380; go(-1); } }
-  };
-  const onDblClick = ()=>{ scale>1?applyScale(1):applyScale(2.5); };
-  const onPointerDown = e=>{
-    if(pinch.current) return;
-    if(scale>1){ drag.current={x:e.clientX,y:e.clientY,tx,ty}; }
-    else { swipe.current={y:e.clientY,x:e.clientX,t:Date.now()}; setAnim(false); }
-  };
-  const onPointerMove = e=>{
-    if(drag.current){ setTx(drag.current.tx+(e.clientX-drag.current.x)); setTy(drag.current.ty+(e.clientY-drag.current.y)); return; }
-    if(swipe.current){
-      let dy=e.clientY-swipe.current.y;
-      if((idx===0&&dy>0)||(idx===posters.length-1&&dy<0)) dy*=0.35; // rubber-band at ends
-      setDragY(dy); if(Math.abs(dy)>8) setHint(false);
-    }
-  };
-  const endPointer = ()=>{
-    if(drag.current){ drag.current=null; return; }
-    if(swipe.current){
-      const dy=dragY, dt=Date.now()-swipe.current.t; swipe.current=null; setAnim(true);
-      const fast=Math.abs(dy)/Math.max(dt,1)>0.45;
-      if((dy<-70||(fast&&dy<-24)) && idx<posters.length-1) setIdx(idx+1);
-      else if((dy>70||(fast&&dy>24)) && idx>0) setIdx(idx-1);
-      setDragY(0);
-    }
-  };
-  const dist = t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
-  const onTouchStart = e=>{ if(e.touches.length===2){ pinch.current={d:dist(e.touches),s:scale}; swipe.current=null; } };
-  const onTouchMove  = e=>{ if(e.touches.length===2&&pinch.current){ e.preventDefault(); applyScale(pinch.current.s*(dist(e.touches)/pinch.current.d)); } };
-  const onTouchEnd   = e=>{ if(e.touches.length<2) pinch.current=null; };
-
-  const share = async()=>{
-    const src=cur.src; if(!src) return;
-    try{
-      if(navigator.share){
-        try{
-          const blob=await (await fetch(src)).blob();
-          const file=new File([blob],((cur.title||"care-guide").replace(/[^\w -]+/g,"")||"care-guide")+".jpg",{type:blob.type||"image/jpeg"});
-          if(navigator.canShare && navigator.canShare({files:[file]})){
-            await navigator.share({files:[file],title:cur.title||"Care Guide",text:(cur.title?cur.title+" — ":"")+"NEMO Aqua Store care guide"});
-            return;
-          }
-        }catch(_){}
-        await navigator.share({title:cur.title||"Care Guide",text:cur.title||"Care Guide",url:location.href});
-        return;
-      }
-      const a=document.createElement("a"); a.href=src; a.download=((cur.title||"care-guide"))+".jpg"; document.body.appendChild(a); a.click(); a.remove();
-      setShared("Saved"); setTimeout(()=>setShared(""),1600);
-    }catch(e){ /* user cancelled */ }
-  };
-
-  const btn={width:38,height:38,borderRadius:11,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:19,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,backdropFilter:"blur(6px)"};
+/* Fullscreen poster viewer with custom zoom (slider + / −, pinch, wheel, double-tap) and drag-to-pan. */
+function PosterZoom({src,title,notes,onClose}){
+  const [scale,setScale]=useState(1);
+  const [tx,setTx]=useState(0),[ty,setTy]=useState(0);
+  const [showNotes,setShowNotes]=useState(false);
+  const drag=React.useRef(null);
+  const pinch=React.useRef(null);
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const applyScale=(ns)=>{ ns=clamp(ns,1,5); setScale(ns); if(ns<=1){setTx(0);setTy(0);} };
+  const onWheel=e=>{ e.preventDefault(); applyScale(scale - e.deltaY*0.0025*scale); };
+  const onDblClick=()=>{ scale>1?applyScale(1):applyScale(2.5); };
+  const onPointerDown=e=>{ if(scale<=1)return; drag.current={x:e.clientX,y:e.clientY,tx,ty}; };
+  const onPointerMove=e=>{ if(!drag.current)return; setTx(drag.current.tx+(e.clientX-drag.current.x)); setTy(drag.current.ty+(e.clientY-drag.current.y)); };
+  const endDrag=()=>{ drag.current=null; };
+  const dist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+  const onTouchStart=e=>{ if(e.touches.length===2){ pinch.current={d:dist(e.touches),s:scale}; } };
+  const onTouchMove=e=>{ if(e.touches.length===2&&pinch.current){ e.preventDefault(); applyScale(pinch.current.s*(dist(e.touches)/pinch.current.d)); } };
+  const onTouchEnd=e=>{ if(e.touches.length<2) pinch.current=null; };
   const pct=Math.round(scale*100);
+  const btn={width:38,height:38,borderRadius:11,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:19,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0};
   return(
     <Portal>
-    <div style={{position:"fixed",inset:0,background:"rgba(4,16,20,.97)",zIndex:9000,display:"flex",flexDirection:"column",animation:"fadeIn .2s ease"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(4,16,20,.96)",zIndex:9000,display:"flex",flexDirection:"column",animation:"fadeIn .2s ease"}}>
       {/* top bar */}
-      <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",color:"white",flexShrink:0,zIndex:5}}>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.title||"Care Guide"}</div>
-          {posters.length>1&&<div style={{fontSize:11,fontWeight:700,opacity:.7,marginTop:2}}>{idx+1} / {posters.length}</div>}
-        </div>
-        <button className="press" onClick={share} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800}} aria-label="Share poster">{shared||"⤴ Share"}</button>
-        {cur.notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
-        <button className="press" onClick={onClose} style={btn} aria-label="Close">✕</button>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",color:"white",flexShrink:0}}>
+        <div style={{flex:1,minWidth:0,fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{title||"Care Guide"}</div>
+        {notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 14px",fontSize:12.5,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
+        <button className="press" onClick={onClose} style={btn}>✕</button>
       </div>
-
-      {/* reel stage */}
-      <div onClick={e=>{ if(e.target===e.currentTarget && scale<=1) onClose(); }} onWheel={onWheel}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointer} onPointerLeave={endPointer}
+      {/* stage */}
+      <div onClick={e=>{if(e.target===e.currentTarget)onClose();}} onWheel={onWheel}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerLeave={endDrag}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        style={{flex:1,position:"relative",overflow:"hidden",touchAction:"none",cursor:scale>1?"grab":"default"}}>
-        <div style={{position:"absolute",inset:0,transform:"translateY(calc("+(-idx*100)+"% + "+dragY+"px))",transition:anim?"transform .34s cubic-bezier(.22,1,.36,1)":"none",willChange:"transform"}}>
-          {posters.map((p,i)=>{
-            const near=Math.abs(i-idx)<=1;
-            const active=i===idx;
-            return(
-              <div key={i} style={{position:"absolute",top:(i*100)+"%",left:0,right:0,height:"100%",display:"flex",alignItems:"center",justifyContent:"center",padding:"6px 10px"}}>
-                {near
-                  ? <div onDoubleClick={active?onDblClick:undefined} onClick={active?()=>{ if(scale<=1)applyScale(2.2); }:undefined}
-                      style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",transform:active?("translate("+tx+"px,"+ty+"px) scale("+scale+")"):"scale(1)",transformOrigin:"center center",transition:(active&&(drag.current||pinch.current))?"none":"transform .14s ease",willChange:"transform"}}>
-                      <img src={p.src} alt={p.title||""} draggable={false} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:12,boxShadow:"0 18px 50px rgba(0,0,0,.55)",userSelect:"none",pointerEvents:"none"}}/>
-                    </div>
-                  : <div style={{width:40,height:40,borderRadius:"50%",border:"3px solid rgba(255,255,255,.25)",borderTopColor:"rgba(255,255,255,.7)",animation:"spin 1s linear infinite"}}/>}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* vertical progress dots */}
-        {posters.length>1&&posters.length<=12&&(
-          <div style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",display:"flex",flexDirection:"column",gap:6,zIndex:4}}>
-            {posters.map((p,i)=>(
-              <div key={i} onClick={()=>setIdx(i)} style={{width:6,height:i===idx?18:6,borderRadius:6,background:i===idx?"#fff":"rgba(255,255,255,.4)",transition:"height .2s,background .2s",cursor:"pointer"}}/>
-            ))}
-          </div>
-        )}
-
-        {/* swipe-up coach mark */}
-        {hint&&scale<=1&&idx<posters.length-1&&(
-          <div style={{position:"absolute",bottom:16,left:0,right:0,display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:"rgba(255,255,255,.85)",pointerEvents:"none",zIndex:4,animation:"bobUp 1.4s ease-in-out infinite"}}>
-            <span style={{fontSize:22,lineHeight:1}}>⌃</span>
-            <span style={{fontSize:11.5,fontWeight:700,letterSpacing:.3}}>Swipe up for next</span>
-          </div>
-        )}
+        style={{flex:1,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"none",cursor:scale>1?"grab":"zoom-in"}}>
+        <img src={src} alt={title||""} draggable={false} onDoubleClick={onDblClick} onClick={()=>{if(scale<=1)applyScale(2.5);}}
+          style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",transform:`translate(${tx}px,${ty}px) scale(${scale})`,transformOrigin:"center center",transition:drag.current||pinch.current?"none":"transform .12s ease",userSelect:"none",willChange:"transform"}}/>
       </div>
-
       {/* notes panel */}
-      {cur.notes&&showNotes&&(
-        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13.5,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cur.notes}</div>
+      {notes&&showNotes&&(
+        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13.5,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{notes}</div>
       )}
-
       {/* zoom controls */}
       <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:12,padding:"12px 18px calc(14px + env(safe-area-inset-bottom))",background:"rgba(0,0,0,.35)"}}>
         <button className="press" onClick={()=>applyScale(scale-0.5)} style={btn} aria-label="Zoom out">−</button>
-        <input type="range" min="1" max="5" step="0.1" value={scale} onChange={e=>applyScale(Number(e.target.value))} style={{flex:1,accentColor:C.accent,height:4}}/>
+        <input type="range" min="1" max="5" step="0.1" value={scale} onChange={e=>applyScale(Number(e.target.value))}
+          style={{flex:1,accentColor:C.accent,height:4}}/>
         <button className="press" onClick={()=>applyScale(scale+0.5)} style={btn} aria-label="Zoom in">+</button>
         <div style={{minWidth:52,textAlign:"center",color:"white",fontSize:12.5,fontWeight:800}}>{pct}%</div>
         <button className="press" onClick={()=>applyScale(1)} style={{...btn,width:"auto",padding:"0 12px",fontSize:12,fontWeight:800}}>Fit</button>
@@ -9357,6 +9186,7 @@ function PosterReel({posters=[],start=0,onClose}){
     </Portal>
   );
 }
+
 /* ═══════════════════ CARE GUIDES PAGE ═══════════════════ */
 function CareGuidesPage({nav,guides,mediaCache}){
   const [cat,setCat]=useState("All");
@@ -9364,7 +9194,6 @@ function CareGuidesPage({nav,guides,mediaCache}){
   const [zoom,setZoom]=useState(null); // {src,title,notes}
   const cats=["All",...GUIDE_CATEGORIES.filter(c=>guides.some(g=>g.category===c))];
   const list=cat==="All"?guides:guides.filter(g=>g.category===cat);
-  const posterList=list.filter(g=>mediaCache["img-"+g.id]).map(g=>({src:mediaCache["img-"+g.id],title:g.title,notes:g.content||""}));
   return(
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 22px",color:"white",position:"relative",overflow:"hidden"}}>
@@ -9406,7 +9235,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
           const hasPoster=!!img;
           return(
             <div key={g.id} style={{background:C.card,borderRadius:16,overflow:"hidden",marginBottom:12,border:`1px solid ${C.border}`}}>
-              <button className="press" onClick={()=>{ if(hasPoster){ const pi=posterList.findIndex(x=>x.src===img); setZoom({start:pi<0?0:pi}); } else { setOpenId(open?null:g.id); } }}
+              <button className="press" onClick={()=>{ if(hasPoster){ setZoom({src:img,title:g.title,notes:content}); } else { setOpenId(open?null:g.id); } }}
                 style={{display:"flex",alignItems:"center",gap:13,width:"100%",padding:"13px 15px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
                 <div style={{flexShrink:0,width:52,height:52,borderRadius:12,overflow:"hidden",background:hasPoster?"#0c2b30":C.accentLight,display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {hasPoster? <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontSize:22}}>📋</span>}
@@ -9427,7 +9256,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
       </div>
 
       {/* Fullscreen poster viewer with custom zoom */}
-      {zoom&&<PosterReel posters={posterList} start={zoom.start} onClose={()=>setZoom(null)}/>}
+      {zoom&&<PosterZoom src={zoom.src} title={zoom.title} notes={zoom.notes} onClose={()=>setZoom(null)}/>}
     </div>
   );
 }
@@ -10351,19 +10180,31 @@ function NemoStore(){
   const cartTotal=useMemo(()=>cart.reduce((s,i)=>s+i.price*i.qty,0),[cart]);
   const cartMap=useMemo(()=>{ const m={}; cart.forEach(i=>{m[i.id]=(m[i.id]||0)+i.qty;}); return m; },[cart]);
   const isAdminPage=["admin-login","admin"].includes(page);
+  const [miniOpen,setMiniOpen]=useState(false);
+  useEffect(()=>{ if(cart.length===0) setMiniOpen(false); },[cart.length]); // auto-close when cart empties
   // Reveal-on-scroll: tagged (.js-reveal) sections spring up as they enter the viewport.
   // Progressive enhancement — only JS adds the hidden state, so content stays visible if this never runs.
   useEffect(()=>{
     if(typeof IntersectionObserver==="undefined") return;
-    let io;
+    const ios=[];
     const raf=requestAnimationFrame(()=>{
+      // Section reveals
       const els=document.querySelectorAll(".js-reveal:not(.reveal-in)");
-      if(!els.length) return;
       els.forEach(el=>el.classList.add("reveal"));
-      io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("reveal-in"); io.unobserve(en.target); } }); },{threshold:0.06,rootMargin:"0px 0px -40px 0px"});
-      els.forEach(el=>io.observe(el));
+      if(els.length){
+        const io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("reveal-in"); io.unobserve(en.target); } }); },{threshold:0.06,rootMargin:"0px 0px -40px 0px"});
+        els.forEach(el=>io.observe(el)); ios.push(io);
+      }
+      // Staggered child reveals (e.g. product grids — each card springs in +55ms after the last)
+      document.querySelectorAll(".js-stagger").forEach(cont=>{
+        const kids=Array.from(cont.children).filter(k=>!k.classList.contains("reveal-in"));
+        if(!kids.length) return;
+        kids.forEach((k,i)=>{ k.classList.add("reveal"); k.style.transitionDelay=Math.min(i*55,520)+"ms"; });
+        const io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ Array.from(en.target.children).forEach(k=>k.classList.add("reveal-in")); io.unobserve(en.target); } }); },{threshold:0.04});
+        io.observe(cont); ios.push(io);
+      });
     });
-    return ()=>{ cancelAnimationFrame(raf); if(io) io.disconnect(); };
+    return ()=>{ cancelAnimationFrame(raf); ios.forEach(io=>io.disconnect()); };
   },[page]);
   // When in admin mode, a page refresh/close prompts for confirmation so you don't exit admin by accident.
   useEffect(()=>{
@@ -10503,7 +10344,16 @@ function NemoStore(){
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
         </div>
       </div>
+      {/* Floating cart bar — quick path to the mini-cart from any browsing page */}
+      {!isAdminPage && cart.length>0 && !["cart","checkout","auth","detail"].includes(page) && (
+        <button className="press slide-up" onClick={()=>setMiniOpen(true)}
+          style={{position:"absolute",left:"50%",transform:"translateX(-50%)",bottom:"calc(76px + env(safe-area-inset-bottom))",zIndex:90,width:"calc(100% - 28px)",maxWidth:440,background:C.coral,color:"white",border:"none",borderRadius:99,padding:"13px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 12px 32px rgba(244,63,94,.36)",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+          <span style={{fontSize:13.5,fontWeight:800}}>🛒 {cartCount} item{cartCount!==1?"s":""} · ₹{cartTotal}</span>
+          <span style={{fontSize:13.5,fontWeight:800}}>View Cart →</span>
+        </button>
+      )}
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
+      {!isAdminPage&&<MiniCart open={miniOpen} onClose={()=>setMiniOpen(false)} cart={cart} total={cartTotal} updateQty={updateQty} nav={nav} settings={settings}/>}
     </div>
   );
 }
