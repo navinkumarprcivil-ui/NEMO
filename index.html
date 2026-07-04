@@ -269,7 +269,7 @@
   var ctx=canvas.getContext('2d');
   var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var DPR=Math.min(window.devicePixelRatio||1,2);
-  var W=0,H=0,bubbles=[],mouse={x:-9999,y:-9999,active:false},running=true;
+  var W=0,H=0,bubbles=[],fish=[],snails=[],mouse={x:-9999,y:-9999,active:false},running=true;
   function mk(y){
     var r=3+Math.random()*9;
     return {x:Math.random()*W, y:(y==null?H+r+Math.random()*H:y), r:r,
@@ -277,9 +277,27 @@
       sway:0.25+Math.random()*0.6, phase:Math.random()*Math.PI*2, swayA:4+Math.random()*10,
       ox:0, oy:0, alpha:0.20+Math.random()*0.32};
   }
+  // ── two fish: the betta drifts toward your cursor, the clownfish shies away — both slow & wavy ──
+  var bettaImg=new Image(); bettaImg.src='assets/betta.png';
+  var clownImg=new Image(); clownImg.src='assets/clownfish.png';
+  function mkFish(img,flee,w){
+    return {img:img, flee:flee, w:w,
+      x:W*0.3+Math.random()*W*0.4, y:H*0.25+Math.random()*H*0.4,
+      vx:0, vy:0, tx:Math.random()*W, ty:H*0.12+Math.random()*H*0.7,
+      phase:Math.random()*Math.PI*2, wag:0, alpha:0.92};
+  }
+  // ── snails that crawl along the bottom and the side walls, and hide when touched ──
+  function mkSnail(wall){
+    var s=13+Math.random()*7;
+    return {wall:wall, t:Math.random(), dir:Math.random()<0.5?1:-1,
+      v:(0.055+Math.random()*0.035), s:s, phase:Math.random()*Math.PI*2,
+      state:'crawl', eyeOut:1, hideUntil:0, alpha:0.5+Math.random()*0.25};
+  }
   function seed(){
     var count=Math.round(Math.min(30,Math.max(12,(W*H)/46000)));
     bubbles=[]; for(var i=0;i<count;i++) bubbles.push(mk(Math.random()*H));
+    fish=[mkFish(bettaImg,false,78), mkFish(clownImg,true,72)];
+    snails=[mkSnail('bottom'), mkSnail('left'), mkSnail('right')];
   }
   function resize(){
     W=window.innerWidth; H=window.innerHeight;
@@ -301,6 +319,58 @@
     ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.strokeStyle='rgba(52,168,202,'+(a*0.85)+')'; ctx.lineWidth=1.3; ctx.stroke();
     ctx.beginPath(); ctx.arc(x-r*0.32,y-r*0.34,Math.max(1,r*0.14),0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,'+(a*1.1)+')'; ctx.fill();
   }
+  // A fish image, drawn in vertical slices so the tail/fins undulate gently. (image faces left)
+  function drawFish(img,x,y,w,dir,tilt,a,wag){
+    if(!img.complete||!img.naturalWidth) return;
+    var nw=img.naturalWidth, nh=img.naturalHeight, h=w*(nh/nw);
+    ctx.save(); ctx.translate(x,y); ctx.rotate(tilt*dir); ctx.scale(dir,1); ctx.globalAlpha=a;
+    var N=14, amp=h*0.05;
+    for(var i=0;i<N;i++){
+      var sx=(nw/N)*i, sw=nw/N+0.6;
+      var dx=-w/2+(w/N)*i, dw=w/N+0.6;
+      // tail (right of source) sways most; head (left) barely moves
+      var f=i/(N-1);
+      var off=Math.sin(wag - f*2.4)*amp*f*f;
+      ctx.drawImage(img, sx,0,sw,nh, dx,-h/2+off,dw,h);
+    }
+    ctx.restore(); ctx.globalAlpha=1;
+  }
+  // Snail: coiled shell + a soft foot. eyeOut (0..1) extends/retracts the eye-stalks. rot clings to walls.
+  function drawSnail(x,y,s,dir,a,rot,eyeOut){
+    var eo=(eyeOut==null?1:eyeOut);
+    ctx.save(); ctx.translate(x,y); ctx.rotate(rot||0); ctx.scale(dir,1); ctx.globalAlpha=a;
+    // foot
+    ctx.beginPath(); ctx.moveTo(-s*0.9,s*0.32);
+    ctx.quadraticCurveTo(-s*1.1,-s*0.05,-s*0.4,-s*0.05);
+    ctx.lineTo(s*0.85,-s*0.05);
+    ctx.quadraticCurveTo(s*1.05,s*0.05,s*0.75,s*0.32);
+    ctx.closePath(); ctx.fillStyle='rgba(150,110,90,0.9)'; ctx.fill();
+    // eye stalks — only when extended
+    if(eo>0.06){
+      var e1x=s*0.7+s*0.25*eo, e1y=-s*0.02-s*0.48*eo;
+      var e2x=s*0.5+s*0.12*eo, e2y=-s*0.02-s*0.48*eo;
+      ctx.strokeStyle='rgba(150,110,90,0.9)'; ctx.lineWidth=Math.max(1,s*0.09); ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(s*0.7,-s*0.02); ctx.lineTo(e1x,e1y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(s*0.5,-s*0.02); ctx.lineTo(e2x,e2y); ctx.stroke();
+      ctx.beginPath(); ctx.arc(e1x,e1y-s*0.05,Math.max(1,s*0.08),0,Math.PI*2);
+      ctx.arc(e2x,e2y-s*0.05,Math.max(1,s*0.08),0,Math.PI*2); ctx.fillStyle='#12303a'; ctx.fill();
+    }
+    // shell
+    var sh=ctx.createRadialGradient(-s*0.15,-s*0.35,s*0.1,0,-s*0.15,s*0.95);
+    sh.addColorStop(0,'rgba(255,206,120,1)'); sh.addColorStop(1,'rgba(214,140,52,1)');
+    ctx.beginPath(); ctx.arc(0,-s*0.15,s*0.8,0,Math.PI*2); ctx.fillStyle=sh; ctx.fill();
+    // spiral
+    ctx.strokeStyle='rgba(150,90,30,0.8)'; ctx.lineWidth=Math.max(1,s*0.1);
+    ctx.beginPath(); ctx.arc(0,-s*0.15,s*0.5,0,Math.PI*1.6); ctx.stroke();
+    ctx.beginPath(); ctx.arc(s*0.08,-s*0.05,s*0.22,0,Math.PI*2); ctx.stroke();
+    ctx.restore(); ctx.globalAlpha=1;
+  }
+  function nudge(o,px,py,R,strength){
+    if(!mouse.active) return;
+    var dx=(px+o.ox)-mouse.x, dy=(py+o.oy)-mouse.y, d=Math.hypot(dx,dy);
+    if(d<R&&d>0.01){ var f=(1-d/R)*strength; o.ox+=(dx/d)*f; o.oy+=(dy/d)*f; }
+    o.ox*=0.90; o.oy*=0.90;
+  }
   function loop(){
     if(!running) return;
     ctx.clearRect(0,0,W,H); bg();
@@ -316,6 +386,58 @@
       if(b.y+b.r<-20){ Object.assign(b,mk()); b.y=H+b.r+Math.random()*40; }
       drawBubble(sx+b.ox,b.y+b.oy,b.r,b.alpha);
     }
+    // snails crawl the walls; touching one makes it duck into its shell for 5s, then reverse
+    for(var s=0;s<snails.length;s++){
+      var sn=snails[s]; sn.phase+=0.03;
+      var wob=Math.abs(Math.sin(sn.phase))*1.5, px,py,rot;
+      if(sn.wall==='bottom'){ px=30+sn.t*(W-60); py=H-8-wob; rot=0; }
+      else if(sn.wall==='left'){ px=8+wob; py=30+sn.t*(H-60); rot=Math.PI/2; }
+      else { px=W-8-wob; py=30+sn.t*(H-60); rot=-Math.PI/2; }
+      var now=(window.performance&&performance.now)?performance.now():Date.now();
+      if(mouse.active && sn.state==='crawl'){
+        var dd=Math.hypot(px-mouse.x,py-mouse.y);
+        if(dd<58){ sn.state='hiding'; sn.hideUntil=now+5000; sn.dir=-sn.dir; }
+      }
+      if(sn.state==='hiding'){
+        sn.eyeOut+=(0-sn.eyeOut)*0.18;      // pull eyes in
+        if(now>=sn.hideUntil){ sn.state='crawl'; }
+      } else {
+        sn.eyeOut+=(1-sn.eyeOut)*0.04;      // slowly push eyes back out
+        var speed=sn.v*Math.max(0,sn.eyeOut-0.2);
+        sn.t+=sn.dir*speed/((sn.wall==='bottom'?W:H)||1);
+        if(sn.t>1){ sn.t=1; sn.dir=-1; } if(sn.t<0){ sn.t=0; sn.dir=1; }
+      }
+      drawSnail(px, py, sn.s, sn.dir, sn.alpha, rot, sn.eyeOut);
+    }
+    // fish glide slowly — betta toward the cursor, clownfish away — both drifting & wavy
+    for(var f=0;f<fish.length;f++){
+      var fs=fish[f]; fs.phase+=0.025; fs.wag+=0.05;
+      if(fs.flee){
+        if(mouse.active){
+          var rx=fs.x-mouse.x, ry=fs.y-mouse.y, rd=Math.hypot(rx,ry), R=230;
+          if(rd<R&&rd>0.01){ var rf=(1-rd/R)*0.05; fs.vx+=(rx/rd)*rf; fs.vy+=(ry/rd)*rf; }
+        }
+        var ax=(fs.tx-fs.x), ay=(fs.ty-fs.y), ad=Math.hypot(ax,ay);
+        if(ad<50){ fs.tx=40+Math.random()*(W-80); fs.ty=H*0.1+Math.random()*(H*0.72); }
+        else { fs.vx+=(ax/ad)*0.005; fs.vy+=(ay/ad)*0.005; }
+      } else {
+        if(mouse.active){ fs.tx=mouse.x; fs.ty=mouse.y; }
+        var bx=(fs.tx-fs.x), by=(fs.ty-fs.y), bd=Math.hypot(bx,by);
+        if(bd<40){ if(!mouse.active){ fs.tx=40+Math.random()*(W-80); fs.ty=H*0.1+Math.random()*(H*0.72); } }
+        else { fs.vx+=(bx/bd)*0.006; fs.vy+=(by/bd)*0.006; }
+      }
+      // soft walls keep them on-screen
+      var m=34;
+      if(fs.x<m) fs.vx+=0.02; else if(fs.x>W-m) fs.vx-=0.02;
+      if(fs.y<m) fs.vy+=0.02; else if(fs.y>H-m) fs.vy-=0.02;
+      var sp=Math.hypot(fs.vx,fs.vy), MAX=0.42;
+      if(sp>MAX){ fs.vx*=MAX/sp; fs.vy*=MAX/sp; }
+      fs.vx*=0.99; fs.vy*=0.99;
+      fs.x+=fs.vx; fs.y+=fs.vy+Math.sin(fs.phase)*0.10;
+      var dir=fs.vx>0?-1:1; // image faces left
+      var tilt=Math.max(-0.26,Math.min(0.26,fs.vy*0.5));
+      drawFish(fs.img, fs.x, fs.y, fs.w, dir, tilt, fs.alpha, fs.wag);
+    }
     requestAnimationFrame(loop);
   }
   window.addEventListener('resize',resize,{passive:true});
@@ -323,7 +445,12 @@
   window.addEventListener('pointerout',function(e){ if(!e.relatedTarget){ mouse.active=false; } });
   document.addEventListener('visibilitychange',function(){ running=!document.hidden; if(running&&!reduce) requestAnimationFrame(loop); });
   resize();
-  if(reduce){ ctx.clearRect(0,0,W,H); bg(); for(var i=0;i<bubbles.length;i++){ var b=bubbles[i]; drawBubble(b.x,b.y,b.r,b.alpha); } }
+  if(reduce){ ctx.clearRect(0,0,W,H); bg();
+    for(var i=0;i<bubbles.length;i++){ var b=bubbles[i]; drawBubble(b.x,b.y,b.r,b.alpha); }
+    drawSnail(W*0.4,H-8,14,1,0.6,0,1);
+    var rdz=function(){ drawFish(bettaImg,W*0.55,H*0.32,78,1,0,0.92,0); drawFish(clownImg,W*0.7,H*0.5,72,-1,0,0.92,0); };
+    bettaImg.onload=rdz; clownImg.onload=rdz; rdz();
+  }
   else { loop(); }
 })();
 </script>
