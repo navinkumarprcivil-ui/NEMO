@@ -269,7 +269,7 @@
   var ctx=canvas.getContext('2d');
   var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var DPR=Math.min(window.devicePixelRatio||1,2);
-  var W=0,H=0,bubbles=[],fish=[],snails=[],mouse={x:-9999,y:-9999,active:false},running=true;
+  var W=0,H=0,bubbles=[],fish=[],snails=[],mouse={x:-9999,y:-9999,active:false},running=true,looping=false;
   function mk(y){
     var r=3+Math.random()*9;
     return {x:Math.random()*W, y:(y==null?H+r+Math.random()*H:y), r:r,
@@ -372,7 +372,7 @@
     o.ox*=0.90; o.oy*=0.90;
   }
   function loop(){
-    if(!running) return;
+    if(!running){ looping=false; return; }
     ctx.clearRect(0,0,W,H); bg();
     for(var i=0;i<bubbles.length;i++){
       var b=bubbles[i];
@@ -444,7 +444,9 @@
   window.addEventListener('resize',resize,{passive:true});
   window.addEventListener('pointermove',function(e){ mouse.x=e.clientX; mouse.y=e.clientY; mouse.active=true; },{passive:true});
   window.addEventListener('pointerout',function(e){ if(!e.relatedTarget){ mouse.active=false; } });
-  document.addEventListener('visibilitychange',function(){ running=!document.hidden; if(running&&!reduce) requestAnimationFrame(loop); });
+  // start the loop at most once — prevents multiple rAF loops stacking (which made the fish speed up over time)
+  function start(){ if(looping||!running||reduce) return; looping=true; requestAnimationFrame(loop); }
+  document.addEventListener('visibilitychange',function(){ running=!document.hidden; if(running) start(); });
   resize();
   if(reduce){ ctx.clearRect(0,0,W,H); bg();
     for(var i=0;i<bubbles.length;i++){ var b=bubbles[i]; drawBubble(b.x,b.y,b.r,b.alpha); }
@@ -452,7 +454,7 @@
     var rdz=function(){ drawFish(bettaImg,W*0.55,H*0.32,78,1,0,0.92,0); drawFish(clownImg,W*0.7,H*0.5,72,-1,0,0.92,0); };
     bettaImg.onload=rdz; clownImg.onload=rdz; rdz();
   }
-  else { loop(); }
+  else { start(); }
 })();
 </script>
 </body>
