@@ -3701,8 +3701,8 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           {onSale&&<div style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{p.price}</div>}
         </div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-          <div style={{fontSize:10,color:stk<10?C.coral:C.textSub,fontWeight:700}}>
-            {oos?"Out of stock":stk<10?`Only ${stk} left`:"In stock"}
+          <div className={!oos&&stk<=3?"festival-pulse":""} style={{fontSize:10,color:stk<10?C.coral:C.textSub,fontWeight:700}}>
+            {oos?"Out of stock":stk<=3?`🔥 Only ${stk} left`:stk<10?`Only ${stk} left`:"In stock"}
           </div>
           {inCart>0 ? (
             <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:10,padding:"3px 4px",gap:4}}>
@@ -4979,6 +4979,60 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
 }
 
 /* ═══════════════════ CART PAGE ═══════════════════ */
+/* Slide-in mini-cart — quick peek + checkout without leaving the page */
+function MiniCart({open,onClose,cart,total,updateQty,nav,settings={}}){
+  const count=cart.reduce((s,i)=>s+i.qty,0);
+  const thr=Number(settings.freeDeliveryThreshold||0);
+  const left=thr>0?Math.max(0,thr-total):0;
+  return(
+    <Portal>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,23,42,.35)",backdropFilter:"blur(2px)",WebkitBackdropFilter:"blur(2px)",zIndex:4000,opacity:open?1:0,pointerEvents:open?"auto":"none",transition:"opacity .3s ease"}}/>
+      <div style={{position:"fixed",top:0,right:0,height:"100%",width:"min(390px,92vw)",background:"#ffffff",zIndex:4001,boxShadow:"-10px 0 44px rgba(15,23,42,.18)",transform:open?"translateX(0)":"translateX(106%)",transition:"transform .42s cubic-bezier(.22,1,.36,1)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"20px 18px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Your Cart ({count})</div>
+          <button className="press" onClick={onClose} aria-label="Close" style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:"50%",width:34,height:34,fontSize:18,color:C.text,cursor:"pointer"}}>×</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
+          {!cart.length?(
+            <div style={{textAlign:"center",color:C.textSub,padding:"50px 0",fontSize:14}}>Your cart is empty 🐠</div>
+          ):cart.map(item=>{
+            const m=CAT_META[item.category]||CAT_META["Live Fish"];
+            const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+            return(
+              <div key={item.key} style={{display:"flex",gap:12,alignItems:"center",padding:"11px 0",borderBottom:`1px solid ${C.border}`}}>
+                <div style={{width:48,height:48,borderRadius:12,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{m.emoji}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</div>
+                  {item.variantLabel&&<div style={{fontSize:11,color:C.textSub}}>{item.variantLabel}</div>}
+                  <div style={{fontFamily:PRICE_FONT,fontSize:13,fontWeight:800,color:C.primary,marginTop:2}}>₹{item.price*item.qty}</div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8,background:"#f8fafc",borderRadius:99,padding:"4px 9px",border:`1px solid ${C.border}`}}>
+                  <button className="press" onClick={()=>updateQty(item.key,-1)} style={{background:"none",border:"none",fontSize:16,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>−</button>
+                  <span style={{fontSize:13,fontWeight:700,minWidth:14,textAlign:"center"}}>{item.qty}</span>
+                  <button className="press" onClick={()=>{if(item.qty<maxAllowed)updateQty(item.key,1);}} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:16,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,cursor:item.qty>=maxAllowed?"default":"pointer",lineHeight:1}}>+</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {cart.length>0&&(
+          <div style={{padding:"14px 18px calc(16px + env(safe-area-inset-bottom))",borderTop:`1px solid ${C.border}`,background:"#fff"}}>
+            {thr>0&&left>0&&<div style={{fontSize:11.5,color:C.textSub,marginBottom:10,textAlign:"center"}}>Add <b style={{color:C.coral}}>₹{left}</b> more for free delivery 🚚</div>}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <span style={{fontSize:14,fontWeight:700,color:C.text}}>Subtotal</span>
+              <span style={{fontFamily:PRICE_FONT,fontSize:19,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button className="press" onClick={()=>{onClose();nav("cart");}} style={{flex:1,background:"#f8fafc",color:C.text,border:`1px solid ${C.border}`,borderRadius:99,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>View Cart</button>
+              <button className="cta" onClick={()=>{onClose();nav("checkout");}} style={{flex:1.4,background:C.coral,color:"white",border:"none",borderRadius:99,padding:"13px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textTransform:"uppercase",letterSpacing:".05em",cursor:"pointer"}}>Checkout →</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Portal>
+  );
+}
+
 function CartPage({cart,updateQty,total,nav,settings={}}){
   const hasLiveFish=cart.some(i=>i.category==="Live Fish");
   if(!cart.length)return(
@@ -4993,6 +5047,22 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
     <div className="slide-up">
       <div className="vh-head dt-read" style={{padding:"52px 16px 100px"}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:20}}>My Cart ({cart.reduce((s,i)=>s+i.qty,0)})</div>
+        {(()=>{
+          const thr=Number(settings.freeDeliveryThreshold||0);
+          if(thr<=0) return null;
+          const left=Math.max(0,thr-total), done=left<=0, pct=Math.min(100,Math.round((total/thr)*100));
+          return(
+            <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:18}}>
+              <div style={{fontSize:13,fontWeight:700,color:done?C.success:C.text,marginBottom:9,display:"flex",alignItems:"center",gap:7}}>
+                <span style={{fontSize:16}}>{done?"🎉":"🚚"}</span>
+                {done?"You've unlocked FREE delivery!":<>Add <b style={{color:C.coral}}>₹{left}</b> more to unlock <b>free delivery</b></>}
+              </div>
+              <div style={{height:8,background:"#e9eef5",borderRadius:99,overflow:"hidden"}}>
+                <div style={{height:"100%",width:pct+"%",borderRadius:99,background:done?"linear-gradient(90deg,#34d399,#10b981)":`linear-gradient(90deg,${C.accent},${C.primary})`,transition:"width .5s cubic-bezier(.22,1,.36,1)"}}/>
+              </div>
+            </div>
+          );
+        })()}
         {cart.map(item=>{
           const m=CAT_META[item.category]||CAT_META["Live Fish"];
           const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
@@ -10110,6 +10180,8 @@ function NemoStore(){
   const cartTotal=useMemo(()=>cart.reduce((s,i)=>s+i.price*i.qty,0),[cart]);
   const cartMap=useMemo(()=>{ const m={}; cart.forEach(i=>{m[i.id]=(m[i.id]||0)+i.qty;}); return m; },[cart]);
   const isAdminPage=["admin-login","admin"].includes(page);
+  const [miniOpen,setMiniOpen]=useState(false);
+  useEffect(()=>{ if(cart.length===0) setMiniOpen(false); },[cart.length]); // auto-close when cart empties
   // Reveal-on-scroll: tagged (.js-reveal) sections spring up as they enter the viewport.
   // Progressive enhancement — only JS adds the hidden state, so content stays visible if this never runs.
   useEffect(()=>{
@@ -10272,7 +10344,16 @@ function NemoStore(){
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
         </div>
       </div>
+      {/* Floating cart bar — quick path to the mini-cart from any browsing page */}
+      {!isAdminPage && cart.length>0 && !["cart","checkout","auth","detail"].includes(page) && (
+        <button className="press slide-up" onClick={()=>setMiniOpen(true)}
+          style={{position:"absolute",left:"50%",transform:"translateX(-50%)",bottom:"calc(76px + env(safe-area-inset-bottom))",zIndex:90,width:"calc(100% - 28px)",maxWidth:440,background:C.coral,color:"white",border:"none",borderRadius:99,padding:"13px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 12px 32px rgba(244,63,94,.36)",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+          <span style={{fontSize:13.5,fontWeight:800}}>🛒 {cartCount} item{cartCount!==1?"s":""} · ₹{cartTotal}</span>
+          <span style={{fontSize:13.5,fontWeight:800}}>View Cart →</span>
+        </button>
+      )}
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
+      {!isAdminPage&&<MiniCart open={miniOpen} onClose={()=>setMiniOpen(false)} cart={cart} total={cartTotal} updateQty={updateQty} nav={nav} settings={settings}/>}
     </div>
   );
 }
