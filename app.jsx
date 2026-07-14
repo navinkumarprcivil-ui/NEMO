@@ -2090,9 +2090,12 @@ input:focus,textarea:focus,select:focus{border-color:#0ea5e9 !important;box-shad
 .press:active{transform:scale(.95);}
 .lift{transition:transform .4s cubic-bezier(0.34,1.56,0.64,1),box-shadow .4s cubic-bezier(0.34,1.56,0.64,1);}
 .lift img{transition:transform .4s cubic-bezier(0.34,1.56,0.64,1);}
-.lift:hover{transform:translateY(-4px) scale(1.02);box-shadow:0 20px 40px rgba(14,165,233,.13);}
-.lift:hover img{transform:scale(1.05);}
+.lift:hover{transform:translateY(-6px) scale(1.02);box-shadow:0 28px 54px rgba(14,165,233,.20);}
+.lift:hover img{transform:scale(1.07);}
 .lift:active{transform:translateY(-2px) scale(.99);}
+/* Icon/pill micro-interaction: gentle brighten on hover (safe — no transform override) */
+.press:hover{filter:brightness(1.05);}
+.cta:hover{transform:scale(1.06);}
 /* Coral pill CTA — brighten + lift + colored shadow on hover, press-in on active */
 .cta{transition:transform .3s cubic-bezier(0.34,1.56,0.64,1),box-shadow .3s,filter .2s;}
 .cta:hover{transform:scale(1.05);box-shadow:0 8px 24px rgba(244,63,94,.3);filter:brightness(1.05);}
@@ -2105,6 +2108,7 @@ input:focus,textarea:focus,select:focus{border-color:#0ea5e9 !important;box-shad
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-9px)}75%{transform:translateX(9px)}}
 @keyframes toastIn{from{transform:translateY(-16px) translateX(-50%);opacity:0}to{transform:translateY(0) translateX(-50%);opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes bobUp{0%,100%{transform:translateY(0);opacity:.85}50%{transform:translateY(-7px);opacity:1}}
 @keyframes checkPop{0%{transform:scale(0)}70%{transform:scale(1.2)}100%{transform:scale(1)}}
 .slide-up{animation:slideUp .3s cubic-bezier(.22,1,.36,1) both;}
 .fade-in{animation:fadeIn .22s ease both;}
@@ -2153,8 +2157,8 @@ input:focus,textarea:focus,select:focus{border-color:#0ea5e9 !important;box-shad
 .kpi-rise{animation:kpiRise .45s cubic-bezier(.22,1,.36,1) both;}
 @keyframes heartPop{0%{transform:scale(1)}40%{transform:scale(1.45)}70%{transform:scale(.88)}100%{transform:scale(1)}}
 .heart-pop{animation:heartPop .35s ease both;display:inline-block;}
-@keyframes pageIn{from{opacity:0}to{opacity:1}}
-.page-swap{animation:pageIn .24s ease both;}
+@keyframes pageIn{from{opacity:0;transform:translateY(12px) scale(.992)}to{opacity:1;transform:none}}
+.page-swap{animation:pageIn .36s cubic-bezier(.22,1,.36,1) both;}
 @keyframes showcaseSlide{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
 .showcase-slide{animation:showcaseSlide .3s ease both;}
 /* Gentle fade + rise — for promo banners and content that appears after data loads */
@@ -2230,10 +2234,10 @@ function Portal({children}){
   return ReactDOM.createPortal(children, elRef.current);
 }
 /* Image that fades in once decoded (no abrupt pop). Falls back instantly for cached/data-URI images. */
-function SmoothImg({src,alt,style,className}){
+function SmoothImg({src,alt,style,className,loading="lazy"}){
   const onReady=(el)=>{ if(el){ if(el.complete && el.naturalWidth>0) el.setAttribute("data-loaded","1"); } };
   return (
-    <img src={src} alt={alt||""} ref={onReady} decoding="async"
+    <img src={src} alt={alt||""} ref={onReady} decoding="async" loading={loading}
       className={"smooth-img"+(className?(" "+className):"")} style={style}
       onLoad={e=>e.currentTarget.setAttribute("data-loaded","1")}
       onError={e=>e.currentTarget.setAttribute("data-loaded","1")}/>
@@ -3618,19 +3622,28 @@ function magnetMove(e){
 }
 function magnetLeave(e){ const el=e.currentTarget; el.style.transition=""; el.style.transform=""; }
 /* Fly a coral burst from (x,y) into the cart icon, then pop the cart */
-function flyToCart(x,y){
+function flyToCart(x,y,imgSrc){
   try{
     const els=document.querySelectorAll("[data-cart-target]");
     let tgt=null; els.forEach(e=>{ if(e.offsetParent!==null) tgt=e; }); if(!tgt) tgt=els[0];
     if(!tgt) return;
     const tr=tgt.getBoundingClientRect();
+    const cx=tr.left+tr.width/2, cy=tr.top+tr.height/2;
     const dot=document.createElement("div");
-    dot.style.cssText=`position:fixed;left:${x-8}px;top:${y-8}px;width:16px;height:16px;border-radius:50%;background:#f43f5e;box-shadow:0 4px 14px rgba(244,63,94,.5);z-index:9999;pointer-events:none;transition:transform .7s cubic-bezier(.5,-0.2,.3,1),opacity .7s ease;`;
+    dot.style.cssText=`position:fixed;left:${x-12}px;top:${y-12}px;width:24px;height:24px;border-radius:50%;background:${imgSrc?`center/cover no-repeat url("${imgSrc}")`:"#f43f5e"};box-shadow:0 6px 18px rgba(244,63,94,.45);z-index:9999;pointer-events:none;border:2px solid #fff;will-change:transform,opacity;`;
     document.body.appendChild(dot);
-    requestAnimationFrame(()=>{ dot.style.transform=`translate(${tr.left+tr.width/2-x}px,${tr.top+tr.height/2-y}px) scale(.3)`; dot.style.opacity="0.2"; });
-    setTimeout(()=>dot.remove(),720);
-    tgt.style.transition="transform .3s cubic-bezier(0.34,1.56,0.64,1)"; tgt.style.transform="scale(1.35)";
-    setTimeout(()=>{ tgt.style.transform=""; },330);
+    const midX=(x+cx)/2, arcLift=Math.min(150, Math.abs(cx-x)*0.5+80);
+    const anim=dot.animate([
+      {transform:"translate(0,0) scale(1)",opacity:1,offset:0},
+      {transform:`translate(${midX-x}px,${Math.min(y,cy)-y-arcLift}px) scale(1.12)`,opacity:1,offset:.55},
+      {transform:`translate(${cx-x}px,${cy-y}px) scale(.22)`,opacity:.2,offset:1}
+    ],{duration:760,easing:"cubic-bezier(.5,-0.05,.35,1)"});
+    anim.onfinish=()=>{ try{dot.remove();}catch(_){} };
+    setTimeout(()=>{ try{dot.remove();}catch(_){} },950);
+    // Cart icon springs when the puck lands
+    tgt.animate([
+      {transform:"scale(1)"},{transform:"scale(1.42)",offset:.5},{transform:"scale(.9)",offset:.72},{transform:"scale(1.08)",offset:.86},{transform:"scale(1)"}
+    ],{duration:540,delay:560,easing:"cubic-bezier(.34,1.56,.64,1)"});
   }catch(e){}
 }
 
@@ -3677,6 +3690,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           : productExpectsImage(p)
             ? <div className="shimmer-bar" style={{position:"absolute",inset:0}}/>
             : <span style={{fontSize:54}}>{m.emoji}</span>}
+        <div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(0,0,0,.16),transparent 40%)"}}/>
         {p.tag&&<span style={{position:"absolute",top:8,left:8,background:"rgba(0,0,0,.32)",color:"white",fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,backdropFilter:"blur(4px)"}}>{p.tag}</span>}
         {onSale&&!soon&&<span style={{position:"absolute",bottom:8,left:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:20}}>-{p.discountPct}%</span>}
         {Heart}
@@ -3713,7 +3727,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
                 style={{background:"transparent",border:"none",color:"white",fontSize:16,fontWeight:700,width:22,height:22,lineHeight:1,cursor:remaining>0?"pointer":"not-allowed",opacity:remaining>0?1:.45}}>+</button>
             </div>
           ) : (
-            <button className="cta" onClick={e=>{e.stopPropagation();if(!oos){onAdd(p,1);flyToCart(e.clientX,e.clientY);}}} disabled={oos}
+            <button className="cta" onClick={e=>{e.stopPropagation();if(!oos){onAdd(p,1);flyToCart(e.clientX,e.clientY,imgSrc);}}} disabled={oos}
               style={{background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"7px 16px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:oos?"not-allowed":"pointer"}}>
               + Add
             </button>
@@ -4585,6 +4599,140 @@ function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
   );
 }
 
+/* ═══════════════════ MEDIA LIGHTBOX — fullscreen open · pinch/scroll zoom · pan · swipe ═══════════════════ */
+function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
+  const [scale,setScale] = useState(1);
+  const [tx,setTx]       = useState(0);
+  const [ty,setTy]       = useState(0);
+  const stageRef = useRef(null);
+  const ptrs     = useRef(new Map());
+  const g        = useRef({mode:null,sx:0,sy:0,stx:0,sty:0,dist:0,sscale:1,moved:0,lastTap:0});
+  const cur      = slides[index]||{};
+  const isVideo  = cur.type==="video";
+  const reset = ()=>{ setScale(1); setTx(0); setTy(0); };
+  useEffect(()=>{ reset(); },[index]);
+  const go = dir => setIndex(i => (i+dir+slides.length)%slides.length);
+  const clamp = (sc,x,y)=>{
+    const el=stageRef.current; if(!el) return [x,y];
+    const r=el.getBoundingClientRect();
+    const mx=Math.max(0,(r.width*(sc-1))/2), my=Math.max(0,(r.height*(sc-1))/2);
+    return [Math.max(-mx,Math.min(mx,x)), Math.max(-my,Math.min(my,y))];
+  };
+  useEffect(()=>{
+    const onKey=e=>{ if(e.key==="Escape")onClose(); else if(e.key==="ArrowRight")go(1); else if(e.key==="ArrowLeft")go(-1); };
+    window.addEventListener("keydown",onKey);
+    return ()=>window.removeEventListener("keydown",onKey);
+  },[slides.length]);
+  const down = e=>{
+    if(isVideo) return;
+    ptrs.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(ptrs.current.size===1){
+      const now=Date.now();
+      if(now-g.current.lastTap<300){
+        if(scale>1.05){ reset(); }
+        else{
+          const el=stageRef.current, r=el.getBoundingClientRect(), ns=2.6;
+          const ox=e.clientX-(r.left+r.width/2), oy=e.clientY-(r.top+r.height/2);
+          const [nx,ny]=clamp(ns,-ox*(ns-1),-oy*(ns-1));
+          setScale(ns); setTx(nx); setTy(ny);
+        }
+        g.current.mode="tapped"; g.current.lastTap=0; return;
+      }
+      g.current.lastTap=now;
+      g.current.mode = scale>1.05?"pan":"swipe";
+      g.current.sx=e.clientX; g.current.sy=e.clientY; g.current.stx=tx; g.current.sty=ty; g.current.moved=0;
+    } else if(ptrs.current.size===2){
+      const [a,b]=[...ptrs.current.values()];
+      g.current.mode="pinch"; g.current.dist=Math.hypot(a.x-b.x,a.y-b.y)||1; g.current.sscale=scale; g.current.stx=tx; g.current.sty=ty;
+    }
+    try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
+  };
+  const move = e=>{
+    if(!ptrs.current.has(e.pointerId)) return;
+    ptrs.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    const m=g.current;
+    if(m.mode==="pinch" && ptrs.current.size>=2){
+      const [a,b]=[...ptrs.current.values()];
+      const ns=Math.max(1,Math.min(4, m.sscale*(Math.hypot(a.x-b.x,a.y-b.y)/m.dist)));
+      const [nx,ny]=clamp(ns,m.stx,m.sty); setScale(ns); setTx(nx); setTy(ny);
+    } else if(m.mode==="pan"){
+      const [nx,ny]=clamp(scale, m.stx+(e.clientX-m.sx), m.sty+(e.clientY-m.sy)); setTx(nx); setTy(ny);
+    } else if(m.mode==="swipe"){
+      m.moved=e.clientX-m.sx; setTx(m.moved*0.55);
+    }
+  };
+  const up = e=>{
+    const m=g.current;
+    ptrs.current.delete(e.pointerId);
+    if(m.mode==="swipe"){ if(m.moved<-55) go(1); else if(m.moved>55) go(-1); else setTx(0); }
+    if(ptrs.current.size===0){ m.mode=null; }
+    else if(ptrs.current.size===1){
+      const [only]=[...ptrs.current.values()];
+      m.mode = scale>1.05?"pan":"swipe"; m.sx=only.x; m.sy=only.y; m.stx=tx; m.sty=ty; m.moved=0;
+    }
+  };
+  useEffect(()=>{
+    const el=stageRef.current; if(!el) return;
+    const onWheel=e=>{
+      if(isVideo) return;
+      e.preventDefault();            // keep the page behind from scrolling while the viewer is open
+      if(!e.ctrlKey) return;         // plain scroll does nothing; trackpad-pinch / Ctrl+wheel zooms
+      const ns=Math.max(1,Math.min(4, scale*(e.deltaY<0?1.12:0.9)));
+      if(ns<=1.02){ reset(); return; }
+      const [nx,ny]=clamp(ns, tx*(ns/scale), ty*(ns/scale)); setScale(ns); setTx(nx); setTy(ny);
+    };
+    el.addEventListener("wheel", onWheel, {passive:false});
+    return ()=>el.removeEventListener("wheel", onWheel);
+  },[isVideo,scale,tx,ty]);
+  const zoomBy = f => {
+    const ns=Math.max(1,Math.min(4, scale*f));
+    if(ns<=1.02){ reset(); return; }
+    const [nx,ny]=clamp(ns, tx*(ns/scale), ty*(ns/scale)); setScale(ns); setTx(nx); setTy(ny);
+  };
+  const iconBtn={display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.16)",border:"none",color:"#fff",cursor:"pointer",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"};
+  return(
+    <Portal>
+      <div className="fade-in" style={{position:"fixed",inset:0,zIndex:9500,background:"rgba(3,10,14,.97)",touchAction:"none",userSelect:"none",overscrollBehavior:"contain"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"calc(env(safe-area-inset-top,0px) + 12px) 14px 12px",zIndex:4,pointerEvents:"none"}}>
+          <span style={{color:"#fff",fontSize:12.5,fontWeight:700,background:"rgba(255,255,255,.14)",padding:"6px 13px",borderRadius:20,backdropFilter:"blur(8px)"}}>
+            {isVideo?"▶ Video":(index+1)+" / "+slides.length}
+          </span>
+          <button className="press" onClick={onClose} aria-label="Close" style={{...iconBtn,pointerEvents:"auto",width:42,height:42,borderRadius:"50%",fontSize:20}}>✕</button>
+        </div>
+        <div ref={stageRef} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+          onClick={e=>{ if(e.target===stageRef.current && scale<=1.05) onClose(); }}
+          style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",cursor:scale>1.05?"grab":"default"}}>
+          {isVideo
+            ? <video src={cur.src} controls autoPlay playsInline style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+            : <img src={cur.src} alt={name} draggable={false}
+                style={{width:"100%",height:"100%",objectFit:"contain",transform:"translate("+tx+"px,"+ty+"px) scale("+scale+")",transition:g.current.mode?"none":"transform .28s cubic-bezier(.22,1,.36,1)",willChange:"transform"}}/>}
+        </div>
+        {slides.length>1&&(<>
+          <button className="press" onClick={()=>go(-1)} aria-label="Previous" style={{...iconBtn,position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>‹</button>
+          <button className="press" onClick={()=>go(1)} aria-label="Next" style={{...iconBtn,position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>›</button>
+        </>)}
+        {slides.length>1&&(
+          <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 26px)",left:0,right:0,display:"flex",justifyContent:"center",gap:6,zIndex:3}}>
+            {slides.map((s,i)=>(
+              <button key={i} className="press" onClick={()=>setIndex(i)} aria-label={"Go to slide "+(i+1)}
+                style={{width:i===index?22:8,height:8,borderRadius:20,border:"none",padding:0,cursor:"pointer",background:i===index?"#fff":"rgba(255,255,255,.45)",transition:"width .2s"}}/>
+            ))}
+          </div>
+        )}
+        {!isVideo&&(
+          <div style={{position:"absolute",left:12,bottom:"calc(env(safe-area-inset-bottom,0px) + 22px)",display:"flex",flexDirection:"column",gap:8,zIndex:3}}>
+            <button className="press" onClick={()=>zoomBy(1.5)} disabled={scale>=4} aria-label="Zoom in" style={{...iconBtn,width:42,height:42,borderRadius:12,fontSize:22,opacity:scale>=4?0.4:1}}>+</button>
+            <button className="press" onClick={()=>zoomBy(1/1.5)} disabled={scale<=1.02} aria-label="Zoom out" style={{...iconBtn,width:42,height:42,borderRadius:12,fontSize:24,opacity:scale<=1.02?0.4:1}}>−</button>
+          </div>
+        )}
+        <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 6px)",left:0,right:0,textAlign:"center",color:"rgba(255,255,255,.5)",fontSize:10.5,fontWeight:600,letterSpacing:.3,pointerEvents:"none",zIndex:3}}>
+          {isVideo?"":"Use + / −, double-tap or pinch to zoom · swipe to browse"}
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
 function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,prevPage="shop",user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
   const [qty,setQty]           = useState(1);
   const [selVarId,setSelVarId] = useState(null);
@@ -4596,6 +4744,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   const [slide,setSlide]       = useState(0); // active gallery slide
   const [justAdded,setJustAdded] = useState(false);
   const [photoZoom,setPhotoZoom] = useState(null); // review photo lightbox src
+  const [lightbox,setLightbox] = useState(-1); // product gallery lightbox — active slide index (-1 = closed)
 
   useEffect(()=>{
     setLoadingRev(true);
@@ -4657,10 +4806,10 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             </div>
           )}
           {slides.map((s,i)=>(
-            <div key={i} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000"}}>
+            <div key={i} onClick={()=>{ if(s.type==="image") setLightbox(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
               {s.type==="video"
                 ? <video src={s.src} controls playsInline loop style={{width:"100%",height:"100%",objectFit:"contain"}}/>
-                : <SmoothImg src={s.src} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+                : <SmoothImg src={s.src} alt={p.name} loading="eager" style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
             </div>
           ))}
         </div>
@@ -4673,6 +4822,10 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               <div key={i} style={{width:i===slide?20:7,height:7,borderRadius:20,background:i===slide?"white":"rgba(255,255,255,.5)",transition:"width .2s"}}/>
             ))}
           </div>
+        )}
+        {slides[slide]&&slides[slide].type==="image"&&(
+          <button className="press" onClick={()=>setLightbox(slide)} aria-label="Open photo full screen"
+            style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
         )}
         {slides[slide]&&<span style={{position:"absolute",top:50,right:16,background:"rgba(0,0,0,.4)",color:"white",fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,backdropFilter:"blur(6px)"}}>
           {slides[slide].type==="video"?"▶ Video":`📷 ${slide+1}/${slides.length}`}
@@ -4966,6 +5119,9 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         </>)}
       </div>
 
+      {lightbox>=0&&slides[lightbox]&&(
+        <MediaLightbox slides={slides} index={lightbox} setIndex={setLightbox} onClose={()=>setLightbox(-1)} name={p.name}/>
+      )}
       {photoZoom&&(
         <Portal>
         <div onClick={()=>setPhotoZoom(null)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -9132,52 +9288,153 @@ function GuideForm({guide,imgSrc,onSave,onCancel}){
   );
 }
 
-/* Fullscreen poster viewer with custom zoom (slider + / −, pinch, wheel, double-tap) and drag-to-pan. */
-function PosterZoom({src,title,notes,onClose}){
-  const [scale,setScale]=useState(1);
-  const [tx,setTx]=useState(0),[ty,setTy]=useState(0);
-  const [showNotes,setShowNotes]=useState(false);
-  const drag=React.useRef(null);
-  const pinch=React.useRef(null);
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  const applyScale=(ns)=>{ ns=clamp(ns,1,5); setScale(ns); if(ns<=1){setTx(0);setTy(0);} };
-  const onWheel=e=>{ e.preventDefault(); applyScale(scale - e.deltaY*0.0025*scale); };
-  const onDblClick=()=>{ scale>1?applyScale(1):applyScale(2.5); };
-  const onPointerDown=e=>{ if(scale<=1)return; drag.current={x:e.clientX,y:e.clientY,tx,ty}; };
-  const onPointerMove=e=>{ if(!drag.current)return; setTx(drag.current.tx+(e.clientX-drag.current.x)); setTy(drag.current.ty+(e.clientY-drag.current.y)); };
-  const endDrag=()=>{ drag.current=null; };
-  const dist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
-  const onTouchStart=e=>{ if(e.touches.length===2){ pinch.current={d:dist(e.touches),s:scale}; } };
-  const onTouchMove=e=>{ if(e.touches.length===2&&pinch.current){ e.preventDefault(); applyScale(pinch.current.s*(dist(e.touches)/pinch.current.d)); } };
-  const onTouchEnd=e=>{ if(e.touches.length<2) pinch.current=null; };
+/* Fullscreen poster REEL — swipe up/down between posters (Instagram-style), pinch / wheel / double-tap zoom, drag-to-pan, share. */
+function PosterReel({posters=[],start=0,onClose}){
+  const [idx,setIdx]       = useState(Math.max(0,Math.min(start,posters.length-1)));
+  const [scale,setScale]   = useState(1);
+  const [tx,setTx]         = useState(0),[ty,setTy]=useState(0);
+  const [showNotes,setShowNotes] = useState(false);
+  const [dragY,setDragY]   = useState(0);   // live reel-swipe offset (px)
+  const [anim,setAnim]     = useState(true); // animate track between slides
+  const [hint,setHint]     = useState(posters.length>1); // "swipe up" coach mark
+  const [shared,setShared] = useState("");
+  const drag  = React.useRef(null);  // image pan gesture
+  const swipe = React.useRef(null);  // reel swipe gesture
+  const pinch = React.useRef(null);  // two-finger pinch
+  const wheelLock = React.useRef(0);
+  const cur   = posters[idx]||{};
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const reset = ()=>{ setScale(1); setTx(0); setTy(0); };
+  const applyScale = ns=>{ ns=clamp(ns,1,5); setScale(ns); if(ns<=1){ setTx(0); setTy(0); } };
+  useEffect(()=>{ reset(); setShowNotes(false); },[idx]);
+  useEffect(()=>{ if(!hint) return; const t=setTimeout(()=>setHint(false),2600); return ()=>clearTimeout(t); },[hint]);
+  const go = d => setIdx(i=>clamp(i+d,0,posters.length-1));
+
+  useEffect(()=>{
+    const onKey=e=>{ if(e.key==="Escape")onClose(); else if(e.key==="ArrowDown"||e.key==="ArrowRight")go(1); else if(e.key==="ArrowUp"||e.key==="ArrowLeft")go(-1); };
+    window.addEventListener("keydown",onKey); return ()=>window.removeEventListener("keydown",onKey);
+  },[posters.length]);
+
+  const onWheel = e=>{
+    if(e.ctrlKey){ e.preventDefault(); applyScale(scale - e.deltaY*0.0025*scale); return; }
+    if(scale<=1){ e.preventDefault(); const now=Date.now(); if(now<wheelLock.current) return;
+      if(e.deltaY>24){ wheelLock.current=now+380; go(1); setHint(false); }
+      else if(e.deltaY<-24){ wheelLock.current=now+380; go(-1); } }
+  };
+  const onDblClick = ()=>{ scale>1?applyScale(1):applyScale(2.5); };
+  const onPointerDown = e=>{
+    if(pinch.current) return;
+    if(scale>1){ drag.current={x:e.clientX,y:e.clientY,tx,ty}; }
+    else { swipe.current={y:e.clientY,x:e.clientX,t:Date.now()}; setAnim(false); }
+  };
+  const onPointerMove = e=>{
+    if(drag.current){ setTx(drag.current.tx+(e.clientX-drag.current.x)); setTy(drag.current.ty+(e.clientY-drag.current.y)); return; }
+    if(swipe.current){
+      let dy=e.clientY-swipe.current.y;
+      if((idx===0&&dy>0)||(idx===posters.length-1&&dy<0)) dy*=0.35; // rubber-band at ends
+      setDragY(dy); if(Math.abs(dy)>8) setHint(false);
+    }
+  };
+  const endPointer = ()=>{
+    if(drag.current){ drag.current=null; return; }
+    if(swipe.current){
+      const dy=dragY, dt=Date.now()-swipe.current.t; swipe.current=null; setAnim(true);
+      const fast=Math.abs(dy)/Math.max(dt,1)>0.45;
+      if((dy<-70||(fast&&dy<-24)) && idx<posters.length-1) setIdx(idx+1);
+      else if((dy>70||(fast&&dy>24)) && idx>0) setIdx(idx-1);
+      setDragY(0);
+    }
+  };
+  const dist = t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+  const onTouchStart = e=>{ if(e.touches.length===2){ pinch.current={d:dist(e.touches),s:scale}; swipe.current=null; } };
+  const onTouchMove  = e=>{ if(e.touches.length===2&&pinch.current){ e.preventDefault(); applyScale(pinch.current.s*(dist(e.touches)/pinch.current.d)); } };
+  const onTouchEnd   = e=>{ if(e.touches.length<2) pinch.current=null; };
+
+  const share = async()=>{
+    const src=cur.src; if(!src) return;
+    try{
+      if(navigator.share){
+        try{
+          const blob=await (await fetch(src)).blob();
+          const file=new File([blob],((cur.title||"care-guide").replace(/[^\w -]+/g,"")||"care-guide")+".jpg",{type:blob.type||"image/jpeg"});
+          if(navigator.canShare && navigator.canShare({files:[file]})){
+            await navigator.share({files:[file],title:cur.title||"Care Guide",text:(cur.title?cur.title+" — ":"")+"NEMO Aqua Store care guide"});
+            return;
+          }
+        }catch(_){}
+        await navigator.share({title:cur.title||"Care Guide",text:cur.title||"Care Guide",url:location.href});
+        return;
+      }
+      const a=document.createElement("a"); a.href=src; a.download=((cur.title||"care-guide"))+".jpg"; document.body.appendChild(a); a.click(); a.remove();
+      setShared("Saved"); setTimeout(()=>setShared(""),1600);
+    }catch(e){ /* user cancelled */ }
+  };
+
+  const btn={width:38,height:38,borderRadius:11,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:19,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,backdropFilter:"blur(6px)"};
   const pct=Math.round(scale*100);
-  const btn={width:38,height:38,borderRadius:11,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:19,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0};
   return(
     <Portal>
-    <div style={{position:"fixed",inset:0,background:"rgba(4,16,20,.96)",zIndex:9000,display:"flex",flexDirection:"column",animation:"fadeIn .2s ease"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(4,16,20,.97)",zIndex:9000,display:"flex",flexDirection:"column",animation:"fadeIn .2s ease"}}>
       {/* top bar */}
-      <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",color:"white",flexShrink:0}}>
-        <div style={{flex:1,minWidth:0,fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{title||"Care Guide"}</div>
-        {notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 14px",fontSize:12.5,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
-        <button className="press" onClick={onClose} style={btn}>✕</button>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",color:"white",flexShrink:0,zIndex:5}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.title||"Care Guide"}</div>
+          {posters.length>1&&<div style={{fontSize:11,fontWeight:700,opacity:.7,marginTop:2}}>{idx+1} / {posters.length}</div>}
+        </div>
+        <button className="press" onClick={share} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800}} aria-label="Share poster">{shared||"⤴ Share"}</button>
+        {cur.notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
+        <button className="press" onClick={onClose} style={btn} aria-label="Close">✕</button>
       </div>
-      {/* stage */}
-      <div onClick={e=>{if(e.target===e.currentTarget)onClose();}} onWheel={onWheel}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerLeave={endDrag}
+
+      {/* reel stage */}
+      <div onClick={e=>{ if(e.target===e.currentTarget && scale<=1) onClose(); }} onWheel={onWheel}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointer} onPointerLeave={endPointer}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        style={{flex:1,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"none",cursor:scale>1?"grab":"zoom-in"}}>
-        <img src={src} alt={title||""} draggable={false} onDoubleClick={onDblClick} onClick={()=>{if(scale<=1)applyScale(2.5);}}
-          style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",transform:`translate(${tx}px,${ty}px) scale(${scale})`,transformOrigin:"center center",transition:drag.current||pinch.current?"none":"transform .12s ease",userSelect:"none",willChange:"transform"}}/>
+        style={{flex:1,position:"relative",overflow:"hidden",touchAction:"none",cursor:scale>1?"grab":"default"}}>
+        <div style={{position:"absolute",inset:0,transform:"translateY(calc("+(-idx*100)+"% + "+dragY+"px))",transition:anim?"transform .34s cubic-bezier(.22,1,.36,1)":"none",willChange:"transform"}}>
+          {posters.map((p,i)=>{
+            const near=Math.abs(i-idx)<=1;
+            const active=i===idx;
+            return(
+              <div key={i} style={{position:"absolute",top:(i*100)+"%",left:0,right:0,height:"100%",display:"flex",alignItems:"center",justifyContent:"center",padding:"6px 10px"}}>
+                {near
+                  ? <div onDoubleClick={active?onDblClick:undefined} onClick={active?()=>{ if(scale<=1)applyScale(2.2); }:undefined}
+                      style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",transform:active?("translate("+tx+"px,"+ty+"px) scale("+scale+")"):"scale(1)",transformOrigin:"center center",transition:(active&&(drag.current||pinch.current))?"none":"transform .14s ease",willChange:"transform"}}>
+                      <img src={p.src} alt={p.title||""} draggable={false} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:12,boxShadow:"0 18px 50px rgba(0,0,0,.55)",userSelect:"none",pointerEvents:"none"}}/>
+                    </div>
+                  : <div style={{width:40,height:40,borderRadius:"50%",border:"3px solid rgba(255,255,255,.25)",borderTopColor:"rgba(255,255,255,.7)",animation:"spin 1s linear infinite"}}/>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* vertical progress dots */}
+        {posters.length>1&&posters.length<=12&&(
+          <div style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",display:"flex",flexDirection:"column",gap:6,zIndex:4}}>
+            {posters.map((p,i)=>(
+              <div key={i} onClick={()=>setIdx(i)} style={{width:6,height:i===idx?18:6,borderRadius:6,background:i===idx?"#fff":"rgba(255,255,255,.4)",transition:"height .2s,background .2s",cursor:"pointer"}}/>
+            ))}
+          </div>
+        )}
+
+        {/* swipe-up coach mark */}
+        {hint&&scale<=1&&idx<posters.length-1&&(
+          <div style={{position:"absolute",bottom:16,left:0,right:0,display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:"rgba(255,255,255,.85)",pointerEvents:"none",zIndex:4,animation:"bobUp 1.4s ease-in-out infinite"}}>
+            <span style={{fontSize:22,lineHeight:1}}>⌃</span>
+            <span style={{fontSize:11.5,fontWeight:700,letterSpacing:.3}}>Swipe up for next</span>
+          </div>
+        )}
       </div>
+
       {/* notes panel */}
-      {notes&&showNotes&&(
-        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13.5,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{notes}</div>
+      {cur.notes&&showNotes&&(
+        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13.5,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cur.notes}</div>
       )}
+
       {/* zoom controls */}
       <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:12,padding:"12px 18px calc(14px + env(safe-area-inset-bottom))",background:"rgba(0,0,0,.35)"}}>
         <button className="press" onClick={()=>applyScale(scale-0.5)} style={btn} aria-label="Zoom out">−</button>
-        <input type="range" min="1" max="5" step="0.1" value={scale} onChange={e=>applyScale(Number(e.target.value))}
-          style={{flex:1,accentColor:C.accent,height:4}}/>
+        <input type="range" min="1" max="5" step="0.1" value={scale} onChange={e=>applyScale(Number(e.target.value))} style={{flex:1,accentColor:C.accent,height:4}}/>
         <button className="press" onClick={()=>applyScale(scale+0.5)} style={btn} aria-label="Zoom in">+</button>
         <div style={{minWidth:52,textAlign:"center",color:"white",fontSize:12.5,fontWeight:800}}>{pct}%</div>
         <button className="press" onClick={()=>applyScale(1)} style={{...btn,width:"auto",padding:"0 12px",fontSize:12,fontWeight:800}}>Fit</button>
@@ -9186,7 +9443,6 @@ function PosterZoom({src,title,notes,onClose}){
     </Portal>
   );
 }
-
 /* ═══════════════════ CARE GUIDES PAGE ═══════════════════ */
 function CareGuidesPage({nav,guides,mediaCache}){
   const [cat,setCat]=useState("All");
@@ -9194,6 +9450,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
   const [zoom,setZoom]=useState(null); // {src,title,notes}
   const cats=["All",...GUIDE_CATEGORIES.filter(c=>guides.some(g=>g.category===c))];
   const list=cat==="All"?guides:guides.filter(g=>g.category===cat);
+  const posterList=list.filter(g=>mediaCache["img-"+g.id]).map(g=>({src:mediaCache["img-"+g.id],title:g.title,notes:g.content||""}));
   return(
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 22px",color:"white",position:"relative",overflow:"hidden"}}>
@@ -9235,7 +9492,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
           const hasPoster=!!img;
           return(
             <div key={g.id} style={{background:C.card,borderRadius:16,overflow:"hidden",marginBottom:12,border:`1px solid ${C.border}`}}>
-              <button className="press" onClick={()=>{ if(hasPoster){ setZoom({src:img,title:g.title,notes:content}); } else { setOpenId(open?null:g.id); } }}
+              <button className="press" onClick={()=>{ if(hasPoster){ const pi=posterList.findIndex(x=>x.src===img); setZoom({start:pi<0?0:pi}); } else { setOpenId(open?null:g.id); } }}
                 style={{display:"flex",alignItems:"center",gap:13,width:"100%",padding:"13px 15px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
                 <div style={{flexShrink:0,width:52,height:52,borderRadius:12,overflow:"hidden",background:hasPoster?"#0c2b30":C.accentLight,display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {hasPoster? <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontSize:22}}>📋</span>}
@@ -9256,7 +9513,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
       </div>
 
       {/* Fullscreen poster viewer with custom zoom */}
-      {zoom&&<PosterZoom src={zoom.src} title={zoom.title} notes={zoom.notes} onClose={()=>setZoom(null)}/>}
+      {zoom&&<PosterReel posters={posterList} start={zoom.start} onClose={()=>setZoom(null)}/>}
     </div>
   );
 }
@@ -10186,25 +10443,23 @@ function NemoStore(){
   // Progressive enhancement — only JS adds the hidden state, so content stays visible if this never runs.
   useEffect(()=>{
     if(typeof IntersectionObserver==="undefined") return;
-    const ios=[];
+    let io;
     const raf=requestAnimationFrame(()=>{
-      // Section reveals
-      const els=document.querySelectorAll(".js-reveal:not(.reveal-in)");
-      els.forEach(el=>el.classList.add("reveal"));
-      if(els.length){
-        const io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("reveal-in"); io.unobserve(en.target); } }); },{threshold:0.06,rootMargin:"0px 0px -40px 0px"});
-        els.forEach(el=>io.observe(el)); ios.push(io);
-      }
-      // Staggered child reveals (e.g. product grids — each card springs in +55ms after the last)
+      // Staggered child reveals (product grids — each card springs in +55ms after the last)
       document.querySelectorAll(".js-stagger").forEach(cont=>{
         const kids=Array.from(cont.children).filter(k=>!k.classList.contains("reveal-in"));
         if(!kids.length) return;
         kids.forEach((k,i)=>{ k.classList.add("reveal"); k.style.transitionDelay=Math.min(i*55,520)+"ms"; });
-        const io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ Array.from(en.target.children).forEach(k=>k.classList.add("reveal-in")); io.unobserve(en.target); } }); },{threshold:0.04});
-        io.observe(cont); ios.push(io);
+        const so=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ Array.from(en.target.children).forEach(k=>k.classList.add("reveal-in")); so.unobserve(en.target); } }); },{threshold:0.04});
+        so.observe(cont);
       });
+      const els=document.querySelectorAll(".js-reveal:not(.reveal-in)");
+      if(!els.length) return;
+      els.forEach(el=>el.classList.add("reveal"));
+      io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("reveal-in"); io.unobserve(en.target); } }); },{threshold:0.06,rootMargin:"0px 0px -40px 0px"});
+      els.forEach(el=>io.observe(el));
     });
-    return ()=>{ cancelAnimationFrame(raf); ios.forEach(io=>io.disconnect()); };
+    return ()=>{ cancelAnimationFrame(raf); if(io) io.disconnect(); };
   },[page]);
   // When in admin mode, a page refresh/close prompts for confirmation so you don't exit admin by accident.
   useEffect(()=>{

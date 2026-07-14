@@ -9,7 +9,7 @@ index.html              ← the app (served at the root)
 app.jsx                 ← all the app code
 assets/                 ← UPLOAD THE WHOLE FOLDER (logo, favicons, share banner)
   ├─ nemo-logo.png
-  ├─ share-banner.png / share-banner.jpg
+  ├─ share-banner.png
   ├─ apple-touch-icon.png
   └─ favicon-16/32/48/96/144/192/512.png
 favicon.ico             ← root favicon Google probes by default
@@ -25,7 +25,6 @@ sitemap.xml             ← page list for Google
 google….html            ← Google Search Console verification file
 vercel.json             ← static config + security headers
 database.rules.json     ← Firebase security rules (NOT served — paste into Firebase, see below)
-storage.rules           ← OPTIONAL Storage rules (only needed if you upgrade to the paid Blaze plan)
 seo/                    ← build-time script only; the LIVE site does NOT need it
 README.md               ← this file
 LAUNCH_CHECKLIST.md     ← pre-launch checklist
@@ -35,7 +34,6 @@ LAUNCH_CHECKLIST.md     ← pre-launch checklist
 > ⚠️ **Keep the folder structure exactly as above — upload the `assets/` and `p/` folders WITH their contents (including `p/og/`).** `index.html` and the product pages reference files *inside* these folders by path, so if a folder uploads empty you'll get a broken logo/favicons and 404s on every `/p/...` product link. Only `seo/` is safe to leave off the live host (it's a build script). If your host's uploader skips folder contents, see **"Uploading"** at the bottom — zip-and-extract or `git push` keeps the structure intact.
 
 ## ⭐ NEW since last version
-- **Faster storefront (big one):** the catalog grid now loads small auto-generated **thumbnails** instead of full-size photos — full images only load when a product is opened. Works on the **free Firebase plan** (no Storage/billing needed). Admin → Orders tab has a one-tap **"Speed Up Catalog"** button to thumbnail existing products.— the catalog grid loads tiny images and reads from a single fetch with no per-image database lookups. Needs the new **`storage.rules`** published (see step 4b) and **Storage enabled**. Falls back safely to the old method if Storage is off. Admin → Orders tab has a one-tap **“Speed Up Catalog”** button to migrate existing photos.
 - **Installable app (PWA):** customers get an "Install Nemo App" button + browser "Add to Home Screen". Needs `manifest.webmanifest` + `sw.js` in the repo (already included).
 - **Per-customer order security + admin-only writes:** new `database.rules.json` — see "Lock admin" below. Orders are now stored per user so customers can only read their own.
 - **Inventory truth:** stock is decremented with an atomic Firebase transaction at checkout, so two buyers can't oversell the last item.
@@ -79,12 +77,6 @@ Also confirm **Authentication → Sign-in method** has **Google** and **Anonymou
 
 Firebase Console → **Realtime Database → Rules** → paste the contents of
 `database.rules.json` → **Publish**. (This replaces the temporary open test rules.)
-
-## 4b. (OPTIONAL) Firebase Storage — only if you're on the paid Blaze plan
-
-**You do NOT need this on the free plan.** The store works fully on Firebase's free **Spark** plan: images are stored in the Realtime Database and the catalog uses small thumbnails for speed.
-
-Firebase now requires the paid **Blaze** plan (a card on file) to enable Cloud Storage. If you ever upgrade and want photos served from a CDN, enable **Build → Storage**, then paste `storage.rules` into its **Rules** tab → **Publish**. The app auto-detects Storage and uses it; until then it silently uses the free base64 path. No code change needed either way.
 
 ## 5. Configure the store (in the app)
 

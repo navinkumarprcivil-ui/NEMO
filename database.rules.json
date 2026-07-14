@@ -79,9 +79,9 @@
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       "total": { ".write": "auth != null", ".validate": "newData.isNumber()" },
       "daily": { "$d": { ".write": "auth != null", ".validate": "newData.isNumber()" } },
+      "funnel": { "$step": { ".write": "auth != null", ".validate": "newData.isNumber()" } },
       "events": { "$type": { "$key": { ".write": "auth != null", ".validate": "newData.isNumber()" } } },
-      "search": { "$term": { ".write": "auth != null", ".validate": "newData.isNumber()" } },
-      "funnel": { "$step": { ".write": "auth != null", ".validate": "newData.isNumber()" } }
+      "search": { "$term": { ".write": "auth != null", ".validate": "newData.isNumber()" } }
     },
 
     "loyalty": {
