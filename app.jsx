@@ -1037,6 +1037,48 @@ function addExpReviewedLocal(key,oid){ const s=loadExpReviewedSet(key); if(!s.in
 function userKey(u){ return u ? (u.uid || ("ph-"+normalizePhone(u.phone||""))) : null; }
 
 /* Recent searches (local, max 8) + keyword-based related products */
+/* ── Smart search: typo-tolerance, synonyms & plurals ──────────────────────
+   "beta" finds Betta, "gupy" finds Guppy, "fighter fish" finds Betta, etc. */
+const SEARCH_SYNONYMS={
+  beta:"betta", betta:"betta", fighter:"betta", fighterfish:"betta",
+  gupy:"guppy", guppie:"guppy", gappi:"guppy",
+  moli:"molly", moly:"molly", mollie:"molly",
+  playty:"platy", plati:"platy",
+  goldfish:"gold fish", gourami:"gourami", gaurami:"gourami", gouramy:"gourami",
+  tetra:"tetra", titra:"tetra", neontetra:"neon tetra",
+  angel:"angelfish", anglefish:"angelfish",
+  shrimps:"shrimp", cheery:"cherry",
+  plant:"plants", pant:"plants", anubia:"anubias",
+  tank:"tanks", aquarium:"tanks", acquarium:"tanks", filter:"filter", pump:"pump",
+  food:"feed", foods:"feed", flake:"feed", flakes:"feed", pellet:"feed", pellets:"feed",
+};
+function _singular(w){ return w.length>3&&w.endsWith("es")?w.slice(0,-2):(w.length>2&&w.endsWith("s")?w.slice(0,-1):w); }
+function _editDist(a,b){ // small Levenshtein — only called for short tokens
+  if(a===b) return 0;
+  const m=a.length,n=b.length; if(!m||!n) return m||n;
+  let prev=Array.from({length:n+1},(_,j)=>j);
+  for(let i=1;i<=m;i++){ const cur=[i]; for(let j=1;j<=n;j++){ cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1)); } prev=cur; }
+  return prev[n];
+}
+function _tokenHit(qt,text){ // query token vs product text: substring OR fuzzy word match
+  if(text.includes(qt)) return true;
+  if(qt.length<4) return false;
+  const tol=qt.length>=7?2:1;
+  for(const w of text.split(/[^a-z0-9]+/)){ if(w&&Math.abs(w.length-qt.length)<=tol&&_editDist(qt,w)<=tol) return true; }
+  return false;
+}
+function smartMatch(query,p){
+  const raw=(query||"").toLowerCase().trim(); if(!raw) return true;
+  const text=((p.name||"")+" "+(p.category||"")+" "+(p.desc||"")).toLowerCase();
+  if(text.includes(raw)) return true; // fast path — exact phrase
+  const toks=raw.split(/[^a-z0-9]+/).filter(t=>t&&t!=="fish");
+  if(!toks.length) return text.includes(raw);
+  return toks.every(t=>{
+    const s=_singular(t), syn=SEARCH_SYNONYMS[t]||SEARCH_SYNONYMS[s];
+    return _tokenHit(t,text)||(s!==t&&_tokenHit(s,text))||(syn&&syn.split(" ").every(x=>_tokenHit(x,text)));
+  });
+}
+
 function loadRecentSearches(){ try{ return JSON.parse(localStorage.getItem("nemo-recent-search")||"[]"); }catch{ return []; } }
 function addRecentSearch(q){
   q=(q||"").trim(); if(q.length<2) return loadRecentSearches();
@@ -4005,6 +4047,157 @@ function ArrivedAliveGallery({products=[]}){
   );
 }
 
+/* ═══════════════════ AQUA TOOLS — compatibility checker & calculators ═══════════════════ */
+/* Species traits: t=temper(0 peaceful,1 semi,2 aggressive), w=water temp band, fin=long-finned,
+   nip=fin-nipper, size cm, min tank L, eats=preys on. Data reflects common fishkeeping guidance. */
+const SPECIES={
+  betta:     {n:"Betta (Male)",e:"🐟",t:2,w:"tropical",fin:true, size:6, min:20, eats:["shrimp"]},
+  guppy:     {n:"Guppy",       e:"🐠",t:0,w:"tropical",fin:true, size:4, min:40},
+  molly:     {n:"Molly",       e:"🐠",t:0,w:"tropical",size:8,  min:60},
+  platy:     {n:"Platy",       e:"🐠",t:0,w:"tropical",size:5,  min:40},
+  swordtail: {n:"Swordtail",   e:"🐠",t:0,w:"tropical",size:10, min:80},
+  neon:      {n:"Neon Tetra",  e:"✨",t:0,w:"tropical",size:3,  min:40},
+  danio:     {n:"Zebra Danio", e:"🦓",t:1,w:"tropical",nip:true,size:5,  min:40},
+  angelfish: {n:"Angelfish",   e:"👼",t:1,w:"tropical",fin:true,size:15, min:120,eats:["tinyfish","shrimp"]},
+  gourami:   {n:"Dwarf Gourami",e:"🐟",t:1,w:"tropical",fin:true,size:8, min:60},
+  barb:      {n:"Tiger Barb",  e:"🐯",t:1,w:"tropical",nip:true,size:7,  min:80},
+  goldfish:  {n:"Goldfish",    e:"🧡",t:0,w:"cold",    size:20, min:100,eats:["shrimp"]},
+  koi:       {n:"Koi",         e:"🎏",t:0,w:"cold",    size:60, min:1000,eats:["shrimp","tinyfish"]},
+  oscar:     {n:"Oscar",       e:"😾",t:2,w:"tropical",size:30, min:300,eats:["tinyfish","smallfish","shrimp"]},
+  cory:      {n:"Corydoras",   e:"🐡",t:0,w:"tropical",size:6,  min:60},
+  shrimp:    {n:"Cherry Shrimp",e:"🦐",t:0,w:"tropical",size:2, min:20, prey:true},
+  snail:     {n:"Snail",       e:"🐌",t:0,w:"tropical",size:3,  min:10},
+};
+function pairVerdict(aKey,bKey){
+  const A=SPECIES[aKey], B=SPECIES[bKey];
+  const pair=(x,y)=>(aKey===x&&bKey===y)||(aKey===y&&bKey===x);
+  if(aKey===bKey){
+    if(aKey==="betta") return {v:2,r:"Two male bettas will fight — keep only one male per tank."};
+    return {v:0,r:"A group of the same species is fine — shoaling species prefer 6+."};
+  }
+  if(A.w!==B.w) return {v:2,r:`${A.n} and ${B.n} need different water temperatures (cold-water vs tropical).`};
+  if(pair("betta","guppy")) return {v:2,r:"Bettas often attack colourful, long-finned guppies — risky mix."};
+  if(pair("betta","gourami")) return {v:2,r:"Bettas and gouramis are related and territorial toward each other."};
+  if(pair("betta","angelfish")) return {v:2,r:"Both are territorial; angelfish and bettas commonly clash."};
+  // Fin-nippers vs long-finned fish
+  if((A.nip&&B.fin)||(B.nip&&A.fin)){ const nip=A.nip?A:B, fin=A.nip?B:A; return {v:2,r:`${nip.n} nips the long fins of ${fin.n}.`}; }
+  // Predation: big eaters vs tiny tankmates / shrimp
+  const eats=(X,Y)=>(X.eats||[]).some(k=>(k==="shrimp"&&Y.prey)||(k==="tinyfish"&&Y.size<=4)||(k==="smallfish"&&Y.size<=10));
+  if(eats(A,B)||eats(B,A)){ const pred=eats(A,B)?A:B, prey=eats(A,B)?B:A;
+    if(pred.n==="Betta (Male)"&&prey.prey) return {v:1,r:"Bettas may hunt shrimp — provide dense plants & hiding spots."};
+    return {v:2,r:`${pred.n} will likely eat ${prey.n}.`}; }
+  if(A.t===2||B.t===2){ const ag=A.t===2?A:B, other=A.t===2?B:A; return {v:2,r:`${ag.n} is aggressive and will bully ${other.n}.`}; }
+  if(A.t===1||B.t===1) return {v:1,r:"Generally works in a spacious tank with hiding places — watch for chasing."};
+  if(Math.max(A.size,B.size)/Math.min(A.size,B.size)>=4) return {v:1,r:"Large size difference — the smaller fish may be stressed or eaten as it grows."};
+  return {v:0,r:"Peaceful community fish — compatible in a properly sized tank."};
+}
+function AquaToolsPage({nav}){
+  const [sel,setSel]=useState([]);
+  const toggle=k=>setSel(p=>p.includes(k)?p.filter(x=>x!==k):(p.length>=5?p:[...p,k]));
+  // Calculators
+  const [dim,setDim]=useState({l:"",w:"",h:""});
+  const liters=useMemo(()=>{ const l=+dim.l,w=+dim.w,h=+dim.h; return (l>0&&w>0&&h>0)?Math.round(l*w*h/1000):0; },[dim]);
+  const [tankL,setTankL]=useState("");
+  const tl=Math.max(0,+tankL||0);
+  const pairs=useMemo(()=>{ const out=[]; for(let i=0;i<sel.length;i++) for(let j=i;j<sel.length;j++){ if(i===j&&sel.length>1) continue; out.push({a:sel[i],b:sel[j],...pairVerdict(sel[i],sel[j])}); } return out.sort((x,y)=>y.v-x.v); },[sel]);
+  const worst=pairs.length?Math.max(...pairs.map(p=>p.v)):-1;
+  const minTank=sel.length?Math.max(...sel.map(k=>SPECIES[k].min)):0;
+  const VER=[{c:"#16a34a",bg:"#ecfdf5",bd:"#a7f3d0",t:"✅ Compatible"},{c:"#b45309",bg:"#fffbeb",bd:"#fde68a",t:"⚠️ Use caution"},{c:"#dc2626",bg:"#fef2f2",bd:"#fecaca",t:"❌ Not recommended"}];
+  const card={background:C.card,borderRadius:24,padding:"18px 16px",marginBottom:16,boxShadow:"0 4px 20px rgba(15,23,42,0.05)"};
+  const H=({children})=><div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:4}}>{children}</div>;
+  const Sub=({children})=><div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:12}}>{children}</div>;
+  const numIn=(val,set,ph)=>(
+    <input type="number" inputMode="decimal" min="0" value={val} placeholder={ph} onChange={e=>set(e.target.value)}
+      style={{width:"100%",boxSizing:"border-box",borderRadius:16,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"#f8fafc",textAlign:"center"}}/>
+  );
+  return(
+    <div className="slide-up">
+      <div className="vh-head" style={{background:"linear-gradient(180deg,#f1f9fe 0%,#ffffff 100%)",padding:"52px 16px 18px",borderRadius:"0 0 28px 28px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <button className="press" onClick={()=>nav("home")} style={{background:"none",border:"none",fontSize:20,color:C.textSub,cursor:"pointer"}}>←</button>
+          <div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>🧪 Aqua Tools</div>
+            <div style={{fontSize:12,color:C.textSub}}>Plan your tank like a pro — free tools from Nemo</div>
+          </div>
+        </div>
+      </div>
+      <div className="dt-read" style={{padding:"18px 16px 110px"}}>
+        {/* ── Fish Compatibility Checker ── */}
+        <div style={card}>
+          <H>🐠 Fish Compatibility Checker</H>
+          <Sub>Select 2–5 species you'd like to keep together (tap again to unselect).</Sub>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
+            {Object.entries(SPECIES).map(([k,s])=>{
+              const on=sel.includes(k);
+              return(
+                <button key={k} className="press" onClick={()=>toggle(k)}
+                  style={{background:on?"#ffffff":"#f8fafc",color:on?C.text:C.textSub,border:`2px solid ${on?C.accent:"transparent"}`,borderRadius:99,padding:"8px 13px",fontSize:12.5,fontWeight:on?700:600,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",boxShadow:on?"0 6px 18px rgba(14,165,233,.16)":"none"}}>
+                  {s.e} {s.n}
+                </button>
+              );
+            })}
+          </div>
+          {sel.length===1&&(()=>{ const solo=pairVerdict(sel[0],sel[0]); return(
+            <div style={{background:VER[solo.v].bg,border:`1px solid ${VER[solo.v].bd}`,borderRadius:14,padding:"11px 13px",fontSize:12.5,color:VER[solo.v].c,fontWeight:600,lineHeight:1.55}}>{VER[solo.v].t.split(" ")[0]} <b>{SPECIES[sel[0]].n} × {SPECIES[sel[0]].n}:</b> {solo.r}</div>
+          );})()}
+          {sel.length>=2&&(
+            <>
+              <div style={{background:VER[worst].bg,border:`1.5px solid ${VER[worst].bd}`,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+                <div style={{fontSize:14,fontWeight:800,color:VER[worst].c,marginBottom:2}}>{VER[worst].t}</div>
+                <div style={{fontSize:11.5,color:C.textSub}}>Minimum recommended tank for this mix: <b style={{color:C.text}}>{minTank} L</b></div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                {pairs.map((p,i)=>(
+                  <div key={i} style={{display:"flex",gap:9,alignItems:"flex-start",background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px"}}>
+                    <span style={{fontSize:14,flexShrink:0}}>{["✅","⚠️","❌"][p.v]}</span>
+                    <div style={{fontSize:12,lineHeight:1.5,color:C.text}}><b>{SPECIES[p.a].n} × {SPECIES[p.b].n}:</b> <span style={{color:C.textSub}}>{p.r}</span></div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {sel.length>0&&<button className="press" onClick={()=>setSel([])} style={{marginTop:12,background:"none",border:"none",color:C.textSub,fontSize:12,fontWeight:700,textDecoration:"underline",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Clear selection</button>}
+          <div style={{fontSize:10.5,color:C.textSub,marginTop:12,lineHeight:1.5}}>General guidance — individual fish temperaments vary. Message us on WhatsApp for advice on your exact setup.</div>
+        </div>
+        {/* ── Water Volume ── */}
+        <div style={card}>
+          <H>📏 Tank Volume Calculator</H>
+          <Sub>Enter your tank's inside dimensions in centimetres.</Sub>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
+            {numIn(dim.l,v=>setDim(d=>({...d,l:v})),"Length cm")}
+            {numIn(dim.w,v=>setDim(d=>({...d,w:v})),"Width cm")}
+            {numIn(dim.h,v=>setDim(d=>({...d,h:v})),"Height cm")}
+          </div>
+          {liters>0&&(
+            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px",fontSize:13,color:C.text,lineHeight:1.6}}>
+              💧 Your tank holds about <b style={{color:C.primary,fontFamily:PRICE_FONT}}>{liters} litres</b> (~{Math.round(liters/3.785)} US gallons). Actual water volume will be ~10–15% less after substrate &amp; décor.
+            </div>
+          )}
+        </div>
+        {/* ── Stocking + Heater + Filter ── */}
+        <div style={card}>
+          <H>⚖️ Stocking, Heater &amp; Filter Guide</H>
+          <Sub>Enter your tank volume in litres (use the calculator above if unsure).</Sub>
+          <div style={{maxWidth:200,marginBottom:12}}>{numIn(tankL,setTankL,"Tank litres")}</div>
+          {tl>0&&(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:12.5,lineHeight:1.6,color:C.text}}>🐟 <b>Stocking:</b> roughly <b>{Math.max(1,Math.round(tl/2))} cm of adult fish</b> total (1 cm per 2 L rule) — e.g. about <b>{Math.max(1,Math.floor(tl/8))} guppy-sized fish</b>. Stock slowly, over weeks.</div>
+              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:12.5,lineHeight:1.6,color:C.text}}>🌡️ <b>Heater:</b> ~<b>{Math.max(25,Math.round(tl))} W</b> (1 W per litre; split into 2 heaters above 200 L).</div>
+              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:12.5,lineHeight:1.6,color:C.text}}>🌀 <b>Filter:</b> flow rate of <b>{tl*4}–{tl*5} L/h</b> (4–5× tank volume per hour).</div>
+              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:12.5,lineHeight:1.6,color:C.text}}>💦 <b>Water changes:</b> ~<b>{Math.max(1,Math.round(tl*0.25))} L weekly</b> (25%).</div>
+            </div>
+          )}
+        </div>
+        {/* Shop nudge */}
+        <button className="cta" onClick={()=>nav("shop")}
+          style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textTransform:"uppercase",letterSpacing:".05em",cursor:"pointer"}}>
+          Shop fish, tanks &amp; gear →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true}){
   const featured=products.slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
@@ -4014,9 +4207,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
   const recentlyViewed=useMemo(()=>loadRecentlyViewed().map(id=>products.find(p=>p.id===id)).filter(Boolean).slice(0,10),[products]);
   // Live search suggestions — match name/category as the customer types
   const suggestions=useMemo(()=>{
-    const q=(query||"").trim().toLowerCase();
+    const q=(query||"").trim();
     if(q.length<1) return [];
-    return products.filter(p=>((p.name||"").toLowerCase().includes(q)||(p.category||"").toLowerCase().includes(q))).slice(0,6);
+    return products.filter(p=>smartMatch(q,p)).slice(0,6);
   },[query,products]);
   const [suggOpen,setSuggOpen]=useState(false);
   const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
@@ -4276,6 +4469,17 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           </button>
         </div>
 
+        {/* Aqua Tools — compatibility checker & tank calculators */}
+        <button className="press" onClick={()=>nav("tools")}
+          style={{width:"100%",marginTop:12,background:"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:18,padding:"16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white",boxShadow:"0 8px 24px rgba(14,165,233,.22)"}}>
+          <span style={{fontSize:32,flexShrink:0}}>🧪</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:15,fontWeight:800,lineHeight:1.2}}>Aqua Tools — free tank planner</div>
+            <div style={{fontSize:11.5,opacity:.9,marginTop:2,lineHeight:1.4}}>Fish compatibility checker · tank volume · heater &amp; filter size · stocking guide</div>
+          </div>
+          <span style={{fontSize:18,opacity:.85}}>→</span>
+        </button>
+
         {/* Share your tank (upload form) + Testimonials — moved to the bottom of the home page */}
         <div style={{marginTop:28}}>
           <TankShowcaseSection mode="upload" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
@@ -4398,10 +4602,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
 
   let list = products.filter(p=>{
     if(category!=="All" && p.category!==category) return false;
-    if(query){
-      const q=query.toLowerCase();
-      if(!p.name.toLowerCase().includes(q) && !p.category.toLowerCase().includes(q) && !(p.desc||"").toLowerCase().includes(q)) return false;
-    }
+    if(query && !smartMatch(query,p)) return false;
     const stk = p.stockCount ?? DEFAULT_STOCK;
     if(availability==="instock" && stk<=0) return false;
     if(availability==="limited" && (stk<=0 || stk>3)) return false;
@@ -4421,8 +4622,8 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
 
   // Live per-category result counts (reflect the current search term)
   const catCounts=useMemo(()=>{
-    const q=(query||"").trim().toLowerCase();
-    const match=p=>!q||p.name.toLowerCase().includes(q)||p.category.toLowerCase().includes(q)||(p.desc||"").toLowerCase().includes(q);
+    const q=(query||"").trim();
+    const match=p=>!q||smartMatch(q,p);
     const m={All:0}; CATEGORIES.forEach(c=>m[c]=0);
     products.forEach(p=>{ if(match(p)){ m.All++; if(m[p.category]!=null) m[p.category]++; } });
     return m;
@@ -6207,7 +6408,7 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
 
 /* ═══════════════════ DESKTOP TOP NAV (shown ≥1000px) ═══════════════════ */
 function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0}){
-  const links=[{id:"home",label:"Home"},{id:"shop",label:"Shop"},{id:"guides",label:"Care Guides"},{id:"request",label:"Request"}];
+  const links=[{id:"home",label:"Home"},{id:"shop",label:"Shop"},{id:"guides",label:"Care Guides"},{id:"tools",label:"Aqua Tools"},{id:"request",label:"Request"}];
   const active=page==="detail"?"shop":page==="checkout"?"cart":page==="auth"?"orders":page;
   const [walletOpen,setWalletOpen]=useState(false);
   const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
@@ -10591,6 +10792,7 @@ function NemoStore(){
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={()=>nav("home")}/>}
         {page==="request"  &&<RequestPage nav={nav} user={user} onSubmit={submitRequest}/>}
         {page==="guides"   &&<CareGuidesPage nav={nav} guides={guides} mediaCache={mediaCache}/>}
+        {page==="tools"    &&<AquaToolsPage nav={nav}/>}
         {page==="saved"    &&<SavedPage nav={nav} products={products} mediaCache={mediaCache} favorites={favorites} addToCart={addToCart} cartMap={cartMap} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} user={user} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="about"    &&<AboutPage nav={nav} settings={settings}/>}
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
