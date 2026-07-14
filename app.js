@@ -1442,6 +1442,83 @@ function addExpReviewedLocal(key, oid) {
 function userKey(u) {
   return u ? u.uid || "ph-" + normalizePhone(u.phone || "") : null;
 }
+const SEARCH_SYNONYMS = {
+  beta: "betta",
+  betta: "betta",
+  fighter: "betta",
+  fighterfish: "betta",
+  gupy: "guppy",
+  guppie: "guppy",
+  gappi: "guppy",
+  moli: "molly",
+  moly: "molly",
+  mollie: "molly",
+  playty: "platy",
+  plati: "platy",
+  goldfish: "gold fish",
+  gourami: "gourami",
+  gaurami: "gourami",
+  gouramy: "gourami",
+  tetra: "tetra",
+  titra: "tetra",
+  neontetra: "neon tetra",
+  angel: "angelfish",
+  anglefish: "angelfish",
+  shrimps: "shrimp",
+  cheery: "cherry",
+  plant: "plants",
+  pant: "plants",
+  anubia: "anubias",
+  tank: "tanks",
+  aquarium: "tanks",
+  acquarium: "tanks",
+  filter: "filter",
+  pump: "pump",
+  food: "feed",
+  foods: "feed",
+  flake: "feed",
+  flakes: "feed",
+  pellet: "feed",
+  pellets: "feed"
+};
+function _singular(w) {
+  return w.length > 3 && w.endsWith("es") ? w.slice(0, -2) : w.length > 2 && w.endsWith("s") ? w.slice(0, -1) : w;
+}
+function _editDist(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m || !n) return m || n;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+function _tokenHit(qt, text) {
+  if (text.includes(qt)) return true;
+  if (qt.length < 4) return false;
+  const tol = qt.length >= 7 ? 2 : 1;
+  for (const w of text.split(/[^a-z0-9]+/)) {
+    if (w && Math.abs(w.length - qt.length) <= tol && _editDist(qt, w) <= tol) return true;
+  }
+  return false;
+}
+function smartMatch(query, p) {
+  const raw = (query || "").toLowerCase().trim();
+  if (!raw) return true;
+  const text = ((p.name || "") + " " + (p.category || "") + " " + (p.desc || "")).toLowerCase();
+  if (text.includes(raw)) return true;
+  const toks = raw.split(/[^a-z0-9]+/).filter((t) => t && t !== "fish");
+  if (!toks.length) return text.includes(raw);
+  return toks.every((t) => {
+    const s = _singular(t), syn = SEARCH_SYNONYMS[t] || SEARCH_SYNONYMS[s];
+    return _tokenHit(t, text) || s !== t && _tokenHit(s, text) || syn && syn.split(" ").every((x) => _tokenHit(x, text));
+  });
+}
 function loadRecentSearches() {
   try {
     return JSON.parse(localStorage.getItem("nemo-recent-search") || "[]");
@@ -4537,6 +4614,116 @@ function ArrivedAliveGallery({ products = [] }) {
     /* @__PURE__ */ React.createElement("div", { style: { padding: "7px 9px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, "\u{1F420} ", ph.name), nameFor(ph.pid) && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9.5, color: C.textSub, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, nameFor(ph.pid)))
   ))), zoom && /* @__PURE__ */ React.createElement(Portal, null, /* @__PURE__ */ React.createElement("div", { onClick: () => setZoom(null), style: { position: "fixed", inset: 0, background: "rgba(4,16,20,.92)", zIndex: 9e3, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 } }, /* @__PURE__ */ React.createElement("img", { src: zoom.photo, alt: "", style: { maxWidth: "100%", maxHeight: "72vh", objectFit: "contain", borderRadius: 12 } }), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14, color: "white", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15 } }, "\u{1F420} ", zoom.name, " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#86efac", marginLeft: 6 } }, "\u2713 Verified buyer")), nameFor(zoom.pid) && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, opacity: 0.8, marginTop: 3 } }, nameFor(zoom.pid))), /* @__PURE__ */ React.createElement("button", { className: "press", onClick: () => setZoom(null), style: { position: "absolute", top: 18, right: 18, width: 42, height: 42, borderRadius: "50%", background: "rgba(255,255,255,.18)", border: "none", color: "white", fontSize: 22, cursor: "pointer" } }, "\xD7"))));
 }
+const SPECIES = {
+  betta: { n: "Betta (Male)", e: "\u{1F41F}", t: 2, w: "tropical", fin: true, size: 6, min: 20, eats: ["shrimp"] },
+  guppy: { n: "Guppy", e: "\u{1F420}", t: 0, w: "tropical", fin: true, size: 4, min: 40 },
+  molly: { n: "Molly", e: "\u{1F420}", t: 0, w: "tropical", size: 8, min: 60 },
+  platy: { n: "Platy", e: "\u{1F420}", t: 0, w: "tropical", size: 5, min: 40 },
+  swordtail: { n: "Swordtail", e: "\u{1F420}", t: 0, w: "tropical", size: 10, min: 80 },
+  neon: { n: "Neon Tetra", e: "\u2728", t: 0, w: "tropical", size: 3, min: 40 },
+  danio: { n: "Zebra Danio", e: "\u{1F993}", t: 1, w: "tropical", nip: true, size: 5, min: 40 },
+  angelfish: { n: "Angelfish", e: "\u{1F47C}", t: 1, w: "tropical", fin: true, size: 15, min: 120, eats: ["tinyfish", "shrimp"] },
+  gourami: { n: "Dwarf Gourami", e: "\u{1F41F}", t: 1, w: "tropical", fin: true, size: 8, min: 60 },
+  barb: { n: "Tiger Barb", e: "\u{1F42F}", t: 1, w: "tropical", nip: true, size: 7, min: 80 },
+  goldfish: { n: "Goldfish", e: "\u{1F9E1}", t: 0, w: "cold", size: 20, min: 100, eats: ["shrimp"] },
+  koi: { n: "Koi", e: "\u{1F38F}", t: 0, w: "cold", size: 60, min: 1e3, eats: ["shrimp", "tinyfish"] },
+  oscar: { n: "Oscar", e: "\u{1F63E}", t: 2, w: "tropical", size: 30, min: 300, eats: ["tinyfish", "smallfish", "shrimp"] },
+  cory: { n: "Corydoras", e: "\u{1F421}", t: 0, w: "tropical", size: 6, min: 60 },
+  shrimp: { n: "Cherry Shrimp", e: "\u{1F990}", t: 0, w: "tropical", size: 2, min: 20, prey: true },
+  snail: { n: "Snail", e: "\u{1F40C}", t: 0, w: "tropical", size: 3, min: 10 }
+};
+function pairVerdict(aKey, bKey) {
+  const A = SPECIES[aKey], B = SPECIES[bKey];
+  const pair = (x, y) => aKey === x && bKey === y || aKey === y && bKey === x;
+  if (aKey === bKey) {
+    if (aKey === "betta") return { v: 2, r: "Two male bettas will fight \u2014 keep only one male per tank." };
+    return { v: 0, r: "A group of the same species is fine \u2014 shoaling species prefer 6+." };
+  }
+  if (A.w !== B.w) return { v: 2, r: `${A.n} and ${B.n} need different water temperatures (cold-water vs tropical).` };
+  if (pair("betta", "guppy")) return { v: 2, r: "Bettas often attack colourful, long-finned guppies \u2014 risky mix." };
+  if (pair("betta", "gourami")) return { v: 2, r: "Bettas and gouramis are related and territorial toward each other." };
+  if (pair("betta", "angelfish")) return { v: 2, r: "Both are territorial; angelfish and bettas commonly clash." };
+  if (A.nip && B.fin || B.nip && A.fin) {
+    const nip = A.nip ? A : B, fin = A.nip ? B : A;
+    return { v: 2, r: `${nip.n} nips the long fins of ${fin.n}.` };
+  }
+  const eats = (X, Y) => (X.eats || []).some((k) => k === "shrimp" && Y.prey || k === "tinyfish" && Y.size <= 4 || k === "smallfish" && Y.size <= 10);
+  if (eats(A, B) || eats(B, A)) {
+    const pred = eats(A, B) ? A : B, prey = eats(A, B) ? B : A;
+    if (pred.n === "Betta (Male)" && prey.prey) return { v: 1, r: "Bettas may hunt shrimp \u2014 provide dense plants & hiding spots." };
+    return { v: 2, r: `${pred.n} will likely eat ${prey.n}.` };
+  }
+  if (A.t === 2 || B.t === 2) {
+    const ag = A.t === 2 ? A : B, other = A.t === 2 ? B : A;
+    return { v: 2, r: `${ag.n} is aggressive and will bully ${other.n}.` };
+  }
+  if (A.t === 1 || B.t === 1) return { v: 1, r: "Generally works in a spacious tank with hiding places \u2014 watch for chasing." };
+  if (Math.max(A.size, B.size) / Math.min(A.size, B.size) >= 4) return { v: 1, r: "Large size difference \u2014 the smaller fish may be stressed or eaten as it grows." };
+  return { v: 0, r: "Peaceful community fish \u2014 compatible in a properly sized tank." };
+}
+function AquaToolsPage({ nav }) {
+  const [sel, setSel] = useState([]);
+  const toggle = (k) => setSel((p) => p.includes(k) ? p.filter((x) => x !== k) : p.length >= 5 ? p : [...p, k]);
+  const [dim, setDim] = useState({ l: "", w: "", h: "" });
+  const liters = useMemo(() => {
+    const l = +dim.l, w = +dim.w, h = +dim.h;
+    return l > 0 && w > 0 && h > 0 ? Math.round(l * w * h / 1e3) : 0;
+  }, [dim]);
+  const [tankL, setTankL] = useState("");
+  const tl = Math.max(0, +tankL || 0);
+  const pairs = useMemo(() => {
+    const out = [];
+    for (let i = 0; i < sel.length; i++) for (let j = i; j < sel.length; j++) {
+      if (i === j && sel.length > 1) continue;
+      out.push({ a: sel[i], b: sel[j], ...pairVerdict(sel[i], sel[j]) });
+    }
+    return out.sort((x, y) => y.v - x.v);
+  }, [sel]);
+  const worst = pairs.length ? Math.max(...pairs.map((p) => p.v)) : -1;
+  const minTank = sel.length ? Math.max(...sel.map((k) => SPECIES[k].min)) : 0;
+  const VER = [{ c: "#16a34a", bg: "#ecfdf5", bd: "#a7f3d0", t: "\u2705 Compatible" }, { c: "#b45309", bg: "#fffbeb", bd: "#fde68a", t: "\u26A0\uFE0F Use caution" }, { c: "#dc2626", bg: "#fef2f2", bd: "#fecaca", t: "\u274C Not recommended" }];
+  const card = { background: C.card, borderRadius: 24, padding: "18px 16px", marginBottom: 16, boxShadow: "0 4px 20px rgba(15,23,42,0.05)" };
+  const H = ({ children }) => /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 4 } }, children);
+  const Sub = ({ children }) => /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.textSub, lineHeight: 1.5, marginBottom: 12 } }, children);
+  const numIn = (val, set, ph) => /* @__PURE__ */ React.createElement(
+    "input",
+    {
+      type: "number",
+      inputMode: "decimal",
+      min: "0",
+      value: val,
+      placeholder: ph,
+      onChange: (e) => set(e.target.value),
+      style: { width: "100%", boxSizing: "border-box", borderRadius: 16, border: `1.5px solid ${C.border}`, padding: "11px 12px", fontSize: 14, outline: "none", background: "#f8fafc", textAlign: "center" }
+    }
+  );
+  return /* @__PURE__ */ React.createElement("div", { className: "slide-up" }, /* @__PURE__ */ React.createElement("div", { className: "vh-head", style: { background: "linear-gradient(180deg,#f1f9fe 0%,#ffffff 100%)", padding: "52px 16px 18px", borderRadius: "0 0 28px 28px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("button", { className: "press", onClick: () => nav("home"), style: { background: "none", border: "none", fontSize: 20, color: C.textSub, cursor: "pointer" } }, "\u2190"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 22, fontWeight: 800, color: C.text } }, "\u{1F9EA} Aqua Tools"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.textSub } }, "Plan your tank like a pro \u2014 free tools from Nemo")))), /* @__PURE__ */ React.createElement("div", { className: "dt-read", style: { padding: "18px 16px 110px" } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement(H, null, "\u{1F420} Fish Compatibility Checker"), /* @__PURE__ */ React.createElement(Sub, null, "Select 2\u20135 species you'd like to keep together (tap again to unselect)."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 } }, Object.entries(SPECIES).map(([k, s]) => {
+    const on = sel.includes(k);
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: k,
+        className: "press",
+        onClick: () => toggle(k),
+        style: { background: on ? "#ffffff" : "#f8fafc", color: on ? C.text : C.textSub, border: `2px solid ${on ? C.accent : "transparent"}`, borderRadius: 99, padding: "8px 13px", fontSize: 12.5, fontWeight: on ? 700 : 600, fontFamily: "'Plus Jakarta Sans',sans-serif", cursor: "pointer", boxShadow: on ? "0 6px 18px rgba(14,165,233,.16)" : "none" }
+      },
+      s.e,
+      " ",
+      s.n
+    );
+  })), sel.length === 1 && (() => {
+    const solo = pairVerdict(sel[0], sel[0]);
+    return /* @__PURE__ */ React.createElement("div", { style: { background: VER[solo.v].bg, border: `1px solid ${VER[solo.v].bd}`, borderRadius: 14, padding: "11px 13px", fontSize: 12.5, color: VER[solo.v].c, fontWeight: 600, lineHeight: 1.55 } }, VER[solo.v].t.split(" ")[0], " ", /* @__PURE__ */ React.createElement("b", null, SPECIES[sel[0]].n, " \xD7 ", SPECIES[sel[0]].n, ":"), " ", solo.r);
+  })(), sel.length >= 2 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { background: VER[worst].bg, border: `1.5px solid ${VER[worst].bd}`, borderRadius: 14, padding: "12px 14px", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: VER[worst].c, marginBottom: 2 } }, VER[worst].t), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11.5, color: C.textSub } }, "Minimum recommended tank for this mix: ", /* @__PURE__ */ React.createElement("b", { style: { color: C.text } }, minTank, " L"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 7 } }, pairs.map((p, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", gap: 9, alignItems: "flex-start", background: "#f8fafc", border: `1px solid ${C.border}`, borderRadius: 12, padding: "9px 11px" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14, flexShrink: 0 } }, ["\u2705", "\u26A0\uFE0F", "\u274C"][p.v]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, lineHeight: 1.5, color: C.text } }, /* @__PURE__ */ React.createElement("b", null, SPECIES[p.a].n, " \xD7 ", SPECIES[p.b].n, ":"), " ", /* @__PURE__ */ React.createElement("span", { style: { color: C.textSub } }, p.r)))))), sel.length > 0 && /* @__PURE__ */ React.createElement("button", { className: "press", onClick: () => setSel([]), style: { marginTop: 12, background: "none", border: "none", color: C.textSub, fontSize: 12, fontWeight: 700, textDecoration: "underline", cursor: "pointer", fontFamily: "'Plus Jakarta Sans',sans-serif" } }, "Clear selection"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10.5, color: C.textSub, marginTop: 12, lineHeight: 1.5 } }, "General guidance \u2014 individual fish temperaments vary. Message us on WhatsApp for advice on your exact setup.")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement(H, null, "\u{1F4CF} Tank Volume Calculator"), /* @__PURE__ */ React.createElement(Sub, null, "Enter your tank's inside dimensions in centimetres."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 } }, numIn(dim.l, (v) => setDim((d) => ({ ...d, l: v })), "Length cm"), numIn(dim.w, (v) => setDim((d) => ({ ...d, w: v })), "Width cm"), numIn(dim.h, (v) => setDim((d) => ({ ...d, h: v })), "Height cm")), liters > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#f1f9fe", border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, color: C.text, lineHeight: 1.6 } }, "\u{1F4A7} Your tank holds about ", /* @__PURE__ */ React.createElement("b", { style: { color: C.primary, fontFamily: PRICE_FONT } }, liters, " litres"), " (~", Math.round(liters / 3.785), " US gallons). Actual water volume will be ~10\u201315% less after substrate & d\xE9cor.")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement(H, null, "\u2696\uFE0F Stocking, Heater & Filter Guide"), /* @__PURE__ */ React.createElement(Sub, null, "Enter your tank volume in litres (use the calculator above if unsure)."), /* @__PURE__ */ React.createElement("div", { style: { maxWidth: 200, marginBottom: 12 } }, numIn(tankL, setTankL, "Tank litres")), tl > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#f8fafc", border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px", fontSize: 12.5, lineHeight: 1.6, color: C.text } }, "\u{1F41F} ", /* @__PURE__ */ React.createElement("b", null, "Stocking:"), " roughly ", /* @__PURE__ */ React.createElement("b", null, Math.max(1, Math.round(tl / 2)), " cm of adult fish"), " total (1 cm per 2 L rule) \u2014 e.g. about ", /* @__PURE__ */ React.createElement("b", null, Math.max(1, Math.floor(tl / 8)), " guppy-sized fish"), ". Stock slowly, over weeks."), /* @__PURE__ */ React.createElement("div", { style: { background: "#f8fafc", border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px", fontSize: 12.5, lineHeight: 1.6, color: C.text } }, "\u{1F321}\uFE0F ", /* @__PURE__ */ React.createElement("b", null, "Heater:"), " ~", /* @__PURE__ */ React.createElement("b", null, Math.max(25, Math.round(tl)), " W"), " (1 W per litre; split into 2 heaters above 200 L)."), /* @__PURE__ */ React.createElement("div", { style: { background: "#f8fafc", border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px", fontSize: 12.5, lineHeight: 1.6, color: C.text } }, "\u{1F300} ", /* @__PURE__ */ React.createElement("b", null, "Filter:"), " flow rate of ", /* @__PURE__ */ React.createElement("b", null, tl * 4, "\u2013", tl * 5, " L/h"), " (4\u20135\xD7 tank volume per hour)."), /* @__PURE__ */ React.createElement("div", { style: { background: "#f8fafc", border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px", fontSize: 12.5, lineHeight: 1.6, color: C.text } }, "\u{1F4A6} ", /* @__PURE__ */ React.createElement("b", null, "Water changes:"), " ~", /* @__PURE__ */ React.createElement("b", null, Math.max(1, Math.round(tl * 0.25)), " L weekly"), " (25%)."))), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      className: "cta",
+      onClick: () => nav("shop"),
+      style: { width: "100%", background: C.coral, color: "white", border: "none", borderRadius: 99, padding: "15px", fontSize: 14, fontWeight: 800, fontFamily: "'Plus Jakarta Sans',sans-serif", textTransform: "uppercase", letterSpacing: ".05em", cursor: "pointer" }
+    },
+    "Shop fish, tanks & gear \u2192"
+  )));
+}
 function HomePage({ nav, products, mediaCache, addToCart, cartMap, setCategory, onSecretTap, setQuery, query, user, settings = {}, settingsReady = true, favorites = [], onFav, interestedSet = [], onInterest, orders = [], showcase = [], onShowcaseSubmit, restockSet = [], onRestock, walletPts = 0, testimonials = [], onTestimonialSubmit, hydrated = true }) {
   const featured = products.slice(0, 6);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -4545,9 +4732,9 @@ function HomePage({ nav, products, mediaCache, addToCart, cartMap, setCategory, 
   const related = useMemo(() => relatedProducts(products, recent, null, 6), [products, recent]);
   const recentlyViewed = useMemo(() => loadRecentlyViewed().map((id) => products.find((p) => p.id === id)).filter(Boolean).slice(0, 10), [products]);
   const suggestions = useMemo(() => {
-    const q = (query || "").trim().toLowerCase();
+    const q = (query || "").trim();
     if (q.length < 1) return [];
-    return products.filter((p) => (p.name || "").toLowerCase().includes(q) || (p.category || "").toLowerCase().includes(q)).slice(0, 6);
+    return products.filter((p) => smartMatch(q, p)).slice(0, 6);
   }, [query, products]);
   const [suggOpen, setSuggOpen] = useState(false);
   const wexp = user && settings.loyaltyEnabled !== false ? walletExpiryInfo(loadLoyaltyLocal(userKey(user)), settings) : null;
@@ -4809,7 +4996,17 @@ function HomePage({ nav, products, mediaCache, addToCart, cartMap, setCategory, 
     /* @__PURE__ */ React.createElement("span", { style: { fontSize: 28 } }, "\u{1F984}"),
     /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 14, fontWeight: 800, color: C.text, lineHeight: 1.2 } }, "Exotic Fish or Any Product on Request"),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.textSub, lineHeight: 1.4 } }, "Rare fish or any product? We'll source it for you")
-  )), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 28 } }, /* @__PURE__ */ React.createElement(TankShowcaseSection, { mode: "upload", showcase, user, settings, onSubmit: onShowcaseSubmit })), settings.testimonialsEnabled !== false && /* @__PURE__ */ React.createElement(TestimonialsSection, { testimonials, user, onSubmit: onTestimonialSubmit, onSignIn: () => nav("orders") }), /* @__PURE__ */ React.createElement(PincodeChecker, { settings }), /* @__PURE__ */ React.createElement("div", { className: "home-footer", style: { margin: "28px -16px 0", background: C.card, borderTop: `3px solid ${C.primary}`, padding: "26px 18px 22px" } }, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 22 } }, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 18, fontWeight: 800, color: C.text } }, STORE_NAME, " Aqua Store"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.textSub, marginTop: 3, lineHeight: 1.5, maxWidth: 300 } }, settings.tagline || "Hand-picked healthy fish, live plants & quality accessories \u2014 delivered with care across India.")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "26px 20px", marginBottom: 22, borderTop: `1px solid ${C.border}`, paddingTop: 22 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", color: C.text, marginBottom: 10 } }, "Shop"), CATEGORIES.map((cat) => /* @__PURE__ */ React.createElement(
+  )), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      className: "press",
+      onClick: () => nav("tools"),
+      style: { width: "100%", marginTop: 12, background: "linear-gradient(135deg,#0ea5e9,#0284c7)", border: "none", borderRadius: 18, padding: "16px", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", fontFamily: "'Plus Jakarta Sans',sans-serif", textAlign: "left", color: "white", boxShadow: "0 8px 24px rgba(14,165,233,.22)" }
+    },
+    /* @__PURE__ */ React.createElement("span", { style: { fontSize: 32, flexShrink: 0 } }, "\u{1F9EA}"),
+    /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, lineHeight: 1.2 } }, "Aqua Tools \u2014 free tank planner"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11.5, opacity: 0.9, marginTop: 2, lineHeight: 1.4 } }, "Fish compatibility checker \xB7 tank volume \xB7 heater & filter size \xB7 stocking guide")),
+    /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18, opacity: 0.85 } }, "\u2192")
+  ), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 28 } }, /* @__PURE__ */ React.createElement(TankShowcaseSection, { mode: "upload", showcase, user, settings, onSubmit: onShowcaseSubmit })), settings.testimonialsEnabled !== false && /* @__PURE__ */ React.createElement(TestimonialsSection, { testimonials, user, onSubmit: onTestimonialSubmit, onSignIn: () => nav("orders") }), /* @__PURE__ */ React.createElement(PincodeChecker, { settings }), /* @__PURE__ */ React.createElement("div", { className: "home-footer", style: { margin: "28px -16px 0", background: C.card, borderTop: `3px solid ${C.primary}`, padding: "26px 18px 22px" } }, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 22 } }, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 18, fontWeight: 800, color: C.text } }, STORE_NAME, " Aqua Store"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.textSub, marginTop: 3, lineHeight: 1.5, maxWidth: 300 } }, settings.tagline || "Hand-picked healthy fish, live plants & quality accessories \u2014 delivered with care across India.")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "26px 20px", marginBottom: 22, borderTop: `1px solid ${C.border}`, paddingTop: 22 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", color: C.text, marginBottom: 10 } }, "Shop"), CATEGORIES.map((cat) => /* @__PURE__ */ React.createElement(
     "button",
     {
       key: cat,
@@ -4891,10 +5088,7 @@ function ShopPage({ nav, products, mediaCache, query, setQuery, category, setCat
   const [sheet, setSheet] = useState(false);
   let list = products.filter((p) => {
     if (category !== "All" && p.category !== category) return false;
-    if (query) {
-      const q = query.toLowerCase();
-      if (!p.name.toLowerCase().includes(q) && !p.category.toLowerCase().includes(q) && !(p.desc || "").toLowerCase().includes(q)) return false;
-    }
+    if (query && !smartMatch(query, p)) return false;
     const stk = p.stockCount ?? DEFAULT_STOCK;
     if (availability === "instock" && stk <= 0) return false;
     if (availability === "limited" && (stk <= 0 || stk > 3)) return false;
@@ -4911,8 +5105,8 @@ function ShopPage({ nav, products, mediaCache, query, setQuery, category, setCat
   });
   const activeFilters = (availability !== "all" ? 1 : 0) + (priceMax < priceCap ? 1 : 0) + (sort !== "relevance" ? 1 : 0);
   const catCounts = useMemo(() => {
-    const q = (query || "").trim().toLowerCase();
-    const match = (p) => !q || p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q) || (p.desc || "").toLowerCase().includes(q);
+    const q = (query || "").trim();
+    const match = (p) => !q || smartMatch(q, p);
     const m = { All: 0 };
     CATEGORIES.forEach((c) => m[c] = 0);
     products.forEach((p) => {
@@ -6200,7 +6394,7 @@ function WalletModal({ open, onClose, points = 0, user, settings = {} }) {
   })))));
 }
 function DesktopNav({ page, nav, cartCount, user, settings = {}, onSecretTap, walletPts = 0 }) {
-  const links = [{ id: "home", label: "Home" }, { id: "shop", label: "Shop" }, { id: "guides", label: "Care Guides" }, { id: "request", label: "Request" }];
+  const links = [{ id: "home", label: "Home" }, { id: "shop", label: "Shop" }, { id: "guides", label: "Care Guides" }, { id: "tools", label: "Aqua Tools" }, { id: "request", label: "Request" }];
   const active = page === "detail" ? "shop" : page === "checkout" ? "cart" : page === "auth" ? "orders" : page;
   const [walletOpen, setWalletOpen] = useState(false);
   const wexp = user && settings.loyaltyEnabled !== false ? walletExpiryInfo(loadLoyaltyLocal(userKey(user)), settings) : null;
@@ -10280,7 +10474,7 @@ function NemoStore() {
     setReviewedSet(loadReviewedSet(userKey(u)));
     if (u.keep !== false) saveUser(u);
     nav("home");
-  }, onBack: () => nav("home") })), page === "auth" && /* @__PURE__ */ React.createElement(PhoneAuth, { mode: "signin", settings, onSuccess: handleLogin, onBack: () => nav("home") }), page === "request" && /* @__PURE__ */ React.createElement(RequestPage, { nav, user, onSubmit: submitRequest }), page === "guides" && /* @__PURE__ */ React.createElement(CareGuidesPage, { nav, guides, mediaCache }), page === "saved" && /* @__PURE__ */ React.createElement(SavedPage, { nav, products, mediaCache, favorites, addToCart, cartMap, onFav: toggleFav, interestedSet, onInterest: markInterested, user, restockSet, onRestock: handleRestock }), page === "about" && /* @__PURE__ */ React.createElement(AboutPage, { nav, settings }), typeof page === "string" && page.indexOf("policy-") === 0 && /* @__PURE__ */ React.createElement(PolicyPage, { nav, settings, which: page.slice(7) }), page === "admin-login" && /* @__PURE__ */ React.createElement(AdminLogin, { onSuccess: () => nav("admin"), onBack: () => nav("home"), settings }), page === "admin" && /* @__PURE__ */ React.createElement(
+  }, onBack: () => nav("home") })), page === "auth" && /* @__PURE__ */ React.createElement(PhoneAuth, { mode: "signin", settings, onSuccess: handleLogin, onBack: () => nav("home") }), page === "request" && /* @__PURE__ */ React.createElement(RequestPage, { nav, user, onSubmit: submitRequest }), page === "guides" && /* @__PURE__ */ React.createElement(CareGuidesPage, { nav, guides, mediaCache }), page === "tools" && /* @__PURE__ */ React.createElement(AquaToolsPage, { nav }), page === "saved" && /* @__PURE__ */ React.createElement(SavedPage, { nav, products, mediaCache, favorites, addToCart, cartMap, onFav: toggleFav, interestedSet, onInterest: markInterested, user, restockSet, onRestock: handleRestock }), page === "about" && /* @__PURE__ */ React.createElement(AboutPage, { nav, settings }), typeof page === "string" && page.indexOf("policy-") === 0 && /* @__PURE__ */ React.createElement(PolicyPage, { nav, settings, which: page.slice(7) }), page === "admin-login" && /* @__PURE__ */ React.createElement(AdminLogin, { onSuccess: () => nav("admin"), onBack: () => nav("home"), settings }), page === "admin" && /* @__PURE__ */ React.createElement(
     AdminHub,
     {
       products,
