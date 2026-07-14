@@ -9647,6 +9647,16 @@ function NemoStore() {
     }
   }, [products]);
   useEffect(() => {
+    try {
+      const pg = new URLSearchParams(window.location.search).get("page");
+      if (pg && ["shop", "orders", "cart", "guides", "tools"].includes(pg)) {
+        nav(pg);
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    } catch (e) {
+    }
+  }, []);
+  useEffect(() => {
     if (FB_OK) trackVisit();
     else window.addEventListener("nemo-fb-ready", trackVisit, { once: true });
     return () => window.removeEventListener("nemo-fb-ready", trackVisit);
