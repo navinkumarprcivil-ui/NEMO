@@ -1,17 +1,31 @@
 {
-  "name": "NEMO",
+  "id": "/",
+  "name": "Nemo Aqua Store",
   "short_name": "NEMO",
-  "description": "Premium aquarium fish, plants & accessories — delivered with care.",
+  "description": "Premium aquarium fish, plants & accessories — delivered with care across India.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["shopping", "lifestyle"],
+  "launch_handler": { "client_mode": "navigate-existing" },
   "icons": [
     { "src": "assets/favicon-192.png?v=3", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "assets/favicon-512.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "assets/favicon-192-maskable.png?v=3", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "assets/favicon-512-maskable.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "home.png", "sizes": "924x540", "type": "image/jpeg", "form_factor": "wide", "label": "Nemo Aqua Store home — shop fish, plants & accessories" },
+    { "src": "tablet-home.png", "sizes": "924x540", "type": "image/jpeg", "form_factor": "wide", "label": "Browse the catalog on any device" }
+  ],
+  "shortcuts": [
+    { "name": "Shop", "url": "/?page=shop", "icons": [{ "src": "assets/favicon-192.png?v=3", "sizes": "192x192" }] },
+    { "name": "My Orders", "url": "/?page=orders", "icons": [{ "src": "assets/favicon-192.png?v=3", "sizes": "192x192" }] }
   ]
 }

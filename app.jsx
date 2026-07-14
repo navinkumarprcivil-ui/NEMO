@@ -10141,6 +10141,16 @@ function NemoStore(){
       try{ window.history.replaceState({},"",window.location.pathname); }catch(e){}
     }
   },[products]);
+  // Page deep links (?page=shop|orders|cart|guides|tools) — used by PWA app shortcuts
+  useEffect(()=>{
+    try{
+      const pg=new URLSearchParams(window.location.search).get("page");
+      if(pg&&["shop","orders","cart","guides","tools"].includes(pg)){
+        nav(pg);
+        window.history.replaceState({},"",window.location.pathname);
+      }
+    }catch(e){}
+  },[]);
 
   // Visitor analytics: count one visit per session, once Firebase is ready
   useEffect(()=>{
