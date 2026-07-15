@@ -13,20 +13,20 @@
 <meta property="og:title" content="Nemo Aqua Store — Premium Aquarium Fish, Plants & Accessories"/>
 <meta property="og:description" content="Hand-picked healthy fish, live plants & quality accessories — delivered with care across India."/>
 <meta property="og:url" content="https://www.nemoaquastore.in/"/>
-<meta property="og:image" content="https://www.nemoaquastore.in/assets/share-banner.png"/>
-<meta property="og:image:secure_url" content="https://www.nemoaquastore.in/assets/share-banner.png"/>
-<meta property="og:image:type" content="image/png"/>
+<meta property="og:image" content="https://www.nemoaquastore.in/assets/share-banner.jpg"/>
+<meta property="og:image:secure_url" content="https://www.nemoaquastore.in/assets/share-banner.jpg"/>
+<meta property="og:image:type" content="image/jpeg"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
 <meta property="og:image:alt" content="Nemo Aqua Store"/>
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:title" content="Nemo Aqua Store"/>
 <meta name="twitter:description" content="Premium aquarium fish, plants & accessories — delivered with care."/>
-<meta name="twitter:image" content="https://www.nemoaquastore.in/assets/share-banner.png"/>
+<meta name="twitter:image" content="https://www.nemoaquastore.in/assets/share-banner.jpg"/>
 <link rel="canonical" href="https://www.nemoaquastore.in/"/>
 <!-- Structured data — tells Google this is an aquarium store -->
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Store","name":"Nemo Aqua Store","image":"https://www.nemoaquastore.in/assets/share-banner.png","logo":"https://www.nemoaquastore.in/assets/nemo-logo.png","url":"https://www.nemoaquastore.in/","description":"Premium aquarium fish, live plants, tanks & accessories — hand-picked, healthy livestock delivered with care across India.","telephone":"+919360921030","priceRange":"₹₹","areaServed":"IN","address":{"@type":"PostalAddress","addressLocality":"Salem","addressRegion":"Tamil Nadu","addressCountry":"IN"}}
+{"@context":"https://schema.org","@type":"Store","name":"Nemo Aqua Store","image":"https://www.nemoaquastore.in/assets/share-banner.jpg","logo":"https://www.nemoaquastore.in/assets/nemo-logo.png","url":"https://www.nemoaquastore.in/","description":"Premium aquarium fish, live plants, tanks & accessories — hand-picked, healthy livestock delivered with care across India.","telephone":"+919360921030","priceRange":"₹₹","areaServed":"IN","address":{"@type":"PostalAddress","addressLocality":"Salem","addressRegion":"Tamil Nadu","addressCountry":"IN"}}
 </script>
 <!-- Organization logo — this is the image Google may show beside the site name in search results -->
 <script type="application/ld+json">
@@ -53,8 +53,23 @@
 <link rel="preload" as="image" href="assets/nemo-logo.png" fetchpriority="high"/>
 <!-- Preload the precompiled bundle so it's ready the moment the page is interactive -->
 <link rel="preload" href="app.js" as="fetch" crossorigin/>
-<!-- Analytics (optional): uncomment & set your domain to track visits with Plausible -->
-<!-- <script defer data-domain="nemoaquastore.vercel.app" src="https://plausible.io/js/script.js"></script> -->
+<!-- ── Google Analytics 4 (traffic + acquisition) ──────────────────────────────
+     TO ACTIVATE: create a GA4 property at analytics.google.com, copy your
+     Measurement ID (looks like G-ABC1234XYZ) and paste it below between the
+     quotes. Until you do, nothing loads and no data is sent. -->
+<script>
+  (function(){
+    var GA_ID = ""; // ← paste your GA4 Measurement ID here, e.g. "G-ABC1234XYZ"
+    if(!GA_ID) return;
+    var s=document.createElement("script"); s.async=true;
+    s.src="https://www.googletagmanager.com/gtag/js?id="+GA_ID;
+    document.head.appendChild(s);
+    window.dataLayer=window.dataLayer||[];
+    window.gtag=function(){ dataLayer.push(arguments); };
+    gtag("js", new Date());
+    gtag("config", GA_ID);
+  })();
+</script>
 <!-- Speed: DNS pre-connect for every external CDN we use -->
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -176,7 +191,7 @@
     if(typeof React==="undefined" || typeof ReactDOM==="undefined"){ return setTimeout(function(){ run(code); }, 30); }
     ran=true;
     var s=document.createElement("script");
-    s.text=code+"\n;try{ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(NemoStore));}catch(e){console.error('render failed',e);}";
+    s.text=code+"\n;try{var __EB=(typeof ErrorBoundary!=='undefined')?ErrorBoundary:React.Fragment;ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(__EB,null,React.createElement(NemoStore)));}catch(e){console.error('render failed',e);}";
     document.body.appendChild(s);
     fadeSplash();
   }

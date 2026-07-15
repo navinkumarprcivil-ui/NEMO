@@ -10001,6 +10001,26 @@ function RequestPage({nav,user,onSubmit,myRequests}){
   );
 }
 
+/* ═══════════════════ ERROR BOUNDARY ═══════════════════ */
+/* Catches any render/runtime error in the app tree and shows a friendly
+   recovery screen instead of a blank white page. */
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err){ return { err }; }
+  componentDidCatch(err, info){ try{ console.error("App crashed:", err, info); }catch(e){} }
+  render(){
+    if(!this.state.err) return this.props.children;
+    return (
+      <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,padding:"32px 24px",textAlign:"center",fontFamily:"'Plus Jakarta Sans',system-ui,sans-serif",background:"#ffffff",color:C.text}}>
+        <div style={{fontSize:52}}>🐠</div>
+        <h1 style={{fontSize:22,fontWeight:800,margin:0}}>Something went wrong</h1>
+        <p style={{fontSize:14,color:"#64748b",maxWidth:340,lineHeight:1.5,margin:0}}>The app hit an unexpected error. Reloading usually fixes it. If it keeps happening, message us on WhatsApp and we'll sort it out.</p>
+        <button onClick={()=>{ try{ location.reload(); }catch(e){} }} style={{background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"14px 28px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",boxShadow:"0 6px 20px rgba(14,165,233,.35)"}}>Reload</button>
+      </div>
+    );
+  }
+}
+
 /* ═══════════════════ ROOT APP ═══════════════════ */
 function NemoStore(){
   const [page,setPage]             = useState("home");

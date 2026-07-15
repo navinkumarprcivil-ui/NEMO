@@ -8,8 +8,8 @@
 - Single-file React app. Source of truth: **`app.jsx`** (~10.8k lines, in-browser React via `React.createElement`).
 - The site loads a **precompiled `app.js`** (fast path); `app.jsx` is only a fallback.
 - **After ANY change to `app.jsx`, rebuild `app.js`:**
-  `npx esbuild app.jsx --loader:.jsx=jsx --jsx=transform --bundle=false --outfile=app.js`
-  then `node --check app.js`. Commit **both** files.
+  `npx esbuild app.jsx --loader:.jsx=jsx --jsx=transform --bundle=false --minify --outfile=app.js`
+  then `node --check app.js`. Commit **both** files. (Keep `--minify` — the shipped bundle is minified.)
 - Bump the service-worker cache in `sw.js` (`nemo-vNN`) on releases so clients refresh.
 - Firebase rules live in `database.rules.json` (must be published in Firebase console separately).
 - Theme = "PRISTINE AQUA" (pure white, Plus Jakarta Sans, cyan `#0ea5e9` accents, coral `#f43f5e` CTAs). Central token object `const C` at top of `app.jsx`.
