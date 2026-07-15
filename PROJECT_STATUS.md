@@ -8,8 +8,8 @@
 - Single-file React app. Source of truth: **`app.jsx`** (~10.8k lines, in-browser React via `React.createElement`).
 - The site loads a **precompiled `app.js`** (fast path); `app.jsx` is only a fallback.
 - **After ANY change to `app.jsx`, rebuild `app.js`:**
-  `npx esbuild app.jsx --loader:.jsx=jsx --jsx=transform --bundle=false --outfile=app.js`
-  then `node --check app.js`. Commit **both** files.
+  `npx esbuild app.jsx --loader:.jsx=jsx --jsx=transform --bundle=false --minify --outfile=app.js`
+  then `node --check app.js`. Commit **both** files. (Keep `--minify` — the shipped bundle is minified.)
 - Bump the service-worker cache in `sw.js` (`nemo-vNN`) on releases so clients refresh.
 - Firebase rules live in `database.rules.json` (must be published in Firebase console separately).
 - Theme = "PRISTINE AQUA" (pure white, Plus Jakarta Sans, cyan `#0ea5e9` accents, coral `#f43f5e` CTAs). Central token object `const C` at top of `app.jsx`.
@@ -24,6 +24,7 @@ Work on branch `claude/nemo-aqua-store-enhancement-74a3o1` → commit → push �
 - Smart search (typo/synonym/plural tolerant — "beta"→Betta). Aqua Tools page (fish compatibility checker + tank/heater/filter/stocking calculators).
 - Interactive UI: 3D card tilt+spotlight, magnetic CTAs, fly-to-cart, reveal-on-scroll, staggered grids, spring-count prices.
 - Mini-cart drawer + Zepto-style floating cart bar (free-delivery nudge).
+- Abandoned-cart recovery: cart persists across sessions (localStorage); a signed-in shopper's open cart syncs to Firebase (`abandonedCarts/<uid>`) and shows in Admin → Orders with a one-tap WhatsApp nudge + Dismiss. **Requires publishing the updated `database.rules.json`** (new `abandonedCarts` node) or writes are denied and the list stays empty.
 - Flipkart-style rating: tap-to-rate in order list + per-aspect ratings (condition/packing/delivery/value).
 - Cinematic splash (wordmark logo, bubbles). Ambient fish-canvas wallpaper (betta+clownfish desktop-only, snails+bubbles everywhere).
 - PWA store-ready: manifest (id, screenshots, shortcuts, categories), `/.well-known/assetlinks.json` (pkg `in.nemoaquastore.app`), `/privacy.html`.
