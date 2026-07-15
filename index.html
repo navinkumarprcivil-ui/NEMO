@@ -59,7 +59,7 @@
      quotes. Until you do, nothing loads and no data is sent. -->
 <script>
   (function(){
-    var GA_ID = ""; // ← paste your GA4 Measurement ID here, e.g. "G-ABC1234XYZ"
+    var GA_ID = "G-918W409NKT"; // GA4 Measurement ID
     if(!GA_ID) return;
     var s=document.createElement("script"); s.async=true;
     s.src="https://www.googletagmanager.com/gtag/js?id="+GA_ID;
@@ -68,6 +68,7 @@
     window.gtag=function(){ dataLayer.push(arguments); };
     gtag("js", new Date());
     gtag("config", GA_ID);
+    window.__GA_ACTIVE = GA_ID; // signals the app so it never double-loads GA from Admin → Settings
   })();
 </script>
 <!-- Speed: DNS pre-connect for every external CDN we use -->

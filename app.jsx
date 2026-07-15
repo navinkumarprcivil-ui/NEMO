@@ -1379,7 +1379,7 @@ function trackFunnel(step){
 /* Optional Google Analytics 4 — only loads if the admin set a Measurement ID (G-XXXX) in Settings. */
 let GA_DONE=false;
 function injectGA(gaId){
-  if(GA_DONE || !gaId || !/^G-/.test(gaId)) return; GA_DONE=true;
+  if(GA_DONE || (typeof window!=="undefined" && window.__GA_ACTIVE) || !gaId || !/^G-/.test(gaId)) return; GA_DONE=true;
   const s=document.createElement("script"); s.async=true; s.src="https://www.googletagmanager.com/gtag/js?id="+encodeURIComponent(gaId); document.head.appendChild(s);
   window.dataLayer=window.dataLayer||[]; function gtag(){ window.dataLayer.push(arguments); } window.gtag=gtag; gtag("js",new Date()); gtag("config",gaId);
 }
@@ -7996,7 +7996,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               const cell=(n,l)=>(<div style={{flex:1,textAlign:"center"}}><div style={{fontFamily:PRICE_FONT,fontSize:22,fontWeight:800}}>{n}</div><div style={{fontSize:10.5,opacity:.85,fontWeight:600}}>{l}</div></div>);
               return <div style={{display:"flex",gap:8}}>{cell(d[today]||0,"Today")}{cell(last7,"Last 7 days")}{cell((visitStats&&visitStats.total)||0,"All time")}</div>;
             })()}
-            <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {settings.gaId?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
+            <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {(settings.gaId||(typeof window!=="undefined"&&window.__GA_ACTIVE))?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
           </div>
           {/* Behaviour insights — funnel, most viewed/added, top searches */}
           <AdminInsights stats={visitStats} products={products}/>
