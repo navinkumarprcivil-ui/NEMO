@@ -2766,8 +2766,9 @@ function RatingSummary({reviews,avgRating}){
   );
 }
 
-function ReviewForm({onSubmit,onCancel,user,orderId:oid}){
-  const [rating,setRating]   = useState(0);
+function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
+  const [rating,setRating]   = useState(preset||0);
+  const [aspects,setAspects] = useState({}); // optional per-aspect stars: health/packing/speed/value
   const [comment,setComment] = useState("");
   const [photos,setPhotos]   = useState([]); // array of compressed JPEG data-URLs
   const [photoBusy,setPhotoBusy]=useState(false);
@@ -2797,7 +2798,8 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid}){
   const submit=async()=>{
     if(!validate())return;
     setSaving(true);
-    await onSubmit({id:uid("rev"),name:name||"Customer",rating,comment:comment.trim(),photos,date:new Date().toISOString(),orderId:oid,verified:true});
+    const asp={}; Object.keys(aspects).forEach(k=>{ if(aspects[k]>0) asp[k]=aspects[k]; });
+    await onSubmit({id:uid("rev"),name:name||"Customer",rating,comment:comment.trim(),photos,date:new Date().toISOString(),orderId:oid,verified:true,...(Object.keys(asp).length?{aspects:asp}:{})});
     setSaving(false);
   };
 
@@ -2816,6 +2818,17 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid}){
           {rating===1?"😐 Poor":rating===2?"🙁 Fair":rating===3?"😊 Good":rating===4?"😄 Great":rating===5?"🤩 Excellent":""}
         </div>
         {errs.rating&&<div style={{fontSize:11,color:C.danger,fontWeight:600}}>{errs.rating}</div>}
+      </div>
+
+      {/* Aspect ratings — optional, Flipkart-style */}
+      <div style={{marginBottom:16,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px"}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>Rate the details <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+        {[["health","🐟 Fish / Product Condition"],["packing","📦 Packing Quality"],["speed","🚚 Delivery Speed"],["value","💰 Value for Money"]].map(([k,label])=>(
+          <div key={k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
+            <span style={{fontSize:12.5,color:C.text,fontWeight:600}}>{label}</span>
+            <ReviewStars value={aspects[k]||0} onChange={v=>setAspects(a=>({...a,[k]:v}))} size={19}/>
+          </div>
+        ))}
       </div>
 
       {/* Comment */}
@@ -3456,10 +3469,17 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     {delivered && prod && (
                       already
                         ? <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ Reviewed</span>
-                        : <button className="press" onClick={()=>onWriteReview(prod, o.id)}
-                            style={{background:C.accentLight,border:`1px solid ${C.accent}`,color:C.primary,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
-                            ★ Review
-                          </button>
+                        : (
+                          <div style={{flexShrink:0,textAlign:"center"}}>
+                            <div style={{display:"flex",gap:2}}>
+                              {[1,2,3,4,5].map(st=>(
+                                <button key={st} className="press" onClick={()=>onWriteReview(prod,st)} aria-label={`Rate ${st} star${st>1?"s":""}`}
+                                  style={{background:"none",border:"none",padding:"2px 1px",fontSize:19,lineHeight:1,color:"#d1d5db",cursor:"pointer"}}>★</button>
+                              ))}
+                            </div>
+                            <div style={{fontSize:9.5,color:C.textSub,fontWeight:600,marginTop:1}}>Tap to rate</div>
+                          </div>
+                        )
                     )}
                   </div>
                 );
@@ -4934,7 +4954,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
   );
 }
 
-function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,prevPage="shop",user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
+function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,prevPage="shop",user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
   const [qty,setQty]           = useState(1);
   const [selVarId,setSelVarId] = useState(null);
   const [tab,setTab]           = useState("desc");
@@ -5175,7 +5195,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             )}
 
             {/* Review form */}
-            {showForm&&<ReviewForm onSubmit={handleNewReview} onCancel={()=>setShowForm(false)} user={user} orderId={null}/>}
+            {showForm&&<ReviewForm onSubmit={handleNewReview} onCancel={()=>setShowForm(false)} user={user} orderId={null} preset={autoReview?reviewPreset:0}/>}
 
             {/* Reviews list */}
             {loadingRev?(
@@ -5206,6 +5226,13 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                     <ReviewStars value={r.rating} size={13}/>
                   </div>
                   <div style={{fontSize:13,color:C.textSub,lineHeight:1.65,paddingLeft:44}}>{r.comment}</div>
+                  {r.aspects&&(
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,paddingLeft:44,marginTop:7}}>
+                      {[["health","🐟 Condition"],["packing","📦 Packing"],["speed","🚚 Delivery"],["value","💰 Value"]].map(([k,label])=>r.aspects[k]?(
+                        <span key={k} style={{fontSize:10.5,fontWeight:700,color:C.textSub,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:20,padding:"3px 9px"}}>{label} <span style={{color:"#f59e0b"}}>{"★".repeat(r.aspects[k])}</span></span>
+                      ):null)}
+                    </div>
+                  )}
                   {/* Customer photos */}
                   {Array.isArray(r.photos)&&r.photos.length>0&&(
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingLeft:44,marginTop:10}}>
@@ -9989,6 +10016,7 @@ function NemoStore(){
   const [authReturn,setAuthReturn] = useState("orders"); // where to go after login
   const [reviewedSet,setReviewedSet] = useState([]);
   const [reviewIntent,setReviewIntent] = useState(null);
+  const [reviewPreset,setReviewPreset]   = useState(0);
   const [favorites,setFavorites]   = useState([]);
   const [interestedSet,setInterestedSet] = useState([]);
   const [interestCounts,setInterestCounts] = useState({});
@@ -10273,7 +10301,7 @@ function NemoStore(){
     }catch(e){ if(String(e?.message)!=="redirecting") showToast("Sign-in failed — try again","error"); }
   };
   const markReviewed=(pid)=>{ if(user){ setReviewedSet(addReviewedLocal(userKey(user),pid)); } };
-  const startReview=(prod)=>{ setReviewIntent(prod.id); nav("detail",prod); };
+  const startReview=(prod,preset=0)=>{ setReviewIntent(prod.id); setReviewPreset(Number(preset)||0); nav("detail",prod); };
   const toggleFav=(prod)=>{
     if(!user){ goAuth("home"); showToast("Sign in to save items"); return; }
     const on=!favorites.includes(prod.id);
@@ -10791,7 +10819,7 @@ function NemoStore(){
         <div key={page} className="page-swap">
         {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
-        {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
+        {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings}/>}
         {page==="checkout" &&(user
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders}/>
@@ -10811,14 +10839,24 @@ function NemoStore(){
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
         </div>
       </div>
-      {/* Floating cart bar — quick path to the mini-cart from any browsing page */}
-      {!isAdminPage && cart.length>0 && !["cart","checkout","auth","detail"].includes(page) && (
-        <button className="press slide-up" onClick={()=>setMiniOpen(true)}
-          style={{position:"absolute",left:"50%",transform:"translateX(-50%)",bottom:"calc(76px + env(safe-area-inset-bottom))",zIndex:90,width:"calc(100% - 28px)",maxWidth:440,background:C.coral,color:"white",border:"none",borderRadius:99,padding:"13px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 12px 32px rgba(244,63,94,.36)",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-          <span style={{fontSize:13.5,fontWeight:800}}>🛒 {cartCount} item{cartCount!==1?"s":""} · ₹{cartTotal}</span>
-          <span style={{fontSize:13.5,fontWeight:800}}>View Cart →</span>
-        </button>
-      )}
+      {/* Floating cart bar — Zepto-style: free-delivery nudge + cart chip, opens the mini-cart */}
+      {!isAdminPage && cart.length>0 && !["cart","checkout","auth","detail"].includes(page) && (()=>{
+        const thr=Number(settings.freeDeliveryThreshold||0);
+        const left=thr>0?Math.max(0,thr-cartTotal):0;
+        return(
+          <button className="press slide-up" onClick={()=>setMiniOpen(true)}
+            style={{position:"absolute",left:"50%",transform:"translateX(-50%)",bottom:"calc(76px + env(safe-area-inset-bottom))",zIndex:90,width:"calc(100% - 28px)",maxWidth:440,background:"#0f172a",color:"white",border:"none",borderRadius:99,padding:"7px 8px 7px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,boxShadow:"0 14px 34px rgba(15,23,42,.35)",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+            <span style={{fontSize:12.5,fontWeight:700,textAlign:"left",lineHeight:1.3,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {left>0?<>🚚 Add <b style={{color:"#fda4af"}}>₹{left}</b> more for free delivery</>
+               :thr>0?<>🎉 Free delivery unlocked!</>
+               :<>🛒 {cartCount} item{cartCount!==1?"s":""} in your cart</>}
+            </span>
+            <span style={{flexShrink:0,display:"inline-flex",alignItems:"center",gap:7,background:C.coral,borderRadius:99,padding:"9px 16px",fontSize:12.5,fontWeight:800,boxShadow:"0 6px 16px rgba(244,63,94,.4)"}}>
+              🛒 Cart · {cartCount}<span style={{opacity:.9}}>₹{cartTotal}</span>
+            </span>
+          </button>
+        );
+      })()}
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
       {!isAdminPage&&<MiniCart open={miniOpen} onClose={()=>setMiniOpen(false)} cart={cart} total={cartTotal} updateQty={updateQty} nav={nav} settings={settings}/>}
     </div>
