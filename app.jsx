@@ -1379,7 +1379,7 @@ function trackFunnel(step){
 /* Optional Google Analytics 4 — only loads if the admin set a Measurement ID (G-XXXX) in Settings. */
 let GA_DONE=false;
 function injectGA(gaId){
-  if(GA_DONE || !gaId || !/^G-/.test(gaId)) return; GA_DONE=true;
+  if(GA_DONE || (typeof window!=="undefined" && window.__GA_ACTIVE) || !gaId || !/^G-/.test(gaId)) return; GA_DONE=true;
   const s=document.createElement("script"); s.async=true; s.src="https://www.googletagmanager.com/gtag/js?id="+encodeURIComponent(gaId); document.head.appendChild(s);
   window.dataLayer=window.dataLayer||[]; function gtag(){ window.dataLayer.push(arguments); } window.gtag=gtag; gtag("js",new Date()); gtag("config",gaId);
 }
@@ -7792,7 +7792,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   const [editGuide,setEditGuide]=useState(null);
   const [guideFormOpen,setGuideFormOpen]=useState(false);
@@ -7996,10 +7996,44 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               const cell=(n,l)=>(<div style={{flex:1,textAlign:"center"}}><div style={{fontFamily:PRICE_FONT,fontSize:22,fontWeight:800}}>{n}</div><div style={{fontSize:10.5,opacity:.85,fontWeight:600}}>{l}</div></div>);
               return <div style={{display:"flex",gap:8}}>{cell(d[today]||0,"Today")}{cell(last7,"Last 7 days")}{cell((visitStats&&visitStats.total)||0,"All time")}</div>;
             })()}
-            <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {settings.gaId?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
+            <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {(settings.gaId||(typeof window!=="undefined"&&window.__GA_ACTIVE))?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
           </div>
           {/* Behaviour insights — funnel, most viewed/added, top searches */}
           <AdminInsights stats={visitStats} products={products}/>
+          {/* ── Abandoned carts — shoppers who left items behind; nudge them on WhatsApp ── */}
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:abandonedCarts.length?12:6}}>
+              <span style={{fontSize:16}}>🛒</span>
+              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Abandoned Carts</span>
+              {abandonedCarts.length>0&&<span style={{marginLeft:"auto",background:C.coral,color:"white",borderRadius:20,padding:"2px 9px",fontSize:11,fontWeight:800}}>{abandonedCarts.length}</span>}
+            </div>
+            {!abandonedCarts.length ? (
+              <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.5}}>No open carts right now. When a signed-in shopper leaves items behind, they appear here with a one-tap WhatsApp nudge.</div>
+            ) : abandonedCarts.map(c=>{
+              const mins=Math.max(1,Math.round((Date.now()-(c.updatedAt||0))/60000));
+              const ago = mins<60?`${mins}m ago` : mins<1440?`${Math.round(mins/60)}h ago` : `${Math.round(mins/1440)}d ago`;
+              const names=(c.items||[]).map(i=>`${i.qty}× ${i.name}`).join(", ");
+              const first=c.name?c.name.split(" ")[0]:"there";
+              const msg=`Hi ${first}! 👋 You left ${c.count} item${c.count!==1?"s":""} in your Nemo Aqua Store cart — ${names}. They're still available 🐠 Complete your order here: https://www.nemoaquastore.in/ — reply here if you need any help!`;
+              const wa = c.phone ? `https://wa.me/91${c.phone}?text=${encodeURIComponent(msg)}` : null;
+              return (
+                <div key={c.uid} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 12px",marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+                    <span style={{fontWeight:800,fontSize:13.5,color:C.text}}>{c.name||"Customer"}</span>
+                    <span style={{fontSize:11,color:C.textSub,whiteSpace:"nowrap"}}>{ago}</span>
+                  </div>
+                  <div style={{fontSize:11.5,color:C.textSub,marginTop:2}}>{c.phone?`📱 +91 ${c.phone}`:c.email?`✉️ ${c.email}`:"no contact"} · {c.count} item{c.count!==1?"s":""} · ₹{Number(c.value||0).toLocaleString("en-IN")}</div>
+                  <div style={{fontSize:12,color:C.text,marginTop:6,lineHeight:1.45}}>{names}</div>
+                  <div style={{display:"flex",gap:8,marginTop:10}}>
+                    {wa
+                      ? <a href={wa} target="_blank" rel="noopener" style={{flex:1,textAlign:"center",background:"#25965a",color:"white",borderRadius:10,padding:"9px 12px",fontSize:12.5,fontWeight:800,textDecoration:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Nudge on WhatsApp</a>
+                      : <span style={{flex:1,textAlign:"center",background:"#f1f5f9",color:C.textSub,borderRadius:10,padding:"9px 12px",fontSize:12,fontWeight:700}}>No phone — email {c.email||"n/a"}</span>}
+                    <button className="press" onClick={()=>onDismissAbandoned&&onDismissAbandoned(c.uid)} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 12px",fontSize:12.5,fontWeight:700,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Dismiss</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           {/* DOA insights — loss patterns by species × zone × season */}
           <DoaInsights orders={orders}/>
           {/* Payment destination — glance-check that money still routes to you */}
@@ -10001,6 +10035,26 @@ function RequestPage({nav,user,onSubmit,myRequests}){
   );
 }
 
+/* ═══════════════════ ERROR BOUNDARY ═══════════════════ */
+/* Catches any render/runtime error in the app tree and shows a friendly
+   recovery screen instead of a blank white page. */
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err){ return { err }; }
+  componentDidCatch(err, info){ try{ console.error("App crashed:", err, info); }catch(e){} }
+  render(){
+    if(!this.state.err) return this.props.children;
+    return (
+      <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,padding:"32px 24px",textAlign:"center",fontFamily:"'Plus Jakarta Sans',system-ui,sans-serif",background:"#ffffff",color:C.text}}>
+        <div style={{fontSize:52}}>🐠</div>
+        <h1 style={{fontSize:22,fontWeight:800,margin:0}}>Something went wrong</h1>
+        <p style={{fontSize:14,color:"#64748b",maxWidth:340,lineHeight:1.5,margin:0}}>The app hit an unexpected error. Reloading usually fixes it. If it keeps happening, message us on WhatsApp and we'll sort it out.</p>
+        <button onClick={()=>{ try{ location.reload(); }catch(e){} }} style={{background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"14px 28px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",boxShadow:"0 6px 20px rgba(14,165,233,.35)"}}>Reload</button>
+      </div>
+    );
+  }
+}
+
 /* ═══════════════════ ROOT APP ═══════════════════ */
 function NemoStore(){
   const [page,setPage]             = useState("home");
@@ -10028,7 +10082,10 @@ function NemoStore(){
   const [restockSet,setRestockSet] = useState(()=>loadRestockLocal().map(x=>x.pid));
   const [selProduct,setSelProduct] = useState(null);
   const [walletPts,setWalletPts]   = useState(0);
-  const [cart,setCart]             = useState([]);
+  // Cart persists across sessions (localStorage) — a returning shopper finds their items waiting,
+  // which itself recovers otherwise-abandoned carts.
+  const [cart,setCart]             = useState(()=>{ try{ return JSON.parse(localStorage.getItem("nemo-cart")||"[]")||[]; }catch(e){ return []; } });
+  const [abandonedCarts,setAbandonedCarts] = useState([]); // admin view of shoppers who left items behind
   const [query,setQuery]           = useState("");
   const [category,setCategory]     = useState("All");
   const [toast,setToast]           = useState(null);
@@ -10274,6 +10331,54 @@ function NemoStore(){
       const max=Math.min(i.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
       return {...i,qty:Math.min(max,Math.max(0,i.qty+delta))};
     }).filter(i=>i.qty>0));
+
+  // Persist the cart so it survives reloads / return visits.
+  useEffect(()=>{ try{ localStorage.setItem("nemo-cart",JSON.stringify(cart)); }catch(e){} },[cart]);
+
+  // ── Abandoned-cart capture ──
+  // While a signed-in shopper has items in their cart, mirror a lightweight snapshot to Firebase
+  // (debounced) so the owner can gently nudge them. Keyed by the Firebase auth uid (satisfies the
+  // security rule), and cleared automatically once the cart empties or an order is placed.
+  useEffect(()=>{
+    if(!(FB_OK && FB_AUTH && FB_AUTH.currentUser && FB_DB)) return;
+    const auid = FB_AUTH.currentUser.uid;
+    const ref = FB_DB.ref("abandonedCarts/"+auid);
+    const t = setTimeout(()=>{
+      if(!cart.length){ ref.remove().catch(()=>{}); return; }
+      const phone = normalizePhone(user?.phone||"");
+      const email = (user?.email||"").slice(0,80);
+      if(!phone && !email) return; // not actionable without a way to reach them
+      ref.set({
+        uid:auid,
+        name:(user?.name||"Customer").slice(0,60),
+        phone, email,
+        items: cart.slice(0,20).map(i=>({name:(i.name||"").slice(0,60),qty:i.qty,price:i.price,variantLabel:i.variantLabel||null})),
+        count: cart.reduce((a,i)=>a+i.qty,0),
+        value: cart.reduce((a,i)=>a+(i.price||0)*i.qty,0),
+        updatedAt: Date.now(),
+      }).catch(()=>{});
+    }, 1500);
+    return ()=>clearTimeout(t);
+  },[cart,user,fbReady]);
+
+  // ADMIN: live listener on abandoned carts (recent, still-open shopping carts).
+  useEffect(()=>{
+    if(page!=="admin") return;
+    if(!(FB_OK && FB_DB)){ setAbandonedCarts([]); return; }
+    const ref=FB_DB.ref("abandonedCarts");
+    const cb=ref.on("value",snap=>{
+      const v=snap.val(); const cutoff=Date.now()-30*86400000; // ignore anything older than 30 days
+      const arr=v?Object.values(v).filter(c=>c&&c.items&&c.updatedAt>cutoff).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)):[];
+      setAbandonedCarts(arr);
+    },err=>{ setAbandonedCarts([]); });
+    return ()=>ref.off("value",cb);
+  },[page,fbReady]);
+
+  // Owner dismisses a lead after contacting them (allowed by the admin branch of the security rule).
+  const dismissAbandoned=(auid)=>{
+    if(FB_OK && FB_DB){ try{ FB_DB.ref("abandonedCarts/"+auid).remove().catch(()=>{}); }catch(e){} }
+    setAbandonedCarts(prev=>prev.filter(c=>c.uid!==auid));
+  };
 
   // Auth
   const handleLogin=(u)=>{
@@ -10835,7 +10940,7 @@ function NemoStore(){
         {page==="about"    &&<AboutPage nav={nav} settings={settings}/>}
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
-        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
+        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
         </div>
       </div>
