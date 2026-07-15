@@ -51,6 +51,15 @@
       }
     },
 
+    "abandonedCarts": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
+        ".write": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
+        ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber())"
+      }
+    },
+
     "interest": {
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       "$pid": {
