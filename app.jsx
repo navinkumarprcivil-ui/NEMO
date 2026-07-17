@@ -577,7 +577,7 @@ async function loadUserOrders(uid){ // a single customer's orders
 }
 async function saveOneOrder(o){ // write one order to local cache + cloud (per-user node)
   const r=await dbGet("nemo-orders"); let arr=r?JSON.parse(r):[]; arr=[o,...arr.filter(x=>x.id!==o.id)]; await dbSet("nemo-orders",JSON.stringify(arr));
-  if(FB_OK&&o.userUid){ try{ await FB_DB.ref("orders/"+o.userUid+"/"+o.id).set(o); }catch(e){} }
+  if(FB_OK&&o.userUid&&!o.demo){ try{ await FB_DB.ref("orders/"+o.userUid+"/"+o.id).set(o); }catch(e){} }
 }
 async function saveOrders(l) { await dbSet("nemo-orders",JSON.stringify(l)); } // local cache only
 /* ── Media cache: IndexedDB (large quota) with one-time migration from the old localStorage cache.
@@ -1035,6 +1035,9 @@ function addExpReviewedLocal(key,oid){ const s=loadExpReviewedSet(key); if(!s.in
 
 /* Stable per-user key (Google uid, else phone) */
 function userKey(u){ return u ? (u.uid || ("ph-"+normalizePhone(u.phone||""))) : null; }
+/* Demo/review accounts (Play Store reviewers, previews): everything works on-device,
+   but nothing syncs to the cloud — no admin orders, no stock changes, no abandoned carts. */
+function isDemoUser(u){ return !!u && u.method==="demo"; }
 
 /* Recent searches (local, max 8) + keyword-based related products */
 /* ── Smart search: typo-tolerance, synonyms & plurals ──────────────────────
@@ -3010,6 +3013,17 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
 
         {err&&<div style={{fontSize:12.5,color:showDemo?C.textSub:C.danger,fontWeight:500,marginTop:14,textAlign:"center",lineHeight:1.5,background:showDemo?C.accentLight:"transparent",borderRadius:12,padding:showDemo?"10px 14px":0}}>{err}</div>}
 
+        {!showDemo&&(
+          <button className="press" onClick={()=>setShowDemo(true)}
+            style={{width:"100%",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:14,padding:"13px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13.5,fontWeight:700,color:C.textSub}}>
+            👀 Explore with a demo account
+          </button>
+        )}
+        {showDemo&&(
+          <div style={{fontSize:11.5,color:C.textSub,textAlign:"center",marginTop:14,lineHeight:1.5,background:C.accentLight,borderRadius:12,padding:"10px 14px"}}>
+            Demo mode — browse and try every feature. Demo orders are simulated on this device only and are <b>not</b> real purchases.
+          </div>
+        )}
         {showDemo&&(
           <div style={{marginTop:16}}>
             {DEMO_GOOGLE_ACCOUNTS.map(acc=>(
@@ -10340,6 +10354,7 @@ function NemoStore(){
   // (debounced) so the owner can gently nudge them. Keyed by the Firebase auth uid (satisfies the
   // security rule), and cleared automatically once the cart empties or an order is placed.
   useEffect(()=>{
+    if(isDemoUser(user)) return; // demo/review sessions never surface in the admin panel
     if(!(FB_OK && FB_AUTH && FB_AUTH.currentUser && FB_DB)) return;
     const auid = FB_AUTH.currentUser.uid;
     const ref = FB_DB.ref("abandonedCarts/"+auid);
@@ -10661,9 +10676,14 @@ function NemoStore(){
   };
 
   const placeOrder=(o)=>{
+    // Demo/review sessions: the order stays on this device only — no cloud order,
+    // no stock decrement, no admin visibility.
+    const demo=isDemoUser(user);
+    if(demo) o={...o,demo:true};
     setCart([]);
     setOrders(prev=>[o,...prev]);
     saveOneOrder(o);
+    if(demo) return;
     trackFunnel("order");
     // NOTE: loyalty points are earned ONLY when the order is delivered (see updateOrderHandler),
     // never at placement — an unpaid/cancelled order earns nothing.
