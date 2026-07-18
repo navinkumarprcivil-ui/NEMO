@@ -1347,6 +1347,28 @@ async function clearAllShowcase(){ return clearAllCloudNode("showcase","nemo-sho
 async function clearAllTestimonials(){ return clearAllCloudNode("testimonials","nemo-testimonials"); }
 async function clearAllRequestsCloud(){ return clearAllCloudNode("requests","nemo-requests"); }
 
+/* ── Account deletion — remove ONE user's personal data (Play "delete my account") ──
+   Deletes the cloud nodes keyed to this user. Order / payment records are intentionally
+   NOT touched here — they're retained for tax & accounting law (see /delete-account.html).
+   Runs from the customer's own session (rules allow owner writes) for the nodes they can
+   reach, and from the admin session (rules grant the admin uid delete access) for the rest. */
+async function purgeUserCloudData(ukey){
+  if(!FB_OK || !FB_DB || !ukey) return;
+  for(const p of ["favorites/"+ukey,"loyalty/"+ukey,"abandonedCarts/"+ukey,"userrefs/"+ukey]){
+    try{ await FB_DB.ref(p).remove(); }catch(e){}
+  }
+  // Tank-showcase photos this user posted (matched by userUid)
+  try{
+    const s=await withTimeout(FB_DB.ref("showcase").get(),6000); const v=s&&s.val();
+    if(v){ for(const k of Object.keys(v)){ if(v[k] && v[k].userUid===ukey){ try{ await FB_DB.ref("showcase/"+k).remove(); }catch(e){} } } }
+  }catch(e){}
+}
+/* Wipe the same user's locally-cached personal data (their own device only). */
+function purgeUserLocalData(ukey){
+  if(!ukey) return;
+  for(const k of [favKey(ukey),loyaltyKey(ukey),intKey(ukey),reviewedKey(ukey)]){ try{ localStorage.removeItem(k); }catch(e){} }
+}
+
 /* ── Visitor analytics (built-in, free — counts unique sessions in Firebase) ── */
 async function trackVisit(){
   try{ if(sessionStorage.getItem("nemo-visited")) return; sessionStorage.setItem("nemo-visited","1"); }catch(e){}
@@ -3290,10 +3312,13 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
   );
 }
 
-function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
+function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
   const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){ addToCart(prod,it.qty||1); n++; } }); nav("cart"); };
   const uk = userKey(user);
   const [payOpen,setPayOpen]=useState(null);
+  const [delOpen,setDelOpen]=useState(false);
+  const [delAck,setDelAck]=useState(false);
+  const [delBusy,setDelBusy]=useState(false);
   // Refresh hourly so the live delivery countdown rolls over as the day changes while the app is left open.
   const [,setDayTick]=useState(0);
   useEffect(()=>{ const id=setInterval(()=>setDayTick(t=>t+1),3600000); return ()=>clearInterval(id); },[]);
@@ -3640,6 +3665,39 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           ))}
           </>
         )}
+
+        {/* ── Danger zone: delete account & data (Play Store data-deletion requirement) ── */}
+        <div style={{marginTop:26,borderTop:`1px solid ${C.border}`,paddingTop:16}}>
+          {!delOpen?(
+            <button className="press" onClick={()=>setDelOpen(true)}
+              style={{background:"none",border:"none",padding:0,color:C.textSub,fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
+              Delete my account
+            </button>
+          ):(
+            <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:14,padding:"14px 16px"}}>
+              <div style={{fontSize:14,fontWeight:800,color:"#b91c1c",marginBottom:6}}>Delete my account &amp; data</div>
+              <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.6,marginBottom:10}}>
+                This deletes your account and personal data — your profile, saved items, wallet &amp; loyalty coins, referral code and any tank photos you posted. Your past order &amp; payment records are kept only as long as tax law requires, then deleted. <b>This can't be undone.</b>
+              </div>
+              <label style={{display:"flex",gap:8,alignItems:"flex-start",fontSize:12,color:"#7f1d1d",fontWeight:600,marginBottom:12,cursor:"pointer"}}>
+                <input type="checkbox" checked={delAck} onChange={e=>setDelAck(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
+                <span>I understand my account and its data will be deleted and this can't be undone.</span>
+              </label>
+              <div style={{display:"flex",gap:8}}>
+                <button className="press" disabled={!delAck||delBusy}
+                  onClick={async()=>{ if(!delAck||delBusy)return; setDelBusy(true); try{ await onDeleteAccount(); }catch(e){ setDelBusy(false); } }}
+                  style={{flex:1,background:(!delAck||delBusy)?"#f3a5a5":"#dc2626",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(!delAck||delBusy)?"default":"pointer"}}>
+                  {delBusy?"Deleting…":"Delete my account"}
+                </button>
+                <button className="press" disabled={delBusy} onClick={()=>{setDelOpen(false);setDelAck(false);}}
+                  style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 16px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+              </div>
+              <div style={{fontSize:11,color:"#991b1b",marginTop:10,lineHeight:1.5}}>
+                Prefer to ask us directly? <a href="/delete-account.html" style={{color:"#b91c1c",fontWeight:700}}>Other ways to request deletion →</a>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -7806,7 +7864,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   const [editGuide,setEditGuide]=useState(null);
   const [guideFormOpen,setGuideFormOpen]=useState(false);
@@ -8424,6 +8482,35 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <>
             <div style={{fontSize:12,color:C.textSub,fontWeight:600,marginBottom:12}}>{requests.length} customer request{requests.length!==1?"s":""}</div>
             {requests.map(r=>{
+              if(r.type==="account-deletion"){
+                const delWa=r.phone?("91"+normalizePhone(r.phone)):"";
+                return(
+                  <div key={r.id} style={{background:"#fef2f2",borderRadius:16,padding:"14px",marginBottom:12,border:"1px solid #fecaca"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                      <span style={{fontSize:20}}>🗑️</span>
+                      <div style={{fontSize:14,fontWeight:800,color:"#b91c1c"}}>Account deletion request</div>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:800,color:C.text}}>{r.name||"Customer"}</div>
+                    <div style={{fontSize:11.5,color:C.textSub,marginTop:3,lineHeight:1.7}}>
+                      {r.phone?<>📱 +91 {r.phone}<br/></>:null}
+                      {r.email?<>✉️ {r.email}<br/></>:null}
+                      <span style={{wordBreak:"break-all"}}>🆔 {r.uid||r.ukey||"—"}</span>
+                    </div>
+                    <div style={{fontSize:11,color:C.textSub,marginTop:4}}>{fmtDate(r.createdAt)}</div>
+                    <div style={{fontSize:11.5,color:"#7f1d1d",background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"9px 12px",marginTop:10,lineHeight:1.6}}>
+                      The customer deleted their account from the app. Tap <b>Delete remaining data</b> to erase any leftover personal data (wallet coins, saved items, referral code, tank photos) from the cloud. <b>Order &amp; payment records are kept</b> for tax/accounting law — delete those manually once the retention period ends.
+                    </div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:12,paddingTop:10,borderTop:"1px solid #fecaca"}}>
+                      {delWa&&<button className="press" onClick={()=>openWA(delWa,encodeURIComponent(`Hi ${r.name||"there"}, your ${STORE_NAME} account and personal data have been deleted as requested. Order records are retained only as long as the law requires. Thank you.`))}
+                        style={{background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Confirm to customer</button>}
+                      <button className="press" onClick={()=>onPurgeUser&&onPurgeUser(r)}
+                        style={{background:"#dc2626",color:"white",border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🗑️ Delete remaining data</button>
+                      <button className="press" onClick={()=>onDeleteRequest(r.id)}
+                        style={{background:"#e5e7eb",color:C.text,border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Dismiss</button>
+                    </div>
+                  </div>
+                );
+              }
               const img=mediaCache["img-"+r.id];
               const waNum="91"+normalizePhone(r.phone);
               return(
@@ -10406,6 +10493,29 @@ function NemoStore(){
     nav("home"); // after sign-in, always land on the home page
   };
   const handleLogout=()=>{ setUser(null); setReviewedSet([]); setFavorites([]); setInterestedSet([]); clearUser(); showToast("Signed out"); nav("home"); };
+  // Customer self-service account deletion (Play Store requirement). Deletes the personal
+  // data reachable from the customer's own session, records a request so the owner can
+  // finish clearing the rest, then signs out. Order/payment records are retained (tax law).
+  const handleDeleteAccount=async()=>{
+    const ukey=userKey(user);
+    if(!isDemoUser(user)){
+      const auid=(FB_OK&&FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||ukey||"";
+      const req={
+        id:uid("del"), type:"account-deletion", ukey:ukey||"", uid:auid,
+        name:(user?.name||"Customer").slice(0,60),
+        email:(user?.email||"").slice(0,80),
+        phone:normalizePhone(user?.phone||""),
+        createdAt:new Date().toISOString(),
+      };
+      try{ await saveOneRequest(req); }catch(e){}     // notify owner via the admin Requests tab
+      try{ await purgeUserCloudData(ukey); }catch(e){} // wipe reachable cloud data while still authed as this user
+    }
+    purgeUserLocalData(ukey);
+    setUser(null); setReviewedSet([]); setFavorites([]); setInterestedSet([]);
+    try{ await clearUser(); }catch(e){}
+    nav("home");
+    showToast(isDemoUser(user)?"Demo account cleared":"Your account and data have been deleted");
+  };
   const goAuth=(returnTo="orders")=>{ setAuthReturn(returnTo); nav("auth"); };
   const adminGoogleSignIn=async()=>{
     try{
@@ -10504,6 +10614,15 @@ function NemoStore(){
     await delMedia(id);
     setMediaCache(c=>{const n={...c};delete n["img-"+id];return n;});
     showToast("Request deleted");
+  };
+  // Admin one-tap: finish clearing a user's leftover cloud data after a deletion request,
+  // then remove the request. Orders are retained (tax law) and are NOT touched here.
+  const purgeUserForAdmin=async(r)=>{
+    if(!isAdminUid(user?.uid)){ showToast("⚠ Sign in with the admin Google account first"); return; }
+    showToast("Deleting user data…");
+    try{ await purgeUserCloudData(r.ukey||r.uid); }catch(e){}
+    await deleteRequest(r.id);
+    showToast("✓ User data deleted");
   };
   // ── "Start Fresh" — admin bulk-clears every customer submission ──
   const clearAllShowcaseHandler=async()=>{
@@ -10950,7 +11069,7 @@ function NemoStore(){
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
         {page==="orders"   &&(user
-          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
+          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
           : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={()=>nav("home")}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={()=>nav("home")}/>}
         {page==="request"  &&<RequestPage nav={nav} user={user} onSubmit={submitRequest}/>}
@@ -10961,7 +11080,7 @@ function NemoStore(){
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
-          onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
+          onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
         </div>
       </div>
       {/* Floating cart bar — Zepto-style: free-delivery nudge + cart chip, opens the mini-cart */}

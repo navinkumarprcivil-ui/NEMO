@@ -49,8 +49,8 @@ Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built 
 2. **Get 12 testers OPTED IN** via the opt-in link (iPhone users can opt in but can't install — use Android testers). 14-day clock starts once 12 are in.
 3. After 14 days → **Apply for production** → answer closed-test questions → create production release → submit → live.
 
-**Open build tasks (offered, not yet built):**
-- In-app "Delete my account" button + admin deletion panel (request→notify admin→one-tap delete). User wants this.
+**Open build tasks:**
+- ✅ **In-app "Delete my account"** button + admin deletion panel — BUILT (branch `claude/play-store-launch-0rabhj`). Account screen (My Orders) → "Delete my account" (danger card, tick-to-confirm). On confirm it wipes the customer's reachable cloud data (saved items, abandoned cart, own tank photos), records an **Account deletion request** in Admin → Requests (badged), and signs the user out. Orders/payment records are **retained** (tax law). Admin → Requests shows the request in red with **one-tap "Delete remaining data"** (clears wallet/loyalty coins + referral mapping) + a WhatsApp "Confirm to customer" button. Demo/review sessions just clear + sign out (never hit the DB). **⚠ REQUIRES publishing the updated `database.rules.json`** — it now grants the admin uid delete access to `favorites` + `userrefs` so the one-tap purge is complete. Publish in Firebase console → Realtime Database → Rules.
 - Optional "Report content" button → would raise rating Teen→Everyone (fixes Germany USK16).
 - Birthday field (Personal info→Other info, NOT Calendar) for b'day offers — future.
 
