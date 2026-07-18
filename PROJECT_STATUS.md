@@ -31,10 +31,36 @@ Work on branch `claude/nemo-aqua-store-enhancement-74a3o1` → commit → push �
 - SEO: schema.org, sitemap, static `/p/` product pages + `/guides/` blog articles.
 - Icons unified to the clownfish; new 1200×630 share banner.
 
-## Pending / next
-1. **Play Store**: identity verification in progress (Organization → DUNS, or Personal → 12-tester test). After verify: create app → upload the `.aab` from the PWABuilder package → store listing (feature graphic 1024×500, portrait screenshots, description, privacy URL `/privacy.html`, data-safety form) → submit.
-2. **SEO off-site** (to rank #1 for "nemo aqua store"): Search Console → resubmit `sitemap.xml` + request indexing; **create Google Business Profile** (biggest lever); list on Justdial/IndiaMART; consistent name/address/phone everywhere.
-3. Feature ideas not yet built: abandoned-cart WhatsApp nudge; aquarium-specific filters (freshwater/beginner/tank-size — needs admin product fields first); AI aquarium assistant; quick-view modal; image srcset/blur-up.
+## Play Store launch — LIVE STATUS (updated 18 Jul 2026)
+**Account type: PERSONAL** → requires 12 testers opted-in for 14 continuous days before production.
+Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built via PWABuilder (user has it + the permanent `signing.keystore` — NEVER commit it).
+
+**DONE ✅**
+- App created in Play Console; app-signing enabled.
+- `.aab` uploaded to **Internal testing** (Active). App verified opening full-screen (no browser bar).
+- **assetlinks.json** has BOTH fingerprints: upload key `2B:EA:…:54` + Google Play app-signing key `E9:85:…:D4`. Verified via Google's digital-asset-links API.
+- **App content declarations all done:** Ads (No), Sign-in details (demo account — see below), Content rating (Everyone/PEGI3; Germany USK16 only), Target audience (18+), Data safety (submitted), Financial features (none), Privacy policy (`/privacy.html`).
+- **Store listing** written (name, short desc, full desc), category Shopping, contact details. Feature graphic (1024×500) + share banner made by user. App icon = `assets/favicon-512.png`.
+- **Reviewer demo login**: sign-in screen has a sandboxed demo mode (PR #15). Reviewer instructions given in Play "Sign-in details".
+- `/delete-account.html` live (required Delete-account URL for Data safety).
+
+**NEXT — the ONLY thing gating production ⏳**
+1. **Closed testing**: create release (Add-from-library, reuse same `.aab`) → country India → add **12+ tester Gmails** → roll out for review.
+2. **Get 12 testers OPTED IN** via the opt-in link (iPhone users can opt in but can't install — use Android testers). 14-day clock starts once 12 are in.
+3. After 14 days → **Apply for production** → answer closed-test questions → create production release → submit → live.
+
+**Open build tasks (offered, not yet built):**
+- In-app "Delete my account" button + admin deletion panel (request→notify admin→one-tap delete). User wants this.
+- Optional "Report content" button → would raise rating Teen→Everyone (fixes Germany USK16).
+- Birthday field (Personal info→Other info, NOT Calendar) for b'day offers — future.
+
+## Also pending (non-Play)
+- **SEO off-site**: Search Console resubmit `sitemap.xml` + request indexing; **create Google Business Profile** (biggest lever); Justdial/IndiaMART.
+- **Firebase rules**: user already PUBLISHED the `abandonedCarts` rule. ✅
+- Audit report at `AUDIT_REPORT.md` (76/100). Phase-1 quick wins done (ErrorBoundary, minified `app.js`, GA4, lighter OG). Not yet: best-sellers row, species spec fields+filters, accessibility pass, FCM push.
+
+## Deploy/merge workflow used this session
+Work on branch `claude/repo-connection-j006nq` → commit → open PR to `main` → squash-merge → Vercel auto-deploys `main`. (Claude has GitHub MCP write access + merges directly when user says "go".) SW cache currently `nemo-v34`; bump on each release.
 
 ## Gotchas
 - Sandbox network blocks fetching the live site + unpkg (can't render the app here) — verify via `esbuild`/`node --check` + code review; user eyeballs the deploy.
