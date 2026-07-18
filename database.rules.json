@@ -47,7 +47,7 @@
     "favorites": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
-        ".write": "auth != null && auth.uid === $uid"
+        ".write": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))"
       }
     },
 
@@ -111,8 +111,8 @@
 
     "userrefs": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid && !data.exists()"
+        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
+        ".write": "auth != null && ((auth.uid === $uid && !data.exists()) || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))"
       }
     },
 
