@@ -1575,6 +1575,22 @@ function uid(pfx="p"){ return pfx+Date.now()+Math.random().toString(36).slice(2,
 function fmtSize(b){ if(b<1024)return b+"B"; if(b<1048576)return(b/1024).toFixed(0)+"KB"; return(b/1048576).toFixed(1)+"MB"; }
 function fmtDate(iso){ return new Date(iso).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }
 function orderId(id){ return "#NA-"+id.slice(-6).toUpperCase(); }
+function orderDayKey(ms){ const d=new Date(ms||Date.now()); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}`; }
+/* Sequential, human-friendly order number: NAS-YYYYMMDD-#### (resets daily).
+   Uses an atomic Firebase counter so the numbers are unique & ordered across devices. */
+async function nextOrderNo(placedAtMs){
+  const day=orderDayKey(placedAtMs);
+  if(FB_OK && FB_DB){
+    try{
+      const res=await withTimeout(FB_DB.ref("orderSeq/"+day).transaction(cur=>(Number(cur)||0)+1), 6000);
+      const seq=res&&res.snapshot&&res.snapshot.val();
+      if(seq) return `NAS-${day}-${String(seq).padStart(4,"0")}`;
+    }catch(e){}
+  }
+  // Offline / no cloud: time-based suffix keeps it unique & sortable within the day.
+  const d=new Date(placedAtMs||Date.now()); const p=n=>String(n).padStart(2,"0");
+  return `NAS-${day}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
 function normalizePhone(p){ return (p||"").replace(/\D/g,"").slice(-10); }
 function hasPurchased(orders, user, productId){
   if(!user) return false;
@@ -1591,7 +1607,7 @@ function hasPurchased(orders, user, productId){
 function waOrderMsg(order){
   const items = order.items.map(i=>`  • ${i.name} x${i.qty} — ₹${i.price*i.qty}`).join("\n");
   return encodeURIComponent([
-    `🐠 *New Order — ${STORE_NAME}* ${orderId(order.id)}`,``,
+    `🐠 *New Order — ${STORE_NAME}* ${order.orderNo||orderId(order.id)}`,``,
     `📦 *Items:*`, items, ``,
     `💰 Subtotal: ₹${order.total}`,
     `🚚 Delivery: ${order.fee===0?"Free":"₹"+order.fee}`,
@@ -1612,7 +1628,7 @@ function waOrderMsg(order){
 }
 
 function waStatusMsg(order, status, tracking=""){
-  const oid = orderId(order.id);
+  const oid = order.orderNo||orderId(order.id);
   const msgs = {
     Confirmed:`✅ *Order Confirmed — ${STORE_NAME}*\n\nHi ${order.address.name}! 👋\nYour order ${oid} has been confirmed.\nWe're packing your goodies carefully 🐠\n\nWe'll update you when it ships!`,
     Shipped:`🚚 *Order Shipped — ${STORE_NAME}*\n\nGreat news ${order.address.name}!\nYour order ${oid} is on its way!\n${order.courierName?`🏷 Courier: ${order.courierName}\n`:""}${tracking?`📦 Consignment: ${tracking}\n`:""}${trackParcelUrl(order)?`🔗 Track here: ${trackParcelUrl(order)}\n`:""}\nExpected delivery in 1–3 days.`,
@@ -2215,7 +2231,7 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     const ptsEarned=settings?.loyaltyEnabled?Math.floor(((Number(o.total)||0)/100)*pph):0; // product value only (excludes shipping)
     const wBal=walletBalances[o.userUid]!=null?walletBalances[o.userUid]:"";
     const bd=o.shippingBreakup||{courier:Math.max(0,(o.fee||0)-(o.thermacolFee||0)-(o.specialDeliveryFee||0)),thermacol:o.thermacolFee||0,carton:0,special:o.specialDeliveryFee||0};
-    return [orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||""].map(esc).join(",");
+    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||""].map(esc).join(",");
   });
   const csv="\uFEFF"+[head.map(esc).join(","),...rows].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -3509,7 +3525,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
     if(match.status!=="Delivered"){ setDoaLookupMsg("DOA can only be reported on a delivered order"); return; }
     if(!match.items.some(it=>it.category==="Live Fish")){ setDoaLookupMsg("That order has no live fish"); return; }
     if(match.doa){ setDoaLookupMsg("A DOA request already exists for that order"); return; }
-    openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${orderId(match.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`));
+    openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${match.orderNo||orderId(match.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`));
     onReportDoa&&onReportDoa(match);
     setDoaOrderNo(""); setDoaLookupMsg("");
   };
@@ -3650,7 +3666,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 style={{width:"100%",background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontFamily:PRICE_FONT,fontSize:13.5,fontWeight:800,color:C.primary,marginBottom:3}}>{orderId(o.id)}</div>
+                    <div style={{fontFamily:PRICE_FONT,fontSize:13.5,fontWeight:800,color:C.primary,marginBottom:3}}>{o.orderNo||orderId(o.id)}</div>
                     <div style={{fontSize:12.5,fontWeight:700,color:C.text,lineHeight:1.35,marginBottom:3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{names}</div>
                     <div style={{fontSize:11,color:C.textSub}}>{fmtDate(o.placedAt)} · {nItems} item{nItems!==1?"s":""} · ₹{o.amountDue??(o.total+o.fee)}</div>
                   </div>
@@ -3784,7 +3800,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                       <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>{doaStatusText[o.doa.status]||"Submitted."}</div>
                       {o.doa.note&&<div style={{fontSize:11.5,color:C.text,marginTop:6,lineHeight:1.5}}><b>Note from store:</b> {o.doa.note}</div>}
                       {(o.doa.status==="Requested"||o.doa.status==="Under Review")&&(
-                        <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${orderId(o.id)} — here is my unboxing video.`))}
+                        <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${o.orderNo||orderId(o.id)} — here is my unboxing video.`))}
                           style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Send video on WhatsApp</button>
                       )}
                     </div>
@@ -3800,7 +3816,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                         ))}
                       </div>
                       <div style={{display:"flex",gap:8}}>
-                        <button className="press" onClick={()=>{ openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${orderId(o.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`)); onReportDoa&&onReportDoa(o,{resolution:doaReso}); setDoaOpen(null); }}
+                        <button className="press" onClick={()=>{ openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${o.orderNo||orderId(o.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`)); onReportDoa&&onReportDoa(o,{resolution:doaReso}); setDoaOpen(null); }}
                           style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Share video on WhatsApp</button>
                         <button className="press" onClick={()=>setDoaOpen(null)}
                           style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
@@ -6135,8 +6151,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     }
     const id=uid("ord");
     const now=Date.now();
+    const orderNo=await nextOrderNo(now);
     const order={
-      id,orderNo:orderId(id),items:[...cart],address:addr,
+      id,orderNo,items:[...cart],address:addr,
       billingAddress:useSameBilling?addr:billing,
       summary:addr.summary||"",
       total,fee,shippingZone:zone||"",shippingZoneLabel:zone?ZONE_LABELS[zone]:"Unknown",
@@ -7726,7 +7743,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
       <div style={{background:C.adminBg,padding:"52px 16px 16px",display:"flex",alignItems:"center",gap:12}}>
         <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
         <div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,.65)",fontWeight:600,letterSpacing:1}}>ORDER {orderId(o.id)}</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,.65)",fontWeight:600,letterSpacing:1}}>ORDER {o.orderNo||orderId(o.id)}</div>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:"white"}}>{o.address.name}</div>
         </div>
       </div>
@@ -8030,7 +8047,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             ):(
               <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>No DOA reported yet. You can still record an outcome here if the customer contacted you directly.</div>
             )}
-            <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding the Dead-on-Arrival report for order ${orderId(o.id)} — please share your unboxing video so we can help.`))}
+            <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding the Dead-on-Arrival report for order ${o.orderNo||orderId(o.id)} — please share your unboxing video so we can help.`))}
               style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>💬 Message customer on WhatsApp</button>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Outcome</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
@@ -8067,7 +8084,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             {(rr.courier||rr.consignment)&&(
               <div style={{fontSize:11.5,color:C.text,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>📦 Return courier: <b>{rr.courier||"—"}</b>{rr.consignment?<> · Consignment <span style={{fontFamily:"monospace"}}>{rr.consignment}</span></>:null}</div>
             )}
-            <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding your return request for order ${orderId(o.id)} —`))}
+            <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding your return request for order ${o.orderNo||orderId(o.id)} —`))}
               style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12}}>💬 Message customer on WhatsApp</button>
             {retAddrOpts.length>0&&(
               <>
@@ -8161,7 +8178,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           <div style={{marginTop:14}}>
             {delOrderConfirm?(
               <div style={{background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"14px"}}>
-                <div style={{fontSize:13,fontWeight:700,color:C.danger,marginBottom:4,textAlign:"center"}}>Delete order {orderId(o.id)} permanently?</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.danger,marginBottom:4,textAlign:"center"}}>Delete order {o.orderNo||orderId(o.id)} permanently?</div>
                 <div style={{fontSize:11,color:"#7f1d1d",marginBottom:10,textAlign:"center",lineHeight:1.5}}>This also removes its payment screenshot and can't be undone.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   <button className="press" onClick={()=>setDelOrderConfirm(false)}
@@ -8615,7 +8632,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:10,border:`1px solid ${C.border}`,cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                 <div>
-                  <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:2}}>{orderId(o.id)}</div>
+                  <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:2}}>{o.orderNo||orderId(o.id)}</div>
                   <div style={{fontSize:14,fontWeight:700,color:C.text}}>{o.address.name}</div>
                   <div style={{fontSize:11,color:C.textSub}}>{o.address.city} · {fmtDate(o.placedAt)}</div>
                 </div>
