@@ -3257,6 +3257,7 @@ function ExperienceReview({order, uk, user, products=[], mediaCache={}, reviewed
       name:(user&&user.name)||order.address?.name||"Customer",
       uid:uk||"", zone:order.shippingZoneLabel||"", date:new Date().toISOString() };
     try{ await saveExperienceReview(rev); }catch(e){}
+    try{ if(onRateProducts) await onRateProducts(order, product, comment.trim()); }catch(e){}
     addExpReviewedLocal(uk, order.id);
     setSaving(false); setDone(true);
   };

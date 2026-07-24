@@ -167,7 +167,7 @@ table.items.gst tbody td{padding:7px 7px;font-size:11px}
       </div>
     </div>
     <div class="title">
-      <div class="big">${G}</div>
+      <div class="big">${U}</div>
       <table class="meta">
         <tr><td class="k">DATE</td><td>${N}</td></tr>
         <tr><td class="k">${s?"CREDIT NOTE #":"INVOICE #"}</td><td>${z}</td></tr>
