@@ -2925,7 +2925,7 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
   const validate=()=>{
     const e={};
     if(!rating)e.rating="Please select a star rating";
-    if(comment.trim().length<10)e.comment="Please write at least 10 characters";
+    // Written review is optional — a star rating alone is enough.
     setErrs(e);
     return !Object.keys(e).length;
   };
@@ -2968,9 +2968,9 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
 
       {/* Comment */}
       <div style={{marginBottom:16}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Your Review</div>
+        <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Your Review <span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}>(optional)</span></div>
         <textarea value={comment} onChange={e=>setComment(e.target.value.slice(0,500))} rows={4}
-          placeholder="How was the quality? Condition on arrival? Would you recommend it?"
+          placeholder="Optional — share how the quality & condition were, if you'd like."
           style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.comment?C.danger:C.border}`,padding:"11px 14px",fontSize:13,outline:"none",resize:"none",lineHeight:1.6,background:C.bg}}/>
         <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
           {errs.comment?<span style={{fontSize:11,color:C.danger,fontWeight:600}}>{errs.comment}</span>:<span/>}
@@ -3236,32 +3236,27 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
    multi-aspect stars (Product, Packing, Shipping, Overall) + a "where to improve" note.
    The Product rating is applied to every product in the order (reflects on product pages).
    Saves to the experienceReviews node; per-order "already reviewed" flag kept locally. */
-function ExperienceReview({order, uk, user, onRateProducts}){
+function ExperienceReview({order, uk, user, products=[], mediaCache={}, reviewedSet=[], onWriteReview}){
   const [done,setDone]=useState(()=>loadExpReviewedSet(uk).includes(order.id));
   const [open,setOpen]=useState(false);
-  const [product,setProduct]=useState(0);
   const [packing,setPacking]=useState(0);
   const [shipping,setShipping]=useState(0);
   const [overall,setOverall]=useState(0);
   const [improve,setImprove]=useState("");
-  const [comment,setComment]=useState("");
   const [saving,setSaving]=useState(false);
-  if(done) return(
-    <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-      <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",fontSize:12,color:"#15803d",fontWeight:700}}>✓ Thanks for reviewing this order!</div>
-    </div>
-  );
-  const ready=product>0&&packing>0&&shipping>0&&overall>0;
+  // Unique ordered products (for the separate "review each product" list).
+  const prodItems=[]; const seenP={};
+  (order.items||[]).forEach(it=>{ if(seenP[it.id]) return; const prod=products.find(p=>p.id===it.id); if(prod){ seenP[it.id]=1; prodItems.push({prod,item:it}); } });
+  const ready=packing>0&&shipping>0&&overall>0;
   const submit=async()=>{
     if(!ready||saving) return;
     setSaving(true);
     const rev={ id:order.id, orderNo:order.orderNo||orderId(order.id),
-      product, packing, shipping, overall, service:overall, // keep legacy 'service' for older admin views
-      improve:improve.trim(), comment:comment.trim(),
+      packing, shipping, overall, service:overall, // keep legacy 'service' for older admin views
+      improve:improve.trim(),
       name:(user&&user.name)||order.address?.name||"Customer",
       uid:uk||"", zone:order.shippingZoneLabel||"", date:new Date().toISOString() };
     try{ await saveExperienceReview(rev); }catch(e){}
-    try{ if(onRateProducts) await onRateProducts(order, product, comment.trim()); }catch(e){}
     addExpReviewedLocal(uk, order.id);
     setSaving(false); setDone(true);
   };
@@ -3272,30 +3267,59 @@ function ExperienceReview({order, uk, user, onRateProducts}){
       <ReviewStars value={val} onChange={set} size={22}/>
     </div>
   );
+  // The per-product "write a review" list — opens each product page to rate + add photos.
+  const productList=prodItems.length>0&&(
+    <div style={{marginTop:10}}>
+      <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:6}}>✍️ Review your product{prodItems.length>1?"s":""}</div>
+      {prodItems.map(({prod,item})=>{
+        const m=CAT_META[item.category]||CAT_META["Live Fish"];
+        const already=reviewedSet.includes(prod.id);
+        const img=mediaCache["img-"+prod.id];
+        return(
+          <div key={prod.id} style={{display:"flex",alignItems:"center",gap:10,background:"white",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px",marginBottom:7}}>
+            <div style={{width:38,height:38,borderRadius:9,flexShrink:0,overflow:"hidden",background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>
+              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
+            </div>
+            <div style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
+            {already
+              ? <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ Reviewed</span>
+              : <button className="press" onClick={()=>onWriteReview&&onWriteReview(prod)}
+                  style={{flexShrink:0,background:C.accentLight,color:C.primaryDark,border:`1.5px solid ${C.accent}`,borderRadius:9,padding:"7px 11px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Write a review →</button>}
+          </div>
+        );
+      })}
+      <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.4}}>Rate each product & add photos on its page — your rating shows on that product.</div>
+    </div>
+  );
+  if(done) return(
+    <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
+      <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",fontSize:12,color:"#15803d",fontWeight:700}}>✓ Thanks for rating your order!</div>
+      {productList}
+    </div>
+  );
   if(!open) return(
     <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
       <button className="press" onClick={()=>setOpen(true)}
-        style={{width:"100%",background:C.accentLight,color:C.primaryDark,border:`1.5px solid ${C.accent}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>⭐ Write a review</button>
+        style={{width:"100%",background:C.accentLight,color:C.primaryDark,border:`1.5px solid ${C.accent}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>⭐ Rate this order</button>
+      {productList}
     </div>
   );
   return(
     <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
       <div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px"}}>
-        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:2}}>⭐ Rate this order</div>
-        <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.45}}>Your <b>Product</b> rating also reflects on the product page.</div>
-        {row("Product quality",product,setProduct)}
+        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:2}}>⭐ How was this order?</div>
+        <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.45}}>About packing, shipping &amp; your overall experience. (Rate the products themselves below.)</div>
         {row("Packing",packing,setPacking)}
         {row("Shipping",shipping,setShipping)}
         {row("Overall satisfaction",overall,setOverall)}
         <div style={{fontSize:11,fontWeight:700,color:C.textSub,margin:"6px 0 5px"}}>Where can we improve? <span style={{fontWeight:400}}>(optional)</span></div>
         <textarea value={improve} onChange={e=>setImprove(e.target.value)} rows={2} placeholder="Tell us what we could do better…" style={ta}/>
-        <div style={{fontSize:11,fontWeight:700,color:C.textSub,margin:"2px 0 5px"}}>Public review <span style={{fontWeight:400}}>(optional — shown on the product)</span></div>
-        <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={2} placeholder="Share your experience with other fishkeepers…" style={ta}/>
         <button className="press" onClick={submit} disabled={!ready||saving}
           style={{width:"100%",background:ready?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:ready?"pointer":"default"}}>
-          {saving?<><Spinner/>Submitting…</>:"Submit review"}
+          {saving?<><Spinner/>Submitting…</>:"Submit order rating"}
         </button>
       </div>
+      {productList}
     </div>
   );
 }
@@ -3618,7 +3642,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
             const names=(o.items||[]).map(i=>i.name).join(", ");
             const nItems=(o.items||[]).length;
             const isDelivered=o.status==="Delivered";
-            const reviewedAll=(o.items||[]).every(it=>reviewedSet.includes(it.id));
+            const orderRated=loadExpReviewedSet(uk).includes(o.id);
             return(
             <div key={o.id} style={{background:C.card,borderRadius:18,padding:"16px",marginBottom:12,border:`1px solid ${open?C.accent:C.border}`}}>
               {/* Compact summary — always visible; tap to open full details, bills & invoices (#11/#12) */}
@@ -3635,7 +3659,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     <span style={{fontSize:11,fontWeight:800,color:C.primary}}>{open?"Hide ▲":"Details ▾"}</span>
                   </div>
                 </div>
-                {isDelivered&&!reviewedAll&&!open&&(
+                {isDelivered&&!orderRated&&!open&&(
                   <div style={{marginTop:8,fontSize:11.5,fontWeight:800,color:"#f59e0b"}}>★★★★★ <span style={{color:C.primary}}>Tap to rate this order →</span></div>
                 )}
               </button>
@@ -3656,21 +3680,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                         {item.variantLabel?<>{item.variantLabel} · </>:null}Qty {item.qty} · ₹{item.price*item.qty}
                       </div>
                     </div>
-                    {delivered && prod && (
-                      already
-                        ? <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ Reviewed</span>
-                        : (
-                          <div style={{flexShrink:0,textAlign:"center"}}>
-                            <div style={{display:"flex",gap:2}}>
-                              {[1,2,3,4,5].map(st=>(
-                                <button key={st} className="press" onClick={()=>onWriteReview(prod,st)} aria-label={`Rate ${st} star${st>1?"s":""}`}
-                                  style={{background:"none",border:"none",padding:"2px 1px",fontSize:19,lineHeight:1,color:"#d1d5db",cursor:"pointer"}}>★</button>
-                              ))}
-                            </div>
-                            <div style={{fontSize:9.5,color:C.textSub,fontWeight:600,marginTop:1}}>Tap to rate</div>
-                          </div>
-                        )
-                    )}
+                    {delivered && prod && already && <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ Reviewed</span>}
                   </div>
                 );
               })}
@@ -3825,7 +3835,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                   </div>
                 </div>
               )}
-              {o.status==="Delivered" && <ExperienceReview order={o} uk={uk} user={user} onRateProducts={onRateOrderProducts}/>}
+              {o.status==="Delivered" && <ExperienceReview order={o} uk={uk} user={user} products={products} mediaCache={mediaCache} reviewedSet={reviewedSet} onWriteReview={onWriteReview}/>}
               </div>)}
             </div>
             );})}
