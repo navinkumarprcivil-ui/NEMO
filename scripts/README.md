@@ -10,9 +10,11 @@ always have the latest copy version-controlled.
 
 **What it produces in Drive → `Nemo Backups`:**
 - `nemo-full-backup.json` — full database, overwritten monthly (+ a couple of dated copies).
-- `Nemo Orders FY####-##` — one Google Sheet per Financial Year, a tab per month, **with GST
-  breakup (CGST/SGST/IGST)** for ITC filing. Refreshed **daily**.
-- `Nemo Inventory` — stock, sold/returned qty, prices. Refreshed **daily**.
+- `Nemo Orders FY####-##` — one Google Sheet per Financial Year, a tab per month. Each order is a
+  **summary row + item sub-rows** (name / qty / rate), with **GST breakup (CGST/SGST/IGST)** for
+  ITC, parcel weight, delivery date, and DOA/return details (customer reason, approval reason,
+  resolution, refund). A **`Products & Stock`** tab (current stock, sold/returned qty, selling
+  price) lives in the **same file**. Refreshed **daily**.
 
 **Setup / re-deploy:** see the big comment block at the top of `nemo-backup.gs`. In short:
 paste the file into the Apps Script project, add the Firebase service-account JSON as a Script
@@ -26,7 +28,8 @@ Secrets are **not** in this repo and must stay out:
 
 Those are backed up separately (Drive/USB/password manager) — see `../HANDBOOK.md` §2.
 
-### Columns marked "(app)" in the inventory sheet
-Fields like SKU, Barcode, Brand, Supplier, Opening/Purchased/Damaged stock, Reorder Level and
-Purchase Price don't exist in the app yet, so those columns stay blank until we add them to the
-product form (or you fill them by hand). Everything else populates automatically.
+### Scope note
+The export intentionally has **no vendor/purchase fields** (SKU, barcode, brand, supplier,
+purchase price, opening/purchased/damaged stock, reorder level). It covers sales/GST + current
+stock only. The `Products & Stock` tab shows: Product, Category, Current Stock, Sold Qty,
+Returned Qty, Selling Price.

@@ -2214,13 +2214,27 @@ async function shareProduct(p, showToast){
 function monthKey(d=new Date()){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
 function prevMonthRange(){ const now=new Date(); const first=new Date(now.getFullYear(),now.getMonth()-1,1); const last=new Date(now.getFullYear(),now.getMonth(),0); const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; return {from:iso(first),to:iso(last),label:first.toLocaleString("en-IN",{month:"long",year:"numeric"})}; }
 /* Export orders to a CSV file (opens in Excel/Sheets). Optional [from,to] ISO-date range (inclusive). */
+/* GST for one order (prices are GST-inclusive; same rule as the invoice). Buyer state comes off
+   the order, else derived from the delivery pincode. Returns taxable + CGST/SGST (intra) or IGST. */
+function orderGST(o, settings){
+  const s=settings||{}, a=o.address||{};
+  const sellerState=String((s.gstin||"").slice(0,2)||"33");
+  const defRate=(s.gstRate!=null)?Number(s.gstRate):18;
+  const buyerState=String(a.stateCode||((pincodeToState(a.pincode)||{}).code)||"");
+  const inter=!!(sellerState&&buyerState&&sellerState!==buyerState);
+  let taxable=0,tax=0;
+  (o.items||[]).forEach(it=>{ const rate=(it.gstRate!=null)?Number(it.gstRate):defRate; const gross=(Number(it.price)||0)*(Number(it.qty)||0); const tv=gross/(1+rate/100); taxable+=tv; tax+=(gross-tv); });
+  const fee=Number(o.fee)||0; if(fee>0){ const stv=fee/(1+defRate/100); taxable+=stv; tax+=(fee-stv); }
+  const r2=n=>Math.round(n*100)/100; taxable=r2(taxable); tax=r2(tax);
+  return { taxable, cgst:inter?0:r2(tax/2), sgst:inter?0:r2(tax-tax/2), igst:inter?tax:0, total:tax, state:(GST_STATES[buyerState]||a.state||"") };
+}
 function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={}){
   const esc=v=>{ const s=String(v==null?"":v).replace(/"/g,'""'); return `"${s}"`; };
   let list=[...orders];
   if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
-  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID"];
+  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID","State","Taxable (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","GST Total (Rs.)","Delivered On","DOA Qty","DOA Claim (customer)","DOA Approval Reason","DOA Refund (Rs.)","Return Reason (customer)","Return Approval Reason","Return Resolution","Return/Refund (Rs.)"];
   const pph=Number(settings?.loyaltyPointsPerHundred||10);
   const rupeePerPoint=Number(settings?.loyaltyRedeemValue||1);
   const rows=list.map(o=>{
@@ -2231,7 +2245,8 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     const ptsEarned=settings?.loyaltyEnabled?Math.floor(((Number(o.total)||0)/100)*pph):0; // product value only (excludes shipping)
     const wBal=walletBalances[o.userUid]!=null?walletBalances[o.userUid]:"";
     const bd=o.shippingBreakup||{courier:Math.max(0,(o.fee||0)-(o.thermacolFee||0)-(o.specialDeliveryFee||0)),thermacol:o.thermacolFee||0,carton:0,special:o.specialDeliveryFee||0};
-    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||""].map(esc).join(",");
+    const g=orderGST(o,settings); const delOn=deliveredAtOf(o);
+    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||"",g.state,g.taxable,g.cgst,g.sgst,g.igst,g.total,delOn?fmtDate(delOn):"",o.doa?.qty||"",o.doa?.claimReason||"",o.doa?.adminReason||"",o.doa?.refundAmount||"",o.returnReq?.reason||"",o.returnReq?.adminReason||"",o.returnReq?.adminResolution||o.returnReq?.resolution||"",o.returnReq?.refundAmount||""].map(esc).join(",");
   });
   const csv="\uFEFF"+[head.map(esc).join(","),...rows].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -3512,6 +3527,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const [doaOpen,setDoaOpen]=useState(null);
   const [doaReso,setDoaReso]=useState("replacement");
+  const [doaClaim,setDoaClaim]=useState("");
   const [doaOrderNo,setDoaOrderNo]=useState("");
   const [doaLookupMsg,setDoaLookupMsg]=useState("");
   const submitDoaByNumber=()=>{
@@ -3804,10 +3820,15 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                           style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Send video on WhatsApp</button>
                       )}
                     </div>
+                  ):o.liveGuarantee===false?(
+                    <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>ℹ️ The <b>Live Arrival Guarantee (DOA cover)</b> doesn't apply to this order — a packing option below our recommendation was chosen at checkout. Per our Terms, DOA claims need the recommended (or safer) packing.</div>
                   ):doaOpen===o.id?(
                     <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px"}}>
                       <div style={{fontSize:12.5,fontWeight:800,color:"#9a3412",marginBottom:6}}>Report Dead on Arrival (DOA)</div>
-                      <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.6,marginBottom:10}}>If a fish arrived dead, send us ONE clear, unedited unboxing video (starting from the sealed package) on WhatsApp within 2 hours of delivery. We'll review it against the Live Arrival Guarantee and, if approved, make it right <b>one time</b> — a replacement, refund to your original account, or reward coins (your choice, up to the fish's value). If that fish is unavailable, we may offer an equal-value substitute.</div>
+                      <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.6,marginBottom:10}}>If a fish arrived dead, send us ONE clear, unedited unboxing video (starting from the sealed package) on WhatsApp within 2 hours of delivery. We'll review it against the Live Arrival Guarantee and, if approved, make it right <b>one time</b> — a replacement, refund to your original account, or reward coins (your choice, up to the fish's value). Refunds cover the fish value only and exclude shipping.</div>
+                      <div style={{fontSize:11,fontWeight:700,color:"#9a3412",marginBottom:6}}>What happened? <span style={{fontWeight:400}}>(how many, which fish)</span></div>
+                      <textarea value={doaClaim} onChange={e=>setDoaClaim(e.target.value.slice(0,300))} rows={2} placeholder="e.g. 1 of the 5 guppies arrived dead"
+                        style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:"1.5px solid #fed7aa",padding:"9px 11px",fontSize:12.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",marginBottom:10,fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
                       <div style={{fontSize:11,fontWeight:700,color:"#9a3412",marginBottom:6}}>Preferred resolution</div>
                       <div style={{display:"flex",gap:6,marginBottom:10}}>
                         {[["replacement","🐟 Replace"],["refund","💸 Refund"],["coins","🪙 Coins"]].map(([k,l])=>(
@@ -3816,7 +3837,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                         ))}
                       </div>
                       <div style={{display:"flex",gap:8}}>
-                        <button className="press" onClick={()=>{ openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${o.orderNo||orderId(o.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`)); onReportDoa&&onReportDoa(o,{resolution:doaReso}); setDoaOpen(null); }}
+                        <button className="press" onClick={()=>{ openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${o.orderNo||orderId(o.id)}.${doaClaim.trim()?` (${doaClaim.trim()})`:""} I'm sharing my unboxing video for review — please help with a replacement/refund.`)); onReportDoa&&onReportDoa(o,{resolution:doaReso,reason:doaClaim.trim()}); setDoaOpen(null); }}
                           style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Share video on WhatsApp</button>
                         <button className="press" onClick={()=>setDoaOpen(null)}
                           style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
@@ -7629,13 +7650,29 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   );
 
   const liveInOrder=o.items.some(it=>it.category==="Live Fish");
-  const liveValue=o.items.filter(it=>it.category==="Live Fish").reduce((s,it)=>s+(Number(it.price)||0)*(it.qty||1),0);
+  const liveItems=o.items.filter(it=>it.category==="Live Fish");
+  const liveValue=liveItems.reduce((s,it)=>s+(Number(it.price)||0)*(it.qty||1),0);
+  const liveQtyTotal=liveItems.reduce((s,it)=>s+(Number(it.qty)||1),0);
+  const liveUnit=liveQtyTotal>0?Math.round(liveValue/liveQtyTotal):0; // avg fish price, for a refund suggestion
   const [doaStatus,setDoaStatus]=useState(o.doa?.status&&o.doa.status!=="Requested"?o.doa.status:"Under Review");
   const [doaNote,setDoaNote]=useState(o.doa?.note||"");
   const [doaSub,setDoaSub]=useState(o.doa?.substitute||"");
+  const [doaQty,setDoaQty]=useState(o.doa?.qty||1);                       // how many fish died (admin selects)
+  const [doaAmount,setDoaAmount]=useState(o.doa?.refundAmount!=null?o.doa.refundAmount:liveUnit); // ₹ for that qty
+  const [doaAdminReason,setDoaAdminReason]=useState(o.doa?.adminReason||""); // reason admin records on approval
+  const doaApproved=/^Approved/.test(doaStatus);
   const saveDoa=async()=>{
     setSaving(true);
-    await onUpdateOrder({...o,doa:{...(o.doa||{}),status:doaStatus,note:doaNote.trim(),substitute:doaSub.trim(),requestedAt:o.doa?.requestedAt||new Date().toISOString(),updatedAt:new Date().toISOString()}});
+    const decided=doaApproved||doaStatus==="Declined";
+    const next={...(o.doa||{}),status:doaStatus,note:doaNote.trim(),substitute:doaSub.trim(),
+      qty:Math.max(1,Number(doaQty)||1),
+      refundAmount:Math.max(0,Number(doaAmount)||0),
+      adminReason:doaAdminReason.trim(),
+      resolution:doaStatus.indexOf("Replacement")>=0?"replacement":doaStatus.indexOf("Store Credit")>=0?"coins":doaStatus.indexOf("Refund")>=0?"refund":(o.doa?.resolution||"replacement"),
+      requestedAt:o.doa?.requestedAt||new Date().toISOString(),
+      resolvedAt:decided?(o.doa?.resolvedAt||new Date().toISOString()):(o.doa?.resolvedAt||""),
+      updatedAt:new Date().toISOString()};
+    await onUpdateOrder({...o,doa:next});
     showToast("DOA request updated");
     setSaving(false);
   };
@@ -7650,10 +7687,13 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
     {key:"2",label:(settings.returnAddress2Label||"Address 2"),text:String(settings.returnAddress2||"").trim()},
   ].filter(a=>a.text);
   const [retAddrKey,setRetAddrKey]=useState(rr?.returnAddrKey||(retAddrOpts[0]&&retAddrOpts[0].key)||"1");
+  const [retAdminReason,setRetAdminReason]=useState(rr?.adminReason||"");                       // reason admin records on approval
+  const [retResolution,setRetResolution]=useState(rr?.adminResolution||rr?.resolution||"refund"); // how admin resolves: refund / replacement / coins
   const saveReturn=async(resolveNow)=>{
     setSaving(true);
     const chosen=retAddrOpts.find(a=>a.key===retAddrKey)||retAddrOpts[0];
     const next={...(o.returnReq||{}),status:retStatus,note:retNote.trim(),
+      adminReason:retAdminReason.trim(), adminResolution:retResolution,
       returnAddress:chosen?chosen.text:((o.returnReq&&o.returnReq.returnAddress)||""),
       returnAddrKey:chosen?chosen.key:"",
       returnAddrLabel:chosen?chosen.label:"",
@@ -7661,9 +7701,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
     let patch={...o,returnReq:next};
     if(resolveNow){
       next.status="Resolved"; next.resolvedAt=new Date().toISOString();
-      if((rr?.resolution||"refund")==="coins" && o.userUid){
+      next.refundAmount=(retResolution==="replacement")?0:retValue;   // refund excludes shipping (product value only)
+      if(retResolution==="coins" && o.userUid){
         const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
         try{ adminCreditLoyalty(o.userUid, Math.ceil(retValue/coinVal), "return:"+o.id, "Return resolved as reward coins", settings.walletValidityMonths); }catch(e){}
+      }else if(retResolution==="replacement"){
+        // Replacement — same order ID, no monetary refund; recorded on the return for the customer to track.
       }else{
         patch.refund={ due:true, amount:retValue, method:"upi", refundTxnId:o.refund?.refundTxnId||"", status:"processing", updatedAt:new Date().toISOString() };
       }
@@ -8042,6 +8085,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>🐟 Dead-on-Arrival (DOA) Request</div>
             {o.doa?(
               <div style={{fontSize:12,color:C.text,marginBottom:10,lineHeight:1.55}}>Customer reported a DOA{o.doa.requestedAt?` on ${fmtDate(o.doa.requestedAt)}`:""}. Review their unboxing video on WhatsApp, then set the outcome below.
+                {o.doa.claimReason&&<div style={{marginTop:6,fontSize:11.5,color:C.text,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px"}}><b>Customer's claim:</b> {o.doa.claimReason}</div>}
                 <div style={{marginTop:6,fontSize:11.5,color:C.textSub}}>Customer prefers: <b style={{color:C.text}}>{({replacement:"Replacement",refund:"Refund to source",coins:"Reward coins"})[o.doa.resolution]||"Replacement"}</b> · Covered up to fish value <b style={{color:C.text}}>₹{liveValue}</b>.</div>
               </div>
             ):(
@@ -8056,6 +8100,22 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${doaStatus===s?C.primary:C.border}`,background:doaStatus===s?C.primary:"transparent",color:doaStatus===s?"white":C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{s.replace("Approved - ","✓ ")}</button>
               ))}
             </div>
+            {doaApproved&&(
+              <div style={{display:"flex",gap:8,marginBottom:10}}>
+                <div style={{width:"38%"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Qty affected</div>
+                  <input type="number" min="1" max={liveQtyTotal||99} value={doaQty}
+                    onChange={e=>{const q=Math.max(1,Number(e.target.value)||1); setDoaQty(q); setDoaAmount(q*liveUnit);}}
+                    style={refundFld}/>
+                  <div style={{fontSize:9.5,color:C.textSub,marginTop:3}}>of {liveQtyTotal} fish</div>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>{doaStatus.indexOf("Store Credit")>=0?"Coins value (₹)":"Refund amount (₹)"}</div>
+                  <input type="number" min="0" value={doaAmount} onChange={e=>setDoaAmount(Number(e.target.value))} style={refundFld}/>
+                  <div style={{fontSize:9.5,color:C.textSub,marginTop:3}}>fish value only — excludes shipping</div>
+                </div>
+              </div>
+            )}
             {doaStatus==="Approved - Replacement"&&(
               <>
                 <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Substitute fish <span style={{fontWeight:400,textTransform:"none"}}>(if the same one is out of stock)</span></div>
@@ -8063,6 +8123,9 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   style={{...refundFld,marginBottom:10}}/>
               </>
             )}
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Reason on approval <span style={{fontWeight:400,textTransform:"none"}}>(for your records — what the video showed)</span></div>
+            <input value={doaAdminReason} onChange={e=>setDoaAdminReason(e.target.value)} placeholder="e.g. Verified unboxing video — 1 fish confirmed dead on arrival"
+              style={{...refundFld,marginBottom:10}}/>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Note to customer <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <textarea value={doaNote} onChange={e=>setDoaNote(e.target.value)} rows={2} placeholder="e.g. Replacement will ship with your next order, or refund sent to your UPI"
               style={{...refundFld,resize:"none",lineHeight:1.5,marginBottom:10}}/>
@@ -8105,6 +8168,16 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${retStatus===s?C.primary:C.border}`,background:retStatus===s?C.primary:"transparent",color:retStatus===s?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{s}</button>
               ))}
             </div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Resolve as</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+              {[["refund","💸 Part refund"],["replacement","🔁 Replace"],["coins","🪙 Coins"]].map(([k,l])=>(
+                <button key={k} className="press" onClick={()=>setRetResolution(k)}
+                  style={{padding:"9px 4px",borderRadius:10,border:`1.5px solid ${retResolution===k?C.primary:C.border}`,background:retResolution===k?C.primary:"transparent",color:retResolution===k?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
+              ))}
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Reason on approval <span style={{fontWeight:400,textTransform:"none"}}>(for your records — what the photo/video showed)</span></div>
+            <input value={retAdminReason} onChange={e=>setRetAdminReason(e.target.value)} placeholder="e.g. Verified photo — item cracked in transit; genuine damage"
+              style={{...refundFld,marginBottom:10}}/>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Note to customer <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <textarea value={retNote} onChange={e=>setRetNote(e.target.value)} rows={2} placeholder="e.g. Approved — courier it to our address; refund once we verify the parcel."
               style={{...refundFld,resize:"none",lineHeight:1.5,marginBottom:10}}/>
@@ -8112,7 +8185,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               <button className="press" onClick={()=>saveReturn(false)} disabled={saving}
                 style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:saving?.7:1}}>💾 Save</button>
               <button className="press" onClick={()=>saveReturn(true)} disabled={saving}
-                style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:saving?.7:1}}>✓ Resolve {rr.resolution==="coins"?`· ${Math.ceil(retValue/(Number(settings.loyaltyRedeemValue||1)||1))} coins`:`· ₹${retValue}`}</button>
+                style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:saving?.7:1}}>✓ Resolve {retResolution==="replacement"?"· replace":retResolution==="coins"?`· ${Math.ceil(retValue/(Number(settings.loyaltyRedeemValue||1)||1))} coins`:`· ₹${retValue}`}</button>
             </div>
             {String(settings.gstin||"").trim()&&(rr.itemIds||[]).length>0&&(
               <button className="press" onClick={()=>openCreditNote(o,settings)}
@@ -8572,8 +8645,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               const due=orders.filter(o=>(o.status==="Delivered"||o.status==="Cancelled")&&new Date(o.placedAt||0).getTime()<cutoff).length;
               return(
                 <div style={{marginTop:10,background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
-                  <div style={{fontSize:12.5,fontWeight:700,color:C.danger,marginBottom:4,lineHeight:1.5}}>Permanently delete {due} delivered/cancelled order{due!==1?"s":""} older than {cleanMonths} months?</div>
-                  <div style={{fontSize:11,color:"#7f1d1d",marginBottom:10,lineHeight:1.5}}>This also removes their payment screenshots and <b>cannot be undone</b>. Download a backup or CSV first if you want to keep the records.</div>
+                  <div style={{fontSize:12.5,fontWeight:700,color:C.danger,marginBottom:4,lineHeight:1.5}}>⚠ Take a backup first — permanently delete {due} delivered/cancelled order{due!==1?"s":""} older than {cleanMonths} months?</div>
+                  <div style={{fontSize:11,color:"#7f1d1d",marginBottom:10,lineHeight:1.5}}>This also removes their payment screenshots and <b>cannot be undone</b>. Your automatic <b>Google Drive backup</b> already keeps these (it updates daily) — but download a copy now to be safe.</div>
+                  <button className="press" onClick={()=>{ const n=exportOrdersCSV(orders,"","",settings,walletBalances); stampExport(); showToast(n?`Backed up ${n} order${n!==1?"s":""} ✓`:"No orders to back up"); }}
+                    style={{width:"100%",marginBottom:8,background:"#107c41",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>⬇ Download backup now (all orders)</button>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     <button className="press" onClick={()=>setCleanConfirm(false)}
                       style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
@@ -11211,7 +11286,7 @@ function NemoStore(){
   // Customer reports a Dead-on-Arrival fish → flags the order (best-effort cloud write) and routes them to WhatsApp
   const reportDoa=async(order,opts={})=>{
     if(order.doa&&order.doa.status&&order.doa.status!=="Requested") return; // don't overwrite an in-progress/resolved request
-    const updated={...order,doa:{status:"Requested",requestedAt:new Date().toISOString(),note:"",resolution:opts.resolution||"replacement"}};
+    const updated={...order,doa:{status:"Requested",requestedAt:new Date().toISOString(),note:"",resolution:opts.resolution||"replacement",claimReason:opts.reason||""}};
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
     showToast("DOA request noted — please send your video on WhatsApp");
