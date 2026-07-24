@@ -185,7 +185,7 @@
 <script>
 (function(){
   var splashStart=Date.now();
-  var SPLASH_MIN_MS=2000; // keep the cinematic on screen long enough for the logo reveal to play fully & gracefully
+  var SPLASH_MIN_MS=1400; // long enough for the logo entrance (1s) + subtitle to play, but snappier to the store
   function fadeSplash(){
     var wait=Math.max(60, SPLASH_MIN_MS-(Date.now()-splashStart));
     setTimeout(function(){ requestAnimationFrame(function(){ var s=document.getElementById("splash"); if(s){ s.classList.add("hide"); setTimeout(function(){ s.remove(); },550); } }); }, wait);
