@@ -506,6 +506,15 @@ function validateCoupon(code, settings, userOrders, cartTotal){
   if(already) return {ok:false, msg:"Coupon already used on this account"};
   return {ok:true, coupon:c};
 }
+/* Zepto-style upsell: the nearest not-yet-unlocked public coupon threshold.
+   Returns {need, off, code} — "add ₹need more to get <off>" — or null. */
+function nextDiscountNudge(cartTotal, settings){
+  const t=Number(cartTotal)||0;
+  const cs=((settings&&settings.coupons)||[]).filter(c=>c&&c.active!==false&&c.code&&!c.secret&&Number(c.minOrder)>0&&t<Number(c.minOrder));
+  if(!cs.length) return null;
+  const c=cs.sort((a,b)=>Number(a.minOrder)-Number(b.minOrder))[0];
+  return { need:Number(c.minOrder)-t, off:(c.type==="percent"?`${c.discount}% off`:`₹${c.discount} off`), code:c.code };
+}
 
 
 /* ═══════════════════ DEFAULT PRODUCTS ═══════════════════ */
@@ -914,6 +923,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   returnPolicy:"NO RETURNS & NO REPLACEMENTS once live fish or plants have been received in good condition — all livestock sales are final on safe delivery. The only cover for transit loss is the Live Arrival Guarantee (DOA) above, which is one-time and limited to the cost of the fish. Live fish & plants are non-returnable and non-refundable once delivered safely. Approved DOA refunds are processed within 5–7 working days of our approval of your unboxing video — no item needs to be returned. Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect, and refunds for returned dry goods are issued within 5–7 working days after we receive and inspect the item. Refunds (where applicable) are issued as store credit or to the original payment method. Orders cannot be cancelled once payment is confirmed.",
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   returnAddress:"", returnAddress1Label:"", returnAddress2:"", returnAddress2Label:"",
+  returnCloseDays: 3,          // days after delivery to auto-close an order (return window)
   shippingRates: null,
   specialDeliveryPrice: 200,
   speedCourierRates: { TN:200, SouthIndia:300, CentralNorth:400 }, // ⚡ speed-courier add-on per zone; admin edits in Settings
@@ -5948,6 +5958,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   const [useSameBilling,setUseSameBilling]=useState(true);
   const [billing,setBilling]=useState({...BLANK_ADDR});
   const [showRates,setShowRates]=useState(false);
+  const [showPackEdit,setShowPackEdit]=useState(false);
   const [loyaltyPts,setLoyaltyPts]=useState(null);
   const [loyaltyRedeemed,setLoyaltyRedeemed]=useState(false);
   // Load loyalty points on mount
@@ -6464,6 +6475,11 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <button className="press" onClick={()=>setStep(1)}
               style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🚚 Change shipping</button>
           </div>
+          {(()=>{ const dc=nextDiscountNudge(total,settings); if(!dc) return null; return (
+            <button className="press" onClick={()=>nav("shop")} style={{width:"100%",textAlign:"left",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 12px",marginBottom:12,fontSize:11.5,color:"#9a3412",fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              🏷️ Add <b>₹{dc.need}</b> more to get <b>{dc.off}</b> — use code <b>{dc.code}</b> · tap to add items
+            </button>
+          ); })()}
           {cart.map(item=>{
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
             const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
@@ -6529,6 +6545,49 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                 <span style={{fontSize:12,fontWeight:700,color:C.text,textAlign:"right",maxWidth:"62%"}}>{packingLabel(packing)}</span>
               </div>
             ) : null}
+            {/* #3 — inline packing editor: pick packing/courier and see the charge for each (by final parcel weight) */}
+            {zone&&(hasLiveFish||anySuggestSpecial)&&(
+              <div style={{marginBottom:8}}>
+                <button className="press" onClick={()=>setShowPackEdit(v=>!v)}
+                  style={{background:"none",border:"none",fontSize:12,color:C.accent,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",padding:0,cursor:"pointer"}}>{showPackEdit?"▲ Hide packing options":"📦 Change packing"}</button>
+                {showPackEdit&&(
+                  <div style={{marginTop:8}}>
+                    {hasLiveFish?PACKING_OPTIONS.map(opt=>{
+                      const sel=packing===opt.key; const isSug=opt.key===suggestedPacking;
+                      const covered=opt.rank>=packingOpt(suggestedPacking).rank;
+                      const optFee=calcShipping(cart,zone,{packing:opt.key},settings);
+                      return(
+                        <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:10,background:sel?"#eff6ff":"#fff",borderRadius:12,padding:"10px 12px",marginBottom:7,cursor:"pointer",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
+                          <input type="radio" name="packrev" checked={sel} onChange={()=>setPacking(opt.key)} style={{width:17,height:17,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
+                          <div style={{flex:1}}>
+                            <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                              <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
+                              {isSug&&<span style={{fontSize:8.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
+                              {covered&&<span style={{fontSize:9,fontWeight:700,color:"#15803d"}}>🛡️</span>}
+                            </div>
+                            <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
+                          </div>
+                          <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>₹{optFee}</span>
+                        </label>
+                      );
+                    }):[{sp:false,label:"📦 Standard courier",blurb:"Regular courier — carton packed."},{sp:true,label:"⚡ Premium courier",blurb:"Priority courier with extra care for fragile items."}].map(o=>{
+                      const sel=specialDelivery===o.sp; const optFee=calcShipping(cart,zone,{special:o.sp},settings);
+                      return(
+                        <label key={String(o.sp)} style={{display:"flex",alignItems:"flex-start",gap:10,background:sel?"#eff6ff":"#fff",borderRadius:12,padding:"10px 12px",marginBottom:7,cursor:"pointer",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
+                          <input type="radio" name="packrev" checked={sel} onChange={()=>setSpecialDelivery(o.sp)} style={{width:17,height:17,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{o.label}</div>
+                            <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{o.blurb}</div>
+                          </div>
+                          <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>₹{optFee}</span>
+                        </label>
+                      );
+                    })}
+                    <div style={{fontSize:10,color:C.textSub,lineHeight:1.4,marginTop:2}}>Charges are based on your final parcel weight (product weight + base packing weight).</div>
+                  </div>
+                )}
+              </div>
+            )}
             {zone&&fee>0&&<div style={{fontSize:10.5,color:C.textSub,lineHeight:1.5,marginTop:-2,marginBottom:8,background:C.accentLight,borderRadius:8,padding:"7px 10px"}}>ℹ️ Shipping is charged as an estimate. If your parcel actually costs less to send, we credit the difference back to your 👛 wallet as loyalty coins after it's dispatched.</div>}
             {guaranteeActive&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
               <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Arrival Guarantee</span>
@@ -7680,9 +7739,22 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               <div style={{fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"11px 13px",lineHeight:1.5}}>⏳ A Dead-on-Arrival request is still open. Resolve the DOA below before closing this order.</div>
             ) : (
               <>
-                <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>Everything delivered safely and no DOA is pending. Close this order to mark it fully complete.</div>
+                <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>Everything delivered safely and no DOA is pending. It will <b>auto-close</b> on the date below (once the return window ends), or you can close it now.</div>
+                {(()=>{
+                  const base=deliveredAtOf(o);
+                  const days=Number(settings.returnCloseDays!=null?settings.returnCloseDays:3);
+                  const def=o.autoCloseAt?new Date(o.autoCloseAt):(base?new Date(new Date(base).getTime()+Math.max(0,days)*86400000):null);
+                  const val=def?new Date(def.getTime()-def.getTimezoneOffset()*60000).toISOString().slice(0,10):"";
+                  return (
+                    <div style={{marginBottom:10}}>
+                      <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Auto-close on</div>
+                      <input type="date" defaultValue={val} onChange={e=>{ const d=e.target.value; onUpdateOrder({...o,autoCloseAt:d?new Date(d+"T23:59:59").toISOString():"",updatedAt:new Date().toISOString()}); }}
+                        style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:C.bg}}/>
+                    </div>
+                  );
+                })()}
                 <button className="press" onClick={doClose} disabled={saving}
-                  style={{width:"100%",background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✓ Close this order</button>
+                  style={{width:"100%",background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✓ Close this order now</button>
               </>
             )}
           </div>
@@ -9288,6 +9360,7 @@ function SettingsPanel({settings,onSave}){
           {area("Address 1 — full address","returnAddress")}
           {field("Address 2 — short name (optional)","returnAddress2Label","e.g. Chennai Warehouse")}
           {area("Address 2 — full address (optional)","returnAddress2")}
+          {field("Auto-close orders after (days from delivery)","returnCloseDays","3","Once this many days pass after delivery — with no open DOA/return — the order closes itself. You can still close any order early, or set a custom date per order.")}
         </div>
         {area("Acclimatization Guide","acclimatizationTips")}
         {area("Terms & Conditions","termsPolicy")}
@@ -11093,16 +11166,41 @@ function NemoStore(){
     restock(order);
   };
 
-  // Sweep for expired unpaid orders every 30s + on order changes
+  // Auto-close a delivered order once its return window has passed (idempotent).
+  const autoCloseOrder=async(order)=>{
+    if(!order||order.closed||order.demo) return;
+    const updated={...order,closed:true,closedAt:new Date().toISOString(),closedAuto:true,updatedAt:new Date().toISOString()};
+    setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
+    await saveOneOrder(updated);
+  };
+  // When is a delivered order due to auto-close? Admin's per-order date wins, else deliveredAt + N days.
+  const orderCloseDueAt=(o)=>{
+    if(o.autoCloseAt) return new Date(o.autoCloseAt).getTime();
+    const base=deliveredAtOf(o); if(!base) return 0;
+    const days=Number(settings.returnCloseDays!=null?settings.returnCloseDays:RETURN_WINDOW_DAYS);
+    return new Date(base).getTime()+Math.max(0,days)*86400000;
+  };
+
+  // Sweep for expired unpaid orders + due auto-closes every 30s + on order changes
   useEffect(()=>{
     const sweep=()=>{
       const now=Date.now();
-      orders.forEach(o=>{ if(o.status==="Awaiting Payment" && o.paymentDeadline && now>o.paymentDeadline){ cancelUnpaid(o); } });
+      orders.forEach(o=>{
+        if(o.status==="Awaiting Payment" && o.paymentDeadline && now>o.paymentDeadline){ cancelUnpaid(o); return; }
+        // Auto-close: delivered, not closed, no open DOA / return, past its close date.
+        if(o.status==="Delivered" && !o.closed && !o.demo){
+          const doaOpen = o.doa && !((o.doa.status||"").startsWith("Approved") || o.doa.status==="Declined");
+          const retOpen = o.returnReq && !["Resolved","Declined"].includes(o.returnReq.status);
+          if(doaOpen||retOpen) return;
+          const due=orderCloseDueAt(o);
+          if(due && now>=due) autoCloseOrder(o);
+        }
+      });
     };
     sweep();
     const t=setInterval(sweep,30000);
     return()=>clearInterval(t);
-  },[orders]);
+  },[orders,settings.returnCloseDays]);
 
   const cartCount=useMemo(()=>cart.reduce((s,i)=>s+i.qty,0),[cart]);
   const cartTotal=useMemo(()=>cart.reduce((s,i)=>s+i.price*i.qty,0),[cart]);
@@ -11275,12 +11373,16 @@ function NemoStore(){
       {!isAdminPage && cart.length>0 && !["cart","checkout","auth","detail"].includes(page) && (()=>{
         const thr=Number(settings.freeDeliveryThreshold||0);
         const left=thr>0?Math.max(0,thr-cartTotal):0;
+        const dc=nextDiscountNudge(cartTotal,settings); // nearest coupon discount to unlock
+        // Show whichever reward needs the least extra spend (Zepto-style).
+        const showFree=left>0 && (!dc || left<=dc.need);
         return(
           <button className="press slide-up" onClick={()=>setMiniOpen(true)}
             style={{position:"absolute",left:"50%",transform:"translateX(-50%)",bottom:"calc(76px + env(safe-area-inset-bottom))",zIndex:90,width:"calc(100% - 28px)",maxWidth:440,background:"#0f172a",color:"white",border:"none",borderRadius:99,padding:"7px 8px 7px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,boxShadow:"0 14px 34px rgba(15,23,42,.35)",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
             <span style={{fontSize:12.5,fontWeight:700,textAlign:"left",lineHeight:1.3,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-              {left>0?<>🚚 Add <b style={{color:"#fda4af"}}>₹{left}</b> more for free delivery</>
-               :thr>0?<>🎉 Free delivery unlocked!</>
+              {showFree?<>🚚 Add <b style={{color:"#fda4af"}}>₹{left}</b> more for free delivery</>
+               :dc?<>🏷️ Add <b style={{color:"#fda4af"}}>₹{dc.need}</b> more to get <b>{dc.off}</b> ({dc.code})</>
+               :thr>0&&cartTotal>=thr?<>🎉 Free delivery unlocked!</>
                :<>🛒 {cartCount} item{cartCount!==1?"s":""} in your cart</>}
             </span>
             <span style={{flexShrink:0,display:"inline-flex",alignItems:"center",gap:7,background:C.coral,borderRadius:99,padding:"9px 16px",fontSize:12.5,fontWeight:800,boxShadow:"0 6px 16px rgba(244,63,94,.4)"}}>
