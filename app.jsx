@@ -8419,6 +8419,27 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── ORDERS TAB (order management only) ── */}
       {tab==="orders"&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
+          {/* Search orders by number / name / phone — top of the tab so it's always reachable */}
+          <div style={{position:"relative",marginBottom:10}}>
+            <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:.5}}>🔍</span>
+            <input value={orderSearch} onChange={e=>setOrderSearch(e.target.value)}
+              placeholder="Search order # / name / phone / WhatsApp…"
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 36px 11px 36px",fontSize:13.5,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+            {orderSearch&&<button className="press" onClick={()=>setOrderSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,color:C.textSub,cursor:"pointer"}}>×</button>}
+          </div>
+          {/* Status filter */}
+          <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:14}}>
+            {["All",...ALL_STATUSES].map(s=>(
+              <button key={s} className="press" onClick={()=>setOrderFilter(s)}
+                style={{flexShrink:0,background:orderFilter===s?C.primary:C.card,color:orderFilter===s?"white":C.textSub,border:`1.5px solid ${orderFilter===s?C.primary:C.border}`,borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                {s}
+                {s!=="All"&&<span style={{marginLeft:4,background:orderFilter===s?"rgba(255,255,255,.25)":C.border,borderRadius:10,padding:"1px 6px",fontSize:10}}>
+                  {orders.filter(o=>o.status===s).length}
+                </span>}
+              </button>
+            ))}
+          </div>
+          {orderSearch.trim()&&<div style={{fontSize:11.5,color:C.textSub,fontWeight:600,marginBottom:10,marginTop:-4}}>{filteredOrders.length} match{filteredOrders.length!==1?"es":""} for “{orderSearch.trim()}”</div>}
           {/* ── Abandoned carts — shoppers who left items behind; nudge them on WhatsApp ── */}
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:abandonedCarts.length?12:6}}>
@@ -8467,26 +8488,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             ):(
               <div style={{fontSize:12.5,color:"#9a3412",fontWeight:600}}>⚠ No payment method set — add your UPI ID or gateway link in Settings so customers can pay.</div>
             )}
-          </div>
-          {/* Search orders by number / name / phone */}
-          <div style={{position:"relative",marginBottom:12}}>
-            <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:.5}}>🔍</span>
-            <input value={orderSearch} onChange={e=>setOrderSearch(e.target.value)}
-              placeholder="Search order # / name / phone…"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 36px 11px 36px",fontSize:13.5,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
-            {orderSearch&&<button className="press" onClick={()=>setOrderSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,color:C.textSub,cursor:"pointer"}}>×</button>}
-          </div>
-          {/* Status filter */}
-          <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:14}}>
-            {["All",...ALL_STATUSES].map(s=>(
-              <button key={s} className="press" onClick={()=>setOrderFilter(s)}
-                style={{flexShrink:0,background:orderFilter===s?C.primary:C.card,color:orderFilter===s?"white":C.textSub,border:`1.5px solid ${orderFilter===s?C.primary:C.border}`,borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                {s}
-                {s!=="All"&&<span style={{marginLeft:4,background:orderFilter===s?"rgba(255,255,255,.25)":C.border,borderRadius:10,padding:"1px 6px",fontSize:10}}>
-                  {orders.filter(o=>o.status===s).length}
-                </span>}
-              </button>
-            ))}
           </div>
 
           {/* Monthly report reminder */}
