@@ -55,13 +55,21 @@ Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built 
 - Optional "Report content" button → would raise rating Teen→Everyone (fixes Germany USK16).
 - Birthday field (Personal info→Other info, NOT Calendar) for b'day offers — future.
 
+## Returns & GST credit notes
+- **Two return addresses** in Settings → About & Policies (Address 1 + Address 2, each with a short name). Admin **picks which address** when handling a return (Admin → order → Return panel); the choice is snapshotted onto the request and shown to the customer ("Courier it back to — <label>").
+- **GST Credit Note** for sales returns: Return panel has a **🧾 GST Credit Note** button (shown once a GSTIN is set). It generates a proper Section-34 credit note for the **returned items only** (no shipping/discounts), reversing **CGST+SGST (TN) or IGST (other states)** against the original tax invoice — this is the document to report in GSTR-1 for the return. `generateCreditNoteHTML()` reuses the invoice engine via `generateInvoiceHTML(order,settings,{creditNote:true})`.
+- Return request already captures: items, reason, damage photo, resolution (refund/coins), courier + consignment, status timeline, refund record. Now also the selected return address + GST credit note.
+
+## Perf
+- Initial-load splash hold trimmed **2000ms → 1400ms** (`SPLASH_MIN_MS` in `index.html`) — logo entrance still plays fully, but the store appears sooner. Only affects fast loads; slow loads still wait for the app to be ready (no blank flash).
+
 ## Also pending (non-Play)
 - **SEO off-site**: Search Console resubmit `sitemap.xml` + request indexing; **create Google Business Profile** (biggest lever); Justdial/IndiaMART.
 - **Firebase rules**: user already PUBLISHED the `abandonedCarts` rule. ✅
 - Audit report at `AUDIT_REPORT.md` (76/100). Phase-1 quick wins done (ErrorBoundary, minified `app.js`, GA4, lighter OG). Not yet: best-sellers row, species spec fields+filters, accessibility pass, FCM push.
 
 ## Deploy/merge workflow used this session
-Work on branch `claude/repo-connection-j006nq` → commit → open PR to `main` → squash-merge → Vercel auto-deploys `main`. (Claude has GitHub MCP write access + merges directly when user says "go".) SW cache currently `nemo-v37`; bump on each release.
+Work on branch `claude/repo-connection-j006nq` → commit → open PR to `main` → squash-merge → Vercel auto-deploys `main`. (Claude has GitHub MCP write access + merges directly when user says "go".) SW cache currently `nemo-v38`; bump on each release.
 
 ## Gotchas
 - Sandbox network blocks fetching the live site + unpkg (can't render the app here) — verify via `esbuild`/`node --check` + code review; user eyeballs the deploy.

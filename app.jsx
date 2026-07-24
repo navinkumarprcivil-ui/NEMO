@@ -916,6 +916,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
   returnPolicy:"NO RETURNS & NO REPLACEMENTS once live fish or plants have been received in good condition — all livestock sales are final on safe delivery. The only cover for transit loss is the Live Arrival Guarantee (DOA) above, which is one-time and limited to the cost of the fish. Live fish & plants are non-returnable and non-refundable once delivered safely. Approved DOA refunds are processed within 5–7 working days of our approval of your unboxing video — no item needs to be returned. Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect, and refunds for returned dry goods are issued within 5–7 working days after we receive and inspect the item. Refunds (where applicable) are issued as store credit or to the original payment method. Orders cannot be cancelled once payment is confirmed.",
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
+  returnAddress:"", returnAddress1Label:"", returnAddress2:"", returnAddress2Label:"",
   shippingRates: null,
   specialDeliveryPrice: 200,
   speedCourierRates: { TN:200, SouthIndia:300, CentralNorth:400 }, // ⚡ speed-courier add-on per zone; admin edits in Settings
@@ -1947,8 +1948,9 @@ function openBill(order,settings){
 /* ── Professional invoice (corporate A4 layout, print → PDF) ─────────────────
    The teal "bill" above is a friendly summary for WhatsApp/email; THIS is the
    formal, print-ready document attached/downloaded as a PDF. */
-function generateInvoiceHTML(order, settings){
+function generateInvoiceHTML(order, settings, opts){
   const s=settings||{}; const o=order||{}; const addr=o.address||{};
+  const cn=!!(opts&&opts.creditNote); // credit-note mode (GST sales return): reverses tax on returned goods
   const E=(v)=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const fmt=n=>Number(n||0).toLocaleString("en-IN");
   const billingAddr=o.billingAddress||addr;
@@ -1960,7 +1962,7 @@ function generateInvoiceHTML(order, settings){
   const storeEmail=E(s.orderEmail||"");
   const logo=E(s.storeLogo||"");
   const gstin=E((s.gstin||"").trim());
-  const docLabel=gstin?"TAX INVOICE":"INVOICE";
+  const docLabel=cn?"CREDIT NOTE":(gstin?"TAX INVOICE":"INVOICE");
   // Per-line MRP (pre-discount unit price) and total line discount, for the price/discount columns.
   const unitMrp=(it)=>Math.round(Number(it.mrp||it.origPrice||(Number(it.discountPct)>0?Number(it.price||0)/(1-Number(it.discountPct)/100):it.price||0)));
   const lineDisc=(it)=>Math.max(0,Math.round((unitMrp(it)-Number(it.price||0))*Number(it.qty||0)));
@@ -2095,9 +2097,10 @@ table.items.gst tbody td{padding:7px 7px;font-size:11px}
       <div class="big">${docLabel}</div>
       <table class="meta">
         <tr><td class="k">DATE</td><td>${dateStr}</td></tr>
-        <tr><td class="k">INVOICE #</td><td>${invNo}</td></tr>
+        <tr><td class="k">${cn?"CREDIT NOTE #":"INVOICE #"}</td><td>${invNo}</td></tr>
+        ${cn&&o.againstInvoice?`<tr><td class="k">AGAINST INVOICE</td><td>${E(o.againstInvoice)}</td></tr>`:""}
         ${custId?`<tr><td class="k">CUSTOMER ID</td><td>${custId}</td></tr>`:""}
-        <tr><td class="k">STATUS</td><td>${E(o.status||"—")}</td></tr>
+        ${cn?"":`<tr><td class="k">STATUS</td><td>${E(o.status||"—")}</td></tr>`}
         ${hasGst?`<tr><td class="k">PLACE OF SUPPLY</td><td>${placeOfSupply}</td></tr><tr><td class="k">REVERSE CHARGE</td><td>No</td></tr>`:""}
         ${o.txnId?`<tr><td class="k">PAYMENT REF</td><td>${E(o.txnId)}</td></tr>`:""}
       </table>
@@ -2129,15 +2132,15 @@ table.items.gst tbody td{padding:7px 7px;font-size:11px}
     ${totRow("TOTAL","₹"+fmt(grand),{grand:true})}
   </table>
   ${hasGst?taxSummaryHtml:""}
-  ${(!isPaid&&payLink)?`<div class="np paybox"><a href="${E(payLink)}" target="_blank" rel="noopener">💳 Pay ₹${fmt(grand)} securely online →</a></div>`:""}
+  ${(!cn&&!isPaid&&payLink)?`<div class="np paybox"><a href="${E(payLink)}" target="_blank" rel="noopener">💳 Pay ₹${fmt(grand)} securely online →</a></div>`:""}
   <div class="payrow">
-    <div class="note"><span class="pay ${isPaid?"paid":"due"}">${isPaid?"PAID":"PAYMENT DUE"}</span>${o.txnId?` <span style="font-size:11px;color:#7a8694">Txn/Ref: ${E(o.txnId)}</span>`:""}</div>
+    <div class="note">${cn?`<span class="pay paid">CREDIT NOTE</span>`:`<span class="pay ${isPaid?"paid":"due"}">${isPaid?"PAID":"PAYMENT DUE"}</span>${o.txnId?` <span style="font-size:11px;color:#7a8694">Txn/Ref: ${E(o.txnId)}</span>`:""}`}</div>
     <div class="sign">For <b>${storeName}</b><div class="sgap"></div>Authorised Signatory</div>
   </div>
-  <div class="thanks">Thank you for your business! 🐠</div>
+  <div class="thanks">${cn?"Credit note issued against returned goods 🧾":"Thank you for your business! 🐠"}</div>
   <div class="foot">
-    <p>${hasGst?"All amounts are in INR and inclusive of GST. Tax is payable on reverse charge basis: No.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this document is issued as a Bill of Supply."}</p>
-    ${hasGst?`<p>We certify that our registration under the Goods and Services Tax Act, 2017 is in force and that this tax invoice reflects the goods actually supplied. ${pan?"PAN: "+pan+". ":""}GSTIN: ${gstin}.</p>`:""}
+    ${cn?`<p>This <b>credit note</b> reverses the GST charged on the goods returned against Tax Invoice <b>${E(o.againstInvoice||"—")}</b>. All amounts are in INR and inclusive of GST; the tax shown above is credited back / adjusted against output tax liability under Section 34 of the CGST Act, 2017.</p>`:`<p>${hasGst?"All amounts are in INR and inclusive of GST. Tax is payable on reverse charge basis: No.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this document is issued as a Bill of Supply."}</p>`}
+    ${hasGst?`<p>We certify that our registration under the Goods and Services Tax Act, 2017 is in force and that this ${cn?"credit note relates to a genuine sales return":"tax invoice reflects the goods actually supplied"}. ${pan?"PAN: "+pan+". ":""}GSTIN: ${gstin}.</p>`:""}
     ${o.liveGuarantee?`<p><b>Live Arrival Guarantee</b> applies to this order. Report any Dead-on-Arrival with a continuous unboxing video on WhatsApp ${storeWA} within 2 hours of delivery.</p>`:""}
     <p>For any questions about this invoice, contact <b>${storeName}</b> on WhatsApp ${storeWA}${storeEmail?` or ${storeEmail}`:""}.</p>
     <p style="font-size:10px">This is a computer-generated invoice and does not require a physical signature. E. &amp; O.E. Subject to ${E(s.jurisdiction||"India")} jurisdiction.</p>
@@ -2148,6 +2151,29 @@ table.items.gst tbody td{padding:7px 7px;font-size:11px}
 }
 function openInvoice(order,settings){
   openDocHTML(generateInvoiceHTML(order,settings||{}));
+}
+/* GST Credit Note for a sales return — mirrors the tax invoice but only for the
+   returned items, with no shipping/discounts, so the CGST+SGST (or IGST) shown is
+   exactly the tax being reversed against the original invoice. */
+function generateCreditNoteHTML(order, settings){
+  const o=order||{};
+  const rr=o.returnReq||{};
+  const ids=rr.itemIds||[];
+  const items=(o.items||[]).filter(it=>ids.includes(it.id));
+  const val=items.reduce((s,it)=>s+Number(it.price||0)*Number(it.qty||0),0);
+  const orig=o.orderNo||orderId(o.id||"");
+  const synth={
+    ...o, items,
+    total:val, amountDue:val,
+    fee:0, shippingBreakup:{courier:0,thermacol:0,carton:0,special:0}, thermacolFee:0, specialDeliveryFee:0,
+    couponDiscount:0, referralDiscount:0, loyaltyDiscount:0, coupon:"", liveGuarantee:false,
+    orderNo:"CN-"+orig, againstInvoice:orig, status:"Credit Note", txnId:"",
+    placedAt: rr.resolvedAt || rr.updatedAt || new Date().toISOString(),
+  };
+  return generateInvoiceHTML(synth, settings||{}, {creditNote:true});
+}
+function openCreditNote(order,settings){
+  openDocHTML(generateCreditNoteHTML(order,settings||{}));
 }
 async function shareProduct(p, showToast){
   const url=(typeof location!=="undefined")?(location.origin+location.pathname+"?p="+encodeURIComponent(p.id)):"";
@@ -3308,7 +3334,7 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
   };
   if(rr){
     const tone=rr.status==="Declined"?{bg:"#fef2f2",bd:"#fecaca"}:rr.status==="Resolved"?{bg:"#ecfdf5",bd:"#a7f3d0"}:{bg:"#eff6ff",bd:"#bfdbfe"};
-    const retAddr=settings.returnAddress||"Please contact us on WhatsApp for the return shipping address before sending the parcel.";
+    const retAddr=(rr&&String(rr.returnAddress||"").trim())||settings.returnAddress||"Please contact us on WhatsApp for the return shipping address before sending the parcel.";
     return(
       <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
         <div style={{background:tone.bg,border:`1px solid ${tone.bd}`,borderRadius:10,padding:"11px 12px"}}>
@@ -3317,7 +3343,7 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
           {rr.note&&<div style={{fontSize:11.5,color:C.text,marginTop:6,lineHeight:1.5}}><b>Note from store:</b> {rr.note}</div>}
           {rr.status==="Approved"&&(
             <div style={{marginTop:10}}>
-              <div style={{fontSize:11,fontWeight:800,color:C.text,marginBottom:4}}>📦 Courier it back to:</div>
+              <div style={{fontSize:11,fontWeight:800,color:C.text,marginBottom:4}}>📦 Courier it back to{rr.returnAddrLabel?` — ${rr.returnAddrLabel}`:""}:</div>
               <div style={{fontSize:11.5,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5,background:"white",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{retAddr}</div>
               <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Attach the consignment bill inside/with the parcel, then enter your courier partner &amp; consignment number below.</div>
               <input value={courier} onChange={e=>setCourier(e.target.value)} placeholder="Courier partner (e.g. DTDC, ST Courier)"
@@ -7451,9 +7477,20 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const retValue=returnItemsValue(o);
   const [retStatus,setRetStatus]=useState(rr?.status||"Requested");
   const [retNote,setRetNote]=useState(rr?.note||"");
+  // Which return address the customer should courier the item back to (admin picks; snapshotted onto the request).
+  const retAddrOpts=[
+    {key:"1",label:(settings.returnAddress1Label||"Address 1"),text:String(settings.returnAddress||"").trim()},
+    {key:"2",label:(settings.returnAddress2Label||"Address 2"),text:String(settings.returnAddress2||"").trim()},
+  ].filter(a=>a.text);
+  const [retAddrKey,setRetAddrKey]=useState(rr?.returnAddrKey||(retAddrOpts[0]&&retAddrOpts[0].key)||"1");
   const saveReturn=async(resolveNow)=>{
     setSaving(true);
-    const next={...(o.returnReq||{}),status:retStatus,note:retNote.trim(),updatedAt:new Date().toISOString()};
+    const chosen=retAddrOpts.find(a=>a.key===retAddrKey)||retAddrOpts[0];
+    const next={...(o.returnReq||{}),status:retStatus,note:retNote.trim(),
+      returnAddress:chosen?chosen.text:((o.returnReq&&o.returnReq.returnAddress)||""),
+      returnAddrKey:chosen?chosen.key:"",
+      returnAddrLabel:chosen?chosen.label:"",
+      updatedAt:new Date().toISOString()};
     let patch={...o,returnReq:next};
     if(resolveNow){
       next.status="Resolved"; next.resolvedAt=new Date().toISOString();
@@ -7869,6 +7906,18 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             )}
             <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding your return request for order ${orderId(o.id)} —`))}
               style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12}}>💬 Message customer on WhatsApp</button>
+            {retAddrOpts.length>0&&(
+              <>
+                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Return address to send the customer {retAddrOpts.length<2&&<span style={{fontWeight:400,textTransform:"none"}}>(add a 2nd in Settings → About &amp; Policies)</span>}</div>
+                <div style={{display:"grid",gridTemplateColumns:retAddrOpts.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:8}}>
+                  {retAddrOpts.map(a=>(
+                    <button key={a.key} className="press" onClick={()=>setRetAddrKey(a.key)}
+                      style={{padding:"9px 10px",borderRadius:10,border:`1.5px solid ${retAddrKey===a.key?C.primary:C.border}`,background:retAddrKey===a.key?C.accentLight:"transparent",color:retAddrKey===a.key?C.primaryDark:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>📍 {a.label}</button>
+                  ))}
+                </div>
+                <div style={{fontSize:11,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:12}}>{(retAddrOpts.find(a=>a.key===retAddrKey)||retAddrOpts[0]).text}</div>
+              </>
+            )}
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Status</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               {["Requested","Approved","Shipped","Received & Verified","Declined"].map(s=>(
@@ -7885,6 +7934,10 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               <button className="press" onClick={()=>saveReturn(true)} disabled={saving}
                 style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:saving?.7:1}}>✓ Resolve {rr.resolution==="coins"?`· ${Math.ceil(retValue/(Number(settings.loyaltyRedeemValue||1)||1))} coins`:`· ₹${retValue}`}</button>
             </div>
+            {String(settings.gstin||"").trim()&&(rr.itemIds||[]).length>0&&(
+              <button className="press" onClick={()=>openCreditNote(o,settings)}
+                style={{width:"100%",marginTop:8,background:"transparent",color:C.primaryDark,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🧾 GST Credit Note (reverses tax on returned items)</button>
+            )}
           </div>
         )}
 
@@ -9212,7 +9265,14 @@ function SettingsPanel({settings,onSave}){
         {area("Delivery Areas","deliveryAreas")}
         {area("Live Arrival Guarantee","liveArrivalGuarantee")}
         {area("Returns & DOA Policy","returnPolicy")}
-        {area("Return Shipping Address","returnAddress")}
+        <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px 12px 2px",marginBottom:14}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>↩️ Return Shipping Addresses</div>
+          <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Set up to <b>2</b> pickup/return points (e.g. main store + warehouse). When you approve a return you'll choose which one the customer should courier the item to.</div>
+          {field("Address 1 — short name","returnAddress1Label","e.g. Salem Store")}
+          {area("Address 1 — full address","returnAddress")}
+          {field("Address 2 — short name (optional)","returnAddress2Label","e.g. Chennai Warehouse")}
+          {area("Address 2 — full address (optional)","returnAddress2")}
+        </div>
         {area("Acclimatization Guide","acclimatizationTips")}
         {area("Terms & Conditions","termsPolicy")}
         {area("Privacy Policy","privacyPolicy")}
