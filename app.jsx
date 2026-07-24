@@ -81,13 +81,10 @@ function returnWindowOpen(o){
   return (Date.now()-new Date(base).getTime()) <= RETURN_WINDOW_DAYS*86400000;
 }
 function selfCancelOpen(o){
-  if(!o) return false;
-  if(o.status==="Awaiting Payment") return true;
-  if(o.status==="Payment Review"||o.status==="Confirmed"){
-    const t=o.paidAt?new Date(o.paidAt).getTime():(o.placedAt?new Date(o.placedAt).getTime():0);
-    return (Date.now()-t) <= SELF_CANCEL_MIN*60000;
-  }
-  return false;
+  if(!o||o.closed) return false;
+  // Customer may cancel any time BEFORE the admin confirms the order.
+  // Once it's Confirmed / Shipped / Delivered (or already Cancelled) it can no longer be self-cancelled.
+  return o.status==="Awaiting Payment" || o.status==="Payment Review";
 }
 // Product value of the items flagged in a return request (refund excludes packing & shipping)
 function returnItemsValue(o){
@@ -1962,7 +1959,10 @@ function generateInvoiceHTML(order, settings, opts){
   const storeEmail=E(s.orderEmail||"");
   const logo=E(s.storeLogo||"");
   const gstin=E((s.gstin||"").trim());
-  const docLabel=cn?"CREDIT NOTE":(gstin?"TAX INVOICE":"INVOICE");
+  // A GST "Tax Invoice" is only issued once the supply is real (paid/confirmed);
+  // before that it's a non-accountable PROFORMA so customers can't treat a pending order as a tax invoice.
+  const paidFlag=["Verified","Paid"].includes(o.paymentStatus||"")||["Confirmed","Shipped","Delivered"].includes(o.status||"");
+  const docLabel=cn?"CREDIT NOTE":(gstin?(paidFlag?"TAX INVOICE":"PROFORMA INVOICE"):"INVOICE");
   // Per-line MRP (pre-discount unit price) and total line discount, for the price/discount columns.
   const unitMrp=(it)=>Math.round(Number(it.mrp||it.origPrice||(Number(it.discountPct)>0?Number(it.price||0)/(1-Number(it.discountPct)/100):it.price||0)));
   const lineDisc=(it)=>Math.max(0,Math.round((unitMrp(it)-Number(it.price||0))*Number(it.qty||0)));
@@ -3278,17 +3278,13 @@ function ExperienceReview({order, uk, user}){
 function SelfCancelBtn({o, onCancel}){
   const [confirm,setConfirm]=useState(false);
   const paid=!!o.paidAt||["Payment Review","Confirmed"].includes(o.status);
-  const mins=(()=>{
-    if(o.status==="Awaiting Payment") return null;
-    const t=o.paidAt?new Date(o.paidAt).getTime():(o.placedAt?new Date(o.placedAt).getTime():0);
-    return Math.max(0, Math.ceil((SELF_CANCEL_MIN*60000-(Date.now()-t))/60000));
-  })();
   if(!confirm) return(
     <div style={{marginTop:10}}>
       <button className="press" onClick={()=>setConfirm(true)}
         style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-        ✕ Cancel this order{mins!=null?` · ${mins} min left`:""}
+        ✕ Cancel this order
       </button>
+      <div style={{fontSize:10.5,color:C.textSub,textAlign:"center",marginTop:5,lineHeight:1.4}}>You can cancel any time until we confirm your order.</div>
     </div>
   );
   return(
@@ -5457,10 +5453,21 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                           <span style={{fontSize:13,fontWeight:800,color:C.primary,fontFamily:PRICE_FONT}}>₹{cPrice}</span>
                           {cOnSale&&<span style={{fontSize:10,color:C.textSub,textDecoration:"line-through"}}>₹{cp.price}</span>}
                         </div>
-                        {cp.category!=="Live Fish"&&(
-                          <button className="press" onClick={()=>{addToCart(cp,1);}}
-                            style={{background:C.primary,color:"white",border:"none",borderRadius:9,width:32,height:32,fontSize:18,fontWeight:700,lineHeight:1,cursor:"pointer",flexShrink:0}}>+</button>
-                        )}
+                        {cp.category!=="Live Fish"&&(()=>{
+                          const inC=cart.find(i=>i.key===cp.id);
+                          const q=inC?inC.qty:0;
+                          if(q<=0) return (
+                            <button className="press" onClick={()=>addToCart(cp,1)}
+                              style={{background:C.primary,color:"white",border:"none",borderRadius:9,width:32,height:32,fontSize:18,fontWeight:700,lineHeight:1,cursor:"pointer",flexShrink:0}}>+</button>
+                          );
+                          return (
+                            <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:9,flexShrink:0,overflow:"hidden"}}>
+                              <button className="press" onClick={()=>addToCart(cp,-1)} style={{background:"none",color:"white",border:"none",width:28,height:32,fontSize:19,fontWeight:800,lineHeight:1,cursor:"pointer"}}>−</button>
+                              <span style={{color:"white",fontSize:13,fontWeight:800,minWidth:18,textAlign:"center",fontFamily:PRICE_FONT}}>{q}</span>
+                              <button className="press" onClick={()=>addToCart(cp,1)} style={{background:"none",color:"white",border:"none",width:28,height:32,fontSize:18,fontWeight:800,lineHeight:1,cursor:"pointer"}}>+</button>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );
@@ -5892,7 +5899,6 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   useEffect(()=>{ trackFunnel("checkout"); },[]); // funnel: reached checkout
   const [exitAsk,setExitAsk]=useState(false);
   const savingsTotal=cart.reduce((s,i)=>s+Math.max(0,((Number(i.mrp)||i.price)-i.price))*i.qty,0);
-  useEffect(()=>{ if(step>=2&&cart.length===0) setStep(1); },[cart.length,step]);
   const [addr,setAddr]=useState({...BLANK_ADDR,name:user?.name||"",phone:user?.phone||""});
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const supWA=(settings.supporterWhatsapp||"").replace(/\D/g,"");
@@ -5901,6 +5907,10 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   const [errs,setErrs]=useState({});
   const [placed,setPlaced]=useState(null);
   const [submitted,setSubmitted]=useState(false);
+  // If the cart empties while still choosing address/review, drop back to step 1 — but NEVER
+  // once an order has been placed (placing empties the cart, and the payment screen is step 3;
+  // bouncing here was creating duplicate orders + double-decrementing stock → false "sold out").
+  useEffect(()=>{ if(step>=2&&cart.length===0&&!placed) setStep(1); },[cart.length,step,placed]);
   const [sentWA,setSentWA]=useState(false);
   const [referralCopied,setReferralCopied]=useState(false);
   const [myRefCode,setMyRefCode]=useState(null);
@@ -8023,6 +8033,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
 function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
+  // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
+  useEffect(()=>{
+    const warn=(e)=>{ e.preventDefault(); e.returnValue=""; return ""; };
+    window.addEventListener("beforeunload",warn);
+    return ()=>window.removeEventListener("beforeunload",warn);
+  },[]);
   const [editGuide,setEditGuide]=useState(null);
   const [guideFormOpen,setGuideFormOpen]=useState(false);
   const [editProduct,setEditProduct]=useState(null);
@@ -8159,7 +8175,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{tab==="products"?"Products":tab==="reviews"?"Reviews":tab==="requests"?"Requests":"Orders"}</div>
           </div>
           <div style={{display:"flex",gap:8}}>
-            <button className="press" onClick={onBack}
+            <button className="press" onClick={()=>{ if(window.confirm("Leave the Admin panel and go back to the store?")) onBack(); }}
               style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               🛍 Store
             </button>
