@@ -93,6 +93,11 @@
       "search": { "$term": { ".write": "auth != null", ".validate": "newData.isNumber()" } }
     },
 
+    "orderSeq": {
+      ".read": "auth != null",
+      "$day": { ".write": "auth != null", ".validate": "newData.isNumber()" }
+    },
+
     "loyalty": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
