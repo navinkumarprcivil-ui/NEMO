@@ -205,6 +205,75 @@ function pincodeToZone(pin){
   if((p>=400000&&p<=445999)||(p>=450000&&p<=497999)||(p>=360000&&p<=396999)||(p>=403000&&p<=403999))return "CentralIndia";
   return "NorthIndia";
 }
+/* All Indian GST state / UT codes → official name (used for the invoice "Place of Supply"). */
+const GST_STATES={
+  "01":"JAMMU AND KASHMIR","02":"HIMACHAL PRADESH","03":"PUNJAB","04":"CHANDIGARH",
+  "05":"UTTARAKHAND","06":"HARYANA","07":"DELHI","08":"RAJASTHAN","09":"UTTAR PRADESH",
+  "10":"BIHAR","11":"SIKKIM","12":"ARUNACHAL PRADESH","13":"NAGALAND","14":"MANIPUR",
+  "15":"MIZORAM","16":"TRIPURA","17":"MEGHALAYA","18":"ASSAM","19":"WEST BENGAL",
+  "20":"JHARKHAND","21":"ODISHA","22":"CHHATTISGARH","23":"MADHYA PRADESH","24":"GUJARAT",
+  "26":"DADRA & NAGAR HAVELI AND DAMAN & DIU","27":"MAHARASHTRA","29":"KARNATAKA",
+  "30":"GOA","31":"LAKSHADWEEP","32":"KERALA","33":"TAMIL NADU","34":"PUDUCHERRY",
+  "35":"ANDAMAN & NICOBAR ISLANDS","36":"TELANGANA","37":"ANDHRA PRADESH","38":"LADAKH"
+};
+/* Derive the buyer's state (GST code + name) from a 6-digit Indian PIN.
+   For a Tamil-Nadu seller the only distinction that changes the tax is TN (33)
+   vs. everything-else, and the 600xxx–643xxx TN block is unambiguous — so even
+   where two neighbouring states share a PIN band the tax charged is unaffected
+   (any non-TN PIN → inter-state → IGST). Returns null if the PIN is unknown. */
+function pincodeToState(pin){
+  const p=parseInt(String(pin||"").replace(/\D/g,""),10);
+  if(!p||isNaN(p)||p<100000||p>999999) return null;
+  const pre=Math.floor(p/1000); // first 3 digits
+  let code="";
+  // Puducherry (UT 34) sits inside Tamil Nadu/Kerala/AP postal ranges — its
+  // scattered pockets are inter-state (IGST) for a TN seller, so match them by
+  // exact PIN first: Pondicherry town, Karaikal, Yanam and Mahe.
+  if((p>=605001&&p<=605014)||(p>=609602&&p<=609609)||p===533464||p===673310||p===673311) code="34";
+  // Pockets that sit inside a larger neighbouring band — checked first.
+  else if(pre===160) code="04";         // Chandigarh (inside Punjab)
+  else if(pre===403) code="30";         // Goa (inside Maharashtra 40x)
+  else if(pre===737) code="11";         // Sikkim (inside West Bengal 7xx)
+  else if(pre===682) code="32";         // Kochi circle → Kerala
+  else if(pre===795) code="14";         // Manipur
+  else if(pre===796) code="15";         // Mizoram
+  else if(pre===799) code="16";         // Tripura
+  else if(pre===194) code="38";         // Ladakh (Leh/Kargil)
+  else if(pre===110) code="07";         // Delhi
+  else if(pre>=121&&pre<=136) code="06"; // Haryana
+  else if(pre>=140&&pre<=160) code="03"; // Punjab
+  else if(pre>=171&&pre<=177) code="02"; // Himachal Pradesh
+  else if(pre>=180&&pre<=193) code="01"; // Jammu & Kashmir
+  else if(pre>=246&&pre<=263) code="05"; // Uttarakhand (inside UP band)
+  else if(pre>=201&&pre<=285) code="09"; // Uttar Pradesh
+  else if(pre>=301&&pre<=345) code="08"; // Rajasthan
+  else if(pre>=360&&pre<=396) code="24"; // Gujarat
+  else if(pre>=400&&pre<=445) code="27"; // Maharashtra
+  else if(pre>=450&&pre<=488) code="23"; // Madhya Pradesh
+  else if(pre>=490&&pre<=497) code="22"; // Chhattisgarh
+  else if(pre>=500&&pre<=509) code="36"; // Telangana
+  else if(pre>=510&&pre<=539) code="37"; // Andhra Pradesh
+  else if(pre>=560&&pre<=591) code="29"; // Karnataka
+  else if(pre>=600&&pre<=643) code="33"; // TAMIL NADU
+  else if(pre>=670&&pre<=695) code="32"; // Kerala
+  else if(pre>=700&&pre<=743) code="19"; // West Bengal
+  else if(pre>=750&&pre<=770) code="21"; // Odisha
+  else if(pre>=781&&pre<=788) code="18"; // Assam
+  else if(pre>=790&&pre<=792) code="12"; // Arunachal Pradesh
+  else if(pre>=793&&pre<=794) code="17"; // Meghalaya
+  else if(pre>=797&&pre<=798) code="13"; // Nagaland
+  else if(pre>=800&&pre<=813) code="10"; // Bihar
+  else if(pre>=814&&pre<=835) code="20"; // Jharkhand
+  else if(pre>=836&&pre<=855) code="10"; // Bihar (Purnia/Katihar belt)
+  return code?{code,name:GST_STATES[code]||""}:null;
+}
+/* Parse a GSTIN → {valid, stateCode, stateName}. Format: 2-digit state + 10-char PAN + entity + 'Z' + checksum. */
+function parseGstin(g){
+  const v=String(g||"").trim().toUpperCase();
+  const valid=/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/.test(v);
+  const stateCode=v.slice(0,2);
+  return {valid, stateCode, stateName:GST_STATES[stateCode]||""};
+}
 /* Live Arrival Guarantee opt-in fee varies by destination: Inside TN / South India / Rest of India (North).
    Central India + anything unknown is grouped under "North" (rest of India). Falls back to the flat price. */
 function liveGuaranteeZoneKey(zone){
@@ -1919,9 +1988,16 @@ function generateInvoiceHTML(order, settings){
   const cin=E(String(s.cin||"").trim());
   const sellerStateCode=gstinRaw.slice(0,2);
   const buyerGstin=E(String(o.buyerGstin||billingAddr.gstin||addr.gstin||"").trim());
-  const GST_STATES={"27":"MAHARASHTRA","33":"TAMIL NADU","29":"KARNATAKA","32":"KERALA","36":"TELANGANA","37":"ANDHRA PRADESH","09":"UTTAR PRADESH","07":"DELHI","24":"GUJARAT","19":"WEST BENGAL","06":"HARYANA","03":"PUNJAB","08":"RAJASTHAN","23":"MADHYA PRADESH","10":"BIHAR","21":"ODISHA","34":"PUDUCHERRY","30":"GOA","02":"HIMACHAL PRADESH","05":"UTTARAKHAND","20":"JHARKHAND","22":"CHHATTISGARH","18":"ASSAM"};
-  const buyerStateName=String(o.placeOfSupplyName||addr.state||billingAddr.state||"").toUpperCase();
-  const buyerStateCode=String(o.placeOfSupplyCode||billingAddr.stateCode||addr.stateCode||"")||(Object.keys(GST_STATES).find(k=>GST_STATES[k]===buyerStateName)||"");
+  // Place of supply for goods = where delivery terminates (ship-to). When no explicit
+  // state is stored on the order/address we derive it from the delivery PIN, so orders
+  // inside Tamil Nadu split CGST+SGST and orders to any other state charge IGST.
+  const posPin=String(addr.pincode||billingAddr.pincode||"").replace(/\D/g,"");
+  const derivedState=pincodeToState(posPin);
+  let buyerStateCode=String(o.placeOfSupplyCode||billingAddr.stateCode||addr.stateCode||"").trim();
+  let buyerStateName=String(o.placeOfSupplyName||addr.state||billingAddr.state||"").toUpperCase().trim();
+  if(!buyerStateCode&&buyerStateName) buyerStateCode=Object.keys(GST_STATES).find(k=>GST_STATES[k]===buyerStateName)||"";
+  if(!buyerStateCode&&derivedState) buyerStateCode=derivedState.code;
+  if(!buyerStateName) buyerStateName=(buyerStateCode&&GST_STATES[buyerStateCode])||(derivedState&&derivedState.name)||"";
   const interState=!!(sellerStateCode&&buyerStateCode&&sellerStateCode!==buyerStateCode);
   const placeOfSupply=buyerStateName?`${E(buyerStateName)}${buyerStateCode?` (${buyerStateCode})`:""}`:(sellerStateCode&&GST_STATES[sellerStateCode]?`${GST_STATES[sellerStateCode]} (${sellerStateCode})`:E(s.legalCity||"—"));
   const defRate=Number(s.gstRate!=null?s.gstRate:18);
@@ -5739,7 +5815,7 @@ function ShippingRatesChart({settings={}}){
 }
 
 /* ═══════════════════ CHECKOUT PAGE (Phase 3+4) ═══════════════════ */
-const BLANK_ADDR={name:"",phone:"",whatsapp:"",address:"",city:"",pincode:"",notes:"",summary:"",waUpdates:true};
+const BLANK_ADDR={name:"",phone:"",whatsapp:"",address:"",city:"",pincode:"",state:"",stateCode:"",notes:"",summary:"",waUpdates:true};
 
 /* Two-stage exit-intent sheet shown when a customer with items tries to leave checkout. */
 function ExitIntentModal({savings=0, onStay, onLeave}){
@@ -5813,6 +5889,13 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     getMyReferralCode(user.uid).then(code=>{ if(alive) setMyRefCode(code); });
     return ()=>{alive=false;};
   },[placed,user,settings.referralMinOrder]);
+  // Auto-fill the delivery State (and GST state code) from the pincode — the
+  // place of supply that decides CGST+SGST (inside TN) vs IGST on the invoice.
+  // A recognised pincode is authoritative; unknown pincodes keep any manual pick.
+  useEffect(()=>{
+    const d=pincodeToState(addr.pincode);
+    if(d) setAddr(a=>(a.stateCode===d.code?a:{...a,state:d.name,stateCode:d.code}));
+  },[addr.pincode]);
   const [specialDelivery,setSpecialDelivery]=useState(false);
   const packingZone=pincodeToZone(addr.pincode);
   const suggestedPacking=suggestedPackingForCart(cart,packingZone);
@@ -6174,6 +6257,27 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             {inp("City","city","text","Chennai",true)}
             {inp("Pincode","pincode","text","600001",true)}
           </div>
+          {(()=>{ const d=pincodeToState(addr.pincode); const six=/^\d{6}$/.test(addr.pincode||"");
+            return (
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>State</div>
+                {d ? (
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:C.accentLight,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px 14px"}}>
+                    <span style={{fontSize:14,fontWeight:700,color:C.text}}>{d.name}</span>
+                    <span style={{fontSize:10,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"2px 8px",letterSpacing:.3}}>✓ AUTO-DETECTED</span>
+                  </div>
+                ) : (
+                  <select value={addr.stateCode||""} onChange={e=>{const c=e.target.value; f("stateCode",c); f("state",GST_STATES[c]||"");}}
+                    style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",color:addr.stateCode?C.text:C.textSub}}>
+                    <option value="">{six?"Select your state…":"Enter pincode above to auto-detect, or pick…"}</option>
+                    {Object.keys(GST_STATES).sort((a,b)=>GST_STATES[a].localeCompare(GST_STATES[b])).map(c=>(
+                      <option key={c} value={c}>{GST_STATES[c]}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            );
+          })()}
           <div style={{marginBottom:14}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Delivery Notes <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <textarea value={addr.notes} onChange={e=>f("notes",e.target.value)} rows={3}
@@ -9124,6 +9228,14 @@ function SettingsPanel({settings,onSave}){
         {field("City / State (public)","legalCity","Salem, Tamil Nadu, India")}
         {field("Full Address (invoice only, optional)","legalAddress","Leave blank to show only city","Appears on invoices for legal completeness. Optional.")}
         {field("GSTIN (add once registered)","gstin","22AAAAA0000A1Z5","When set, invoices become a proper GST 'Tax Invoice' with HSN, place of supply and CGST/SGST (or IGST) breakup. Leave blank until you have it.")}
+        {(()=>{ const g=String(f.gstin||"").trim(); if(!g) return null; const p=parseGstin(g);
+          const good=p.valid&&!!p.stateName;
+          const msg=good
+            ? `✓ Valid GSTIN · Seller state: ${p.stateName} (${p.stateCode}). Invoices to ${p.stateName} charge CGST + SGST; all other states charge IGST — set automatically from each customer's delivery pincode.`
+            : (p.valid ? `⚠ Format looks OK but state code “${p.stateCode}” isn't recognised — double-check the GSTIN.`
+                       : `⚠ This doesn't look like a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z5). Invoices still work, but check for a typo.`);
+          return <div style={{marginTop:-8,marginBottom:16,fontSize:11.5,fontWeight:700,lineHeight:1.5,color:good?C.success:C.danger}}>{msg}</div>;
+        })()}
         {field("Default GST Rate %","gstRate","18","Applied on tax invoices once GSTIN is set (prices are treated as GST-inclusive). A product can override this per item.")}
         {field("Default HSN / SAC Code","hsnCode","0301","Printed per line on the tax invoice. e.g. ornamental fish 0301, aquatic plants 0602, accessories per item.")}
         {field("Legal Jurisdiction","jurisdiction","Salem, Tamil Nadu")}

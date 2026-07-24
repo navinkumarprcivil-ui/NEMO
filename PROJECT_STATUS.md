@@ -30,8 +30,9 @@ Work on branch `claude/nemo-aqua-store-enhancement-74a3o1` → commit → push �
 - PWA store-ready: manifest (id, screenshots, shortcuts, categories), `/.well-known/assetlinks.json` (pkg `in.nemoaquastore.app`), `/privacy.html`.
 - SEO: schema.org, sitemap, static `/p/` product pages + `/guides/` blog articles.
 - Icons unified to the clownfish; new 1200×630 share banner.
+- **GST live (GSTIN `33BWXPP8706N1ZI`, Tamil Nadu):** once a GSTIN is saved in Settings, the formal invoice (`openInvoice` → `generateInvoiceHTML`) becomes a proper **Tax Invoice** with HSN, place of supply, and the correct tax split — **CGST+SGST for deliveries inside TN, IGST for every other state**. Checkout now collects **State**, auto-detected from the delivery pincode via `pincodeToState()` (editable dropdown if the pincode is unrecognised) and stored on the order; the invoice falls back to pincode derivation for older orders. Puducherry pockets (Pondicherry town, Karaikal, Yanam, Mahe) are special-cased to UT 34 → IGST. Settings shows a live "✓ Valid GSTIN · Seller state: TAMIL NADU (33)" confirmation under the GSTIN field. Prices are treated as GST-inclusive; default rate/HSN in Settings, per-product override supported. **We deliberately do NOT store/show the GST certificate image** (it carries the proprietor's personal address; only the GSTIN is shown, which is all that's legally required online).
 
-## Play Store launch — LIVE STATUS (updated 18 Jul 2026)
+## Play Store launch — LIVE STATUS (updated 24 Jul 2026)
 **Account type: PERSONAL** → requires 12 testers opted-in for 14 continuous days before production.
 Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built via PWABuilder (user has it + the permanent `signing.keystore` — NEVER commit it).
 
@@ -43,6 +44,7 @@ Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built 
 - **Store listing** written (name, short desc, full desc), category Shopping, contact details. Feature graphic (1024×500) + share banner made by user. App icon = `assets/favicon-512.png`.
 - **Reviewer demo login**: sign-in screen has a sandboxed demo mode (PR #15). Reviewer instructions given in Play "Sign-in details".
 - `/delete-account.html` live (required Delete-account URL for Data safety).
+- **In-app "Delete my account" + admin deletion panel — MERGED to `main` (PR #18).** Account screen → danger card (tick-to-confirm) wipes the customer's reachable cloud data (saved items, abandoned cart, own tank photos), logs an **Account deletion request** in Admin → Requests (badged), and signs the user out. Orders/payment records retained (tax law). Admin → Requests shows it in red with one-tap "Delete remaining data" (wallet/loyalty coins + referral mapping) + WhatsApp "Confirm to customer". Demo/review sessions just clear + sign out. **⚠ REQUIRES publishing the updated `database.rules.json`** (grants admin uid delete access to `favorites` + `userrefs` so the one-tap purge is complete) — Firebase console → Realtime Database → Rules.
 
 **NEXT — the ONLY thing gating production ⏳**
 1. **Closed testing**: create release (Add-from-library, reuse same `.aab`) → country India → add **12+ tester Gmails** → roll out for review.
@@ -50,7 +52,6 @@ Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built 
 3. After 14 days → **Apply for production** → answer closed-test questions → create production release → submit → live.
 
 **Open build tasks:**
-- ✅ **In-app "Delete my account"** button + admin deletion panel — BUILT (branch `claude/play-store-launch-0rabhj`). Account screen (My Orders) → "Delete my account" (danger card, tick-to-confirm). On confirm it wipes the customer's reachable cloud data (saved items, abandoned cart, own tank photos), records an **Account deletion request** in Admin → Requests (badged), and signs the user out. Orders/payment records are **retained** (tax law). Admin → Requests shows the request in red with **one-tap "Delete remaining data"** (clears wallet/loyalty coins + referral mapping) + a WhatsApp "Confirm to customer" button. Demo/review sessions just clear + sign out (never hit the DB). **⚠ REQUIRES publishing the updated `database.rules.json`** — it now grants the admin uid delete access to `favorites` + `userrefs` so the one-tap purge is complete. Publish in Firebase console → Realtime Database → Rules.
 - Optional "Report content" button → would raise rating Teen→Everyone (fixes Germany USK16).
 - Birthday field (Personal info→Other info, NOT Calendar) for b'day offers — future.
 
@@ -60,7 +61,7 @@ Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built 
 - Audit report at `AUDIT_REPORT.md` (76/100). Phase-1 quick wins done (ErrorBoundary, minified `app.js`, GA4, lighter OG). Not yet: best-sellers row, species spec fields+filters, accessibility pass, FCM push.
 
 ## Deploy/merge workflow used this session
-Work on branch `claude/repo-connection-j006nq` → commit → open PR to `main` → squash-merge → Vercel auto-deploys `main`. (Claude has GitHub MCP write access + merges directly when user says "go".) SW cache currently `nemo-v34`; bump on each release.
+Work on branch `claude/repo-connection-j006nq` → commit → open PR to `main` → squash-merge → Vercel auto-deploys `main`. (Claude has GitHub MCP write access + merges directly when user says "go".) SW cache currently `nemo-v37`; bump on each release.
 
 ## Gotchas
 - Sandbox network blocks fetching the live site + unpkg (can't render the app here) — verify via `esbuild`/`node --check` + code review; user eyeballs the deploy.
