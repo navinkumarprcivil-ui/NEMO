@@ -69,10 +69,8 @@ const SELF_CANCEL_MIN    = 60;  // customer may self-cancel within 1 hour of pay
 const NON_RETURNABLE_CATS = ["Live Fish","Plants","Feed"];
 function isReturnableItem(it){
   if(!it) return false;
-  if(NON_RETURNABLE_CATS.includes(it.category)) return false;
-  const n=(it.name||"").toLowerCase();
-  if(/pump|tube|tubing|medicin|medication|\bfood\b|feed|conditioner|bacteria/.test(n)) return false;
-  return true;
+  // Opt-in only: an Accessories item the admin explicitly marked "Eligible for return if damaged".
+  return it.category==="Accessories" && it.returnEligible===true;
 }
 function orderHasReturnable(o){ return (((o&&o.items)||[]).some(isReturnableItem)); }
 function deliveredAtOf(o){ return o&&(o.deliveredAt||(o.status==="Delivered"?o.updatedAt:null)||null); }
@@ -6898,6 +6896,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     desc:product?.desc||"",
     comingSoon:!!product?.comingSoon,
     packagingWeight:product?.packagingWeight||"",
+    returnEligible:!!product?.returnEligible,
     suggestSpecialDelivery:!!product?.suggestSpecialDelivery,
     suggestedPacking:product?.suggestedPacking||"carton_special",
     suggestedPackingTN:product?.suggestedPackingTN||product?.suggestedPacking||"carton_special",
@@ -7010,6 +7009,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
       offerEndsAt:form.offerEndsAt?new Date(form.offerEndsAt).toISOString():null,
       comingSoon:!!form.comingSoon,
       packagingWeight:Number(form.packagingWeight)||0,
+      returnEligible: form.category==="Accessories" ? !!form.returnEligible : false,
       suggestSpecialDelivery:!!form.suggestSpecialDelivery,
       suggestedPacking:form.suggestedPacking||"carton_special",
       suggestedPackingTN:form.suggestedPackingTN||"carton_special",
@@ -7101,6 +7101,17 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>Shows a Coming Soon badge + "Interested" button instead of Add. Track demand before stocking.</div>
           </div>
         </label>
+
+        {/* #15 — return eligibility, admin-only, off by default, accessories only */}
+        {form.category==="Accessories"&&(
+          <label style={{display:"flex",alignItems:"flex-start",gap:10,background:"#fff7ed",borderRadius:12,padding:"12px 14px",marginBottom:16,cursor:"pointer",userSelect:"none",border:"1px solid #fed7aa"}}>
+            <input type="checkbox" checked={!!form.returnEligible} onChange={e=>f("returnEligible",e.target.checked)} style={{width:18,height:18,accentColor:"#ea580c",flexShrink:0,marginTop:1}}/>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:C.text}}>↩️ Eligible for return if damaged</div>
+              <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>Only if you tick this can a customer raise a damaged-item return for this accessory (within your return window). After you approve, receive &amp; verify it, you can issue a part refund or wallet coins for just this item. Off by default; customers never see this setting.</div>
+            </div>
+          </label>
+        )}
 
         {/* Live Fish types — editable */}
         {form.category==="Live Fish"&&(
@@ -10684,7 +10695,7 @@ function NemoStore(){
       if(qty>0 && curQty+qty>maxAllowed) setTimeout(()=>showToast(`Only ${maxAllowed} available per order`,"error"),0);
       else if(qty>0){ setTimeout(()=>showToast("Added to cart"),0); trackEvent("addcart",product.id); trackFunnel("addcart"); }
       if(ex) return prev.map(i=>i.key===key?{...i,qty:nextQty}:i);
-      return [...prev,{key,id:product.id,name:product.name,category:product.category,price:unitPrice,mrp:(v?variantBasePrice(product,v):(product.price||unitPrice)),qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,suggestedPacking:product.suggestedPacking||null,suggestSpecialDelivery:!!product.suggestSpecialDelivery,stockCount:stock}];
+      return [...prev,{key,id:product.id,name:product.name,category:product.category,price:unitPrice,mrp:(v?variantBasePrice(product,v):(product.price||unitPrice)),qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,suggestedPacking:product.suggestedPacking||null,suggestSpecialDelivery:!!product.suggestSpecialDelivery,returnEligible:product.returnEligible===true,stockCount:stock}];
     });
   };
   const updateQty=(key,delta)=>
