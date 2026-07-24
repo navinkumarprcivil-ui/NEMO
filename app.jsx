@@ -3232,49 +3232,68 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
   );
 }
 
-/* Inline "rate our service & packing" prompt shown on each delivered order. Self-contained:
-   reads/writes its own per-order "already rated" flag and saves to the experienceReviews node. */
-function ExperienceReview({order, uk, user}){
+/* Unified "Write a review" for a delivered order: a collapsed button that expands to
+   multi-aspect stars (Product, Packing, Shipping, Overall) + a "where to improve" note.
+   The Product rating is applied to every product in the order (reflects on product pages).
+   Saves to the experienceReviews node; per-order "already reviewed" flag kept locally. */
+function ExperienceReview({order, uk, user, onRateProducts}){
   const [done,setDone]=useState(()=>loadExpReviewedSet(uk).includes(order.id));
-  const [service,setService]=useState(0);
+  const [open,setOpen]=useState(false);
+  const [product,setProduct]=useState(0);
   const [packing,setPacking]=useState(0);
+  const [shipping,setShipping]=useState(0);
+  const [overall,setOverall]=useState(0);
+  const [improve,setImprove]=useState("");
   const [comment,setComment]=useState("");
   const [saving,setSaving]=useState(false);
   if(done) return(
     <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-      <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",fontSize:12,color:"#15803d",fontWeight:700}}>✓ Thanks for rating our service &amp; packing!</div>
+      <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",fontSize:12,color:"#15803d",fontWeight:700}}>✓ Thanks for reviewing this order!</div>
     </div>
   );
-  const ready=service>0&&packing>0;
+  const ready=product>0&&packing>0&&shipping>0&&overall>0;
   const submit=async()=>{
     if(!ready||saving) return;
     setSaving(true);
     const rev={ id:order.id, orderNo:order.orderNo||orderId(order.id),
-      service, packing, comment:comment.trim(),
+      product, packing, shipping, overall, service:overall, // keep legacy 'service' for older admin views
+      improve:improve.trim(), comment:comment.trim(),
       name:(user&&user.name)||order.address?.name||"Customer",
       uid:uk||"", zone:order.shippingZoneLabel||"", date:new Date().toISOString() };
     try{ await saveExperienceReview(rev); }catch(e){}
+    try{ if(onRateProducts) await onRateProducts(order, product, comment.trim()); }catch(e){}
     addExpReviewedLocal(uk, order.id);
     setSaving(false); setDone(true);
   };
+  const ta={width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:12.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",boxSizing:"border-box",marginBottom:9,fontFamily:"'Plus Jakarta Sans',sans-serif"};
+  const row=(label,val,set)=>(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
+      <span style={{fontSize:12.5,color:C.text,fontWeight:600}}>{label}</span>
+      <ReviewStars value={val} onChange={set} size={22}/>
+    </div>
+  );
+  if(!open) return(
+    <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
+      <button className="press" onClick={()=>setOpen(true)}
+        style={{width:"100%",background:C.accentLight,color:C.primaryDark,border:`1.5px solid ${C.accent}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>⭐ Write a review</button>
+    </div>
+  );
   return(
     <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
       <div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px"}}>
-        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:2}}>📦 How was our service &amp; packing?</div>
-        <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.45}}>Your feedback helps us pack &amp; deliver better. (Rate the products separately above.)</div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
-          <span style={{fontSize:12,color:C.text,fontWeight:600}}>Service</span>
-          <ReviewStars value={service} onChange={setService} size={22}/>
-        </div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-          <span style={{fontSize:12,color:C.text,fontWeight:600}}>Packing quality</span>
-          <ReviewStars value={packing} onChange={setPacking} size={22}/>
-        </div>
-        <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={2} placeholder="Anything about delivery, packing or service? (optional)"
-          style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:12.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",boxSizing:"border-box",marginBottom:9,fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:2}}>⭐ Rate this order</div>
+        <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.45}}>Your <b>Product</b> rating also reflects on the product page.</div>
+        {row("Product quality",product,setProduct)}
+        {row("Packing",packing,setPacking)}
+        {row("Shipping",shipping,setShipping)}
+        {row("Overall satisfaction",overall,setOverall)}
+        <div style={{fontSize:11,fontWeight:700,color:C.textSub,margin:"6px 0 5px"}}>Where can we improve? <span style={{fontWeight:400}}>(optional)</span></div>
+        <textarea value={improve} onChange={e=>setImprove(e.target.value)} rows={2} placeholder="Tell us what we could do better…" style={ta}/>
+        <div style={{fontSize:11,fontWeight:700,color:C.textSub,margin:"2px 0 5px"}}>Public review <span style={{fontWeight:400}}>(optional — shown on the product)</span></div>
+        <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={2} placeholder="Share your experience with other fishkeepers…" style={ta}/>
         <button className="press" onClick={submit} disabled={!ready||saving}
           style={{width:"100%",background:ready?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:ready?"pointer":"default"}}>
-          {saving?<><Spinner/>Submitting…</>:"Submit rating"}
+          {saving?<><Spinner/>Submitting…</>:"Submit review"}
         </button>
       </div>
     </div>
@@ -3418,7 +3437,8 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
   );
 }
 
-function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
+function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, onRateOrderProducts, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
+  const [openId,setOpenId]=useState(null); // which order is expanded (list shows summaries; details open on tap)
   const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){ addToCart(prod,it.qty||1); n++; } }); nav("cart"); };
   const uk = userKey(user);
   const [payOpen,setPayOpen]=useState(null);
@@ -3442,6 +3462,13 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
     if(prod){ seen[it.id]=1; toReview.push({prod,name:it.name,category:it.category}); }
   }));
   const hasDelivered = myOrders.some(o=>o.status==="Delivered");
+  // "How was your order" + refer-a-friend show at the top only for a recent delivery (temporary),
+  // then live on inside that order's details in the list. (#13)
+  const RECENT_PROMPT_DAYS=7;
+  const recentDeliveredOrder=myOrders.filter(o=>o.status==="Delivered")
+    .sort((a,b)=>new Date(deliveredAtOf(b)||b.updatedAt||0)-new Date(deliveredAtOf(a)||a.updatedAt||0))[0]||null;
+  const recentDeliveredAt=recentDeliveredOrder?new Date(deliveredAtOf(recentDeliveredOrder)||recentDeliveredOrder.updatedAt||0).getTime():0;
+  const showTempPrompts=recentDeliveredAt>0 && (Date.now()-recentDeliveredAt)<=RECENT_PROMPT_DAYS*86400000;
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const [doaOpen,setDoaOpen]=useState(null);
   const [doaReso,setDoaReso]=useState("replacement");
@@ -3511,7 +3538,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
           <span style={{fontSize:18,color:C.textSub}}>›</span>
         </button>
-        {toReview.length>0&&(
+        {showTempPrompts&&toReview.length>0&&(
           <div style={{background:`linear-gradient(140deg,${C.primary},${C.accent})`,borderRadius:20,padding:"18px",marginBottom:16,color:"white",position:"relative",overflow:"hidden"}}>
             <div style={{position:"absolute",top:-24,right:-16,width:90,height:90,borderRadius:"50%",background:"rgba(255,255,255,.12)"}}/>
             <div style={{position:"relative"}}>
@@ -3541,7 +3568,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
         )}
 
-        {refCode&&(
+        {showTempPrompts&&refCode&&(
           <div style={{background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:18,padding:"16px",marginBottom:16,color:"white",position:"relative",overflow:"hidden"}}>
             <div style={{position:"absolute",top:-20,right:-14,width:84,height:84,borderRadius:"50%",background:"rgba(255,255,255,.12)"}}/>
             <div style={{position:"relative"}}>
@@ -3586,15 +3613,33 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
             </div>
           )}
           <div style={{fontSize:12,color:C.textSub,fontWeight:600,marginBottom:12}}>{myOrders.length} order{myOrders.length!==1?"s":""}</div>
-          {myOrders.map(o=>(
-            <div key={o.id} style={{background:C.card,borderRadius:18,padding:"16px",marginBottom:12,border:`1px solid ${C.border}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-                <div>
-                  <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary,marginBottom:3}}>{orderId(o.id)}</div>
-                  <div style={{fontSize:11.5,color:C.textSub}}>{fmtDate(o.placedAt)}</div>
+          {myOrders.map(o=>{
+            const open=openId===o.id;
+            const names=(o.items||[]).map(i=>i.name).join(", ");
+            const nItems=(o.items||[]).length;
+            const isDelivered=o.status==="Delivered";
+            const reviewedAll=(o.items||[]).every(it=>reviewedSet.includes(it.id));
+            return(
+            <div key={o.id} style={{background:C.card,borderRadius:18,padding:"16px",marginBottom:12,border:`1px solid ${open?C.accent:C.border}`}}>
+              {/* Compact summary — always visible; tap to open full details, bills & invoices (#11/#12) */}
+              <button className="press" onClick={()=>setOpenId(open?null:o.id)}
+                style={{width:"100%",background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontFamily:PRICE_FONT,fontSize:13.5,fontWeight:800,color:C.primary,marginBottom:3}}>{orderId(o.id)}</div>
+                    <div style={{fontSize:12.5,fontWeight:700,color:C.text,lineHeight:1.35,marginBottom:3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{names}</div>
+                    <div style={{fontSize:11,color:C.textSub}}>{fmtDate(o.placedAt)} · {nItems} item{nItems!==1?"s":""} · ₹{o.amountDue??(o.total+o.fee)}</div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+                    <StatusBadge status={o.status}/>
+                    <span style={{fontSize:11,fontWeight:800,color:C.primary}}>{open?"Hide ▲":"Details ▾"}</span>
+                  </div>
                 </div>
-                <StatusBadge status={o.status}/>
-              </div>
+                {isDelivered&&!reviewedAll&&!open&&(
+                  <div style={{marginTop:8,fontSize:11.5,fontWeight:800,color:"#f59e0b"}}>★★★★★ <span style={{color:C.primary}}>Tap to rate this order →</span></div>
+                )}
+              </button>
+              {open&&(<div style={{marginTop:12}}>
               {o.items.map((item,i)=>{
                 const m=CAT_META[item.category]||CAT_META["Live Fish"];
                 const prod=products.find(p=>p.id===item.id);
@@ -3766,9 +3811,24 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 <ReturnRequestBlock o={o} products={products} ownerWA={ownerWA} settings={settings}
                   onRequestReturn={onRequestReturn} onSubmitReturnShipment={onSubmitReturnShipment}/>
               )}
-              {o.status==="Delivered" && <ExperienceReview order={o} uk={uk} user={user}/>}
+              {/* Refer-a-friend lives inside the most recent delivered order once the top banner's temporary window ends (#13) */}
+              {isDelivered&&recentDeliveredOrder&&o.id===recentDeliveredOrder.id&&refCode&&(
+                <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
+                  <div style={{background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:12,padding:"12px",color:"white"}}>
+                    <div style={{fontSize:12.5,fontWeight:800,marginBottom:4}}>💜 Refer a friend &amp; earn rewards</div>
+                    <div style={{fontSize:11,opacity:.9,lineHeight:1.5,marginBottom:9}}>Share your code — your friend gets a welcome reward, and you earn wallet coins once their order is delivered.</div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.5)",borderRadius:9,padding:"8px 10px",fontFamily:"monospace",fontSize:14,fontWeight:800,letterSpacing:1.5,textAlign:"center"}}>{refCode}</div>
+                      <button className="press" onClick={()=>{ try{navigator.clipboard.writeText(refCode);}catch(e){} try{navigator.share&&navigator.share({text:`Use my code ${refCode} at ${STORE_NAME} Aqua Store and get a welcome reward on your order! 🐠`});}catch(e){} setRefCopied(true);setTimeout(()=>setRefCopied(false),2000); }}
+                        style={{background:refCopied?"rgba(255,255,255,.95)":"rgba(255,255,255,.25)",border:"1px solid rgba(255,255,255,.4)",borderRadius:9,padding:"9px 14px",color:refCopied?"#7c3aed":"white",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>{refCopied?"✓ Copied!":"Share"}</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {o.status==="Delivered" && <ExperienceReview order={o} uk={uk} user={user} onRateProducts={onRateOrderProducts}/>}
+              </div>)}
             </div>
-          ))}
+            );})}
           </>
         )}
 
@@ -8255,7 +8315,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <div>
             <div style={{fontSize:11,color:"rgba(255,255,255,.65)",fontWeight:600,letterSpacing:1,marginBottom:4}}>ADMIN — {STORE_NAME.toUpperCase()}</div>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{tab==="products"?"Products":tab==="reviews"?"Reviews":tab==="requests"?"Requests":"Orders"}</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{tab==="products"?"Products":tab==="dashboard"?"Dashboard":tab==="reviews"?"Reviews":tab==="requests"?"Requests":"Orders"}</div>
           </div>
           <div style={{display:"flex",gap:8}}>
             <button className="press" onClick={()=>{ if(window.confirm("Leave the Admin panel and go back to the store?")) onBack(); }}
@@ -8280,10 +8340,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
         {/* Tab bar */}
         <div style={{display:"flex",background:"rgba(0,0,0,.2)",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-          {["orders","products","wallets","reviews","requests","guides","settings"].map(t=>(
+          {["orders","dashboard","products","wallets","reviews","requests","guides","settings"].map(t=>(
             <button key={t} className="press" onClick={()=>setTab(t)}
               style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
-              {t==="orders"?"📋 Orders":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
+              {t==="orders"?"📋 Orders":t==="dashboard"?"📊 Dashboard":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
               {t==="orders"&&newOrderCount>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{newOrderCount}</span>}
               {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":attnProds.some(p=>(p.stockCount??DEFAULT_STOCK)<=0)?"#dc2626":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Products needing restock — tap Products to see which">{stockAlertCount}</span>}
               {t==="requests"&&requests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{requests.length}</span>}
@@ -8307,10 +8367,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
       )}
 
-      {/* ── ORDERS TAB ── */}
-      {tab==="orders"&&(
+      {/* ── DASHBOARD TAB (analytics — separated from order management, #9) ── */}
+      {tab==="dashboard"&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
-          {/* Sales analytics dashboard */}
           <AdminSalesDashboard orders={orders} products={products} settings={settings}/>
           {/* Visitor analytics */}
           <div style={{background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
@@ -8328,6 +8387,11 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           </div>
           {/* Behaviour insights — funnel, most viewed/added, top searches */}
           <AdminInsights stats={visitStats} products={products}/>
+        </div>
+      )}
+      {/* ── ORDERS TAB (order management only) ── */}
+      {tab==="orders"&&(
+        <div className="dt-read" style={{padding:"16px 16px 100px"}}>
           {/* ── Abandoned carts — shoppers who left items behind; nudge them on WhatsApp ── */}
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:abandonedCarts.length?12:6}}>
@@ -11065,6 +11129,23 @@ function NemoStore(){
       return next;
     });
   };
+  // Order-level "Product" rating from the order page → applies to every product in the order
+  // and reflects on each product page (marks them reviewed so we don't re-ask).
+  const rateOrderProducts=async(order, star, comment)=>{
+    if(!(Number(star)>0)) return;
+    const nm=(user&&user.name)||order.address?.name||"Customer";
+    const seen={};
+    for(const it of (order.items||[])){
+      if(!it||seen[it.id]) continue; seen[it.id]=1;
+      try{
+        const rev={id:uid("rev"),name:nm,rating:Number(star),comment:(comment||"").trim(),photos:[],date:new Date().toISOString(),orderId:order.id,verified:true,uid:userKey(user)||""};
+        const next=await appendReview(it.id,rev);
+        recomputeProductRating(it.id,next);
+        addReviewedLocal(userKey(user),it.id);
+      }catch(e){}
+    }
+    setReviewedSet(prev=>{ const s=new Set(prev); (order.items||[]).forEach(it=>it&&s.add(it.id)); return [...s]; });
+  };
 
   const placeOrder=(o)=>{
     // Demo/review sessions: the order stays on this device only — no cloud order,
@@ -11366,7 +11447,7 @@ function NemoStore(){
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
         {page==="orders"   &&(user
-          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
+          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} onRateOrderProducts={rateOrderProducts} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
           : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={()=>nav("home")}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={()=>nav("home")}/>}
         {page==="request"  &&<RequestPage nav={nav} user={user} onSubmit={submitRequest}/>}
