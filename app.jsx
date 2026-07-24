@@ -8315,7 +8315,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <div>
             <div style={{fontSize:11,color:"rgba(255,255,255,.65)",fontWeight:600,letterSpacing:1,marginBottom:4}}>ADMIN — {STORE_NAME.toUpperCase()}</div>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{tab==="products"?"Products":tab==="reviews"?"Reviews":tab==="requests"?"Requests":"Orders"}</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{tab==="products"?"Products":tab==="dashboard"?"Dashboard":tab==="reviews"?"Reviews":tab==="requests"?"Requests":"Orders"}</div>
           </div>
           <div style={{display:"flex",gap:8}}>
             <button className="press" onClick={()=>{ if(window.confirm("Leave the Admin panel and go back to the store?")) onBack(); }}
@@ -8340,10 +8340,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
         {/* Tab bar */}
         <div style={{display:"flex",background:"rgba(0,0,0,.2)",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-          {["orders","products","wallets","reviews","requests","guides","settings"].map(t=>(
+          {["orders","dashboard","products","wallets","reviews","requests","guides","settings"].map(t=>(
             <button key={t} className="press" onClick={()=>setTab(t)}
               style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
-              {t==="orders"?"📋 Orders":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
+              {t==="orders"?"📋 Orders":t==="dashboard"?"📊 Dashboard":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
               {t==="orders"&&newOrderCount>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{newOrderCount}</span>}
               {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":attnProds.some(p=>(p.stockCount??DEFAULT_STOCK)<=0)?"#dc2626":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Products needing restock — tap Products to see which">{stockAlertCount}</span>}
               {t==="requests"&&requests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{requests.length}</span>}
@@ -8367,10 +8367,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
       )}
 
-      {/* ── ORDERS TAB ── */}
-      {tab==="orders"&&(
+      {/* ── DASHBOARD TAB (analytics — separated from order management, #9) ── */}
+      {tab==="dashboard"&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
-          {/* Sales analytics dashboard */}
           <AdminSalesDashboard orders={orders} products={products} settings={settings}/>
           {/* Visitor analytics */}
           <div style={{background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
@@ -8388,6 +8387,11 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           </div>
           {/* Behaviour insights — funnel, most viewed/added, top searches */}
           <AdminInsights stats={visitStats} products={products}/>
+        </div>
+      )}
+      {/* ── ORDERS TAB (order management only) ── */}
+      {tab==="orders"&&(
+        <div className="dt-read" style={{padding:"16px 16px 100px"}}>
           {/* ── Abandoned carts — shoppers who left items behind; nudge them on WhatsApp ── */}
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:abandonedCarts.length?12:6}}>
