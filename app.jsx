@@ -226,8 +226,12 @@ function pincodeToState(pin){
   if(!p||isNaN(p)||p<100000||p>999999) return null;
   const pre=Math.floor(p/1000); // first 3 digits
   let code="";
+  // Puducherry (UT 34) sits inside Tamil Nadu/Kerala/AP postal ranges — its
+  // scattered pockets are inter-state (IGST) for a TN seller, so match them by
+  // exact PIN first: Pondicherry town, Karaikal, Yanam and Mahe.
+  if((p>=605001&&p<=605014)||(p>=609602&&p<=609609)||p===533464||p===673310||p===673311) code="34";
   // Pockets that sit inside a larger neighbouring band — checked first.
-  if(pre===160) code="04";              // Chandigarh (inside Punjab)
+  else if(pre===160) code="04";         // Chandigarh (inside Punjab)
   else if(pre===403) code="30";         // Goa (inside Maharashtra 40x)
   else if(pre===737) code="11";         // Sikkim (inside West Bengal 7xx)
   else if(pre===682) code="32";         // Kochi circle → Kerala
@@ -5811,7 +5815,7 @@ function ShippingRatesChart({settings={}}){
 }
 
 /* ═══════════════════ CHECKOUT PAGE (Phase 3+4) ═══════════════════ */
-const BLANK_ADDR={name:"",phone:"",whatsapp:"",address:"",city:"",pincode:"",notes:"",summary:"",waUpdates:true};
+const BLANK_ADDR={name:"",phone:"",whatsapp:"",address:"",city:"",pincode:"",state:"",stateCode:"",notes:"",summary:"",waUpdates:true};
 
 /* Two-stage exit-intent sheet shown when a customer with items tries to leave checkout. */
 function ExitIntentModal({savings=0, onStay, onLeave}){
@@ -5885,6 +5889,13 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     getMyReferralCode(user.uid).then(code=>{ if(alive) setMyRefCode(code); });
     return ()=>{alive=false;};
   },[placed,user,settings.referralMinOrder]);
+  // Auto-fill the delivery State (and GST state code) from the pincode — the
+  // place of supply that decides CGST+SGST (inside TN) vs IGST on the invoice.
+  // A recognised pincode is authoritative; unknown pincodes keep any manual pick.
+  useEffect(()=>{
+    const d=pincodeToState(addr.pincode);
+    if(d) setAddr(a=>(a.stateCode===d.code?a:{...a,state:d.name,stateCode:d.code}));
+  },[addr.pincode]);
   const [specialDelivery,setSpecialDelivery]=useState(false);
   const packingZone=pincodeToZone(addr.pincode);
   const suggestedPacking=suggestedPackingForCart(cart,packingZone);
@@ -6246,6 +6257,27 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             {inp("City","city","text","Chennai",true)}
             {inp("Pincode","pincode","text","600001",true)}
           </div>
+          {(()=>{ const d=pincodeToState(addr.pincode); const six=/^\d{6}$/.test(addr.pincode||"");
+            return (
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>State</div>
+                {d ? (
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:C.accentLight,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px 14px"}}>
+                    <span style={{fontSize:14,fontWeight:700,color:C.text}}>{d.name}</span>
+                    <span style={{fontSize:10,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"2px 8px",letterSpacing:.3}}>✓ AUTO-DETECTED</span>
+                  </div>
+                ) : (
+                  <select value={addr.stateCode||""} onChange={e=>{const c=e.target.value; f("stateCode",c); f("state",GST_STATES[c]||"");}}
+                    style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",color:addr.stateCode?C.text:C.textSub}}>
+                    <option value="">{six?"Select your state…":"Enter pincode above to auto-detect, or pick…"}</option>
+                    {Object.keys(GST_STATES).sort((a,b)=>GST_STATES[a].localeCompare(GST_STATES[b])).map(c=>(
+                      <option key={c} value={c}>{GST_STATES[c]}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            );
+          })()}
           <div style={{marginBottom:14}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Delivery Notes <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <textarea value={addr.notes} onChange={e=>f("notes",e.target.value)} rows={3}
