@@ -30,6 +30,7 @@ Work on branch `claude/nemo-aqua-store-enhancement-74a3o1` → commit → push �
 - PWA store-ready: manifest (id, screenshots, shortcuts, categories), `/.well-known/assetlinks.json` (pkg `in.nemoaquastore.app`), `/privacy.html`.
 - SEO: schema.org, sitemap, static `/p/` product pages + `/guides/` blog articles.
 - Icons unified to the clownfish; new 1200×630 share banner.
+- **GST live (GSTIN `33BWXPP8706N1ZI`, Tamil Nadu):** once a GSTIN is saved in Settings, the formal invoice (`openInvoice` → `generateInvoiceHTML`) becomes a proper **Tax Invoice** with HSN, place of supply, and the correct tax split — **CGST+SGST for deliveries inside TN, IGST for every other state**, decided automatically from the customer's delivery pincode via `pincodeToState()` (no state field needed at checkout). Settings shows a live "✓ Valid GSTIN · Seller state: TAMIL NADU (33)" confirmation under the GSTIN field. Prices are treated as GST-inclusive; default rate/HSN in Settings, per-product override supported.
 
 ## Play Store launch — LIVE STATUS (updated 24 Jul 2026)
 **Account type: PERSONAL** → requires 12 testers opted-in for 14 continuous days before production.
@@ -60,7 +61,7 @@ Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built 
 - Audit report at `AUDIT_REPORT.md` (76/100). Phase-1 quick wins done (ErrorBoundary, minified `app.js`, GA4, lighter OG). Not yet: best-sellers row, species spec fields+filters, accessibility pass, FCM push.
 
 ## Deploy/merge workflow used this session
-Work on branch `claude/repo-connection-j006nq` → commit → open PR to `main` → squash-merge → Vercel auto-deploys `main`. (Claude has GitHub MCP write access + merges directly when user says "go".) SW cache currently `nemo-v35`; bump on each release.
+Work on branch `claude/repo-connection-j006nq` → commit → open PR to `main` → squash-merge → Vercel auto-deploys `main`. (Claude has GitHub MCP write access + merges directly when user says "go".) SW cache currently `nemo-v36`; bump on each release.
 
 ## Gotchas
 - Sandbox network blocks fetching the live site + unpkg (can't render the app here) — verify via `esbuild`/`node --check` + code review; user eyeballs the deploy.
