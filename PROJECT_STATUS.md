@@ -31,9 +31,12 @@ Work on branch `claude/nemo-aqua-store-enhancement-74a3o1` → commit → push �
 - SEO: schema.org, sitemap, static `/p/` product pages + `/guides/` blog articles.
 - Icons unified to the clownfish; new 1200×630 share banner.
 
-## Play Store launch — LIVE STATUS (updated 18 Jul 2026)
+## Play Store launch — LIVE STATUS (updated 19 Jul 2026)
 **Account type: PERSONAL** → requires 12 testers opted-in for 14 continuous days before production.
 Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built via PWABuilder (user has it + the permanent `signing.keystore` — NEVER commit it).
+
+**▶ WHERE WE ARE RIGHT NOW:** Closed testing is **Active** (reviewed & published). **12 testers opted in on ~19 Jul 2026 → the 14-day clock is RUNNING.** Eligible to **Apply for production ~2 Aug 2026** (14 continuous days with ≥12 opted-in testers). Nothing gates this but time — see "NEXT" below.
+**⚠ Protect the clock:** don't remove testers, don't unpublish the track, don't upload a new `.aab` unless necessary (website changes via GitHub→Vercel are safe). Keep ≥12 opted in (18 total added, so there's a cushion).
 
 **DONE ✅**
 - App created in Play Console; app-signing enabled.
@@ -43,24 +46,29 @@ Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built 
 - **Store listing** written (name, short desc, full desc), category Shopping, contact details. Feature graphic (1024×500) + share banner made by user. App icon = `assets/favicon-512.png`.
 - **Reviewer demo login**: sign-in screen has a sandboxed demo mode (PR #15). Reviewer instructions given in Play "Sign-in details".
 - `/delete-account.html` live (required Delete-account URL for Data safety).
+- **Advertising ID declaration** = No (TWA, no native ad SDK; GA4 is web-only). Cleared the "incomplete advertising ID" blocker.
+- **Android developer verification**: `in.nemoaquastore.app` shows **Registered** (auto, via Play Console) — no action needed (Sept 2026 requirement already met).
+- **Closed testing release** created (Add-from-library, same `.aab`), country India, tester email list (18 Gmails) attached, **rolled out & reviewed → Active**.
+- **In-app "Delete my account" SHIPPED ✅** (PR #18, merged to `main`, live on site). Account screen (My Orders) → "Delete my account" (danger card, tick-to-confirm) → wipes customer's reachable cloud data (saved items, abandoned cart, own tank photos), records an **Account deletion request** in Admin → Requests (badged), signs out. Orders/payment records **retained** (tax law). Admin → Requests shows it in red with **one-tap "Delete remaining data"** (clears wallet/loyalty + referral mapping) + WhatsApp "Confirm to customer". Demo/review sessions clear + sign out only (never touch DB). **`database.rules.json` updated (admin delete on `favorites`+`userrefs`) and PUBLISHED ✅.**
+- **GitHub repo made PRIVATE** — Vercel still auto-deploys `main` (redeploy verified working). Live app unaffected.
 
-**NEXT — the ONLY thing gating production ⏳**
-1. **Closed testing**: create release (Add-from-library, reuse same `.aab`) → country India → add **12+ tester Gmails** → roll out for review.
-2. **Get 12 testers OPTED IN** via the opt-in link (iPhone users can opt in but can't install — use Android testers). 14-day clock starts once 12 are in.
-3. After 14 days → **Apply for production** → answer closed-test questions → create production release → submit → live.
+**NEXT — the ONLY thing gating production ⏳ (time, not tasks)**
+1. ✅ Closed testing Active; ✅ 12 testers opted in (~19 Jul) → **14-day clock running**.
+2. **Wait 14 continuous days** with ≥12 opted-in testers. Encourage real testing activity (browse, cart, place a test order), not just installs.
+3. **~2 Aug 2026:** Play unlocks **Apply for production** → answer closed-test questions (recruitment, feedback, how addressed) → create production release → submit → live.
 
-**Open build tasks:**
-- ✅ **In-app "Delete my account"** button + admin deletion panel — BUILT (branch `claude/play-store-launch-0rabhj`). Account screen (My Orders) → "Delete my account" (danger card, tick-to-confirm). On confirm it wipes the customer's reachable cloud data (saved items, abandoned cart, own tank photos), records an **Account deletion request** in Admin → Requests (badged), and signs the user out. Orders/payment records are **retained** (tax law). Admin → Requests shows the request in red with **one-tap "Delete remaining data"** (clears wallet/loyalty coins + referral mapping) + a WhatsApp "Confirm to customer" button. Demo/review sessions just clear + sign out (never hit the DB). **⚠ REQUIRES publishing the updated `database.rules.json`** — it now grants the admin uid delete access to `favorites` + `userrefs` so the one-tap purge is complete. Publish in Firebase console → Realtime Database → Rules.
+**Open build tasks (offered, not yet built):**
 - Optional "Report content" button → would raise rating Teen→Everyone (fixes Germany USK16).
 - Birthday field (Personal info→Other info, NOT Calendar) for b'day offers — future.
 
 ## Also pending (non-Play)
-- **SEO off-site**: Search Console resubmit `sitemap.xml` + request indexing; **create Google Business Profile** (biggest lever); Justdial/IndiaMART.
-- **Firebase rules**: user already PUBLISHED the `abandonedCarts` rule. ✅
+- **Google Business Profile CREATED ✅** (name "Nemo Aqua Store", category Aquarium shop, verified/managed, hours set). **TODO:** complete profile to 100% (photos, products, description), connect WhatsApp (+91 93609 21030), and **collect Google reviews** (biggest local-SEO lever — send the "Ask for reviews" link on WhatsApp after each delivery). Decide storefront-address (pin) vs delivery service-area. Ranking for "aquarium store near me" builds over weeks as reviews/photos grow.
+- **SEO off-site**: Search Console resubmit `sitemap.xml` + request indexing; Justdial/IndiaMART. Optional Google Ads (small daily cap; local intent > broad).
+- **Firebase rules**: `abandonedCarts` ✅ and delete-account (`favorites`+`userrefs`) ✅ both PUBLISHED.
 - Audit report at `AUDIT_REPORT.md` (76/100). Phase-1 quick wins done (ErrorBoundary, minified `app.js`, GA4, lighter OG). Not yet: best-sellers row, species spec fields+filters, accessibility pass, FCM push.
 
-## Deploy/merge workflow used this session
-Work on branch `claude/repo-connection-j006nq` → commit → open PR to `main` → squash-merge → Vercel auto-deploys `main`. (Claude has GitHub MCP write access + merges directly when user says "go".) SW cache currently `nemo-v34`; bump on each release.
+## Deploy/merge workflow
+Work on branch `claude/play-store-launch-0rabhj` → commit → PR to `main` → merge → Vercel auto-deploys `main`. **Repo is now PRIVATE (Vercel access retained).** After ANY `app.jsx` change: rebuild `app.js` (esbuild, see top), bump `sw.js` cache. SW cache currently **`nemo-v35`**; bump on each release. NOTE: PR #18 already merged — per git rules, start follow-up work by restarting this branch from `origin/main` (don't stack on merged history).
 
 ## Gotchas
 - Sandbox network blocks fetching the live site + unpkg (can't render the app here) — verify via `esbuild`/`node --check` + code review; user eyeballs the deploy.
