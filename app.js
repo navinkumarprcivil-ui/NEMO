@@ -72,7 +72,7 @@ Open the ${STORE_NAME} app \u2192 *Orders* tab \u2192 tap *Rate* on your product
     ${j?`<div class="box"><h4>\u{1F4CB} Order Info</h4>
       <p>Zone: ${a(n.shippingZoneLabel)||"\u2014"}</p>
       <p class="sub">Status: ${a(n.status)||"\u2014"}</p>
-      <p class="sub">Payment: ${O?'<span style="color:#16a34a;font-weight:700">\u2713 Verified</span>':'<span style="color:#b45309;font-weight:700">\u23F3 Pending</span>'}</p>
+      <p class="sub">Payment: ${B?'<span style="color:#16a34a;font-weight:700">\u2713 Verified</span>':'<span style="color:#b45309;font-weight:700">\u23F3 Pending</span>'}</p>
       ${n.txnId?`<p class="sub">Txn: ${a(n.txnId)}</p>`:""}
     </div>`:`<div class="box"><h4>\u{1F3E0} Bill To</h4>
       <p>${a(s.name)||a(i.name)||"\u2014"}</p>
