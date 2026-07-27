@@ -46,10 +46,12 @@ Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built 
 - `/delete-account.html` live (required Delete-account URL for Data safety).
 - **In-app "Delete my account" + admin deletion panel — MERGED to `main` (PR #18).** Account screen → danger card (tick-to-confirm) wipes the customer's reachable cloud data (saved items, abandoned cart, own tank photos), logs an **Account deletion request** in Admin → Requests (badged), and signs the user out. Orders/payment records retained (tax law). Admin → Requests shows it in red with one-tap "Delete remaining data" (wallet/loyalty coins + referral mapping) + WhatsApp "Confirm to customer". Demo/review sessions just clear + sign out. **⚠ REQUIRES publishing the updated `database.rules.json`** (grants admin uid delete access to `favorites` + `userrefs` so the one-tap purge is complete) — Firebase console → Realtime Database → Rules.
 
-**NEXT — the ONLY thing gating production ⏳**
-1. **Closed testing**: create release (Add-from-library, reuse same `.aab`) → country India → add **12+ tester Gmails** → roll out for review.
+**⚠ TARGET API 36 (deadline 31 Aug 2026)** — Play Console flagged the app targets API 35; must target **Android 16 (API 36)** to keep updating. Fix is in the **PWABuilder package, NOT this repo**: rebuild the `.aab` at **Target API = 36** in PWABuilder, **signing with the SAME existing `signing.keystore`** (never a new key, or Play rejects it as a different app), then upload to the **existing closed-testing track** (does NOT reset the 12-tester/14-day opt-in clock) → promote that same build to production after day 14. If the rebuild shows a new SHA-256, add it to `.well-known/assetlinks.json`.
+
+**NEXT — the ONLY thing gating production ⏳** (in progress: 12 testers opted in, ~8 days as of late Jul 2026)
+1. **Closed testing**: create release (Add-from-library, use the **API-36** `.aab`) → country India → add **12+ tester Gmails** → roll out for review.
 2. **Get 12 testers OPTED IN** via the opt-in link (iPhone users can opt in but can't install — use Android testers). 14-day clock starts once 12 are in.
-3. After 14 days → **Apply for production** → answer closed-test questions → create production release → submit → live.
+3. After 14 days → **Apply for production** → answer closed-test questions → create production release (the API-36 build) → submit → live.
 
 **Open build tasks:**
 - Optional "Report content" button → would raise rating Teen→Everyone (fixes Germany USK16).
