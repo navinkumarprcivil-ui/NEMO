@@ -118,6 +118,31 @@ function productVariants(p){
   return p.category==="Live Fish" ? DEFAULT_FISH_VARIANTS : null;
 }
 function hasVariants(p){ const v=productVariants(p); return !!(v && v.length); }
+
+/* ── Per-option stock ──────────────────────────────────────────────────────────
+   Each option keeps its own count in `variantStock` (a map keyed by option id, NOT an array
+   index — options get reordered, ids don't). Products saved before this existed have no map,
+   and fall back to the single shared pool they've always used, so nothing changes for them
+   until per-option numbers are entered. */
+function hasVariantStock(p){ return !!(p && p.variantStock && Object.keys(p.variantStock).length); }
+function variantStockOf(p, v){
+  if(!v) return p.stockCount ?? DEFAULT_STOCK;
+  if(!hasVariantStock(p)) return p.stockCount ?? DEFAULT_STOCK;   // legacy shared pool
+  const n = p.variantStock[v.id];
+  return typeof n==="number" ? n : 0;
+}
+/* An option is unavailable if the admin flagged it sold out OR it has run down to zero. */
+function variantSoldOut(p, v){ return !!(v && (v.soldOut || variantStockOf(p,v)<=0)); }
+function availableVariants(p){ const vs=productVariants(p); return vs ? vs.filter(v=>!variantSoldOut(p,v)) : null; }
+/* Units a shopper can actually buy. For an option product that's the sum of what's left across
+   its available options — so a product whose every option is gone reads as out of stock, instead
+   of staying "In Stock" on a leftover product-level number. */
+function productStockTotal(p){
+  const vs=productVariants(p);
+  if(!vs || !vs.length) return p.stockCount ?? DEFAULT_STOCK;
+  if(!hasVariantStock(p)) return vs.some(v=>!v.soldOut) ? (p.stockCount ?? DEFAULT_STOCK) : 0;
+  return vs.reduce((s,v)=>s + (v.soldOut ? 0 : Math.max(0, variantStockOf(p,v))), 0);
+}
 /* Heading over the option list. The admin can name it per product ("Size", "Capacity",
    "Wattage", "Pack Size"); otherwise it falls back to something sensible for the category. */
 function variantHeading(p){
@@ -130,7 +155,7 @@ function variantHeading(p){
 function variantFromPrice(p){
   const vs=productVariants(p);
   if(!vs||!vs.length) return effectivePrice(p);
-  const live=vs.filter(v=>!v.soldOut);
+  const live=vs.filter(v=>!variantSoldOut(p,v));
   const pool=live.length?live:vs;
   return Math.min(...pool.map(v=>variantEffPrice(p,v)));
 }
@@ -3164,7 +3189,7 @@ function CountdownBanner({endsAt, title="Limited Time Offer", subtitle="Don't mi
   );
 }
 
-/* ═══════════════════ VARIANT PICKER (Live Fish) ═══════════════════ */
+/* ═══════════════════ VARIANT PICKER ═══════════════════ */
 function VariantPicker({product, variants, selectedId, onSelect}){
   const onSale=(product.discountPct||0)>0;
   return(
@@ -3175,15 +3200,18 @@ function VariantPicker({product, variants, selectedId, onSelect}){
           const sel = v.id===selectedId;
           const price = variantEffPrice(product, v);
           const orig  = variantBasePrice(product, v);
+          // Sold out = flagged by the admin OR run down to zero on its own count.
+          const out  = variantSoldOut(product, v);
+          const left = hasVariantStock(product) ? variantStockOf(product, v) : null;
           return(
-            <button key={v.id} className="press" onClick={()=>!v.soldOut&&onSelect(v)} disabled={v.soldOut}
+            <button key={v.id} className="press" onClick={()=>!out&&onSelect(v)} disabled={out}
               style={{
                 width:"100%",textAlign:"left",
-                background: v.soldOut?"#f3f4f6":sel?C.accentLight:C.card,
+                background: out?"#f3f4f6":sel?C.accentLight:C.card,
                 border:`1.5px solid ${sel?C.primary:C.border}`,
                 borderRadius:14, padding:"12px 14px",
                 display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
-                opacity:v.soldOut?.55:1,cursor:v.soldOut?"not-allowed":"pointer",
+                opacity:out?.55:1,cursor:out?"not-allowed":"pointer",
                 fontFamily:"'Plus Jakarta Sans',sans-serif",
               }}>
               <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
@@ -3192,9 +3220,10 @@ function VariantPicker({product, variants, selectedId, onSelect}){
                 </div>
                 <div style={{fontSize:13,fontWeight:600,color:C.text,lineHeight:1.3}}>{v.label}</div>
               </div>
-              {v.soldOut
+              {out
                 ? <span style={{fontSize:11,fontWeight:700,color:C.danger}}>Sold out</span>
                 : <span style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                    {left!=null&&left<=3&&<span style={{fontSize:10,fontWeight:800,color:C.coral}}>Only {left} left</span>}
                     {onSale&&<span style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{orig}</span>}
                     <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{price}</span>
                   </span>}
@@ -4081,7 +4110,9 @@ function flyToCart(x,y,imgSrc){
 
 function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,isInterested=false,onInterest}){
   const m   = CAT_META[p.category]||CAT_META["Live Fish"];
-  const stk = typeof p.stockCount==="number" ? p.stockCount : DEFAULT_STOCK;
+  // For an option product this is the sum of what's left across its available options, so a
+  // product whose every option is gone reads as sold out rather than "In stock".
+  const stk = productStockTotal(p);
   const oos = stk<=0;
   const soon = !!p.comingSoon;
   const onSale = (p.discountPct||0) > 0;
@@ -5000,7 +5031,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
   let list = products.filter(p=>{
     if(category!=="All" && p.category!==category) return false;
     if(query && !smartMatch(query,p)) return false;
-    const stk = p.stockCount ?? DEFAULT_STOCK;
+    const stk = productStockTotal(p);
     if(availability==="instock" && stk<=0) return false;
     if(availability==="limited" && (stk<=0 || stk>3)) return false;
     if(effectivePrice(p) > priceMax) return false;
@@ -5365,10 +5396,15 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
 
   if(!p)return null;
   const m   = CAT_META[p.category]||CAT_META["Live Fish"];
-  const stk = p.stockCount ?? DEFAULT_STOCK;
-  const oos = stk<=0;
   const variants = productVariants(p);
-  const selVar = variants ? (variants.find(v=>v.id===selVarId && !v.soldOut) || variants.find(v=>!v.soldOut) || variants[0]) : null;
+  // Prefer the option the shopper picked; otherwise the first one that's actually available.
+  // Falling back to variants[0] regardless (as this used to) meant a product whose options were
+  // ALL sold out still preselected one and sold it.
+  const selVar = variants ? (variants.find(v=>v.id===selVarId && !variantSoldOut(p,v)) || variants.find(v=>!variantSoldOut(p,v)) || variants[0]) : null;
+  const selOut = !!(selVar && variantSoldOut(p, selVar));
+  // Stock shown/enforced is the SELECTED option's when options carry their own counts.
+  const stk = selVar ? variantStockOf(p, selVar) : (p.stockCount ?? DEFAULT_STOCK);
+  const oos = productStockTotal(p)<=0 || selOut;
   const onSale = (p.discountPct||0)>0;
   const baseEff = effectivePrice(p);
   const unitPrice = selVar ? variantEffPrice(p, selVar) : baseEff;
@@ -5452,7 +5488,9 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <div style={{textAlign:"right",flexShrink:0}}>
             <div style={{fontFamily:PRICE_FONT,fontSize:24,fontWeight:800,color:C.primary}}>₹{unitPrice}</div>
             {onSale&&<div style={{fontSize:13,color:C.textSub,textDecoration:"line-through"}}>₹{selVar?variantBasePrice(p,selVar):p.price}</div>}
-            <div style={{marginTop:5}}><StockBadge stockCount={stk}/></div>
+            {/* Reflects what's actually buyable right now: 0 when the product (or the selected
+                option) is unavailable, rather than a leftover product-level number. */}
+            <div style={{marginTop:5}}><StockBadge stockCount={oos?0:stk}/></div>
           </div>
         </div>
 
@@ -7130,13 +7168,15 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
   // save unless you name it, so a product with no options stays a plain single-price item.
   // A Live Fish product with no rows still shows customers the standard pair/trio set, because
   // productVariants() falls back to it — and "Use the standard types" materialises them to edit.
-  const blankVariant=()=>({ id:uid("v"), label:"", price:Number(product?.price)||"", packagingWeight:null, soldOut:false });
+  const blankVariant=()=>({ id:uid("v"), label:"", price:Number(product?.price)||"", stock:null, packagingWeight:null, soldOut:false });
   const seedVariants=()=>{
     const src = product?.variants&&product.variants.length ? product.variants : null;
     if(!src) return [blankVariant()];
     const base = Number(product?.price)||0;
+    const vstock = product?.variantStock||{};
     return src.map(v=>({ id:v.id||uid("v"), label:v.label,
       price:(typeof v.price==="number"?v.price:Math.round(base*(v.priceMul||1))),
+      stock:(typeof vstock[v.id]==="number"?vstock[v.id]:null),
       packagingWeight:(v.packagingWeight??null),   // was dropped here, losing per-option shipping weight on edit
       soldOut:!!v.soldOut }));
   };
@@ -7244,9 +7284,29 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     (product?.media||[]).forEach(m=>{ if(!keptKeys.has(m.key)){ delMediaItem(m.key); delMediaItem(m.key+"_thumb"); } });
 
     const firstImg=images.find(i=>i.src)?.src || "";
+    // Options and their stock, built together so the two always agree. Unnamed rows are dropped,
+    // so the default blank row never becomes an option. `variantStock` is only written when at
+    // least one option has a number in it — leave them all blank and the product keeps the single
+    // shared pool it has always used.
+    const savedVariantFields=(()=>{
+      const rows=variants.filter(v=>String(v.label||"").trim());
+      if(!rows.length) return { variants:null, variantStock:null };
+      const list=rows.map(v=>({
+        id:v.id,
+        label:v.label.trim(),
+        price:Math.max(0,Math.round(Number(v.price)||0)),
+        packagingWeight:(v.packagingWeight===""||v.packagingWeight==null)?null:Math.max(0,Number(v.packagingWeight)||0),
+        soldOut:!!v.soldOut,
+      }));
+      const anyStock=rows.some(v=>v.stock!=null&&v.stock!=="");
+      const stockMap=anyStock?rows.reduce((m,v)=>{ m[v.id]=Math.max(0,parseInt(v.stock)||0); return m; },{}):null;
+      return { variants:list, variantStock:stockMap };
+    })();
     const saved={id,name:form.name,category:form.category,tag:form.tag,desc:form.desc,
       price:Number(form.price),
-      stockCount:Math.max(0,parseInt(form.stockCount)||0),
+      stockCount:savedVariantFields.variantStock
+        ? Object.values(savedVariantFields.variantStock).reduce((a,b)=>a+b,0)   // options are the truth; the product total follows them
+        : Math.max(0,parseInt(form.stockCount)||0),
       discountPct:Math.min(100,Math.max(0,parseInt(form.discountPct)||0)),
       offerEndsAt:form.offerEndsAt?new Date(form.offerEndsAt).toISOString():null,
       comingSoon:!!form.comingSoon,
@@ -7261,18 +7321,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
       media,
       rating:product?.rating||0,reviews:product?.reviews||0,
       variantLabelText:form.variantLabelText.trim(),
-      // Options are available to every category now, and each carries its own packing weight —
-      // that field is what the shipping calculation reads, and it used to be dropped here.
-      variants: (()=>{
-        const list=variants.filter(v=>v.label.trim()).map(v=>({
-          id:v.id,
-          label:v.label.trim(),
-          price:Math.max(0,Math.round(Number(v.price)||0)),
-          packagingWeight:(v.packagingWeight===""||v.packagingWeight==null)?null:Math.max(0,Number(v.packagingWeight)||0),
-          soldOut:!!v.soldOut,
-        }));
-        return list.length?list:null;
-      })(),
+      ...savedVariantFields,
       createdAt:product?.createdAt||new Date().toISOString()};
     // Build a cache patch so the UI shows new media immediately
     const cachePatch={};
@@ -7318,11 +7367,27 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Price (₹)</div>
             <input type="number" value={form.price} onChange={e=>f("price",e.target.value)} placeholder="350" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
           </div>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Stock Count</div>
-            <input type="number" value={form.stockCount} onChange={e=>f("stockCount",e.target.value)} placeholder="10" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
-            <div style={{fontSize:11,color:C.textSub,marginTop:4}}>Customers can order up to this many (max {MAX_PER_ORDER}).</div>
-          </div>
+          {(()=>{
+            // Once options carry their own counts, they ARE the stock — the product total is
+            // their sum, so editing it here would just be overwritten. Show the sum instead.
+            const perOption=variants.filter(v=>String(v.label||"").trim()&&v.stock!=null&&v.stock!=="");
+            if(perOption.length) return(
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Stock Count</div>
+                <div style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,background:C.bg,color:C.textSub,fontFamily:PRICE_FONT,fontWeight:700}}>
+                  {perOption.reduce((a,v)=>a+(parseInt(v.stock)||0),0)}
+                </div>
+                <div style={{fontSize:11,color:C.textSub,marginTop:4}}>Total across your options — set each one's stock below.</div>
+              </div>
+            );
+            return(
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Stock Count</div>
+                <input type="number" value={form.stockCount} onChange={e=>f("stockCount",e.target.value)} placeholder="10" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+                <div style={{fontSize:11,color:C.textSub,marginTop:4}}>Customers can order up to this many (max {MAX_PER_ORDER}).</div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Offer / discount */}
@@ -7403,7 +7468,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
                     <button className="press" onClick={()=>removeVariant(v.id)} title="Remove"
                       style={{flexShrink:0,width:30,height:30,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
                     <div>
                       <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>PRICE</div>
                       <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}}>
@@ -7413,8 +7478,15 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
                       </div>
                     </div>
                     <div>
-                      <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>PACKING WEIGHT</div>
-                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="Packing weight for this type (kg) — used for shipping">
+                      <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>STOCK</div>
+                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="How many of this option you have. Sells down on its own; the product's total is the sum of these.">
+                        <input type="number" min="0" step="1" value={v.stock??""} onChange={e=>setVar(v.id,"stock",e.target.value===''?null:Math.max(0,parseInt(e.target.value)||0))} placeholder="0"
+                          style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>PACKING WT</div>
+                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="Packing weight for this option (kg) — used for shipping. Customers never see it.">
                         <input type="number" step="0.05" min="0" value={v.packagingWeight??""} onChange={e=>setVar(v.id,"packagingWeight",e.target.value===''?null:Number(e.target.value))} placeholder="0.20"
                           style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
                         <span style={{fontSize:12,color:C.textSub,fontWeight:700,whiteSpace:"nowrap"}}>kg</span>
@@ -9095,7 +9167,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                     <span style={{fontFamily:PRICE_FONT,fontSize:15,fontWeight:800,color:C.primary}}>₹{effectivePrice(p)}</span>
                     {p.comingSoon
                       ? <span style={{fontSize:10,fontWeight:800,color:C.accent,background:C.accentLight,padding:"2px 7px",borderRadius:12}}>🔜 Coming Soon · {interestCounts[p.id]||0} interested</span>
-                      : <StockBadge stockCount={p.stockCount ?? DEFAULT_STOCK}/>}
+                      : <StockBadge stockCount={productStockTotal(p)}/>}
                     {(p.discountPct||0)>0&&!p.comingSoon&&<span style={{fontSize:10,fontWeight:800,color:C.coral,background:"#fff7ed",padding:"2px 7px",borderRadius:12}}>-{p.discountPct}%</span>}
                     {p.hasImg&&<span style={{fontSize:10,color:C.accent}}>📷</span>}
                     {p.hasVid&&<span style={{fontSize:10,color:C.accent}}>🎬</span>}
@@ -11085,11 +11157,15 @@ function NemoStore(){
   };
 
   const addToCart=(product,qty=1,variant=null)=>{
-    const stock = product.stockCount ?? DEFAULT_STOCK;
     let v = variant;
     // Any product with options gets one picked if the caller didn't pass one (reorder, cross-sell,
     // "buy it again") — otherwise the line would land with no option and the plain base price.
-    if(!v){ const vs=productVariants(product); if(vs&&vs.length) v=vs.find(x=>!x.soldOut)||vs[0]; }
+    if(!v){ const vs=productVariants(product); if(vs&&vs.length) v=vs.find(x=>!variantSoldOut(product,x))||null; }
+    // Never let a sold-out option through, whoever asked for it.
+    if(qty>0 && v && variantSoldOut(product,v)){ setTimeout(()=>showToast(`${v.label} is sold out`,"error"),0); return; }
+    if(qty>0 && productStockTotal(product)<=0){ setTimeout(()=>showToast("Out of stock","error"),0); return; }
+    // The cap is the CHOSEN option's stock, not the product-wide pool.
+    const stock = v ? variantStockOf(product, v) : (product.stockCount ?? DEFAULT_STOCK);
     const key = product.id + (v?("|"+v.id):"");
     const unitPrice = v ? variantEffPrice(product, v) : effectivePrice(product);
     const maxAllowed = Math.max(0, Math.min(stock, MAX_PER_ORDER));
@@ -11501,9 +11577,15 @@ function NemoStore(){
     trackFunnel("order");
     // NOTE: loyalty points are earned ONLY when the order is delivered (see updateOrderHandler),
     // never at placement — an unpaid/cancelled order earns nothing.
-    // Atomically decrement stock in the cloud (prevents overselling across devices)
-    const sold={};
-    o.items.forEach(it=>{sold[it.id]=(sold[it.id]||0)+it.qty;});
+    // Atomically decrement stock in the cloud (prevents overselling across devices).
+    // Two counters move together for an option product: the option's own count and the
+    // product-wide total, each under its own transaction so concurrent buyers can't oversell.
+    const sold={};                       // pid -> units (product-wide)
+    const soldVar={};                    // pid -> { variantId -> units }
+    o.items.forEach(it=>{
+      sold[it.id]=(sold[it.id]||0)+it.qty;
+      if(it.variantId){ (soldVar[it.id]=soldVar[it.id]||{})[it.variantId]=(soldVar[it.id][it.variantId]||0)+it.qty; }
+    });
     if(FB_OK){
       Object.keys(sold).forEach(pid=>{
         try{
@@ -11512,10 +11594,29 @@ function NemoStore(){
             return Math.max(0, c - sold[pid]);
           });
         }catch(e){}
+        // Only touch a per-option counter that already exists — a product still on the shared
+        // pool must not sprout one here, or its stock would start reading as zero.
+        Object.keys(soldVar[pid]||{}).forEach(vid=>{
+          try{
+            FB_DB.ref("products/"+pid+"/variantStock/"+vid).transaction(cur=>{
+              if(typeof cur!=="number") return cur;   // abort: no per-option stock on this product
+              return Math.max(0, cur - soldVar[pid][vid]);
+            });
+          }catch(e){}
+        });
       });
     }
     setProducts(prev=>{
-      const next=prev.map(p=>sold[p.id]?{...p,stockCount:Math.max(0,(p.stockCount??DEFAULT_STOCK)-sold[p.id])}:p);
+      const next=prev.map(p=>{
+        if(!sold[p.id]) return p;
+        const np={...p,stockCount:Math.max(0,(p.stockCount??DEFAULT_STOCK)-sold[p.id])};
+        if(hasVariantStock(p) && soldVar[p.id]){
+          const vs={...p.variantStock};
+          Object.keys(soldVar[p.id]).forEach(vid=>{ if(typeof vs[vid]==="number") vs[vid]=Math.max(0, vs[vid]-soldVar[p.id][vid]); });
+          np.variantStock=vs;
+        }
+        return np;
+      });
       if(!FB_OK) saveProd(next);
       else dbSet("nemo-products",JSON.stringify(next)); // local cache only; cloud handled by transaction
       return next;
@@ -11581,11 +11682,30 @@ function NemoStore(){
 
   // Restock items from a cancelled order
   const restock=(o)=>{
-    const back={};
-    (o.items||[]).forEach(it=>{back[it.id]=(back[it.id]||0)+it.qty;});
-    if(FB_OK){ Object.keys(back).forEach(pid=>{ try{ FB_DB.ref("products/"+pid+"/stockCount").transaction(cur=>(typeof cur==="number"?cur:0)+back[pid]); }catch(e){} }); }
+    const back={}, backVar={};
+    (o.items||[]).forEach(it=>{
+      back[it.id]=(back[it.id]||0)+it.qty;
+      if(it.variantId){ (backVar[it.id]=backVar[it.id]||{})[it.variantId]=(backVar[it.id][it.variantId]||0)+it.qty; }
+    });
+    if(FB_OK){ Object.keys(back).forEach(pid=>{
+      try{ FB_DB.ref("products/"+pid+"/stockCount").transaction(cur=>(typeof cur==="number"?cur:0)+back[pid]); }catch(e){}
+      // Mirror of the checkout decrement: give the units back to the option they came from,
+      // and leave products still on the shared pool untouched.
+      Object.keys(backVar[pid]||{}).forEach(vid=>{
+        try{ FB_DB.ref("products/"+pid+"/variantStock/"+vid).transaction(cur=>(typeof cur==="number")?cur+backVar[pid][vid]:cur); }catch(e){}
+      });
+    }); }
     setProducts(prev=>{
-      const next=prev.map(p=>back[p.id]?{...p,stockCount:(p.stockCount??0)+back[p.id]}:p);
+      const next=prev.map(p=>{
+        if(!back[p.id]) return p;
+        const np={...p,stockCount:(p.stockCount??0)+back[p.id]};
+        if(hasVariantStock(p) && backVar[p.id]){
+          const vs={...p.variantStock};
+          Object.keys(backVar[p.id]).forEach(vid=>{ if(typeof vs[vid]==="number") vs[vid]=vs[vid]+backVar[p.id][vid]; });
+          np.variantStock=vs;
+        }
+        return np;
+      });
       if(!FB_OK) saveProd(next); else dbSet("nemo-products",JSON.stringify(next));
       return next;
     });
