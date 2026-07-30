@@ -76,6 +76,9 @@ One product, several variations, each with **its own price and packing weight** 
 - **Grid cards**: a product with options shows **"from ₹X"** (cheapest in-stock option) and a **Select** button that opens the product page, instead of blind-adding an arbitrary size. Option-less products are untouched.
 - **Reorder / cross-sell** re-add the exact option that was bought, not whichever is first.
 - Already handled downstream, no change needed: separate cart lines per option (`key = id|variantId`), and the option name on order history, WhatsApp, email, packing slip, **GST tax invoice** and admin exports.
+- **Per-option packing weight is admin-only** — customers never see it. The only weight shown anywhere is the aggregate live-fish parcel estimate at checkout. It is *not* cosmetic: it's what the courier bracket is priced from, so it stays.
+- **New category `Medicine`** (💊, purple). Ships as a dry good, so per-option pack weights apply. Set **non-returnable** alongside Feed — both consumables; flip it to the Accessories model (per-product "eligible if damaged" tick) if you'd rather.
+- **The options editor starts with one blank row**, and extra rows are added on demand. A blank row is dropped at save, so a product with no options stays a plain single-price item. The customer-facing heading field appears once an option is actually named.
 - **Stock is still one pool per product** (`products/<id>/stockCount`, atomic at checkout). Per-option availability is the manual sold-out toggle. **Phase 2** = real per-option counts at `products/<id>/variantStock/<variantId>` reusing the same transaction pattern.
 - Not yet done: static SEO pages under `/p/` still print a single price and should say "from ₹X" for option products.
 

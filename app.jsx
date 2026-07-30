@@ -56,6 +56,7 @@ const CAT_META = {
   "Accessories": { emoji:"⚙️",  c1:"#1a3060", c2:"#2d52a8" },
   "Tanks":       { emoji:"🐋", c1:"#0a3050", c2:"#1a5080" },
   "Feed":        { emoji:"🥣", c1:"#7a3a00", c2:"#c46000" },
+  "Medicine":    { emoji:"💊", c1:"#5b2d82", c2:"#8b5cf6" },
 };
 const CATEGORIES  = Object.keys(CAT_META);
 const ORDER_STATUSES = ["Payment Review","Confirmed","Shipped","Delivered"]; // post-payment progress
@@ -66,7 +67,10 @@ const MAX_PER_ORDER  = 10;
 // ── Returns / self-cancel policy helpers ──────────────────────────────
 const RETURN_WINDOW_DAYS = 3;   // window to raise a damaged-item return after delivery
 const SELF_CANCEL_MIN    = 60;  // customer may self-cancel within 1 hour of payment
-const NON_RETURNABLE_CATS = ["Live Fish","Plants","Feed"];
+// Medicine sits with Feed here: both are consumables, and once a pack leaves the shop it can't
+// be resold. Tell me if you'd rather it behave like Accessories (returnable when you tick the
+// per-product "eligible if damaged" box).
+const NON_RETURNABLE_CATS = ["Live Fish","Plants","Feed","Medicine"];
 function isReturnableItem(it){
   if(!it) return false;
   // Opt-in only: an Accessories item the admin explicitly marked "Eligible for return if damaged".
@@ -1263,11 +1267,12 @@ function relatedProducts(products, terms, excludeId, limit=8){
    Fish → food, conditioner & accessories (high-margin, zero mortality risk);
    Plants → accessories & substrate; gear → other gear & feed. In-stock only. */
 const CROSS_SELL_MAP = {
-  "Live Fish":    ["Feed","Accessories","Plants"],
+  "Live Fish":    ["Feed","Medicine","Accessories","Plants"],
   "Plants":       ["Accessories","Feed","Live Fish"],
   "Accessories":  ["Feed","Accessories","Tanks"],
   "Tanks":        ["Accessories","Feed","Plants"],
   "Feed":         ["Accessories","Live Fish","Plants"],
+  "Medicine":     ["Feed","Accessories","Live Fish"],
 };
 function crossSellProducts(product, products, limit=6){
   if(!product) return [];
@@ -4129,7 +4134,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
         {soon&&<div style={{position:"absolute",inset:0,background:"rgba(8,54,64,.55)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"white",fontSize:12,fontWeight:800,letterSpacing:1,background:"rgba(0,0,0,.3)",padding:"4px 12px",borderRadius:20}}>COMING SOON</span></div>}
         {!soon&&oos&&<div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"white",fontSize:12,fontWeight:700}}>Sold Out</span></div>}
       </div>
-      <div style={{padding:"18px 12px 12px"}}>
+      <div style={{padding:"26px 12px 12px"}}>
         <div style={{fontSize:9,color:C.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>{p.category}</div>
         <div style={{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.35,marginBottom:6,minHeight:34}}>{p.name}</div>
         {soon ? (
@@ -5426,7 +5431,9 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
       </div>
 
       {/* Content */}
-      <div style={{background:C.bg,borderRadius:"26px 26px 0 0",marginTop:-24,padding:"24px 20px 180px",minHeight:400}}>
+      {/* The panel is pulled up 24px over the image, so its top padding has to clear that
+          before the category line gets any breathing room of its own. */}
+      <div style={{background:C.bg,borderRadius:"26px 26px 0 0",marginTop:-24,padding:"42px 20px 180px",minHeight:400}}>
         {/* Title row */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
           <div style={{flex:1,paddingRight:12}}>
@@ -7117,18 +7124,25 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
 
   // Product options (sizes / capacities / wattages / pack weights) — editable. Seeded ONLY from
-  // what's saved on the product: auto-seeding fish types here meant a new product (which starts
-  // in the Live Fish category) carried 5 fish rows into whatever category you switched it to.
+  // what's saved on the product, then padded to a SINGLE blank row: auto-seeding the 5 fish types
+  // meant a new product (which starts in the Live Fish category) carried them into whatever
+  // category you switched it to. One blank row is a starting point, not content — it's dropped at
+  // save unless you name it, so a product with no options stays a plain single-price item.
   // A Live Fish product with no rows still shows customers the standard pair/trio set, because
   // productVariants() falls back to it — and "Use the standard types" materialises them to edit.
+  const blankVariant=()=>({ id:uid("v"), label:"", price:Number(product?.price)||"", packagingWeight:null, soldOut:false });
   const seedVariants=()=>{
-    const src = product?.variants&&product.variants.length ? product.variants : [];
+    const src = product?.variants&&product.variants.length ? product.variants : null;
+    if(!src) return [blankVariant()];
     const base = Number(product?.price)||0;
     return src.map(v=>({ id:v.id||uid("v"), label:v.label,
       price:(typeof v.price==="number"?v.price:Math.round(base*(v.priceMul||1))),
       packagingWeight:(v.packagingWeight??null),   // was dropped here, losing per-option shipping weight on edit
       soldOut:!!v.soldOut }));
   };
+  // "Has the admin actually filled anything in?" — drives the hints that only make sense
+  // before any real option exists.
+  const anyNamedVariant=()=>variants.some(v=>String(v.label||"").trim());
   const [variants,setVariants]=useState(seedVariants);
   const setVar=(id,key,val)=>setVariants(prev=>prev.map(v=>v.id===id?{...v,[key]:val}:v));
   const addVariant=()=>setVariants(prev=>[...prev,{id:uid("v"),label:"",price:Number(form.price)||0,packagingWeight:null,soldOut:false}]);
@@ -7372,7 +7386,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.45}}>
               Optional. Add a row per variation and the customer picks one on the product page — each row has its own <b>price</b> and <b>packing weight</b>, and the weight is what shipping is calculated from. Leave this empty for a plain single-price product. {hint}
             </div>
-            {variants.length>0&&(
+            {anyNamedVariant()&&(
               <div style={{marginBottom:12}}>
                 <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>HEADING SHOWN TO CUSTOMERS</div>
                 <input value={form.variantLabelText} onChange={e=>f("variantLabelText",e.target.value)}
@@ -7418,7 +7432,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
               style={{width:"100%",marginTop:10,background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               ＋ Add {isFish?"a type":"an option"}
             </button>
-            {isFish&&variants.length===0&&(
+            {isFish&&!anyNamedVariant()&&(
               <button className="press" onClick={addFishDefaults}
                 style={{width:"100%",marginTop:8,background:"transparent",border:"none",color:C.textSub,padding:"6px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
                 Use the standard pair / trio types
