@@ -79,7 +79,13 @@ One product, several variations, each with **its own price and packing weight** 
 - **Per-option packing weight is admin-only** — customers never see it. The only weight shown anywhere is the aggregate live-fish parcel estimate at checkout. It is *not* cosmetic: it's what the courier bracket is priced from, so it stays.
 - **New category `Medicine`** (💊, purple). Ships as a dry good, so per-option pack weights apply. Set **non-returnable** alongside Feed — both consumables; flip it to the Accessories model (per-product "eligible if damaged" tick) if you'd rather.
 - **The options editor starts with one blank row**, and extra rows are added on demand. A blank row is dropped at save, so a product with no options stays a plain single-price item. The customer-facing heading field appears once an option is actually named.
-- **Stock is still one pool per product** (`products/<id>/stockCount`, atomic at checkout). Per-option availability is the manual sold-out toggle. **Phase 2** = real per-option counts at `products/<id>/variantStock/<variantId>` reusing the same transaction pattern.
+- **Per-option stock (Phase 2 — done).** Each option keeps its own count in `products/<id>/variantStock/<optionId>` (keyed by option id, not array index — options get reordered). Set a **STOCK** number per row in the admin editor; the product's own Stock Count then becomes read-only and shows their sum.
+  - An option is sold out when the admin flags it **or** its count hits 0. `productStockTotal()` is the sum across *available* options, so a product whose every option is gone reads Out of Stock everywhere (grid, filters, product page, admin list).
+  - Cart quantity is capped by the **chosen option's** stock, not the product-wide pool.
+  - Checkout decrements the option's counter and the product total together, each under its own atomic transaction. Cancel/restock reverses both. Transactions abort on products that have no per-option map, so those can't accidentally sprout one.
+  - **Backward compatible**: products with no `variantStock` keep the single shared pool they've always used. Nothing changes until you type per-option numbers.
+  - **⚠ REQUIRES publishing the updated `database.rules.json`** — new `products/$id/variantStock/$vid` rule, mirroring the existing `stockCount` policy (authenticated users may only *decrease* it; admin unrestricted via the cascading parent rule). Without it, a customer's checkout write to the per-option counter is denied and only the product total moves.
+- **Fixed: a fully sold-out product used to still sell.** With every option flagged sold out, the page showed "In Stock", the Add button was live, and a sold-out option went into the cart. Availability now derives from the options themselves.
 - Not yet done: static SEO pages under `/p/` still print a single price and should say "from ₹X" for option products.
 
 ## Admin panel — Back button & product form (Jul 2026)

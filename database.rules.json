@@ -10,6 +10,12 @@
         "stockCount": {
           ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.val() <= data.val())",
           ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "variantStock": {
+          "$vid": {
+            ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.val() <= data.val())",
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          }
         }
       }
     },
