@@ -106,9 +106,29 @@ const DEFAULT_FISH_VARIANTS = [
   { id:"v4", label:"Breeding Pair — 1 Male & 1 Female", priceMul:1.6, soldOut:true  },
   { id:"v5", label:"Adult — 1 Pair (Male & Female)",  priceMul:1.8, soldOut:false },
 ];
+/* Options a customer picks between on the product page — a net's sizes, a pump's capacities,
+   a heater's wattages, a feed's pack weights. Any product can carry them; Live Fish additionally
+   falls back to the standard pair/trio set when the admin hasn't set its own. */
 function productVariants(p){
-  if(p.category!=="Live Fish") return null;
-  return p.variants && p.variants.length ? p.variants : DEFAULT_FISH_VARIANTS;
+  if(p.variants && p.variants.length) return p.variants;
+  return p.category==="Live Fish" ? DEFAULT_FISH_VARIANTS : null;
+}
+function hasVariants(p){ const v=productVariants(p); return !!(v && v.length); }
+/* Heading over the option list. The admin can name it per product ("Size", "Capacity",
+   "Wattage", "Pack Size"); otherwise it falls back to something sensible for the category. */
+function variantHeading(p){
+  const t=(p.variantLabelText||"").trim();
+  if(t) return t;
+  return p.category==="Live Fish" ? "Choose Type" : "Choose an option";
+}
+/* Cheapest price across a product's options — the catalog grid shows "from ₹X" so a shopper
+   isn't quoted the base price for a product whose real options all cost more. */
+function variantFromPrice(p){
+  const vs=productVariants(p);
+  if(!vs||!vs.length) return effectivePrice(p);
+  const live=vs.filter(v=>!v.soldOut);
+  const pool=live.length?live:vs;
+  return Math.min(...pool.map(v=>variantEffPrice(p,v)));
 }
 /* Absolute (pre-discount) price for a variant — prefers admin-set price, falls back to legacy multiplier */
 function variantBasePrice(p, v){
@@ -325,7 +345,7 @@ function parcelWeightBracket(cart, r){
   const fish=(cart||[]).filter(i=>i.category==="Live Fish");
   const dry=(cart||[]).filter(i=>i.category!=="Live Fish");
   const fishWt=fish.reduce((s,i)=>s+(Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2)*i.qty,0);
-  const dryWt=dry.reduce((s,i)=>s+(Number(i.packagingWeight)||0.1)*i.qty,0);
+  const dryWt=dry.reduce((s,i)=>s+(Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.1)*i.qty,0);
   const base=fish.length?Number(r.liveBasePackagingKg!=null?r.liveBasePackagingKg:(r.basePackagingKg??0.5)):(Number(r.basePackagingKg)||0.5);
   return getWeightBracket(fishWt+dryWt+base);
 }
@@ -443,7 +463,9 @@ function shippingBreakdown(cart, zone, opts, settings){
     else if(packing.box==="carton") carton += cartonCharge(bracket, settings);
   }
   if(dryItems.length){
-    const wt = dryItems.reduce((s,i)=>s+((Number(i.packagingWeight)||0.1)*i.qty),0)+(Number(r.basePackagingKg)||0.5);
+    // Per-option weight wins when the product has options (a 1kg feed pack vs a 100g one),
+    // falling back to the product's own packing weight.
+    const wt = dryItems.reduce((s,i)=>s+((Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.1)*i.qty),0)+(Number(r.basePackagingKg)||0.5);
     const bracket = getWeightBracket(wt);
     courier += (r.dryGoods?.[bracket]?.[zone]||0);
     // Standard (base) packing — carton box / courier bag. Only when no live fish already drives the box.
@@ -3142,7 +3164,7 @@ function VariantPicker({product, variants, selectedId, onSelect}){
   const onSale=(product.discountPct||0)>0;
   return(
     <div style={{marginBottom:18}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>Choose Type</div>
+      <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>{variantHeading(product)}</div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {variants.map(v=>{
           const sel = v.id===selectedId;
@@ -3548,7 +3570,11 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
 
 function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, onRateOrderProducts, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
   const [openId,setOpenId]=useState(null); // which order is expanded (list shows summaries; details open on tap)
-  const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){ addToCart(prod,it.qty||1); n++; } }); nav("cart"); };
+  // Re-add the exact option that was bought (the 10" net, not whichever size happens to be first).
+  const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){
+    const vs=productVariants(prod);
+    const want=it.variantId&&vs?vs.find(v=>v.id===it.variantId&&!v.soldOut):null;
+    addToCart(prod,it.qty||1,want||null); n++; } }); nav("cart"); };
   const uk = userKey(user);
   const [payOpen,setPayOpen]=useState(null);
   const [delOpen,setDelOpen]=useState(false);
@@ -4054,7 +4080,11 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   const oos = stk<=0;
   const soon = !!p.comingSoon;
   const onSale = (p.discountPct||0) > 0;
-  const eff = effectivePrice(p);
+  // A product with options is priced "from" its cheapest one, and its Add button opens the
+  // product page to choose — adding blind from the grid would pick a size for the customer.
+  const opts = productVariants(p);
+  const multi = !!(opts && opts.length>1);
+  const eff = multi ? variantFromPrice(p) : effectivePrice(p);
   const remaining = Math.max(0, stk - inCart);
   // Live cursor-reactive tilt + spotlight (desktop fine-pointer only; honors reduced-motion)
   const cardRef = useRef(null);
@@ -4112,8 +4142,9 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           </div>
         ) : (<>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+          {multi&&<span style={{fontSize:10,color:C.textSub,fontWeight:700}}>from</span>}
           <div style={{fontFamily:PRICE_FONT,fontSize:16,fontWeight:800,color:C.primary}}>₹{eff}</div>
-          {onSale&&<div style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{p.price}</div>}
+          {onSale&&!multi&&<div style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{p.price}</div>}
         </div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
           <div className={!oos&&stk<=3?"festival-pulse":""} style={{fontSize:10,color:stk<10?C.coral:C.textSub,fontWeight:700}}>
@@ -4128,9 +4159,11 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
                 style={{background:"transparent",border:"none",color:"white",fontSize:16,fontWeight:700,width:22,height:22,lineHeight:1,cursor:remaining>0?"pointer":"not-allowed",opacity:remaining>0?1:.45}}>+</button>
             </div>
           ) : (
-            <button className="cta" onClick={e=>{e.stopPropagation();if(!oos){onAdd(p,1);flyToCart(e.clientX,e.clientY,imgSrc);}}} disabled={oos}
-              style={{background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"7px 16px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:oos?"not-allowed":"pointer"}}>
-              + Add
+            <button className="cta" onClick={e=>{e.stopPropagation();if(oos)return;
+                if(multi){ onPress(p); return; }            // let the customer pick the option first
+                onAdd(p,1);flyToCart(e.clientX,e.clientY,imgSrc);}} disabled={oos}
+              style={{background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"7px 16px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:oos?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
+              {multi?"Select":"+ Add"}
             </button>
           )}
         </div>
@@ -7057,6 +7090,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     tag:product?.tag||"",
     desc:product?.desc||"",
     comingSoon:!!product?.comingSoon,
+    variantLabelText:product?.variantLabelText||"",
     packagingWeight:product?.packagingWeight||"",
     returnEligible:!!product?.returnEligible,
     suggestSpecialDelivery:!!product?.suggestSpecialDelivery,
@@ -7082,15 +7116,26 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
   const MAX_IMAGES=4;
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
 
-  // Live-fish types (variants) — editable. Seed from product or defaults (converted to absolute prices).
+  // Product options (sizes / capacities / wattages / pack weights) — editable. Seeded ONLY from
+  // what's saved on the product: auto-seeding fish types here meant a new product (which starts
+  // in the Live Fish category) carried 5 fish rows into whatever category you switched it to.
+  // A Live Fish product with no rows still shows customers the standard pair/trio set, because
+  // productVariants() falls back to it — and "Use the standard types" materialises them to edit.
   const seedVariants=()=>{
-    const src = (product?.variants&&product.variants.length) ? product.variants : DEFAULT_FISH_VARIANTS;
+    const src = product?.variants&&product.variants.length ? product.variants : [];
     const base = Number(product?.price)||0;
-    return src.map(v=>({ id:v.id||uid("v"), label:v.label, price:(typeof v.price==="number"?v.price:Math.round(base*(v.priceMul||1))), soldOut:!!v.soldOut }));
+    return src.map(v=>({ id:v.id||uid("v"), label:v.label,
+      price:(typeof v.price==="number"?v.price:Math.round(base*(v.priceMul||1))),
+      packagingWeight:(v.packagingWeight??null),   // was dropped here, losing per-option shipping weight on edit
+      soldOut:!!v.soldOut }));
   };
   const [variants,setVariants]=useState(seedVariants);
   const setVar=(id,key,val)=>setVariants(prev=>prev.map(v=>v.id===id?{...v,[key]:val}:v));
-  const addVariant=()=>setVariants(prev=>[...prev,{id:uid("v"),label:"",price:Number(form.price)||0,soldOut:false}]);
+  const addVariant=()=>setVariants(prev=>[...prev,{id:uid("v"),label:"",price:Number(form.price)||0,packagingWeight:null,soldOut:false}]);
+  const addFishDefaults=()=>{
+    const base=Number(form.price)||0;
+    setVariants(DEFAULT_FISH_VARIANTS.map(v=>({id:uid("v"),label:v.label,price:Math.round(base*(v.priceMul||1)),packagingWeight:null,soldOut:!!v.soldOut})));
+  };
   const removeVariant=(id)=>setVariants(prev=>prev.filter(v=>v.id!==id));
 
   const addImages=async(fileList)=>{
@@ -7201,9 +7246,19 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
              temperament:form.careTemperament.trim(), level:form.careLevel.trim(), adultSize:form.careAdultSize.trim(), tankMates:form.careTankMates.trim() },
       media,
       rating:product?.rating||0,reviews:product?.reviews||0,
-      variants: form.category==="Live Fish"
-        ? variants.filter(v=>v.label.trim()).map(v=>({id:v.id,label:v.label.trim(),price:Math.max(0,Math.round(Number(v.price)||0)),soldOut:!!v.soldOut}))
-        : null,
+      variantLabelText:form.variantLabelText.trim(),
+      // Options are available to every category now, and each carries its own packing weight —
+      // that field is what the shipping calculation reads, and it used to be dropped here.
+      variants: (()=>{
+        const list=variants.filter(v=>v.label.trim()).map(v=>({
+          id:v.id,
+          label:v.label.trim(),
+          price:Math.max(0,Math.round(Number(v.price)||0)),
+          packagingWeight:(v.packagingWeight===""||v.packagingWeight==null)?null:Math.max(0,Number(v.packagingWeight)||0),
+          soldOut:!!v.soldOut,
+        }));
+        return list.length?list:null;
+      })(),
       createdAt:product?.createdAt||new Date().toISOString()};
     // Build a cache patch so the UI shows new media immediately
     const cachePatch={};
@@ -7297,14 +7352,34 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
           </label>
         )}
 
-        {/* Live Fish types — editable */}
-        {form.category==="Live Fish"&&(
+        {/* Product options — sizes, capacities, wattages, pack weights. Available to every
+            category; a product with no rows here simply behaves as a single-price item. */}
+        {(()=>{
+          const isFish=form.category==="Live Fish";
+          const hint={
+            "Live Fish":'e.g. "1 Pair — Male & Female"',
+            "Accessories":'e.g. "6 inch", "1200 L/hr", "100W", "2ft · White · 18W"',
+            "Feed":'e.g. "100g pack", "500g pack", "1kg tub"',
+            "Plants":'e.g. "Single stem", "Bunch of 5", "Potted"',
+            "Tanks":'e.g. "1ft", "2ft", "3ft"',
+          }[form.category]||'e.g. "Small", "Medium", "Large"';
+          return(
           <div style={{background:"#eef9fa",borderRadius:14,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-              <div style={{fontSize:12,fontWeight:800,color:C.primary,textTransform:"uppercase",letterSpacing:.8}}>🐠 Live Fish Types</div>
+              <div style={{fontSize:12,fontWeight:800,color:C.primary,textTransform:"uppercase",letterSpacing:.8}}>{isFish?"🐠 Live Fish Types":"🧩 Options / Sizes"}</div>
               <span style={{fontSize:11,color:C.textSub}}>{variants.length} option{variants.length!==1?"s":""}</span>
             </div>
-            <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.45}}>Customers pick one of these on the product page. Set a label, price and packing weight (kg) for each. The weight is used to calculate live-fish shipping accurately.</div>
+            <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.45}}>
+              Optional. Add a row per variation and the customer picks one on the product page — each row has its own <b>price</b> and <b>packing weight</b>, and the weight is what shipping is calculated from. Leave this empty for a plain single-price product. {hint}
+            </div>
+            {variants.length>0&&(
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>HEADING SHOWN TO CUSTOMERS</div>
+                <input value={form.variantLabelText} onChange={e=>f("variantLabelText",e.target.value)}
+                  placeholder={isFish?"Choose Type":"e.g. Size / Capacity / Wattage / Pack Size"}
+                  style={{width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white"}}/>
+              </div>
+            )}
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {variants.map((v,idx)=>(
                 <div key={v.id} style={{background:"white",borderRadius:12,padding:"10px",border:`1px solid ${C.border}`}}>
@@ -7341,10 +7416,17 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             </div>
             <button className="press" onClick={addVariant}
               style={{width:"100%",marginTop:10,background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              ＋ Add a type
+              ＋ Add {isFish?"a type":"an option"}
             </button>
+            {isFish&&variants.length===0&&(
+              <button className="press" onClick={addFishDefaults}
+                style={{width:"100%",marginTop:8,background:"transparent",border:"none",color:C.textSub,padding:"6px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
+                Use the standard pair / trio types
+              </button>
+            )}
           </div>
-        )}
+          );
+        })()}
 
         {fld("Description","desc","text","Describe the product…",{textarea:true})}
 
@@ -10991,7 +11073,9 @@ function NemoStore(){
   const addToCart=(product,qty=1,variant=null)=>{
     const stock = product.stockCount ?? DEFAULT_STOCK;
     let v = variant;
-    if(!v && product.category==="Live Fish"){ const vs=productVariants(product); v=vs.find(x=>!x.soldOut)||vs[0]; }
+    // Any product with options gets one picked if the caller didn't pass one (reorder, cross-sell,
+    // "buy it again") — otherwise the line would land with no option and the plain base price.
+    if(!v){ const vs=productVariants(product); if(vs&&vs.length) v=vs.find(x=>!x.soldOut)||vs[0]; }
     const key = product.id + (v?("|"+v.id):"");
     const unitPrice = v ? variantEffPrice(product, v) : effectivePrice(product);
     const maxAllowed = Math.max(0, Math.min(stock, MAX_PER_ORDER));
