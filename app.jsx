@@ -613,10 +613,19 @@ async function fbGetColl(path){
   try{ const s=await withTimeout(FB_DB.ref(path).get(),6000); if(!s) return null; const v=s.val(); return v?Object.values(v):[]; }
   catch(e){ console.warn("fbGetColl "+path,e?.message); return null; }
 }
+/* A Realtime Database write only settles once the SERVER acknowledges it, so on a stalled
+   mobile connection `set()` can stay pending indefinitely — that's what leaves a save spinner
+   turning forever. Cap the wait instead: the SDK keeps the write queued and delivers it when
+   the link recovers, so returning early loses nothing. `false` = "not confirmed yet". */
+const FB_WRITE_MS = 15000;
+async function fbWrite(ref, value){
+  try{ return await withTimeout(ref.set(value).then(()=>true), FB_WRITE_MS, false); }
+  catch(e){ console.warn("fbWrite",e?.message); return false; }
+}
 async function fbSetColl(path,arr){
   if(!FB_OK) return false;
-  try{ const o={}; arr.forEach(x=>{o[x.id]=x;}); await FB_DB.ref(path).set(o); return true; }
-  catch(e){ console.warn("fbSetColl "+path,e?.message); return false; }
+  const o={}; arr.forEach(x=>{o[x.id]=x;});
+  return fbWrite(FB_DB.ref(path), o);
 }
 async function fbGetObj(path){
   if(!FB_OK) return null;
@@ -629,11 +638,39 @@ async function fbSetObj(path,obj){
   catch(e){ console.warn("fbSetObj "+path,e?.message); return false; }
 }
 
+/* JSON with object keys in a fixed order, so two records holding the same data always compare
+   equal — the local cache and the Firebase copy don't necessarily list their keys in the same
+   order, and plain JSON.stringify would call those different. */
+function stableJSON(v){
+  if(v===null||typeof v!=="object") return JSON.stringify(v);
+  if(Array.isArray(v)) return "["+v.map(stableJSON).join(",")+"]";
+  return "{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+stableJSON(v[k])).join(",")+"}";
+}
+/* Do two catalogs describe the same thing? Used to skip a no-op re-render when the cloud
+   returns exactly what's already on screen. Order-insensitive — the DB hands rows back keyed
+   by id, so the array order isn't meaningful. */
+function sameCatalog(a,b){
+  if(a===b) return true;
+  if(!Array.isArray(a)||!Array.isArray(b)||a.length!==b.length) return false;
+  try{
+    const key=l=>[...l].sort((x,y)=>String(x.id).localeCompare(String(y.id))).map(stableJSON).join("|");
+    return key(a)===key(b);
+  }catch(e){ return false; }
+}
 async function loadProducts(){
   if(FB_OK){ const a=await fbGetColl("products"); if(a&&a.length) return a; }
   const r=await dbGet("nemo-products"); return r?JSON.parse(r):null;
 }
 async function saveProd(l)   { await dbSet("nemo-products",JSON.stringify(l)); if(FB_OK) await fbSetColl("products",l); }
+/* Persist ONE product. Editing a single item used to rewrite the whole `products` node, which
+   re-uploaded the entire catalog on every save (and made every connected client re-download it).
+   Writing `products/<id>` touches only the row that changed. `list` is the full catalog for the
+   local cache. Returns true when the cloud confirmed the write. */
+async function saveOneProd(p, list){
+  await dbSet("nemo-products",JSON.stringify(list));
+  if(!FB_OK) return false;
+  return fbWrite(FB_DB.ref("products/"+p.id), p);
+}
 async function loadOrders()  { // admin: ALL orders (flattened from orders/<uid>/<id>)
   if(FB_OK){
     const s=await withTimeout(FB_DB.ref("orders").get(),6000);
@@ -711,29 +748,39 @@ async function delMedia(id)  { await mediaDel("nemo-img-"+id); await mediaDel("n
 /* Upload a compressed image (JPEG data-URL) to Firebase Storage and return its public URL.
    Returns null if Storage isn't available/enabled or the upload fails — callers then fall
    back to storing the base64 in the Realtime Database (the original behaviour). */
+const FB_UPLOAD_MS = 45000;   // generous — a photo on slow mobile data still needs a while
+const UPLOAD_TIMED_OUT = {};  // sentinel, distinct from any value putString can resolve to
 async function uploadToStorage(path, dataUrl){
   if(!FB_STORAGE || typeof dataUrl!=="string" || !dataUrl.startsWith("data:")) return null;
-  try{
+  let failed=null;
+  const task=(async()=>{
     const ref=FB_STORAGE.ref(path);
     await ref.putString(dataUrl, "data_url");
     return await ref.getDownloadURL();
-  }catch(e){
+  })().catch(e=>{ failed=e||new Error("upload failed"); return null; });
+  // Bounded so a stalled upload can't spin the save forever. A timeout is NOT treated as
+  // "Storage is off" — the connection was just slow, so Storage stays enabled for next time.
+  const url=await Promise.race([task, new Promise(r=>setTimeout(()=>r(UPLOAD_TIMED_OUT), FB_UPLOAD_MS))]);
+  if(url===UPLOAD_TIMED_OUT){ console.warn("Storage upload timed out — using base64 path:", path); return null; }
+  if(failed){
     // On the free (Spark) plan Storage isn't enabled, so every upload 401s. After the first
     // failure, disable Storage for this session so we go straight to the base64 path (no waiting
     // on doomed uploads, no console spam). Resets on reload if Storage is later enabled.
     FB_STORAGE=null;
-    console.warn("Storage unavailable — using free-plan base64 path:", e&&e.message);
+    console.warn("Storage unavailable — using free-plan base64 path:", failed.message);
     return null;
   }
+  return url;
 }
 async function saveMediaItem(key,b64){
   await mediaSet("nemo-m-"+key,b64);
   if(FB_OK){
     // Prefer Storage: keep only a tiny URL in the DB (huge speed win on load/sync).
     const url=await uploadToStorage("media/"+key+".jpg", b64);
-    if(url){ try{ await FB_DB.ref("media/"+key).set(url); await mediaSet("nemo-m-"+key,url); }catch(e){ console.warn("saveMediaItem url",e&&e.message); } return true; }
+    if(url){ await fbWrite(FB_DB.ref("media/"+key), url); await mediaSet("nemo-m-"+key,url); return true; }
     // Fallback: store base64 in the DB (original behaviour) so nothing breaks if Storage is off.
-    try{ await FB_DB.ref("media/"+key).set(b64); }catch(e){ console.warn("saveMediaItem",e&&e.message); }
+    // Base64 rows are big, so give this one a longer leash than an ordinary write.
+    try{ await withTimeout(FB_DB.ref("media/"+key).set(b64), FB_UPLOAD_MS, false); }catch(e){ console.warn("saveMediaItem",e&&e.message); }
   }
   return true;
 }
@@ -2383,6 +2430,12 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
 .desk-nav{display:none;}
 /* Header top padding adapts to device safe-area instead of a flat notch inset */
 .vh-head{padding-top:calc(env(safe-area-inset-top, 0px) + 14px) !important;}
+/* Same idea for the admin headers. The page uses viewport-fit=cover, so in the installed app
+   the layout runs under the status bar — a flat inset left the header's buttons sitting in the
+   strip the system reserves for the notification pull-down, where taps get eaten. */
+.admin-head{padding-top:calc(env(safe-area-inset-top, 0px) + 24px) !important;}
+/* Header controls are small; keep them at the 44px minimum so they're reliably tappable. */
+.admin-head button{min-height:44px;}
 /* Left filter drawer */
 @keyframes slideInLeft{from{transform:translateX(-100%)}to{transform:translateX(0)}}
 .drawer-panel{animation:slideInLeft .22s cubic-bezier(.22,1,.36,1) both;}
@@ -2395,6 +2448,7 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
   .mobile-bottom-nav{display:none !important;}
   .prod-grid{grid-template-columns:repeat(3,1fr) !important;}
   .vh-head{padding-top:18px !important;}
+  .admin-head{padding-top:20px !important;}
   /* The brand wordmark already lives in the top title bar — don't repeat the big logo banner.
      The desktop top-nav also carries account + cart, so hide the in-hero chrome and keep a slim banner. */
   .home-hero-logo{display:none !important;}
@@ -7042,13 +7096,17 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
   const addImages=async(fileList)=>{
     const files=[...fileList].slice(0,MAX_IMAGES-images.length);
     if(!files.length){ showToast(`Up to ${MAX_IMAGES} photos`,"error"); return; }
-    setBusyNote("Processing photos…");
-    const added=[];
-    for(const file of files){
-      try{ const b64=await compressImage(file); added.push({key:uid("mi"),src:b64,b64}); }catch(e){}
+    const added=[]; let bad=0;
+    for(let i=0;i<files.length;i++){
+      const file=files[i];
+      // A big PNG straight off a phone camera takes a moment to decode + re-encode, so name
+      // the file being worked on instead of leaving a vague "Processing…" on screen.
+      setBusyNote(`Processing photo ${i+1} of ${files.length} — ${fmtSize(file.size)}…`);
+      try{ const b64=await compressImage(file); added.push({key:uid("mi"),src:b64,b64}); }catch(e){ bad++; console.warn("compressImage",e&&e.message); }
     }
     setImages(prev=>[...prev,...added]);
-    setBusyNote("");
+    // A photo that fails to decode used to vanish silently — say so instead.
+    setBusyNote(bad?`⚠ ${bad} photo${bad>1?"s":""} couldn't be read — try a JPG or PNG`:"");
   };
   const removeImage=(key)=>setImages(prev=>prev.filter(i=>i.key!==key));
   const moveImage=(key,dir)=>setImages(prev=>{ const i=prev.findIndex(x=>x.key===key); const j=i+dir; if(j<0||j>=prev.length)return prev; const next=[...prev]; [next[i],next[j]]=[next[j],next[i]]; return next; });
@@ -7060,10 +7118,25 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
   };
 
   const handleSave=async()=>{
+    if(saving) return;                       // ignore repeat taps while a save is already running
     if(!form.name.trim()){showToast("Product name required","error");return;}
     if(!form.price||isNaN(form.price)||Number(form.price)<=0){showToast("Enter a valid price","error");return;}
     setSaving(true);
+    try{ await saveProduct(); }
+    catch(e){
+      // Without this the spinner used to turn forever on any failure, with nothing on screen
+      // to say what went wrong.
+      console.error("save product failed",e);
+      setBusyNote("");
+      showToast("Couldn't save — "+((e&&e.message)||"please try again"),"error");
+    }
+    finally{ setSaving(false); }             // the spinner ALWAYS clears, success or not
+  };
+
+  const saveProduct=async()=>{
     const id=product?.id||uid();
+    const newImgCount=images.filter(im=>im.b64).length;   // only freshly-added photos need uploading
+    let uploaded=0;
     // Persist any newly-added media items.
     // Major-ecommerce pattern: bytes -> Storage (CDN), only the short URL + thumbUrl ride on the
     // product record, so the catalog renders from one `products` read with no per-image DB lookups.
@@ -7077,6 +7150,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
       const entry={key:im.key,type:"image"};
       if(im.b64){
         // Only the FIRST image needs a catalog thumbnail (that's all the grid shows).
+        setBusyNote(`Uploading photo ${++uploaded} of ${newImgCount}…`);
         const r=await persistImage(im.key, im.b64, isFirst);
         if(r.url) entry.url=r.url;
         if(r.url_thumb) entry.thumbUrl=r.url_thumb;
@@ -7094,6 +7168,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     {
       const firstEntry=media.find(m=>m.type!=="video");
       if(firstEntry && !firstEntry.thumb && !firstEntry.thumbUrl && images[0] && images[0].src){
+        setBusyNote("Making the catalog thumbnail…");
         const t=await makeThumbFromAny(images[0].src);
         if(t){ await saveMediaItem(firstEntry.key+"_thumb", t); firstEntry.thumb=1; thumbPatch["thumb-"+firstEntry.key]=t; }
       }
@@ -7101,7 +7176,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     if(video && !video.tooLarge){
       const prevV=prevMedia.find(m=>m.key===video.key)||{};
       const entry={key:video.key,type:"video"};
-      if(video.b64){ const r=await persistImage(video.key, video.b64, false); if(r.url) entry.url=r.url; }
+      if(video.b64){ setBusyNote("Uploading video…"); const r=await persistImage(video.key, video.b64, false); if(r.url) entry.url=r.url; }
       else if(prevV.url) entry.url=prevV.url;
       media.push(entry);
     }
@@ -7135,8 +7210,9 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     images.forEach(im=>{ if(im.src) cachePatch["m-"+im.key]=im.src; });
     Object.assign(cachePatch,thumbPatch);
     if(video&&!video.tooLarge&&video.src) cachePatch["m-"+video.key]=video.b64||video.src;
+    setBusyNote("Saving product…");
     await onSave(saved, cachePatch);
-    setSaving(false);
+    setBusyNote("");
   };
 
   const fld=(label,key,type="text",ph="",opts={})=>(
@@ -7151,8 +7227,8 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
 
   return(
     <div className="slide-up">
-      <div style={{background:C.adminBg,padding:"52px 16px 16px",display:"flex",alignItems:"center",gap:12}}>
-        <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
+      <div className="admin-head" style={{background:C.adminBg,padding:"52px 16px 16px",display:"flex",alignItems:"center",gap:12}}>
+        <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:44,height:44,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>←</button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:"white"}}>{isEdit?"Edit Product":"Add Product"}</div>
       </div>
       <div className="dt-read" style={{padding:"20px 16px 100px"}}>
@@ -7386,11 +7462,13 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             </label>
           )}
         </div>
-        {busyNote&&<div style={{fontSize:12,color:busyNote.startsWith("⚠")?C.danger:C.textSub,fontWeight:600,marginBottom:12,marginTop:-4}}>{busyNote}</div>}
+        {/* While saving, the progress rides on the button itself — no need to repeat it here. */}
+        {busyNote&&!saving&&<div style={{fontSize:12,color:busyNote.startsWith("⚠")?C.danger:C.textSub,fontWeight:600,marginBottom:12,marginTop:-4}}>{busyNote}</div>}
 
         <button className="press" onClick={handleSave} disabled={saving}
           style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?.7:1}}>
-          {saving?<><Spinner/> Saving…</>:isEdit?"💾 Save Changes":"✓ Add Product"}
+          {/* Naming the current step makes a slow photo upload read as progress, not a hang. */}
+          {saving?<><Spinner/> {busyNote||"Saving…"}</>:isEdit?"💾 Save Changes":"✓ Add Product"}
         </button>
         {isEdit&&!delConfirm&&(
           <button className="press" onClick={()=>setDelConfirm(true)} style={{width:"100%",background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:16,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🗑 Delete Product</button>
@@ -7783,8 +7861,8 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 
   return(
     <div className="slide-up">
-      <div style={{background:C.adminBg,padding:"52px 16px 16px",display:"flex",alignItems:"center",gap:12}}>
-        <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
+      <div className="admin-head" style={{background:C.adminBg,padding:"52px 16px 16px",display:"flex",alignItems:"center",gap:12}}>
+        <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:44,height:44,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>←</button>
         <div>
           <div style={{fontSize:11,color:"rgba(255,255,255,.65)",fontWeight:600,letterSpacing:1}}>ORDER {o.orderNo||orderId(o.id)}</div>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:"white"}}>{o.address.name}</div>
@@ -8273,8 +8351,34 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   );
 }
 
+/* Confirmation shown when the phone's Back button is pressed at the top level of the Admin
+   panel. window.confirm() is unreliable inside a popstate handler on mobile, so this is an
+   in-app sheet — it behaves the same on every device. */
+function AdminExitConfirm({onStay,onLeave}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,.55)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:4000}} onClick={onStay}>
+      <div className="slide-up" onClick={e=>e.stopPropagation()}
+        style={{width:"100%",maxWidth:440,background:"#fff",borderRadius:"20px 20px 0 0",padding:"22px 20px calc(22px + env(safe-area-inset-bottom))",boxShadow:"0 -12px 40px rgba(0,0,0,.25)"}}>
+        <div style={{fontSize:34,textAlign:"center",marginBottom:10}}>⚠️</div>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:8,textAlign:"center"}}>Leave the Admin panel?</div>
+        <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.6,marginBottom:18,textAlign:"center"}}>
+          You'll go back to the store. Anything you were typing but haven't saved will be lost.
+        </div>
+        <button className="press" onClick={onStay}
+          style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:10,cursor:"pointer"}}>
+          Stay in Admin
+        </button>
+        <button className="press" onClick={onLeave}
+          style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+          Leave Admin
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
@@ -8292,7 +8396,20 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const markStockSeen=(p)=>{ setStockSeen(prev=>{ const next={...prev,[p.id]:(p.stockCount??DEFAULT_STOCK)}; try{ localStorage.setItem("nemo-stock-seen",JSON.stringify(next)); }catch(e){} return next; }); };
   const needsStockAttn=(p)=>{ if(p.comingSoon) return false; const s=p.stockCount??DEFAULT_STOCK; return s<=3 && stockSeen[p.id]!==s; };
   const openProduct=(p)=>{ const gm=getProductMedia(p,mediaCache); markStockSeen(p); setEditProduct({...p,_mediaImgs:gm.images,_mediaVid:gm.video}); setTab("form"); };
+  const openNewProduct=()=>{ setEditProduct(null); setTab("form"); };
   const [viewOrder,setViewOrder]=useState(null);
+  // Let the phone's Back button step back through the panel instead of leaving it: an open
+  // product form or order detail closes first. Returning false means "nothing left to close",
+  // which is when the app asks whether to leave Admin.
+  useEffect(()=>{
+    if(!backRef) return;
+    backRef.current=()=>{
+      if(tab==="form"){ setEditProduct(null); setTab("products"); return true; }
+      if(tab==="orderDetail"){ setViewOrder(null); setTab("orders"); return true; }
+      return false;
+    };
+    return ()=>{ backRef.current=null; };
+  },[backRef,tab]);
   const [cleanMonths,setCleanMonths]=useState(6);
   const [cleanConfirm,setCleanConfirm]=useState(false);
   const [thumbBusy,setThumbBusy]=useState(false);
@@ -8411,18 +8528,18 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   return(
     <div className="slide-up">
       {/* Header */}
-      <div style={{background:C.adminBg,padding:"52px 16px 0"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div>
+      <div className="admin-head" style={{background:C.adminBg,padding:"52px 16px 0"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8}}>
+          <div style={{minWidth:0}}>
             <div style={{fontSize:11,color:"rgba(255,255,255,.65)",fontWeight:600,letterSpacing:1,marginBottom:4}}>ADMIN — {STORE_NAME.toUpperCase()}</div>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{tab==="products"?"Products":tab==="dashboard"?"Dashboard":tab==="reviews"?"Reviews":tab==="requests"?"Requests":"Orders"}</div>
           </div>
-          <div style={{display:"flex",gap:8}}>
+          <div style={{display:"flex",gap:8,flexShrink:0}}>
             <button className="press" onClick={()=>{ if(window.confirm("Leave the Admin panel and go back to the store?")) onBack(); }}
               style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               🛍 Store
             </button>
-            {tab==="products"&&<button className="press" onClick={()=>{setEditProduct(null);setTab("form");}}
+            {tab==="products"&&<button className="press" onClick={openNewProduct}
               style={{background:"white",border:"none",borderRadius:10,padding:"8px 14px",color:C.primary,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               + Add
             </button>}
@@ -8831,6 +8948,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── PRODUCTS TAB ── */}
       {tab==="products"&&(
         <div style={{padding:"16px 16px 100px"}}>
+          {/* Full-width twin of the header's "+ Add". The header one sits right under the phone's
+              status bar, which is a cramped place to aim at — this one is always easy to hit. */}
+          <button className="press" onClick={openNewProduct}
+            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",minHeight:48,fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:"0 6px 18px rgba(14,165,233,.28)"}}>
+            ➕ Add New Product
+          </button>
           <div style={{display:"flex",alignItems:"center",background:C.card,borderRadius:12,padding:"10px 14px",gap:8,marginBottom:12,border:`1.5px solid ${C.border}`}}>
             <span>🔍</span>
             <input type="text" placeholder="Search products…" value={prodQ} onChange={e=>setProdQ(e.target.value)}
@@ -10693,7 +10816,11 @@ function NemoStore(){
     let prods=await fbGetColl("products");
     if(prods!==null && prods.length===0){ const seed=(localProducts()||DEFAULT_PRODUCTS).map(normalizeProduct); await saveProd(seed); prods=seed; }
     const finalProds=(prods&&prods.length)?prods.map(normalizeProduct):null;
-    if(finalProds) setProducts(finalProds);
+    // A repeat visit paints instantly from cache, then this cloud read lands a moment later.
+    // Handing back a fresh array even when nothing changed re-rendered the whole catalog and
+    // replayed the grid's reveal animation — the visible "products update" after the store has
+    // already opened. Keep the existing array when the data is identical.
+    if(finalProds) setProducts(prev=>sameCatalog(prev,finalProds)?prev:finalProds);
     setHydrated(true);
     // Guides — seed if empty
     let gds=await fbGetColl("guides");
@@ -10804,10 +10931,24 @@ function NemoStore(){
 
   // Phone Back button: from any inner page → go Home; on Home → "press back again to exit".
   const exitArmRef = useRef(0);
+  // Admin panel: Back must never drop straight out of the panel — a stray back-swipe mid-edit
+  // would throw away the work in progress. AdminHub registers a handler here that closes any
+  // open sub-screen (product form / order detail) first; at the top level we ask to confirm.
+  const adminBackRef = useRef(null);
+  const [adminExitAsk,setAdminExitAsk]=useState(false);
   useEffect(()=>{
     // Seed one history entry so the FIRST back press is captured (even on a fresh Home load).
     try{ history.pushState({nemo:1},""); }catch(e){}
     const onPop=()=>{
+      if(pageRef.current==="admin"){
+        try{ history.pushState({nemo:1},""); }catch(e){}   // never leave on this press
+        // Step out of a sub-screen first, if one is open.
+        if(adminBackRef.current && adminBackRef.current()) return;
+        // Top level of the panel → warn before going back to the store. (window.confirm is
+        // blocked inside popstate on most phones, so this is an in-app dialog.)
+        setAdminExitAsk(true);
+        return;
+      }
       if(pageRef.current!=="home"){
         // Any inner page → return to Home instead of exiting
         setReviewIntent(null);
@@ -11105,13 +11246,13 @@ function NemoStore(){
   };
 
   const saveProdHandler=async(saved,cachePatch)=>{
-    setProducts(prev=>{
-      const next=prev.find(p=>p.id===saved.id)?prev.map(p=>p.id===saved.id?saved:p):[...prev,saved];
-      saveProd(next);
-      return next;
-    });
+    const next=products.find(p=>p.id===saved.id)?products.map(p=>p.id===saved.id?saved:p):[...products,saved];
+    setProducts(next);
     if(cachePatch&&Object.keys(cachePatch).length)setMediaCache(c=>({...c,...cachePatch}));
-    showToast("Product saved!");
+    // Only the edited row goes to the cloud, not the whole catalog. Awaited so the form's
+    // spinner reflects the real write — and it's time-bounded, so it can't spin forever.
+    const confirmed=await saveOneProd(saved,next);
+    showToast(confirmed||!FB_OK?"Product saved!":"Saved on this device — syncing when the connection returns");
   };
   const deleteProdHandler=async id=>{
     const prod=products.find(p=>p.id===id);
@@ -11539,6 +11680,7 @@ function NemoStore(){
     <div className="nemo-app" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",background:C.bg,maxWidth:430,margin:"0 auto",position:"relative",overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <style>{STYLES}</style>
       {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
+      {adminExitAsk&&<AdminExitConfirm onStay={()=>setAdminExitAsk(false)} onLeave={()=>{setAdminExitAsk(false);nav("home");}}/>}
       {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap} walletPts={walletPts}/>}
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
         <div key={page} className="page-swap">
@@ -11561,7 +11703,7 @@ function NemoStore(){
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
-          onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn}/>}
+          onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
       </div>
       {/* Floating cart bar — Zepto-style: free-delivery nudge + cart chip, opens the mini-cart */}
