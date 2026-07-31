@@ -88,6 +88,14 @@ One product, several variations, each with **its own price and packing weight** 
 - **Fixed: a fully sold-out product used to still sell.** With every option flagged sold out, the page showed "In Stock", the Add button was live, and a sold-out option went into the cart. Availability now derives from the options themselves.
 - Not yet done: static SEO pages under `/p/` still print a single price and should say "from ₹X" for option products.
 
+## Ambient jellyfish (Jul 2026)
+A single kawaii jellyfish drifts bottom→top in a slow zig-zag; when it clears the top, the next one starts from the bottom after a short pause. Lives in `index.html` next to the bubble-wallpaper canvas (`#nemo-jelly`, `z-index:-1`, `pointer-events:none`).
+- **Drawn as inline SVG, not a flat image**, so the bell can actually contract and the tentacles trail behind it. A PNG could only be slid around as one rigid piece.
+- **Swims like the real thing**: a quick bell contraction thrusts it upward, then it coasts while the bell refills — so the climb surges and glides rather than moving at a constant rate. Arms and tentacles run on a lagged phase because they're dragged, not driven; each tentacle also has a staggered CSS ripple so they don't move as one comb.
+- Roughly 4 sways over the rise (~50s on a phone screen), randomised size / lane / amplitude / stroke rate per drifter so no two look identical.
+- Honours `prefers-reduced-motion` (hidden entirely) and pauses on tab-hide. Transform-only animation, one element on screen at a time.
+- To swap in a different jellyfish, edit `svg(uid)` in that block — but keep the `.jelly-bell` / `.jelly-arms` / `.jelly-tents` groups, since the animation drives those by class.
+
 ## Product page fixes (Jul 2026)
 - **Coming Soon products no longer show a stock badge.** The title/price area read "● In Stock" off the product's leftover `stockCount` while the bottom bar correctly said Coming Soon. It now shows a "🔜 Coming Soon" badge instead; normal products are unchanged.
 - **Descriptions keep the line breaks you type.** The product page renders `p.desc` with `white-space: pre-wrap`, so paragraphs, blank lines and bullet lists appear as entered instead of collapsing into one run-on block.

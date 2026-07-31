@@ -498,5 +498,164 @@
   else { start(); }
 })();
 </script>
+
+<!-- ══ Drifting jellyfish — one at a time, rising bottom→top in a slow zig-zag ══
+     Built as an SVG (not a flat image) so the bell can actually contract and the tentacles
+     can trail behind it: a real jellyfish swims by squeezing its bell to surge, then glides
+     while it relaxes. Speed is driven by that same pulse, so it lurches and coasts. -->
+<div id="nemo-jelly" aria-hidden="true"></div>
+<style>
+  #nemo-jelly{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;}
+  #nemo-jelly svg{position:absolute;left:0;top:0;will-change:transform;}
+  /* Fine ripple along each tentacle, staggered so they don't move as one rigid comb. */
+  @keyframes jellyTentacle{0%,100%{transform:translateX(0) scaleY(1)}50%{transform:translateX(2.5px) scaleY(1.05)}}
+  .jt{transform-box:fill-box;transform-origin:top center;animation:jellyTentacle 4.6s ease-in-out infinite;}
+  @media(prefers-reduced-motion:reduce){#nemo-jelly{display:none;}}
+</style>
+<script>
+(function(){
+  var host=document.getElementById('nemo-jelly'); if(!host) return;
+  if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  // ── Artwork ────────────────────────────────────────────────────────────────
+  // Kawaii jellyfish: lavender→mint bell, star sparkle, blushed cheeks, ruffled oral arms
+  // and eight long tentacles. Grouped so the bell, arms and tentacles animate separately.
+  function svg(uid){
+    var g='jg'+uid, t='jt'+uid, a='ja'+uid;
+    return ''+
+    '<svg width="200" height="330" viewBox="0 0 200 330" fill="none" xmlns="http://www.w3.org/2000/svg">'+
+      '<defs>'+
+        '<linearGradient id="'+g+'" x1="0" y1="0" x2="0" y2="1">'+
+          '<stop offset="0%" stop-color="#cdb4ec"/><stop offset="45%" stop-color="#bcc8ee"/>'+
+          '<stop offset="100%" stop-color="#a8e6cf"/></linearGradient>'+
+        '<linearGradient id="'+t+'" x1="0" y1="0" x2="0" y2="1">'+
+          '<stop offset="0%" stop-color="#c9b6e8"/><stop offset="100%" stop-color="#fbf0c4"/></linearGradient>'+
+        '<linearGradient id="'+a+'" x1="0" y1="0" x2="0" y2="1">'+
+          '<stop offset="0%" stop-color="#d8c8f0"/><stop offset="100%" stop-color="#fdf3cc"/></linearGradient>'+
+      '</defs>'+
+      '<g class="jelly-tents" opacity=".95">'+
+        // long outer tentacles — drawn first so they sit behind the bell
+        '<path class="jt" style="animation-delay:-0.0s"  d="M55 118c-14 34-22 76-16 116 4 27 1 46-9 58" stroke="url(#'+t+')" stroke-width="7" stroke-linecap="round" fill="none"/>'+
+        '<path class="jt" style="animation-delay:-0.6s"  d="M74 122c-9 40-13 84-6 122 4 24 2 40-6 52" stroke="url(#'+t+')" stroke-width="7" stroke-linecap="round" fill="none"/>'+
+        '<path class="jt" style="animation-delay:-1.2s"  d="M92 126c-4 44-5 90 1 126 3 22 1 36-5 46" stroke="url(#'+t+')" stroke-width="7" stroke-linecap="round" fill="none"/>'+
+        '<path class="jt" style="animation-delay:-1.8s"  d="M110 126c4 44 5 90-1 126-3 22-1 36 5 46" stroke="url(#'+t+')" stroke-width="7" stroke-linecap="round" fill="none"/>'+
+        '<path class="jt" style="animation-delay:-2.4s"  d="M128 122c9 40 13 84 6 122-4 24-2 40 6 52" stroke="url(#'+t+')" stroke-width="7" stroke-linecap="round" fill="none"/>'+
+        '<path class="jt" style="animation-delay:-3.0s"  d="M147 118c14 34 22 76 16 116-4 27-1 46 9 58" stroke="url(#'+t+')" stroke-width="7" stroke-linecap="round" fill="none"/>'+
+      '</g>'+
+      '<g class="jelly-arms">'+
+        // ruffled oral arms in the middle
+        '<path d="M84 120c-10 22-16 46-13 70 2 18-2 34-9 46 12-4 20-16 24-30 5-18 8-42 6-64z" fill="url(#'+a+')" stroke="#6b4a8f" stroke-width="3.4" stroke-linejoin="round"/>'+
+        '<path d="M118 120c10 22 16 46 13 70-2 18 2 34 9 46-12-4-20-16-24-30-5-18-8-42-6-64z" fill="url(#'+a+')" stroke="#6b4a8f" stroke-width="3.4" stroke-linejoin="round"/>'+
+        '<path d="M101 124c-6 26-8 56-4 82 3 18 1 32-4 42 10-6 16-18 18-34 3-24 2-62-2-90z" fill="url(#'+a+')" stroke="#6b4a8f" stroke-width="3.4" stroke-linejoin="round"/>'+
+      '</g>'+
+      '<g class="jelly-bell">'+
+        // dome with a scalloped hem
+        '<path d="M14 104c0-48 39-86 86-86s86 38 86 86c0 12-2 20-5 24-6 2-11-2-14-6-4 6-10 10-16 10s-12-4-16-10c-4 6-10 10-16 10s-12-4-16-10c-4 6-10 10-16 10s-12-4-16-10c-4 6-10 10-16 10s-12-4-16-10c-3 4-8 8-14 6-3-4-5-12-5-24z" fill="url(#'+g+')" stroke="#5b3a7a" stroke-width="4.2" stroke-linejoin="round"/>'+
+        // gloss highlight
+        '<path d="M44 76c6-22 23-37 41-41-15 11-26 26-30 45-2.5 9-13.5 6.5-11-4z" fill="#fff" opacity=".75"/>'+
+        // sparkles
+        '<path d="M144 44l3.4 7.2 7.6 1-5.6 5.6 1.4 7.8-6.8-3.8-6.8 3.8 1.4-7.8-5.6-5.6 7.6-1z" fill="#fff" opacity=".92"/>'+
+        '<circle cx="155" cy="72" r="2.6" fill="#fff" opacity=".8"/>'+
+        // face — blush sits behind the eyes, sparkles tucked inside the iris
+        '<ellipse cx="49" cy="99" rx="13" ry="7.5" fill="#c9a8e8" opacity=".72"/>'+
+        '<ellipse cx="151" cy="99" rx="13" ry="7.5" fill="#c9a8e8" opacity=".72"/>'+
+        '<ellipse cx="74" cy="78" rx="15" ry="17.5" fill="#3d2352"/>'+
+        '<ellipse cx="126" cy="78" rx="15" ry="17.5" fill="#3d2352"/>'+
+        '<circle cx="68" cy="70" r="4.8" fill="#fff"/><circle cx="120" cy="70" r="4.8" fill="#fff"/>'+
+        '<path d="M81 85l1.5 3.1 3.4.5-2.5 2.4.6 3.4-3-1.6-3 1.6.6-3.4-2.5-2.4 3.4-.5z" fill="#f7d774"/>'+
+        '<path d="M133 85l1.5 3.1 3.4.5-2.5 2.4.6 3.4-3-1.6-3 1.6.6-3.4-2.5-2.4 3.4-.5z" fill="#f7d774"/>'+
+        // open smile with a tongue, sat below and between the eyes
+        '<path d="M88 95c4 1.2 20 1.2 24 0 0 9-5.5 14.5-12 14.5S88 104 88 95z" fill="#3d2352"/>'+
+        '<path d="M94.5 105c1.8 2.6 9.2 2.6 11 0 .4 4.4-2.6 7-5.5 7s-5.9-2.6-5.5-7z" fill="#f79fb0"/>'+
+      '</g>'+
+    '</svg>';
+  }
+
+  // ── One drifter at a time ──────────────────────────────────────────────────
+  var uid=0, el=null, jf=null, raf=0, running=true, last=0;
+
+  function spawn(){
+    uid++;
+    var W=window.innerWidth, H=window.innerHeight;
+    var scale=(W<560?0.42:0.62)*(0.85+Math.random()*0.3);
+    var w=200*scale, h=330*scale;
+    host.innerHTML=svg(uid);
+    el=host.firstChild;
+    el.style.width=w+'px'; el.style.height=h+'px';
+    jf={
+      w:w, h:h,
+      y:H+h*0.6,                                   // start just below the bottom edge
+      cx:W*(0.28+Math.random()*0.44),              // the line it zig-zags about
+      amp:Math.min(W*0.30, 190)*(0.75+Math.random()*0.5),
+      swayHz:0.07+Math.random()*0.025,             // ~4 sways over the rise — a visible zig-zag
+      swayPh:Math.random()*Math.PI*2,
+      pulseT:Math.random(),                        // where in the swim stroke it starts
+      pulseDur:2.9+Math.random()*0.9,              // seconds per contraction cycle
+      rise:26+Math.random()*10,                    // px/sec average climb
+      bell:el.querySelector('.jelly-bell'),
+      arms:el.querySelector('.jelly-arms'),
+      tents:el.querySelector('.jelly-tents')
+    };
+    // keep the artwork's own origin sensible for squash/stretch
+    if(jf.bell){ jf.bell.style.transformBox='fill-box'; jf.bell.style.transformOrigin='center bottom'; }
+    if(jf.arms){ jf.arms.style.transformBox='fill-box'; jf.arms.style.transformOrigin='top center'; }
+    if(jf.tents){ jf.tents.style.transformBox='fill-box'; jf.tents.style.transformOrigin='top center'; }
+  }
+
+  function frame(now){
+    if(!running){ raf=0; return; }
+    if(!last) last=now;
+    var dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!jf) spawn();
+    var H=window.innerHeight;
+
+    // Swim stroke: a quick contraction that thrusts, then a long relaxed glide.
+    jf.pulseT+=dt/jf.pulseDur; if(jf.pulseT>1) jf.pulseT-=1;
+    var p=jf.pulseT, contract=0.34, thrust, squash;
+    if(p<contract){                       // power stroke — bell squeezes, it surges
+      var k=p/contract;
+      thrust=Math.sin(k*Math.PI);
+      squash=Math.sin(k*Math.PI);
+    } else {                              // recovery — bell refills, it coasts
+      var r=(p-contract)/(1-contract);
+      thrust=0;
+      squash=-0.35*Math.sin(r*Math.PI);   // slight over-relax, like a bell refilling
+    }
+    // climb: a slow baseline drift plus the surge from each contraction
+    jf.y-=(jf.rise*0.42 + jf.rise*1.9*thrust)*dt;
+
+    // zig-zag across the screen as it rises
+    jf.swayPh+=dt*Math.PI*2*jf.swayHz;
+    var sway=Math.sin(jf.swayPh);
+    var x=jf.cx+sway*jf.amp-jf.w/2;
+    var lean=-Math.cos(jf.swayPh)*7;      // lean into the direction it's drifting
+
+    el.style.transform='translate3d('+x.toFixed(1)+'px,'+jf.y.toFixed(1)+'px,0) rotate('+lean.toFixed(2)+'deg)';
+    if(jf.bell) jf.bell.style.transform='scale('+(1+squash*0.10).toFixed(3)+','+(1-squash*0.16).toFixed(3)+')';
+    // arms and tentacles lag the bell — they're dragged, not driven
+    var lag=Math.sin((p-0.16)*Math.PI*2);
+    if(jf.arms)  jf.arms.style.transform='scaleY('+(1+lag*0.07).toFixed(3)+') skewX('+(sway*3).toFixed(2)+'deg)';
+    if(jf.tents) jf.tents.style.transform='scaleY('+(1+lag*0.10).toFixed(3)+') skewX('+(sway*5).toFixed(2)+'deg)';
+
+    // off the top → hand over to the next one after a beat
+    if(jf.y< -jf.h-10){
+      jf=null; host.innerHTML=''; el=null;
+      raf=0;
+      setTimeout(function(){ if(running&&!raf){ last=0; raf=requestAnimationFrame(frame); } }, 1200+Math.random()*1800);
+      return;
+    }
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(raf||!running) return; last=0; raf=requestAnimationFrame(frame); }
+  document.addEventListener('visibilitychange',function(){
+    running=!document.hidden;
+    if(!running){ if(raf) cancelAnimationFrame(raf); raf=0; }
+    else start();
+  });
+  window.addEventListener('resize',function(){ if(jf){ jf.cx=Math.min(jf.cx,window.innerWidth*0.8); } },{passive:true});
+  start();
+})();
+</script>
 </body>
 </html>
