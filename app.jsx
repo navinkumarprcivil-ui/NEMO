@@ -948,6 +948,14 @@ async function persistImage(key, b64, withThumb=true){
   }
   return out;
 }
+/* Thumbnail for one cart line. Cart items are snapshots taken at add-to-cart time and
+   deliberately carry no image (the cart is persisted to localStorage, and a base64 thumb
+   would blow the quota), so resolve it from the live catalog by id at render time. */
+function getCartLineImg(item, products, cache){
+  if(!item) return null;
+  const p=(products||[]).find(x=>x.id===item.id);
+  return p?getCardImg(p,cache||{}):null;
+}
 /* Resolve a product's gallery from the media cache (with backward-compat) */
 function getProductMedia(p, cache={}){
   const images=[]; let video=null;
@@ -5288,8 +5296,8 @@ function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
 }
 
 /* ═══════════════════ MEDIA LIGHTBOX — fullscreen open · pinch/scroll zoom · pan · swipe ═══════════════════ */
-function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
-  const [scale,setScale] = useState(1);
+function MediaLightbox({slides=[],index=0,setIndex,onClose,name="",initialZoom=false}){
+  const [scale,setScale] = useState(initialZoom?2.6:1);
   const [tx,setTx]       = useState(0);
   const [ty,setTy]       = useState(0);
   const stageRef = useRef(null);
@@ -5298,7 +5306,13 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
   const cur      = slides[index]||{};
   const isVideo  = cur.type==="video";
   const reset = ()=>{ setScale(1); setTx(0); setTy(0); };
-  useEffect(()=>{ reset(); },[index]);
+  // Changing slide always returns to fit — but not on the very first run when we were opened
+  // zoomed on purpose, or the magnification would be thrown away immediately.
+  const firstRun = useRef(true);
+  useEffect(()=>{
+    if(firstRun.current){ firstRun.current=false; if(initialZoom) return; }
+    reset();
+  },[index]);
   const go = dir => setIndex(i => (i+dir+slides.length)%slides.length);
   const clamp = (sc,x,y)=>{
     const el=stageRef.current; if(!el) return [x,y];
@@ -5434,6 +5448,9 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   const [photoZoom,setPhotoZoom] = useState(null); // review photo lightbox src
   const [lightbox,setLightbox] = useState(-1); // product gallery lightbox — active slide index (-1 = closed)
   const galRef                 = useRef(null); // the hero scroller, so the arrows can drive it
+  const [zoomOnOpen,setZoomOnOpen] = useState(false); // open the lightbox already magnified
+  const clickT                 = useRef(null); // pending single-click, held back to see if a double follows
+  const ptrKind                = useRef("mouse");
 
   useEffect(()=>{
     setLoadingRev(true);
@@ -5456,6 +5473,25 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
     ...media.images.map(src=>({type:"image",src})),
     ...(media.video?[{type:"video",src:media.video}]:[]),
   ];
+
+  /* Opening the photo. A single click opens it fit-to-screen; a double click opens it zoomed in
+     on the spot that was clicked, so it can be dragged around to see the rest. The single click
+     is held for a moment first — without that, click one opens the viewer and click two lands on
+     the viewer and shuts it again, which is why double-clicking used to do nothing at all. Only
+     mice pay that wait: a tap opens immediately, and inside the viewer double-tap already zooms. */
+  const openPhoto=(i,zoom)=>{ setZoomOnOpen(!!zoom); setLightbox(i); };
+  const slideClick=(i,type)=>{
+    if(type!=="image") return;
+    if(ptrKind.current!=="mouse"){ openPhoto(i,false); return; }
+    if(clickT.current){ clearTimeout(clickT.current); clickT.current=null; return; }
+    clickT.current=setTimeout(()=>{ clickT.current=null; openPhoto(i,false); },240);
+  };
+  const slideDblClick=(i,type)=>{
+    if(type!=="image") return;
+    if(clickT.current){ clearTimeout(clickT.current); clickT.current=null; }
+    openPhoto(i,true);
+  };
+  useEffect(()=>()=>{ if(clickT.current) clearTimeout(clickT.current); },[]);
 
   /* Step the hero gallery. Scrolling the container (rather than tracking an index ourselves)
      keeps the arrows, the swipe gesture and the dots reading from one source of truth — the
@@ -5527,7 +5563,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             </div>
           )}
           {slides.map((s,i)=>(
-            <div key={i} onClick={()=>{ if(s.type==="image") setLightbox(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
+            <div key={i}
+              onPointerDown={e=>{ ptrKind.current=e.pointerType||"mouse"; }}
+              onClick={()=>slideClick(i,s.type)}
+              onDoubleClick={()=>slideDblClick(i,s.type)}
+              style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
               {s.type==="video"
                 ? <video src={s.src} controls playsInline loop style={{width:"100%",height:"100%",objectFit:"contain"}}/>
                 : <SmoothImg src={s.src} alt={p.name} loading="eager" style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
@@ -5547,7 +5587,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           </div>
         )}
         {slides[slide]&&slides[slide].type==="image"&&(
-          <button className="press" onClick={()=>setLightbox(slide)} aria-label="Open photo full screen"
+          <button className="press" onClick={()=>openPhoto(slide,false)} aria-label="Open photo full screen"
             style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
         )}
         {slides[slide]&&<span style={{position:"absolute",top:50,right:16,background:"rgba(0,0,0,.4)",color:"white",fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,backdropFilter:"blur(6px)"}}>
@@ -5873,7 +5913,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
       </div>
 
       {lightbox>=0&&slides[lightbox]&&(
-        <MediaLightbox slides={slides} index={lightbox} setIndex={setLightbox} onClose={()=>setLightbox(-1)} name={p.name}/>
+        <MediaLightbox slides={slides} index={lightbox} setIndex={setLightbox} onClose={()=>setLightbox(-1)} name={p.name} initialZoom={zoomOnOpen}/>
       )}
       {photoZoom&&(
         <Portal>
@@ -5889,7 +5929,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
 
 /* ═══════════════════ CART PAGE ═══════════════════ */
 /* Slide-in mini-cart — quick peek + checkout without leaving the page */
-function MiniCart({open,onClose,cart,total,updateQty,nav,settings={}}){
+function MiniCart({open,onClose,cart,total,updateQty,nav,settings={},products=[],mediaCache={}}){
   const count=cart.reduce((s,i)=>s+i.qty,0);
   const thr=Number(settings.freeDeliveryThreshold||0);
   const left=thr>0?Math.max(0,thr-total):0;
@@ -5907,9 +5947,12 @@ function MiniCart({open,onClose,cart,total,updateQty,nav,settings={}}){
           ):cart.map(item=>{
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
             const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+            const cartImg=getCartLineImg(item,products,mediaCache);
             return(
               <div key={item.key} style={{display:"flex",gap:12,alignItems:"center",padding:"11px 0",borderBottom:`1px solid ${C.border}`}}>
-                <div style={{width:48,height:48,borderRadius:12,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{m.emoji}</div>
+                <div style={{width:48,height:48,borderRadius:12,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,overflow:"hidden"}}>
+                  {cartImg?<img src={cartImg} alt={item.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
+                </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</div>
                   {item.variantLabel&&<div style={{fontSize:11,color:C.textSub}}>{item.variantLabel}</div>}
@@ -5942,7 +5985,7 @@ function MiniCart({open,onClose,cart,total,updateQty,nav,settings={}}){
   );
 }
 
-function CartPage({cart,updateQty,total,nav,settings={}}){
+function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={}}){
   const hasLiveFish=cart.some(i=>i.category==="Live Fish");
   if(!cart.length)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"20px",textAlign:"center"}}>
@@ -5975,9 +6018,15 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
         {cart.map(item=>{
           const m=CAT_META[item.category]||CAT_META["Live Fish"];
           const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+          // The line item is a snapshot and carries no picture (storing one would bloat the
+          // saved cart), so look the photo up from the catalog by id. Falls back to the
+          // category tile for a product that has since been removed.
+          const cartImg=getCartLineImg(item,products,mediaCache);
           return(
             <div key={item.key} style={{background:C.card,borderRadius:18,padding:"14px",marginBottom:10,display:"flex",gap:14,alignItems:"center",border:`1px solid ${C.border}`}}>
-              <div style={{width:58,height:58,borderRadius:14,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30}}>{m.emoji}</div>
+              <div style={{width:58,height:58,borderRadius:14,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,overflow:"hidden"}}>
+                {cartImg?<img src={cartImg} alt={item.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
+              </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13.5,fontWeight:700,color:C.text,marginBottom:2}}>{item.name}</div>
                 <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>{item.variantLabel||item.category}</div>
@@ -12063,7 +12112,7 @@ function NemoStore(){
         {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
         {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
-        {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings}/>}
+        {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={products} mediaCache={mediaCache}/>}
         {page==="checkout" &&(user
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
@@ -12105,7 +12154,7 @@ function NemoStore(){
         );
       })()}
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
-      {!isAdminPage&&<MiniCart open={miniOpen} onClose={()=>setMiniOpen(false)} cart={cart} total={cartTotal} updateQty={updateQty} nav={nav} settings={settings}/>}
+      {!isAdminPage&&<MiniCart open={miniOpen} onClose={()=>setMiniOpen(false)} cart={cart} total={cartTotal} updateQty={updateQty} nav={nav} settings={settings} products={products} mediaCache={mediaCache}/>}
     </div>
   );
 }
