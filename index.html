@@ -499,10 +499,10 @@
 })();
 </script>
 
-<!-- ══ Drifting jellyfish — one at a time, rising bottom→top in a slow zig-zag ══
-     Built as an SVG (not a flat image) so the bell can actually contract and the tentacles
-     can trail behind it: a real jellyfish swims by squeezing its bell to surge, then glides
-     while it relaxes. Speed is driven by that same pulse, so it lurches and coasts. -->
+<!-- ══ Drifting jellyfish — one at a time, rising slowly straight up from bottom→top ══
+     Each one takes a fresh lane across the screen. Built as an SVG (not a flat image) so the
+     bell can actually contract and the tentacles trail: a real jellyfish swims by squeezing
+     its bell to surge, then glides while it relaxes — speed follows that same pulse. -->
 <div id="nemo-jelly" aria-hidden="true"></div>
 <style>
   #nemo-jelly{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;}
@@ -571,27 +571,42 @@
     '</svg>';
   }
 
+  // ── Pointer / touch: getting close wakes it up ─────────────────────────────
+  // The layer is pointer-events:none (it must never eat a tap), so proximity is measured
+  // against the pointer rather than using hover. A tap stays "hot" for a moment, since a
+  // touch is instantaneous and otherwise nothing would register.
+  var ptr={x:-9999,y:-9999,until:0};
+  function markPtr(x,y,ms){ ptr.x=x; ptr.y=y; ptr.until=(performance.now?performance.now():Date.now())+ms; }
+  window.addEventListener('pointermove',function(e){ markPtr(e.clientX,e.clientY,220); },{passive:true});
+  window.addEventListener('pointerdown',function(e){ markPtr(e.clientX,e.clientY,1600); },{passive:true});
+  window.addEventListener('touchstart',function(e){ var t=e.touches&&e.touches[0]; if(t) markPtr(t.clientX,t.clientY,1600); },{passive:true});
+  window.addEventListener('touchmove',function(e){ var t=e.touches&&e.touches[0]; if(t) markPtr(t.clientX,t.clientY,400); },{passive:true});
+
   // ── One drifter at a time ──────────────────────────────────────────────────
   var uid=0, el=null, jf=null, raf=0, running=true, last=0;
 
   function spawn(){
     uid++;
     var W=window.innerWidth, H=window.innerHeight;
-    var scale=(W<560?0.42:0.62)*(0.85+Math.random()*0.3);
-    var w=200*scale, h=330*scale;
+    // The betta and clownfish in the wallpaper render 72-78px wide; keep this well under half
+    // of that. The bell is ~86% of the SVG width, so a 34px svg gives a ~29px bell.
+    var w=26+Math.random()*7, h=w*(330/200);
     host.innerHTML=svg(uid);
     el=host.firstChild;
     el.style.width=w+'px'; el.style.height=h+'px';
     jf={
       w:w, h:h,
       y:H+h*0.6,                                   // start just below the bottom edge
-      cx:W*(0.28+Math.random()*0.44),              // the line it zig-zags about
-      amp:Math.min(W*0.30, 190)*(0.75+Math.random()*0.5),
-      swayHz:0.07+Math.random()*0.025,             // ~4 sways over the rise — a visible zig-zag
+      // A fresh lane anywhere across the screen each time, so over a few drifters they cover
+      // the whole width — but each one travels straight up rather than zig-zagging.
+      cx:w*0.6+Math.random()*Math.max(40,W-w*1.2),
+      amp:5+Math.random()*4,                       // barely-there wander, just so it isn't a rigid lift
+      swayHz:0.012+Math.random()*0.008,            // under one slow cycle across the whole rise
       swayPh:Math.random()*Math.PI*2,
       pulseT:Math.random(),                        // where in the swim stroke it starts
-      pulseDur:2.9+Math.random()*0.9,              // seconds per contraction cycle
-      rise:26+Math.random()*10,                    // px/sec average climb
+      pulseDur:3.4+Math.random()*1.1,              // seconds per contraction cycle
+      rise:12+Math.random()*3,                     // net px/sec after the sink — just above the bubbles
+      act:0,                                       // 0 = calm drift, 1 = stirred up by the pointer
       bell:el.querySelector('.jelly-bell'),
       arms:el.querySelector('.jelly-arms'),
       tents:el.querySelector('.jelly-tents')
@@ -609,33 +624,50 @@
     if(!jf) spawn();
     var H=window.innerHeight;
 
-    // Swim stroke: a quick contraction that thrusts, then a long relaxed glide.
-    jf.pulseT+=dt/jf.pulseDur; if(jf.pulseT>1) jf.pulseT-=1;
-    var p=jf.pulseT, contract=0.34, thrust, squash;
-    if(p<contract){                       // power stroke — bell squeezes, it surges
-      var k=p/contract;
-      thrust=Math.sin(k*Math.PI);
-      squash=Math.sin(k*Math.PI);
-    } else {                              // recovery — bell refills, it coasts
-      var r=(p-contract)/(1-contract);
-      thrust=0;
-      squash=-0.35*Math.sin(r*Math.PI);   // slight over-relax, like a bell refilling
-    }
-    // climb: a slow baseline drift plus the surge from each contraction
-    jf.y-=(jf.rise*0.42 + jf.rise*1.9*thrust)*dt;
-
-    // zig-zag across the screen as it rises
+    // Where it sits this frame (a barely-there wander, not a zig-zag).
     jf.swayPh+=dt*Math.PI*2*jf.swayHz;
     var sway=Math.sin(jf.swayPh);
     var x=jf.cx+sway*jf.amp-jf.w/2;
-    var lean=-Math.cos(jf.swayPh)*7;      // lean into the direction it's drifting
+    var lean=-Math.cos(jf.swayPh)*1.5;    // a whisper of tilt, not a banking turn
+
+    // Pointer nearby (or a recent tap) stirs it up: it pulses harder and climbs quicker,
+    // then settles back to its calm drift. Wakes fast, calms slowly — like a startled animal.
+    var near=0;
+    if(now<ptr.until){
+      var d=Math.hypot(ptr.x-(x+jf.w/2), ptr.y-(jf.y+jf.h*0.28)), R=78;
+      if(d<R) near=1-d/R;
+    }
+    jf.act+=(near-jf.act)*(near>jf.act?0.16:0.015);
+
+    // Swim stroke: a short sharp contraction that fires it upward, then a long near-stall
+    // while the bell refills. That contrast is what makes it hop rather than glide.
+    jf.pulseT+=dt/(jf.pulseDur/(1+jf.act*1.15)); if(jf.pulseT>1) jf.pulseT-=1;
+    var p=jf.pulseT, contract=0.30, thrust, squash, sink=0;
+    if(p<contract){                       // power stroke — bell squeezes, it darts
+      var k=p/contract;
+      thrust=Math.sin(k*Math.PI);
+      squash=Math.sin(k*Math.PI);
+    } else {                              // recovery — bell refills and it sinks back a little
+      var r=(p-contract)/(1-contract);
+      thrust=0;
+      squash=-0.35*Math.sin(r*Math.PI);   // slight over-relax, like a bell refilling
+      sink=Math.sin(r*Math.PI)*0.85+0.15; // eases in, so it doesn't drop the instant the stroke ends
+    }
+    // Pulse-and-sink, the way a jellyfish actually travels: a hard shove upward on the
+    // contraction, then it drifts back down a touch while the bell refills. Net movement is
+    // still upward at jf.rise, but it arrives as visible little hops rather than a slide.
+    var up   = jf.rise*6.7*(1+jf.act*1.4)*thrust;
+    var down = jf.rise*0.40*(1-jf.act*0.5)*sink;   // stirred up, it sinks back less
+    jf.y-=(up-down)*dt;
 
     el.style.transform='translate3d('+x.toFixed(1)+'px,'+jf.y.toFixed(1)+'px,0) rotate('+lean.toFixed(2)+'deg)';
-    if(jf.bell) jf.bell.style.transform='scale('+(1+squash*0.10).toFixed(3)+','+(1-squash*0.16).toFixed(3)+')';
+    // Bell works harder when it's stirred up.
+    var amp=1+jf.act*0.45;
+    if(jf.bell) jf.bell.style.transform='scale('+(1+squash*0.10*amp).toFixed(3)+','+(1-squash*0.16*amp).toFixed(3)+')';
     // arms and tentacles lag the bell — they're dragged, not driven
     var lag=Math.sin((p-0.16)*Math.PI*2);
-    if(jf.arms)  jf.arms.style.transform='scaleY('+(1+lag*0.07).toFixed(3)+') skewX('+(sway*3).toFixed(2)+'deg)';
-    if(jf.tents) jf.tents.style.transform='scaleY('+(1+lag*0.10).toFixed(3)+') skewX('+(sway*5).toFixed(2)+'deg)';
+    if(jf.arms)  jf.arms.style.transform='scaleY('+(1+lag*0.07*amp).toFixed(3)+') skewX('+(sway*1.6).toFixed(2)+'deg)';
+    if(jf.tents) jf.tents.style.transform='scaleY('+(1+lag*0.10*amp).toFixed(3)+') skewX('+(sway*2.6).toFixed(2)+'deg)';
 
     // off the top → hand over to the next one after a beat
     if(jf.y< -jf.h-10){

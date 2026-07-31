@@ -91,8 +91,10 @@ One product, several variations, each with **its own price and packing weight** 
 ## Ambient jellyfish (Jul 2026)
 A single kawaii jellyfish drifts bottom→top in a slow zig-zag; when it clears the top, the next one starts from the bottom after a short pause. Lives in `index.html` next to the bubble-wallpaper canvas (`#nemo-jelly`, `z-index:-1`, `pointer-events:none`).
 - **Drawn as inline SVG, not a flat image**, so the bell can actually contract and the tentacles trail behind it. A PNG could only be slid around as one rigid piece.
-- **Swims like the real thing**: a quick bell contraction thrusts it upward, then it coasts while the bell refills — so the climb surges and glides rather than moving at a constant rate. Arms and tentacles run on a lagged phase because they're dragged, not driven; each tentacle also has a staggered CSS ripple so they don't move as one comb.
-- Roughly 4 sways over the rise (~50s on a phone screen), randomised size / lane / amplitude / stroke rate per drifter so no two look identical.
+- **Pulse-and-sink, the way a jellyfish actually travels**: a hard shove upward on the bell contraction, then it drifts back down a touch while the bell refills. Net travel is upward, but it arrives as visible little hops rather than a steady slide. Arms and tentacles run on a lagged phase because they're dragged, not driven; each tentacle also has a staggered CSS ripple so they don't move as one comb.
+- **Travels straight up**, no zig-zag — each drifter takes a fresh lane so they cover the whole screen width over time. Calm net climb is ~12-15 px/sec, just above the wallpaper bubbles (~2-11 px/sec).
+- **Sized well under half the betta/clownfish** (those render 72-78px wide; the jellyfish bell is ~25px).
+- **Pointer or touch nearby wakes it**: within 78px it pulses harder and climbs ~3x faster, then eases back to its calm drift. Wakes fast, calms slowly. The layer stays `pointer-events:none`, so proximity is measured against the pointer rather than hover — a tap stays "hot" for 1.6s since a touch is instantaneous.
 - Honours `prefers-reduced-motion` (hidden entirely) and pauses on tab-hide. Transform-only animation, one element on screen at a time.
 - To swap in a different jellyfish, edit `svg(uid)` in that block — but keep the `.jelly-bell` / `.jelly-arms` / `.jelly-tents` groups, since the animation drives those by class.
 
