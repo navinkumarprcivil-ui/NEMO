@@ -5488,9 +5488,15 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <div style={{textAlign:"right",flexShrink:0}}>
             <div style={{fontFamily:PRICE_FONT,fontSize:24,fontWeight:800,color:C.primary}}>₹{unitPrice}</div>
             {onSale&&<div style={{fontSize:13,color:C.textSub,textDecoration:"line-through"}}>₹{selVar?variantBasePrice(p,selVar):p.price}</div>}
-            {/* Reflects what's actually buyable right now: 0 when the product (or the selected
-                option) is unavailable, rather than a leftover product-level number. */}
-            <div style={{marginTop:5}}><StockBadge stockCount={oos?0:stk}/></div>
+            {/* A Coming Soon product isn't on sale yet, so a stock badge is misleading — it used
+                to read "In Stock" here while the bottom bar correctly said Coming Soon. Otherwise
+                this reflects what's actually buyable: 0 when the product (or the selected option)
+                is unavailable, rather than a leftover product-level number. */}
+            <div style={{marginTop:5}}>
+              {p.comingSoon
+                ? <span style={{fontSize:10,fontWeight:700,color:C.accent,background:C.accentLight,padding:"3px 9px",borderRadius:20}}>🔜 Coming Soon</span>
+                : <StockBadge stockCount={oos?0:stk}/>}
+            </div>
           </div>
         </div>
 
@@ -5539,7 +5545,9 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         {/* Description tab */}
         {tab==="desc"&&(
           <div className="fade-in">
-            <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.75}}>{p.desc}</div>
+            {/* pre-wrap keeps the admin's own line breaks and blank lines — typing the description
+                as paragraphs or a bulleted list used to collapse into one run-on block. */}
+            <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.75,whiteSpace:"pre-wrap"}}>{p.desc}</div>
             {(()=>{
               const care=p.care||{};
               const rows=[
