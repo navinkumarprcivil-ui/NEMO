@@ -685,8 +685,7 @@ async function fbGetObj(path){
 }
 async function fbSetObj(path,obj){
   if(!FB_OK) return false;
-  try{ await FB_DB.ref(path).set(obj); return true; }
-  catch(e){ console.warn("fbSetObj "+path,e?.message); return false; }
+  return fbWrite(FB_DB.ref(path), obj);
 }
 
 /* JSON with object keys in a fixed order, so two records holding the same data always compare
@@ -738,7 +737,7 @@ async function loadUserOrders(uid){ // a single customer's orders
 }
 async function saveOneOrder(o){ // write one order to local cache + cloud (per-user node)
   const r=await dbGet("nemo-orders"); let arr=r?JSON.parse(r):[]; arr=[o,...arr.filter(x=>x.id!==o.id)]; await dbSet("nemo-orders",JSON.stringify(arr));
-  if(FB_OK&&o.userUid&&!o.demo){ try{ await FB_DB.ref("orders/"+o.userUid+"/"+o.id).set(o); }catch(e){} }
+  if(FB_OK&&o.userUid&&!o.demo){ await fbWrite(FB_DB.ref("orders/"+o.userUid+"/"+o.id), o); }
 }
 async function saveOrders(l) { await dbSet("nemo-orders",JSON.stringify(l)); } // local cache only
 /* ── Media cache: IndexedDB (large quota) with one-time migration from the old localStorage cache.
@@ -786,8 +785,8 @@ async function saveImg(id,b) {
   await mediaSet("nemo-img-"+id,b);
   if(FB_OK){
     const url=await uploadToStorage("media/img-"+id+".jpg", b);
-    if(url){ try{ await FB_DB.ref("media/img-"+id).set(url); await mediaSet("nemo-img-"+id,url); }catch(e){} return true; }
-    try{ await FB_DB.ref("media/img-"+id).set(b); }catch(e){}
+    if(url){ await fbWrite(FB_DB.ref("media/img-"+id), url); await mediaSet("nemo-img-"+id,url); return true; }
+    try{ await withTimeout(FB_DB.ref("media/img-"+id).set(b), FB_UPLOAD_MS, false); }catch(e){}
   }
   return true;
 }
@@ -980,7 +979,7 @@ async function loadArrivedAlivePhotos(limit=24){
 async function saveReviews(pid,list){ await dbSet("nemo-rev-"+pid,JSON.stringify(list)); if(FB_OK) await fbSetColl("reviews/"+pid,list); }
 async function appendReview(pid,rev){
   // Write ONLY this review to its own node — never overwrite the whole collection (a whole-node .set wiped concurrent reviewers' entries)
-  if(FB_OK){ try{ await FB_DB.ref("reviews/"+pid+"/"+rev.id).set(rev); }catch(e){} }
+  if(FB_OK){ await fbWrite(FB_DB.ref("reviews/"+pid+"/"+rev.id), rev); }
   const list=await loadReviews(pid);
   const next=list.some(r=>r.id===rev.id)?list:[rev,...list];
   await dbSet("nemo-rev-"+pid,JSON.stringify(next)); // local cache only
@@ -1000,7 +999,7 @@ async function loadExperienceReviews(){
   try{ const r=localStorage.getItem("nemo-exp-reviews"); return r?JSON.parse(r):[]; }catch{ return []; }
 }
 async function saveExperienceReview(rev){
-  if(FB_OK){ try{ await FB_DB.ref("experienceReviews/"+rev.id).set(rev); }catch(e){} }
+  if(FB_OK){ await fbWrite(FB_DB.ref("experienceReviews/"+rev.id), rev); }
   try{ const r=localStorage.getItem("nemo-exp-reviews"); const list=r?JSON.parse(r):[];
     const next=list.some(x=>x.id===rev.id)?list.map(x=>x.id===rev.id?rev:x):[rev,...list];
     localStorage.setItem("nemo-exp-reviews",JSON.stringify(next)); }catch{}
@@ -1121,12 +1120,15 @@ async function getMyReferralCode(uid){
   return code;
 }
 /* Validate a referral code at checkout. Returns {ok, msg}. */
+const REF_TIMEOUT={};   // sentinel: a read that timed out, distinct from "no such code"
 async function validateReferral(code, uid){
   const c=(code||"").trim();
   if(!/^\d{6}$/.test(c)) return {ok:false, msg:"Referral codes are 6 digits"};
   if(!FB_OK) return {ok:false, msg:"Referral check unavailable right now"};
   try{
-    const snap=await FB_DB.ref("referrals/"+c).get();
+    // Bounded: an unbounded read here left the Apply button spinning on a stalled connection.
+    const snap=await withTimeout(FB_DB.ref("referrals/"+c).get(), 6000, REF_TIMEOUT);
+    if(snap===REF_TIMEOUT) return {ok:false, msg:"Couldn't reach the server — check your connection and try again"};
     if(!snap||!snap.exists()) return {ok:false, msg:"Invalid referral code"};
     const r=snap.val();
     if(r.owner===uid) return {ok:false, msg:"You can't use your own referral code"};
@@ -1149,7 +1151,8 @@ async function creditReferralOnDelivery(code, settings, deliveredOrderId){
   if(!FB_OK || !/^\d{6}$/.test(c)) return;
   const coins=Number((settings&&settings.referralCoins)!=null?settings.referralCoins:50)||0;
   try{
-    const snap=await FB_DB.ref("referrals/"+c).get();
+    const snap=await withTimeout(FB_DB.ref("referrals/"+c).get(), 6000, REF_TIMEOUT);
+    if(snap===REF_TIMEOUT) return;      // couldn't read it — leave the payout for a later attempt
     const r=snap&&snap.val();
     if(!r || r.delivered===true) return; // already credited
     await FB_DB.ref("referrals/"+c).update({delivered:true, rewardCoins:coins, deliveredOrderId:deliveredOrderId||"", deliveredAt:Date.now()});
@@ -1162,7 +1165,8 @@ async function reverseReferralOnCancel(code){
   const c=(code||"").trim();
   if(!FB_OK || !/^\d{6}$/.test(c)) return;
   try{
-    const snap=await FB_DB.ref("referrals/"+c).get();
+    const snap=await withTimeout(FB_DB.ref("referrals/"+c).get(), 6000, REF_TIMEOUT);
+    if(snap===REF_TIMEOUT) return;      // don't reverse a payout we couldn't confirm
     const r=snap&&snap.val();
     if(r && r.delivered===true && (Number(r.rewardCoins)||0)>0 && r.owner){
       await adminCreditLoyalty(r.owner, -(Number(r.rewardCoins)||0), "refrev:"+c+":"+(r.deliveredOrderId||"d"), "Referral reversed (order cancelled)");
@@ -2365,7 +2369,9 @@ async function downloadFullBackup(){
   const nodes=["products","guides","settings","showcase","reviews","media","orders","requests"];
   if(FB_OK){
     for(const n of nodes){
-      try{ const s=await FB_DB.ref(n).get(); if(s&&s.exists()) out[n]=s.val(); }catch(e){ /* unreadable node — skip */ }
+      // Generous bound — a full export is legitimately big, but it still must not hang forever
+      // (the button would sit on "Preparing backup…" with no way out).
+      try{ const s=await withTimeout(FB_DB.ref(n).get(), 30000, null); if(s&&s.exists()) out[n]=s.val(); }catch(e){ /* unreadable node — skip */ }
     }
   }
   const payload={ _backup:{ store:STORE_NAME, exportedAt:new Date().toISOString(), version:1 }, ...out };
@@ -3071,8 +3077,11 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
     if(!validate())return;
     setSaving(true);
     const asp={}; Object.keys(aspects).forEach(k=>{ if(aspects[k]>0) asp[k]=aspects[k]; });
-    await onSubmit({id:uid("rev"),name:name||"Customer",rating,comment:comment.trim(),photos,date:new Date().toISOString(),orderId:oid,verified:true,...(Object.keys(asp).length?{aspects:asp}:{})});
-    setSaving(false);
+    // finally, so a failed write can never leave the button spinning with no way out
+    try{
+      await onSubmit({id:uid("rev"),name:name||"Customer",rating,comment:comment.trim(),photos,date:new Date().toISOString(),orderId:oid,verified:true,...(Object.keys(asp).length?{aspects:asp}:{})});
+    }catch(err){ console.error("review submit",err); setErrs({submit:"Couldn't post your review — please try again"}); }
+    finally{ setSaving(false); }
   };
 
   return(
@@ -3140,6 +3149,7 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
           style={{flex:1,padding:"12px",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textSub,fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
           Cancel
         </button>
+        {errs.submit&&<div style={{fontSize:12,color:C.danger,fontWeight:700,marginBottom:8,textAlign:"center"}}>{errs.submit}</div>}
         <button className="press" onClick={submit} disabled={saving}
           style={{flex:2,padding:"12px",borderRadius:12,border:"none",background:C.primary,color:"white",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
           {saving?<><Spinner/>Submitting…</>:"⭐ Submit Review"}
@@ -6004,8 +6014,9 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
     if(!txn.trim()){ setProofNote("⚠ Enter the transaction / UPI reference ID"); return; }
     if(!proof){ setProofNote("⚠ Attach your payment screenshot"); return; }
     setBusy(true);
-    await onSubmitPayment(order,{txnId:txn.trim(),paymentProof:proof});
-    setBusy(false);
+    try{ await onSubmitPayment(order,{txnId:txn.trim(),paymentProof:proof}); }
+    catch(err){ console.error("payment submit",err); setProofNote("⚠ Couldn't submit — check your connection and try again"); }
+    finally{ setBusy(false); }
   };
 
   if(expired&&order.status!=="Awaiting Payment"){
@@ -7883,17 +7894,22 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   };
   const doCancel=async()=>{
     setSaving(true);
-    const updated={...o,status:"Cancelled",paymentStatus:"Cancelled by store",cancelReason:cancelReason.trim(),refund:buildRefund(),updatedAt:new Date().toISOString()};
-    setStatus("Cancelled");
-    await onUpdateOrder(updated);
-    showToast(paidish?"Order cancelled — refund recorded":"Order cancelled");
-    setSaving(false); setCancelOpen(false);
+    try{
+      const updated={...o,status:"Cancelled",paymentStatus:"Cancelled by store",cancelReason:cancelReason.trim(),refund:buildRefund(),updatedAt:new Date().toISOString()};
+      setStatus("Cancelled");
+      await onUpdateOrder(updated);
+      showToast(paidish?"Order cancelled — refund recorded":"Order cancelled");
+      setCancelOpen(false);
+    }catch(err){ console.error("order update",err); showToast("Couldn't save — check your connection and try again","error"); }
+    finally{ setSaving(false); }
   };
   const saveRefund=async()=>{
     setSaving(true);
-    await onUpdateOrder({...o,refund:buildRefund(),updatedAt:new Date().toISOString()});
-    showToast("Refund details saved");
-    setSaving(false);
+    try{
+      await onUpdateOrder({...o,refund:buildRefund(),updatedAt:new Date().toISOString()});
+      showToast("Refund details saved");
+    }catch(err){ console.error("order update",err); showToast("Couldn't save — check your connection and try again","error"); }
+    finally{ setSaving(false); }
   };
   const refundFld={width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",boxSizing:"border-box"};
   const refundEditor=()=>(
@@ -8001,27 +8017,33 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const handleUpdate=async()=>{
     if(o.closed){ showToast("Order is closed — reopen it to change status"); return; }
     setSaving(true);
-    const etaNum=etaDays===""?"":Math.max(0,Number(etaDays)||0);
-    // Anchor the countdown to the day the ETA is given; preserve it when etaDays is unchanged so re-saving other fields doesn't reset the clock.
-    const etaSetAt=etaNum===""?"":((o.etaDays===etaNum&&o.etaSetAt)?o.etaSetAt:new Date().toISOString());
-    const updated={...o,status,trackingNumber:tracking,etaDays:etaNum,etaSetAt,courierId,courierName:selCourier?.name||"",courierTrackUrl:selCourier?.trackUrl||"",updatedAt:new Date().toISOString()};
-    await onUpdateOrder(updated);
-    showToast("Order updated!");
-    setSaving(false);
+    try{
+      const etaNum=etaDays===""?"":Math.max(0,Number(etaDays)||0);
+      // Anchor the countdown to the day the ETA is given; preserve it when etaDays is unchanged so re-saving other fields doesn't reset the clock.
+      const etaSetAt=etaNum===""?"":((o.etaDays===etaNum&&o.etaSetAt)?o.etaSetAt:new Date().toISOString());
+      const updated={...o,status,trackingNumber:tracking,etaDays:etaNum,etaSetAt,courierId,courierName:selCourier?.name||"",courierTrackUrl:selCourier?.trackUrl||"",updatedAt:new Date().toISOString()};
+      await onUpdateOrder(updated);
+      showToast("Order updated!");
+    }catch(err){ console.error("order update",err); showToast("Couldn't save — check your connection and try again","error"); }
+    finally{ setSaving(false); }
   };
   // Closing an order: only once it's delivered and no DOA is still open.
   const doaResolved = !o.doa || (o.doa.status||"").startsWith("Approved") || o.doa.status==="Declined";
   const doClose=async()=>{
     setSaving(true);
-    await onUpdateOrder({...o,closed:true,closedAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
-    showToast("Order closed — all done ✓");
-    setSaving(false);
+    try{
+      await onUpdateOrder({...o,closed:true,closedAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+      showToast("Order closed — all done ✓");
+    }catch(err){ console.error("order update",err); showToast("Couldn't save — check your connection and try again","error"); }
+    finally{ setSaving(false); }
   };
   const doReopen=async()=>{
     setSaving(true);
-    await onUpdateOrder({...o,closed:false,closedAt:"",updatedAt:new Date().toISOString()});
-    showToast("Order reopened");
-    setSaving(false);
+    try{
+      await onUpdateOrder({...o,closed:false,closedAt:"",updatedAt:new Date().toISOString()});
+      showToast("Order reopened");
+    }catch(err){ console.error("order update",err); showToast("Couldn't save — check your connection and try again","error"); }
+    finally{ setSaving(false); }
   };
   // Shipping reward is based on COURIER charge only — packaging (thermacol) is never rewardable.
   const courierCharged=Math.max(0, Number(o.fee||0) - Number(o.thermacolFee||0));
@@ -8033,26 +8055,30 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
     const diff=Math.round(chargedShip-actual);
     if(diff<rewardMin){ showToast(`Difference must be at least ₹${rewardMin} to reward`,"error"); return; }
     setSaving(true);
-    const code="NEMO"+Math.random().toString(36).slice(2,7).toUpperCase();
-    const reward={code,amount:diff,actual,charged:chargedShip,issuedAt:new Date().toISOString()};
-    await onUpdateOrder({...o,shippingReward:reward,updatedAt:new Date().toISOString()});
-    // Credit the customer's wallet directly (admin context — rules permit writing any loyalty node).
-    const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
-    const coins=Math.round(diff/coinVal);
-    if(coins>0 && o.userUid) adminCreditLoyalty(o.userUid, coins, "ship:"+code, "Shipping refund", settings&&settings.walletValidityMonths);
-    showToast(`₹${diff} credited to ${o.address.name}'s wallet`);
-    setRewardConfirm(false);
-    setSaving(false);
+    try{
+      const code="NEMO"+Math.random().toString(36).slice(2,7).toUpperCase();
+      const reward={code,amount:diff,actual,charged:chargedShip,issuedAt:new Date().toISOString()};
+      await onUpdateOrder({...o,shippingReward:reward,updatedAt:new Date().toISOString()});
+      // Credit the customer's wallet directly (admin context — rules permit writing any loyalty node).
+      const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
+      const coins=Math.round(diff/coinVal);
+      if(coins>0 && o.userUid) adminCreditLoyalty(o.userUid, coins, "ship:"+code, "Shipping refund", settings&&settings.walletValidityMonths);
+      showToast(`₹${diff} credited to ${o.address.name}'s wallet`);
+      setRewardConfirm(false);
+    }catch(err){ console.error("shipping reward",err); showToast("Couldn't issue the reward — please try again","error"); }
+    finally{ setSaving(false); }
   };
   const verifyPayment=async(ok)=>{
     setSaving(true);
-    const updated= ok
-      ? {...o,paymentStatus:"Verified",status:"Confirmed",updatedAt:new Date().toISOString()}
-      : {...o,paymentStatus:"Rejected",status:"Cancelled",updatedAt:new Date().toISOString()};
-    setVerified(ok); setStatus(updated.status);
-    await onUpdateOrder(updated);
-    showToast(ok?"Payment verified — order confirmed ✓":"Payment rejected — order cancelled");
-    setSaving(false);
+    try{
+      const updated= ok
+        ? {...o,paymentStatus:"Verified",status:"Confirmed",updatedAt:new Date().toISOString()}
+        : {...o,paymentStatus:"Rejected",status:"Cancelled",updatedAt:new Date().toISOString()};
+      setVerified(ok); setStatus(updated.status);
+      await onUpdateOrder(updated);
+      showToast(ok?"Payment verified — order confirmed ✓":"Payment rejected — order cancelled");
+    }catch(err){ console.error("order update",err); showToast("Couldn't save — check your connection and try again","error"); }
+    finally{ setSaving(false); }
   };
   const sendWA=(st)=>{
     if(!o.address.phone&&!o.address.whatsapp){showToast("No customer WhatsApp number","error");return;}
@@ -9605,14 +9631,19 @@ function SettingsPanel({settings,onSave}){
     setOtpInput(""); setOtpMsg(""); setOtpTries(0); setPendingSave(nf);
     setOtpSendFailed(false); setOverrideText("");
     setOtpOpen(true); setOtpBusy(true);
-    const res=await sendOtpEmail(email, code, settings);
-    setOtpBusy(false); setOtpSendFailed(!res.ok);
+    let res; try{ res=await sendOtpEmail(email, code, settings); }
+    catch(err){ res={ok:false,error:(err&&err.message)||"send failed"}; }
+    finally{ setOtpBusy(false); }
+    setOtpSendFailed(!res.ok);
     setOtpMsg(res.ok ? ("✓ Code sent to "+maskEmail(email)) : ("⚠ Couldn't send — "+res.error+". In your EmailJS template, set the “To Email” field to {{to_email}}, and allow your site's domain under Account → Security."));
   };
   const resendOtp=async()=>{
     const code=genCode(); setOtpCode(code); setOtpExp(Date.now()+5*60*1000);
     setOtpTries(0); setOtpInput(""); setOtpBusy(true); setOtpMsg("");
-    const res=await sendOtpEmail(otpEmail, code, settings); setOtpBusy(false); setOtpSendFailed(!res.ok);
+    let res; try{ res=await sendOtpEmail(otpEmail, code, settings); }
+    catch(err){ res={ok:false,error:(err&&err.message)||"send failed"}; }
+    finally{ setOtpBusy(false); }
+    setOtpSendFailed(!res.ok);
     setOtpMsg(res.ok ? ("✓ New code sent to "+maskEmail(otpEmail)) : ("⚠ "+res.error));
   };
   const verifyOtp=()=>{
@@ -10398,8 +10429,9 @@ function GuideForm({guide,imgSrc,onSave,onCancel}){
     const id=guide?.id||uid("g");
     const saved={id,title:form.title.trim(),category:form.category,content:form.content.trim(),
       hasImg:imgB64?true:(guide?.hasImg||false),createdAt:guide?.createdAt||new Date().toISOString()};
-    await onSave(saved,imgB64);
-    setSaving(false);
+    try{ await onSave(saved,imgB64); }
+    catch(err){ console.error("guide save",err); setErrs(e2=>({...e2,submit:"Couldn't save the guide — please try again"})); }
+    finally{ setSaving(false); }
   };
 
   return(
@@ -10429,6 +10461,7 @@ function GuideForm({guide,imgSrc,onSave,onCancel}){
       </div>
       <div style={{display:"flex",gap:10}}>
         <button className="press" onClick={onCancel} style={{flex:1,padding:"13px",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textSub,fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+        {errs.submit&&<div style={{fontSize:12,color:C.danger,fontWeight:700,marginBottom:8,textAlign:"center"}}>{errs.submit}</div>}
         <button className="press" onClick={submit} disabled={saving} style={{flex:2,padding:"13px",borderRadius:12,border:"none",background:C.primary,color:"white",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
           {saving?<><Spinner/>Saving…</>:isEdit?"Save Changes":"Publish Guide"}
         </button>
@@ -10848,8 +10881,11 @@ function RequestPage({nav,user,onSubmit,myRequests}){
     const req={id,product:form.product.trim(),brand:form.brand.trim(),link:form.link.trim(),
       qty:form.qty,notes:form.notes.trim(),name:form.name.trim(),phone:normalizePhone(form.phone),
       hasImg:!!imgB64,status:"New",createdAt:new Date().toISOString()};
-    await onSubmit(req,imgB64);
-    setSaving(false);setDone(true);
+    try{
+      await onSubmit(req,imgB64);
+      setDone(true);                 // only claim success if it actually went through
+    }catch(err){ console.error("request submit",err); setErrs({submit:"Couldn't send your request — please try again"}); }
+    finally{ setSaving(false); }
   };
 
   if(done)return(
@@ -10913,6 +10949,7 @@ function RequestPage({nav,user,onSubmit,myRequests}){
             {errs.phone&&<div style={{fontSize:11,color:C.danger,fontWeight:600,marginTop:4}}>{errs.phone}</div>}
           </div>
         </div>
+        {errs.submit&&<div style={{fontSize:12,color:C.danger,fontWeight:700,marginBottom:8,textAlign:"center"}}>{errs.submit}</div>}
         <button className="press" onClick={submit} disabled={saving}
           style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
           {saving?<><Spinner/>Sending…</>:"📨 Send Request"}
