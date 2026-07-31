@@ -659,6 +659,24 @@ function tryInitFirebase(){
 /* The SDK is loaded async; poll briefly until it's available (no-op if it never loads). */
 (function pollFB(n){ if(tryInitFirebase()||n<=0) return; setTimeout(()=>pollFB(n-1), 250); })(40);
 
+/* The Firebase scripts load async, so on a cold cache the app can boot before FB_OK is true.
+   Wait a bounded moment for the connection rather than deciding there's no cloud yet — but
+   never longer than `ms`, because a shopper with no connection still has a store to browse. */
+function waitForFirebase(ms){
+  if(FB_OK) return Promise.resolve(true);
+  return new Promise(resolve=>{
+    let settled=false;
+    const done=v=>{ if(settled) return; settled=true; window.removeEventListener("nemo-fb-ready",onReady); resolve(v); };
+    const onReady=()=>done(true);
+    window.addEventListener("nemo-fb-ready",onReady);
+    setTimeout(()=>done(FB_OK),ms);
+  });
+}
+/* Lift the boot splash. index.html owns the timing — it holds the cinematic minimum and its own
+   hard maximum — so this only says "the store has something real to show now". Idempotent, and
+   a no-op if the splash markup isn't there (e.g. the app embedded elsewhere). */
+function revealStore(){ try{ if(window.nemoSplashReady) window.nemoSplashReady(); }catch(e){} }
+
 async function fbGetColl(path){
   if(!FB_OK) return null;
   try{ const s=await withTimeout(FB_DB.ref(path).get(),6000); if(!s) return null; const v=s.val(); return v?Object.values(v):[]; }
@@ -907,13 +925,17 @@ async function makeThumbFromAny(src, maxDim=560, quality=0.82){
 async function persistImage(key, b64, withThumb=true){
   const out={};
   if(FB_STORAGE){
-    const url=await uploadToStorage("media/"+key+".jpg", b64);
+    // The thumbnail is made from the same bytes we already hold and lands at its own path, so
+    // it does not need the full-size upload to finish first. Sending both at once saves a whole
+    // upload + getDownloadURL round trip on the one image that carries a thumbnail.
+    const mainUp=uploadToStorage("media/"+key+".jpg", b64);
+    const thumbUp=withThumb
+      ? makeThumb(b64).then(t=>t?uploadToStorage("media/"+key+"_thumb.jpg",t).then(tu=>({t,tu})):null).catch(()=>null)
+      : Promise.resolve(null);
+    const [url,thumb]=await Promise.all([mainUp,thumbUp]);
     if(url){
       out.url=url; try{ await mediaSet("nemo-m-"+key, url); }catch(e){}
-      if(withThumb){
-        const t=await makeThumb(b64);
-        if(t){ const tu=await uploadToStorage("media/"+key+"_thumb.jpg", t); if(tu){ out.url_thumb=tu; out.thumbData=t; } }
-      }
+      if(thumb&&thumb.tu){ out.url_thumb=thumb.tu; out.thumbData=thumb.t; }
       return out;
     }
   }
@@ -925,6 +947,14 @@ async function persistImage(key, b64, withThumb=true){
     if(t){ await saveMediaItem(key+"_thumb", t); out.thumbData=t; }
   }
   return out;
+}
+/* Thumbnail for one cart line. Cart items are snapshots taken at add-to-cart time and
+   deliberately carry no image (the cart is persisted to localStorage, and a base64 thumb
+   would blow the quota), so resolve it from the live catalog by id at render time. */
+function getCartLineImg(item, products, cache){
+  if(!item) return null;
+  const p=(products||[]).find(x=>x.id===item.id);
+  return p?getCardImg(p,cache||{}):null;
 }
 /* Resolve a product's gallery from the media cache (with backward-compat) */
 function getProductMedia(p, cache={}){
@@ -3200,8 +3230,13 @@ function CountdownBanner({endsAt, title="Limited Time Offer", subtitle="Don't mi
 }
 
 /* ═══════════════════ VARIANT PICKER ═══════════════════ */
-function VariantPicker({product, variants, selectedId, onSelect}){
+function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToCart}){
   const onSale=(product.discountPct||0)>0;
+  // Each option is its own cart line (same key format addToCart uses), so a shopper can build an
+  // order of several different options without going back and forth between them.
+  const qtyOf=v=>(cart.find(i=>i.key===product.id+"|"+v.id)?.qty)||0;
+  const stop=e=>{ e.stopPropagation(); };
+  const stepBtn={background:"none",border:"none",fontSize:17,fontWeight:700,lineHeight:1,cursor:"pointer",padding:"0 2px"};
   return(
     <div style={{marginBottom:18}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>{variantHeading(product)}</div>
@@ -3213,8 +3248,14 @@ function VariantPicker({product, variants, selectedId, onSelect}){
           // Sold out = flagged by the admin OR run down to zero on its own count.
           const out  = variantSoldOut(product, v);
           const left = hasVariantStock(product) ? variantStockOf(product, v) : null;
+          const q    = qtyOf(v);
+          const maxV = Math.max(0, Math.min(variantStockOf(product, v), MAX_PER_ORDER));
+          // A row is no longer a <button>: it holds the +/- controls, and a button can't nest
+          // buttons. Kept keyboard-reachable and announced as a radio in its place.
           return(
-            <button key={v.id} className="press" onClick={()=>!out&&onSelect(v)} disabled={out}
+            <div key={v.id} role="radio" aria-checked={sel} aria-disabled={out} tabIndex={out?-1:0}
+              onClick={()=>!out&&onSelect&&onSelect(v)}
+              onKeyDown={e=>{ if(!out&&(e.key==="Enter"||e.key===" ")){ e.preventDefault(); onSelect&&onSelect(v); } }}
               style={{
                 width:"100%",textAlign:"left",
                 background: out?"#f3f4f6":sel?C.accentLight:C.card,
@@ -3228,19 +3269,48 @@ function VariantPicker({product, variants, selectedId, onSelect}){
                 <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${sel?C.primary:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   {sel&&<div style={{width:10,height:10,borderRadius:"50%",background:C.primary}}/>}
                 </div>
-                <div style={{fontSize:13,fontWeight:600,color:C.text,lineHeight:1.3}}>{v.label}</div>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,lineHeight:1.3}}>{v.label}</div>
+                  {!out&&(
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
+                      {onSale&&<span style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{orig}</span>}
+                      <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{price}</span>
+                      {left!=null&&left<=3&&<span style={{fontSize:10,fontWeight:800,color:C.coral}}>Only {left} left</span>}
+                    </div>
+                  )}
+                </div>
               </div>
               {out
-                ? <span style={{fontSize:11,fontWeight:700,color:C.danger}}>Sold out</span>
-                : <span style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                    {left!=null&&left<=3&&<span style={{fontSize:10,fontWeight:800,color:C.coral}}>Only {left} left</span>}
-                    {onSale&&<span style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{orig}</span>}
-                    <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{price}</span>
-                  </span>}
-            </button>
+                ? <span style={{fontSize:11,fontWeight:700,color:C.danger,flexShrink:0}}>Sold out</span>
+                : !addToCart
+                  ? null
+                  : q>0
+                    ? <div onClick={stop} style={{display:"flex",alignItems:"center",gap:9,background:C.bg,borderRadius:99,padding:"5px 11px",border:`1.5px solid ${C.border}`,flexShrink:0}}>
+                        <button className="press" aria-label={`Remove one ${v.label}`} onClick={e=>{stop(e);addToCart(product,-1,v);}}
+                          style={{...stepBtn,color:C.primary}}>−</button>
+                        <span style={{fontSize:14,fontWeight:800,color:C.text,minWidth:14,textAlign:"center"}}>{q}</span>
+                        <button className="press" aria-label={`Add another ${v.label}`} disabled={q>=maxV} onClick={e=>{stop(e);onSelect&&onSelect(v);addToCart(product,1,v);}}
+                          style={{...stepBtn,color:q>=maxV?C.textSub:C.primary,opacity:q>=maxV?.5:1,cursor:q>=maxV?"default":"pointer"}}>+</button>
+                      </div>
+                    : <button className="press" aria-label={`Add ${v.label} to cart`} onClick={e=>{stop(e);onSelect&&onSelect(v);addToCart(product,1,v);}}
+                        style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:99,padding:"7px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>+ Add</button>}
+            </div>
           );
         })}
       </div>
+      {/* What this option set adds up to, so a mixed order is legible before checkout. */}
+      {(()=>{
+        const lines=variants.map(v=>({v,q:qtyOf(v)})).filter(x=>x.q>0);
+        if(lines.length<2) return null;
+        const units=lines.reduce((a,x)=>a+x.q,0);
+        const sum=lines.reduce((a,x)=>a+x.q*variantEffPrice(product,x.v),0);
+        return(
+          <div style={{marginTop:10,padding:"9px 13px",background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <span style={{fontSize:11.5,fontWeight:700,color:C.text}}>{lines.length} options · {units} item{units!==1?"s":""} in cart</span>
+            <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{sum}</span>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -5266,8 +5336,8 @@ function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
 }
 
 /* ═══════════════════ MEDIA LIGHTBOX — fullscreen open · pinch/scroll zoom · pan · swipe ═══════════════════ */
-function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
-  const [scale,setScale] = useState(1);
+function MediaLightbox({slides=[],index=0,setIndex,onClose,name="",initialZoom=false}){
+  const [scale,setScale] = useState(initialZoom?2.6:1);
   const [tx,setTx]       = useState(0);
   const [ty,setTy]       = useState(0);
   const stageRef = useRef(null);
@@ -5276,7 +5346,13 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
   const cur      = slides[index]||{};
   const isVideo  = cur.type==="video";
   const reset = ()=>{ setScale(1); setTx(0); setTy(0); };
-  useEffect(()=>{ reset(); },[index]);
+  // Changing slide always returns to fit — but not on the very first run when we were opened
+  // zoomed on purpose, or the magnification would be thrown away immediately.
+  const firstRun = useRef(true);
+  useEffect(()=>{
+    if(firstRun.current){ firstRun.current=false; if(initialZoom) return; }
+    reset();
+  },[index]);
   const go = dir => setIndex(i => (i+dir+slides.length)%slides.length);
   const clamp = (sc,x,y)=>{
     const el=stageRef.current; if(!el) return [x,y];
@@ -5411,6 +5487,10 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   const [justAdded,setJustAdded] = useState(false);
   const [photoZoom,setPhotoZoom] = useState(null); // review photo lightbox src
   const [lightbox,setLightbox] = useState(-1); // product gallery lightbox — active slide index (-1 = closed)
+  const galRef                 = useRef(null); // the hero scroller, so the arrows can drive it
+  const [zoomOnOpen,setZoomOnOpen] = useState(false); // open the lightbox already magnified
+  const clickT                 = useRef(null); // pending single-click, held back to see if a double follows
+  const ptrKind                = useRef("mouse");
 
   useEffect(()=>{
     setLoadingRev(true);
@@ -5421,6 +5501,9 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
     trackEvent("view",p.id); trackFunnel("view");
     loadReviews(p.id).then(r=>{ setReviews(r); setLoadingRev(false); if((r.length||0)!==(p.reviewCount||0)) onReviewsChanged && onReviewsChanged(p.id, r); });
     setSlide(0);
+    // The scroller is reused across products, so without this it keeps the previous product's
+    // offset — landing on photo 3 of a product while the dots say 1.
+    if(galRef.current) galRef.current.scrollLeft=0;
     // Auto-open the review form when the customer tapped "Rate" from their orders
     if(autoReview && user && hasPurchased(orders, user, p.id)){ setTab("reviews"); setShowForm(true); }
   },[p.id]);
@@ -5430,6 +5513,49 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
     ...media.images.map(src=>({type:"image",src})),
     ...(media.video?[{type:"video",src:media.video}]:[]),
   ];
+
+  /* Opening the photo. A single click opens it fit-to-screen; a double click opens it zoomed in
+     on the spot that was clicked, so it can be dragged around to see the rest. The single click
+     is held for a moment first — without that, click one opens the viewer and click two lands on
+     the viewer and shuts it again, which is why double-clicking used to do nothing at all. Only
+     mice pay that wait: a tap opens immediately, and inside the viewer double-tap already zooms. */
+  const openPhoto=(i,zoom)=>{ setZoomOnOpen(!!zoom); setLightbox(i); };
+  const slideClick=(i,type)=>{
+    if(type!=="image") return;
+    if(ptrKind.current!=="mouse"){ openPhoto(i,false); return; }
+    if(clickT.current){ clearTimeout(clickT.current); clickT.current=null; return; }
+    clickT.current=setTimeout(()=>{ clickT.current=null; openPhoto(i,false); },240);
+  };
+  const slideDblClick=(i,type)=>{
+    if(type!=="image") return;
+    if(clickT.current){ clearTimeout(clickT.current); clickT.current=null; }
+    openPhoto(i,true);
+  };
+  useEffect(()=>()=>{ if(clickT.current) clearTimeout(clickT.current); },[]);
+
+  /* Step the hero gallery. Scrolling the container (rather than tracking an index ourselves)
+     keeps the arrows, the swipe gesture and the dots reading from one source of truth — the
+     onScroll handler updates `slide` either way. */
+  const goSlide=(dir)=>{
+    const el=galRef.current; if(!el) return;
+    const i=Math.min(slides.length-1,Math.max(0,slide+dir));
+    if(i===slide) return;
+    setSlide(i);
+    const left=i*el.clientWidth;
+    if(el.scrollTo) el.scrollTo({left,behavior:"smooth"}); else el.scrollLeft=left;
+  };
+  /* Prev/next arrow over the hero. Dimmed and inert at either end, so the shopper can see
+     where they are in the set without counting dots. */
+  const galArrow=(dir,side,label,glyph)=>{
+    const off = dir<0 ? slide<=0 : slide>=slides.length-1;
+    return(
+      <button className="press" onClick={()=>goSlide(dir)} disabled={off} aria-label={label}
+        style={{position:"absolute",top:150,transform:"translateY(-50%)",[side]:12,width:38,height:38,borderRadius:"50%",
+          background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:22,lineHeight:1,
+          paddingBottom:3,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2,
+          opacity:off?.28:1,cursor:off?"default":"pointer",transition:"opacity .18s"}}>{glyph}</button>
+    );
+  };
 
   if(!p)return null;
   const m   = CAT_META[p.category]||CAT_META["Live Fish"];
@@ -5469,7 +5595,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
     <div className="slide-up">
       {/* Hero media gallery */}
       <div style={{position:"relative",background:slides.length?"#000":`linear-gradient(155deg,${m.c1},${m.c2})`}}>
-        <div style={{height:300,display:"flex",overflowX:"auto",scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch"}}
+        <div ref={galRef} style={{height:300,display:"flex",overflowX:"auto",scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch"}}
           onScroll={e=>{ const i=Math.round(e.target.scrollLeft/e.target.clientWidth); if(i!==slide)setSlide(i); }}>
           {slides.length===0 && (
             <div style={{minWidth:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -5477,7 +5603,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             </div>
           )}
           {slides.map((s,i)=>(
-            <div key={i} onClick={()=>{ if(s.type==="image") setLightbox(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
+            <div key={i}
+              onPointerDown={e=>{ ptrKind.current=e.pointerType||"mouse"; }}
+              onClick={()=>slideClick(i,s.type)}
+              onDoubleClick={()=>slideDblClick(i,s.type)}
+              style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
               {s.type==="video"
                 ? <video src={s.src} controls playsInline loop style={{width:"100%",height:"100%",objectFit:"contain"}}/>
                 : <SmoothImg src={s.src} alt={p.name} loading="eager" style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
@@ -5487,6 +5617,8 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,.3) 0%,transparent 35%)",pointerEvents:"none"}}/>
         <button className="press" onClick={()=>nav(prevPage)}
           style={{position:"absolute",top:50,left:16,background:"rgba(255,255,255,.2)",border:"1.5px solid rgba(255,255,255,.35)",borderRadius:12,width:40,height:40,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)"}}>←</button>
+        {slides.length>1&&galArrow(-1,"left","Previous photo","‹")}
+        {slides.length>1&&galArrow(1,"right","Next photo","›")}
         {slides.length>1&&(
           <div style={{position:"absolute",bottom:36,left:0,right:0,display:"flex",justifyContent:"center",gap:6,pointerEvents:"none"}}>
             {slides.map((s,i)=>(
@@ -5495,7 +5627,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           </div>
         )}
         {slides[slide]&&slides[slide].type==="image"&&(
-          <button className="press" onClick={()=>setLightbox(slide)} aria-label="Open photo full screen"
+          <button className="press" onClick={()=>openPhoto(slide,false)} aria-label="Open photo full screen"
             style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
         )}
         {slides[slide]&&<span style={{position:"absolute",top:50,right:16,background:"rgba(0,0,0,.4)",color:"white",fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,backdropFilter:"blur(6px)"}}>
@@ -5562,7 +5694,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         )}
 
         {/* Variant picker for Live Fish */}
-        {variants && <VariantPicker product={p} variants={variants} selectedId={selVar?.id} onSelect={v=>setSelVarId(v.id)}/>}
+        {variants && <VariantPicker product={p} variants={variants} selectedId={selVar?.id} onSelect={v=>setSelVarId(v.id)} cart={cart} addToCart={addToCart}/>}
 
         {/* Restock alert for out-of-stock products */}
         <RestockBtn product={p} user={user} restockSet={restockSet} onSubscribe={onRestock}/>
@@ -5821,7 +5953,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
       </div>
 
       {lightbox>=0&&slides[lightbox]&&(
-        <MediaLightbox slides={slides} index={lightbox} setIndex={setLightbox} onClose={()=>setLightbox(-1)} name={p.name}/>
+        <MediaLightbox slides={slides} index={lightbox} setIndex={setLightbox} onClose={()=>setLightbox(-1)} name={p.name} initialZoom={zoomOnOpen}/>
       )}
       {photoZoom&&(
         <Portal>
@@ -5837,7 +5969,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
 
 /* ═══════════════════ CART PAGE ═══════════════════ */
 /* Slide-in mini-cart — quick peek + checkout without leaving the page */
-function MiniCart({open,onClose,cart,total,updateQty,nav,settings={}}){
+function MiniCart({open,onClose,cart,total,updateQty,nav,settings={},products=[],mediaCache={}}){
   const count=cart.reduce((s,i)=>s+i.qty,0);
   const thr=Number(settings.freeDeliveryThreshold||0);
   const left=thr>0?Math.max(0,thr-total):0;
@@ -5855,9 +5987,12 @@ function MiniCart({open,onClose,cart,total,updateQty,nav,settings={}}){
           ):cart.map(item=>{
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
             const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+            const cartImg=getCartLineImg(item,products,mediaCache);
             return(
               <div key={item.key} style={{display:"flex",gap:12,alignItems:"center",padding:"11px 0",borderBottom:`1px solid ${C.border}`}}>
-                <div style={{width:48,height:48,borderRadius:12,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{m.emoji}</div>
+                <div style={{width:48,height:48,borderRadius:12,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,overflow:"hidden"}}>
+                  {cartImg?<img src={cartImg} alt={item.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
+                </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</div>
                   {item.variantLabel&&<div style={{fontSize:11,color:C.textSub}}>{item.variantLabel}</div>}
@@ -5890,7 +6025,7 @@ function MiniCart({open,onClose,cart,total,updateQty,nav,settings={}}){
   );
 }
 
-function CartPage({cart,updateQty,total,nav,settings={}}){
+function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={}}){
   const hasLiveFish=cart.some(i=>i.category==="Live Fish");
   if(!cart.length)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"20px",textAlign:"center"}}>
@@ -5923,9 +6058,15 @@ function CartPage({cart,updateQty,total,nav,settings={}}){
         {cart.map(item=>{
           const m=CAT_META[item.category]||CAT_META["Live Fish"];
           const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+          // The line item is a snapshot and carries no picture (storing one would bloat the
+          // saved cart), so look the photo up from the catalog by id. Falls back to the
+          // category tile for a product that has since been removed.
+          const cartImg=getCartLineImg(item,products,mediaCache);
           return(
             <div key={item.key} style={{background:C.card,borderRadius:18,padding:"14px",marginBottom:10,display:"flex",gap:14,alignItems:"center",border:`1px solid ${C.border}`}}>
-              <div style={{width:58,height:58,borderRadius:14,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30}}>{m.emoji}</div>
+              <div style={{width:58,height:58,borderRadius:14,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,overflow:"hidden"}}>
+                {cartImg?<img src={cartImg} alt={item.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
+              </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13.5,fontWeight:700,color:C.text,marginBottom:2}}>{item.name}</div>
                 <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>{item.variantLabel||item.category}</div>
@@ -7285,29 +7426,33 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     // Persist any newly-added media items.
     // Major-ecommerce pattern: bytes -> Storage (CDN), only the short URL + thumbUrl ride on the
     // product record, so the catalog renders from one `products` read with no per-image DB lookups.
-    const media=[];
+    const media=new Array(images.length);
     const prevMedia=product?.media||[];
     const thumbPatch={};
-    for(let idx=0; idx<images.length; idx++){
-      const im=images[idx];
+    if(newImgCount) setBusyNote(`Uploading ${newImgCount} photo${newImgCount>1?"s":""}…`);
+    // The photos go up together rather than one after another. They are independent objects at
+    // their own Storage paths, so uploading them in turn just stacked one full round trip per
+    // photo onto every save — the slowest part of saving a product with new pictures. Results
+    // are written back by index, so gallery order never depends on which upload finishes first.
+    await Promise.all(images.map(async(im,idx)=>{
       const isFirst=idx===0;
       const prev=prevMedia.find(m=>m.key===im.key)||{};
       const entry={key:im.key,type:"image"};
       if(im.b64){
         // Only the FIRST image needs a catalog thumbnail (that's all the grid shows).
-        setBusyNote(`Uploading photo ${++uploaded} of ${newImgCount}…`);
         const r=await persistImage(im.key, im.b64, isFirst);
         if(r.url) entry.url=r.url;
         if(r.url_thumb) entry.thumbUrl=r.url_thumb;
         if(r.thumbData){ entry.thumb=1; thumbPatch["thumb-"+im.key]=r.thumbData; }
+        setBusyNote(`Uploaded ${++uploaded} of ${newImgCount} photo${newImgCount>1?"s":""}…`);
       } else {
         // Untouched existing image — carry its embedded URL/thumb forward.
         if(prev.url) entry.url=prev.url;
         if(prev.thumbUrl){ entry.thumbUrl=prev.thumbUrl; entry.thumb=1; }
         else if(prev.thumb) entry.thumb=1;
       }
-      media.push(entry);
-    }
+      media[idx]=entry;
+    }));
     // Guarantee the FIRST image has a thumbnail — even if it's an existing image just moved into
     // first place (its thumb may not have been generated yet). This is what the catalog grid uses.
     {
@@ -11092,6 +11237,10 @@ function NemoStore(){
     const syncedProds=finalProds||(localProducts()||DEFAULT_PRODUCTS).map(normalizeProduct);
     const syncedGds=finalGds||(localGuidesData()||[]);
     hydrateMedia(syncedProds, localRequests(), syncedGds);
+    // The storefront is now showing live products with their images — everything past this point
+    // (requests, settings) is either admin-only or already served from cache, so there's nothing
+    // left worth making the shopper stare at the splash for.
+    revealStore();
     // Requests (admin needs these; customers' request page works regardless)
     const reqs=await loadRequests();
     if(reqs)setRequests(reqs);
@@ -11122,13 +11271,18 @@ function NemoStore(){
       setLoading(false);
       // Safety: never leave skeletons up indefinitely (e.g. Firebase off) — reveal after a short wait
       setTimeout(()=>setHydrated(true),2500);
-      // Remove the boot splash now that the app has painted
-      try{ const sp=document.getElementById("splash"); if(sp){ sp.classList.add("hide"); setTimeout(()=>sp.remove(),450); } }catch(e){}
       hydrateMedia(prods,reqs,guideList);      // Seed defaults locally if first run
       if(!localP)saveProd(prods);
       if(!localGuidesData())saveGuides(guideList);
-      // 2) Background cloud hydrate (won't block UI; safe if Firebase is slow/misconfigured)
-      cloudSync();
+      // 2) Cloud hydrate. This used to run purely in the background while the splash was torn
+      // down the moment the cached paint landed — which is why the store opened in well under a
+      // second and then visibly rewrote itself as real stock counts and Coming Soon badges
+      // arrived. The splash now stays up until this settles, so the first catalog the shopper
+      // sees is the live one. cloudSync reveals as soon as products + their images are in;
+      // this await covers the case where it returns early (Firebase off) with nothing to wait for.
+      if(!FB_OK) await waitForFirebase(2200);
+      try{ await cloudSync(); }catch(e){ console.warn("cloudSync",e&&e.message); }
+      revealStore();
     })();
   },[]);
 
@@ -11998,7 +12152,7 @@ function NemoStore(){
         {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
         {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
-        {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings}/>}
+        {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={products} mediaCache={mediaCache}/>}
         {page==="checkout" &&(user
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
@@ -12040,7 +12194,7 @@ function NemoStore(){
         );
       })()}
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
-      {!isAdminPage&&<MiniCart open={miniOpen} onClose={()=>setMiniOpen(false)} cart={cart} total={cartTotal} updateQty={updateQty} nav={nav} settings={settings}/>}
+      {!isAdminPage&&<MiniCart open={miniOpen} onClose={()=>setMiniOpen(false)} cart={cart} total={cartTotal} updateQty={updateQty} nav={nav} settings={settings} products={products} mediaCache={mediaCache}/>}
     </div>
   );
 }

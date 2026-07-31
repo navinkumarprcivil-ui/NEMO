@@ -185,11 +185,27 @@
 <script>
 (function(){
   var splashStart=Date.now();
-  var SPLASH_MIN_MS=2400; // smooth, slower cinematic reveal — and gives images/stock time to hydrate before the store shows
-  function fadeSplash(){
-    var wait=Math.max(60, SPLASH_MIN_MS-(Date.now()-splashStart));
-    setTimeout(function(){ requestAnimationFrame(function(){ var s=document.getElementById("splash"); if(s){ s.classList.add("hide"); setTimeout(function(){ s.remove(); },550); } }); }, wait);
+  var SPLASH_MIN_MS=2400; // smooth, slower cinematic reveal — never lift before this
+  var SPLASH_MAX_MS=6000; // …and never hold past this, however the load is going
+  var splashGone=false;
+  function hideSplashNow(){
+    if(splashGone) return; splashGone=true;
+    requestAnimationFrame(function(){
+      var s=document.getElementById("splash");
+      if(s){ s.classList.add("hide"); setTimeout(function(){ if(s.parentNode) s.remove(); },550); }
+    });
   }
+  /* The app calls this (as window.nemoSplashReady) once the live catalog has landed, so stock
+     counts and Coming Soon badges settle BEHIND the splash instead of visibly rewriting the
+     store a moment after it opens. Idempotent — repeat calls are ignored. */
+  function fadeSplash(){
+    setTimeout(hideSplashNow, Math.max(60, SPLASH_MIN_MS-(Date.now()-splashStart)));
+  }
+  window.nemoSplashReady=fadeSplash;
+  /* Backstop: if the app never signals — script error, no network, Firebase blocked — the
+     shopper still gets into the store. This is the only thing that can strand them, so it is
+     armed here at page load rather than anywhere the app could fail to reach. */
+  setTimeout(hideSplashNow, SPLASH_MAX_MS);
   var ran=false;
   function run(code){
     if(ran) return; // once-guard: cached copy and fresh fetch both call run — inject only the first
@@ -199,7 +215,8 @@
     var s=document.createElement("script");
     s.text=code+"\n;try{var __EB=(typeof ErrorBoundary!=='undefined')?ErrorBoundary:React.Fragment;ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(__EB,null,React.createElement(NemoStore)));}catch(e){console.error('render failed',e);}";
     document.body.appendChild(s);
-    fadeSplash();
+    // No fadeSplash() here — injecting the script only means the code arrived, not that the
+    // store has anything real to show. The app signals when its data has actually landed.
   }
 
   /* ── FALLBACK PATH ──────────────────────────────────────────────────────────
