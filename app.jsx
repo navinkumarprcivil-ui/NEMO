@@ -659,6 +659,24 @@ function tryInitFirebase(){
 /* The SDK is loaded async; poll briefly until it's available (no-op if it never loads). */
 (function pollFB(n){ if(tryInitFirebase()||n<=0) return; setTimeout(()=>pollFB(n-1), 250); })(40);
 
+/* The Firebase scripts load async, so on a cold cache the app can boot before FB_OK is true.
+   Wait a bounded moment for the connection rather than deciding there's no cloud yet — but
+   never longer than `ms`, because a shopper with no connection still has a store to browse. */
+function waitForFirebase(ms){
+  if(FB_OK) return Promise.resolve(true);
+  return new Promise(resolve=>{
+    let settled=false;
+    const done=v=>{ if(settled) return; settled=true; window.removeEventListener("nemo-fb-ready",onReady); resolve(v); };
+    const onReady=()=>done(true);
+    window.addEventListener("nemo-fb-ready",onReady);
+    setTimeout(()=>done(FB_OK),ms);
+  });
+}
+/* Lift the boot splash. index.html owns the timing — it holds the cinematic minimum and its own
+   hard maximum — so this only says "the store has something real to show now". Idempotent, and
+   a no-op if the splash markup isn't there (e.g. the app embedded elsewhere). */
+function revealStore(){ try{ if(window.nemoSplashReady) window.nemoSplashReady(); }catch(e){} }
+
 async function fbGetColl(path){
   if(!FB_OK) return null;
   try{ const s=await withTimeout(FB_DB.ref(path).get(),6000); if(!s) return null; const v=s.val(); return v?Object.values(v):[]; }
@@ -907,13 +925,17 @@ async function makeThumbFromAny(src, maxDim=560, quality=0.82){
 async function persistImage(key, b64, withThumb=true){
   const out={};
   if(FB_STORAGE){
-    const url=await uploadToStorage("media/"+key+".jpg", b64);
+    // The thumbnail is made from the same bytes we already hold and lands at its own path, so
+    // it does not need the full-size upload to finish first. Sending both at once saves a whole
+    // upload + getDownloadURL round trip on the one image that carries a thumbnail.
+    const mainUp=uploadToStorage("media/"+key+".jpg", b64);
+    const thumbUp=withThumb
+      ? makeThumb(b64).then(t=>t?uploadToStorage("media/"+key+"_thumb.jpg",t).then(tu=>({t,tu})):null).catch(()=>null)
+      : Promise.resolve(null);
+    const [url,thumb]=await Promise.all([mainUp,thumbUp]);
     if(url){
       out.url=url; try{ await mediaSet("nemo-m-"+key, url); }catch(e){}
-      if(withThumb){
-        const t=await makeThumb(b64);
-        if(t){ const tu=await uploadToStorage("media/"+key+"_thumb.jpg", t); if(tu){ out.url_thumb=tu; out.thumbData=t; } }
-      }
+      if(thumb&&thumb.tu){ out.url_thumb=thumb.tu; out.thumbData=thumb.t; }
       return out;
     }
   }
@@ -5411,6 +5433,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   const [justAdded,setJustAdded] = useState(false);
   const [photoZoom,setPhotoZoom] = useState(null); // review photo lightbox src
   const [lightbox,setLightbox] = useState(-1); // product gallery lightbox — active slide index (-1 = closed)
+  const galRef                 = useRef(null); // the hero scroller, so the arrows can drive it
 
   useEffect(()=>{
     setLoadingRev(true);
@@ -5421,6 +5444,9 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
     trackEvent("view",p.id); trackFunnel("view");
     loadReviews(p.id).then(r=>{ setReviews(r); setLoadingRev(false); if((r.length||0)!==(p.reviewCount||0)) onReviewsChanged && onReviewsChanged(p.id, r); });
     setSlide(0);
+    // The scroller is reused across products, so without this it keeps the previous product's
+    // offset — landing on photo 3 of a product while the dots say 1.
+    if(galRef.current) galRef.current.scrollLeft=0;
     // Auto-open the review form when the customer tapped "Rate" from their orders
     if(autoReview && user && hasPurchased(orders, user, p.id)){ setTab("reviews"); setShowForm(true); }
   },[p.id]);
@@ -5430,6 +5456,30 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
     ...media.images.map(src=>({type:"image",src})),
     ...(media.video?[{type:"video",src:media.video}]:[]),
   ];
+
+  /* Step the hero gallery. Scrolling the container (rather than tracking an index ourselves)
+     keeps the arrows, the swipe gesture and the dots reading from one source of truth — the
+     onScroll handler updates `slide` either way. */
+  const goSlide=(dir)=>{
+    const el=galRef.current; if(!el) return;
+    const i=Math.min(slides.length-1,Math.max(0,slide+dir));
+    if(i===slide) return;
+    setSlide(i);
+    const left=i*el.clientWidth;
+    if(el.scrollTo) el.scrollTo({left,behavior:"smooth"}); else el.scrollLeft=left;
+  };
+  /* Prev/next arrow over the hero. Dimmed and inert at either end, so the shopper can see
+     where they are in the set without counting dots. */
+  const galArrow=(dir,side,label,glyph)=>{
+    const off = dir<0 ? slide<=0 : slide>=slides.length-1;
+    return(
+      <button className="press" onClick={()=>goSlide(dir)} disabled={off} aria-label={label}
+        style={{position:"absolute",top:150,transform:"translateY(-50%)",[side]:12,width:38,height:38,borderRadius:"50%",
+          background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:22,lineHeight:1,
+          paddingBottom:3,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2,
+          opacity:off?.28:1,cursor:off?"default":"pointer",transition:"opacity .18s"}}>{glyph}</button>
+    );
+  };
 
   if(!p)return null;
   const m   = CAT_META[p.category]||CAT_META["Live Fish"];
@@ -5469,7 +5519,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
     <div className="slide-up">
       {/* Hero media gallery */}
       <div style={{position:"relative",background:slides.length?"#000":`linear-gradient(155deg,${m.c1},${m.c2})`}}>
-        <div style={{height:300,display:"flex",overflowX:"auto",scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch"}}
+        <div ref={galRef} style={{height:300,display:"flex",overflowX:"auto",scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch"}}
           onScroll={e=>{ const i=Math.round(e.target.scrollLeft/e.target.clientWidth); if(i!==slide)setSlide(i); }}>
           {slides.length===0 && (
             <div style={{minWidth:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -5487,6 +5537,8 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,.3) 0%,transparent 35%)",pointerEvents:"none"}}/>
         <button className="press" onClick={()=>nav(prevPage)}
           style={{position:"absolute",top:50,left:16,background:"rgba(255,255,255,.2)",border:"1.5px solid rgba(255,255,255,.35)",borderRadius:12,width:40,height:40,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)"}}>←</button>
+        {slides.length>1&&galArrow(-1,"left","Previous photo","‹")}
+        {slides.length>1&&galArrow(1,"right","Next photo","›")}
         {slides.length>1&&(
           <div style={{position:"absolute",bottom:36,left:0,right:0,display:"flex",justifyContent:"center",gap:6,pointerEvents:"none"}}>
             {slides.map((s,i)=>(
@@ -7285,29 +7337,33 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     // Persist any newly-added media items.
     // Major-ecommerce pattern: bytes -> Storage (CDN), only the short URL + thumbUrl ride on the
     // product record, so the catalog renders from one `products` read with no per-image DB lookups.
-    const media=[];
+    const media=new Array(images.length);
     const prevMedia=product?.media||[];
     const thumbPatch={};
-    for(let idx=0; idx<images.length; idx++){
-      const im=images[idx];
+    if(newImgCount) setBusyNote(`Uploading ${newImgCount} photo${newImgCount>1?"s":""}…`);
+    // The photos go up together rather than one after another. They are independent objects at
+    // their own Storage paths, so uploading them in turn just stacked one full round trip per
+    // photo onto every save — the slowest part of saving a product with new pictures. Results
+    // are written back by index, so gallery order never depends on which upload finishes first.
+    await Promise.all(images.map(async(im,idx)=>{
       const isFirst=idx===0;
       const prev=prevMedia.find(m=>m.key===im.key)||{};
       const entry={key:im.key,type:"image"};
       if(im.b64){
         // Only the FIRST image needs a catalog thumbnail (that's all the grid shows).
-        setBusyNote(`Uploading photo ${++uploaded} of ${newImgCount}…`);
         const r=await persistImage(im.key, im.b64, isFirst);
         if(r.url) entry.url=r.url;
         if(r.url_thumb) entry.thumbUrl=r.url_thumb;
         if(r.thumbData){ entry.thumb=1; thumbPatch["thumb-"+im.key]=r.thumbData; }
+        setBusyNote(`Uploaded ${++uploaded} of ${newImgCount} photo${newImgCount>1?"s":""}…`);
       } else {
         // Untouched existing image — carry its embedded URL/thumb forward.
         if(prev.url) entry.url=prev.url;
         if(prev.thumbUrl){ entry.thumbUrl=prev.thumbUrl; entry.thumb=1; }
         else if(prev.thumb) entry.thumb=1;
       }
-      media.push(entry);
-    }
+      media[idx]=entry;
+    }));
     // Guarantee the FIRST image has a thumbnail — even if it's an existing image just moved into
     // first place (its thumb may not have been generated yet). This is what the catalog grid uses.
     {
@@ -11092,6 +11148,10 @@ function NemoStore(){
     const syncedProds=finalProds||(localProducts()||DEFAULT_PRODUCTS).map(normalizeProduct);
     const syncedGds=finalGds||(localGuidesData()||[]);
     hydrateMedia(syncedProds, localRequests(), syncedGds);
+    // The storefront is now showing live products with their images — everything past this point
+    // (requests, settings) is either admin-only or already served from cache, so there's nothing
+    // left worth making the shopper stare at the splash for.
+    revealStore();
     // Requests (admin needs these; customers' request page works regardless)
     const reqs=await loadRequests();
     if(reqs)setRequests(reqs);
@@ -11122,13 +11182,18 @@ function NemoStore(){
       setLoading(false);
       // Safety: never leave skeletons up indefinitely (e.g. Firebase off) — reveal after a short wait
       setTimeout(()=>setHydrated(true),2500);
-      // Remove the boot splash now that the app has painted
-      try{ const sp=document.getElementById("splash"); if(sp){ sp.classList.add("hide"); setTimeout(()=>sp.remove(),450); } }catch(e){}
       hydrateMedia(prods,reqs,guideList);      // Seed defaults locally if first run
       if(!localP)saveProd(prods);
       if(!localGuidesData())saveGuides(guideList);
-      // 2) Background cloud hydrate (won't block UI; safe if Firebase is slow/misconfigured)
-      cloudSync();
+      // 2) Cloud hydrate. This used to run purely in the background while the splash was torn
+      // down the moment the cached paint landed — which is why the store opened in well under a
+      // second and then visibly rewrote itself as real stock counts and Coming Soon badges
+      // arrived. The splash now stays up until this settles, so the first catalog the shopper
+      // sees is the live one. cloudSync reveals as soon as products + their images are in;
+      // this await covers the case where it returns early (Firebase off) with nothing to wait for.
+      if(!FB_OK) await waitForFirebase(2200);
+      try{ await cloudSync(); }catch(e){ console.warn("cloudSync",e&&e.message); }
+      revealStore();
     })();
   },[]);
 
