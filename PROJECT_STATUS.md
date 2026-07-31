@@ -88,6 +88,10 @@ One product, several variations, each with **its own price and packing weight** 
 - **Fixed: a fully sold-out product used to still sell.** With every option flagged sold out, the page showed "In Stock", the Add button was live, and a sold-out option went into the cart. Availability now derives from the options themselves.
 - Not yet done: static SEO pages under `/p/` still print a single price and should say "from ₹X" for option products.
 
+## Product page fixes (Jul 2026)
+- **Coming Soon products no longer show a stock badge.** The title/price area read "● In Stock" off the product's leftover `stockCount` while the bottom bar correctly said Coming Soon. It now shows a "🔜 Coming Soon" badge instead; normal products are unchanged.
+- **Descriptions keep the line breaks you type.** The product page renders `p.desc` with `white-space: pre-wrap`, so paragraphs, blank lines and bullet lists appear as entered instead of collapsing into one run-on block.
+
 ## Admin panel — Back button & product form (Jul 2026)
 - **Hardware/browser Back inside Admin no longer drops out of the panel.** It steps back one level at a time: an open product form or order detail closes first (`backRef` handler registered by `AdminHub`); at the top level an in-app sheet asks **"Leave the Admin panel?"** (`AdminExitConfirm`). `window.confirm` is unreliable inside a `popstate` handler on mobile, hence the in-app dialog. The header's "🛍 Store" button and the `beforeunload` refresh/close guard are unchanged.
 - **Admin headers are safe-area aware** (`.admin-head` → `env(safe-area-inset-top) + 24px`). The page ships `viewport-fit=cover`, so in the installed app the layout runs *under* the status bar; the old flat `52px` left the header's small controls in the strip the system reserves for the notification pull-down, where taps get eaten. Header buttons are now ≥44px tall, and the Products tab has a full-width **➕ Add New Product** button in the body as an always-reachable twin of the header's "+ Add".
