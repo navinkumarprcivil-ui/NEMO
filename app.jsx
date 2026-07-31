@@ -3230,8 +3230,13 @@ function CountdownBanner({endsAt, title="Limited Time Offer", subtitle="Don't mi
 }
 
 /* ═══════════════════ VARIANT PICKER ═══════════════════ */
-function VariantPicker({product, variants, selectedId, onSelect}){
+function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToCart}){
   const onSale=(product.discountPct||0)>0;
+  // Each option is its own cart line (same key format addToCart uses), so a shopper can build an
+  // order of several different options without going back and forth between them.
+  const qtyOf=v=>(cart.find(i=>i.key===product.id+"|"+v.id)?.qty)||0;
+  const stop=e=>{ e.stopPropagation(); };
+  const stepBtn={background:"none",border:"none",fontSize:17,fontWeight:700,lineHeight:1,cursor:"pointer",padding:"0 2px"};
   return(
     <div style={{marginBottom:18}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>{variantHeading(product)}</div>
@@ -3243,8 +3248,14 @@ function VariantPicker({product, variants, selectedId, onSelect}){
           // Sold out = flagged by the admin OR run down to zero on its own count.
           const out  = variantSoldOut(product, v);
           const left = hasVariantStock(product) ? variantStockOf(product, v) : null;
+          const q    = qtyOf(v);
+          const maxV = Math.max(0, Math.min(variantStockOf(product, v), MAX_PER_ORDER));
+          // A row is no longer a <button>: it holds the +/- controls, and a button can't nest
+          // buttons. Kept keyboard-reachable and announced as a radio in its place.
           return(
-            <button key={v.id} className="press" onClick={()=>!out&&onSelect(v)} disabled={out}
+            <div key={v.id} role="radio" aria-checked={sel} aria-disabled={out} tabIndex={out?-1:0}
+              onClick={()=>!out&&onSelect&&onSelect(v)}
+              onKeyDown={e=>{ if(!out&&(e.key==="Enter"||e.key===" ")){ e.preventDefault(); onSelect&&onSelect(v); } }}
               style={{
                 width:"100%",textAlign:"left",
                 background: out?"#f3f4f6":sel?C.accentLight:C.card,
@@ -3258,19 +3269,48 @@ function VariantPicker({product, variants, selectedId, onSelect}){
                 <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${sel?C.primary:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   {sel&&<div style={{width:10,height:10,borderRadius:"50%",background:C.primary}}/>}
                 </div>
-                <div style={{fontSize:13,fontWeight:600,color:C.text,lineHeight:1.3}}>{v.label}</div>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,lineHeight:1.3}}>{v.label}</div>
+                  {!out&&(
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
+                      {onSale&&<span style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{orig}</span>}
+                      <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{price}</span>
+                      {left!=null&&left<=3&&<span style={{fontSize:10,fontWeight:800,color:C.coral}}>Only {left} left</span>}
+                    </div>
+                  )}
+                </div>
               </div>
               {out
-                ? <span style={{fontSize:11,fontWeight:700,color:C.danger}}>Sold out</span>
-                : <span style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                    {left!=null&&left<=3&&<span style={{fontSize:10,fontWeight:800,color:C.coral}}>Only {left} left</span>}
-                    {onSale&&<span style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{orig}</span>}
-                    <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{price}</span>
-                  </span>}
-            </button>
+                ? <span style={{fontSize:11,fontWeight:700,color:C.danger,flexShrink:0}}>Sold out</span>
+                : !addToCart
+                  ? null
+                  : q>0
+                    ? <div onClick={stop} style={{display:"flex",alignItems:"center",gap:9,background:C.bg,borderRadius:99,padding:"5px 11px",border:`1.5px solid ${C.border}`,flexShrink:0}}>
+                        <button className="press" aria-label={`Remove one ${v.label}`} onClick={e=>{stop(e);addToCart(product,-1,v);}}
+                          style={{...stepBtn,color:C.primary}}>−</button>
+                        <span style={{fontSize:14,fontWeight:800,color:C.text,minWidth:14,textAlign:"center"}}>{q}</span>
+                        <button className="press" aria-label={`Add another ${v.label}`} disabled={q>=maxV} onClick={e=>{stop(e);onSelect&&onSelect(v);addToCart(product,1,v);}}
+                          style={{...stepBtn,color:q>=maxV?C.textSub:C.primary,opacity:q>=maxV?.5:1,cursor:q>=maxV?"default":"pointer"}}>+</button>
+                      </div>
+                    : <button className="press" aria-label={`Add ${v.label} to cart`} onClick={e=>{stop(e);onSelect&&onSelect(v);addToCart(product,1,v);}}
+                        style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:99,padding:"7px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>+ Add</button>}
+            </div>
           );
         })}
       </div>
+      {/* What this option set adds up to, so a mixed order is legible before checkout. */}
+      {(()=>{
+        const lines=variants.map(v=>({v,q:qtyOf(v)})).filter(x=>x.q>0);
+        if(lines.length<2) return null;
+        const units=lines.reduce((a,x)=>a+x.q,0);
+        const sum=lines.reduce((a,x)=>a+x.q*variantEffPrice(product,x.v),0);
+        return(
+          <div style={{marginTop:10,padding:"9px 13px",background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <span style={{fontSize:11.5,fontWeight:700,color:C.text}}>{lines.length} options · {units} item{units!==1?"s":""} in cart</span>
+            <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{sum}</span>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -5654,7 +5694,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         )}
 
         {/* Variant picker for Live Fish */}
-        {variants && <VariantPicker product={p} variants={variants} selectedId={selVar?.id} onSelect={v=>setSelVarId(v.id)}/>}
+        {variants && <VariantPicker product={p} variants={variants} selectedId={selVar?.id} onSelect={v=>setSelVarId(v.id)} cart={cart} addToCart={addToCart}/>}
 
         {/* Restock alert for out-of-stock products */}
         <RestockBtn product={p} user={user} restockSet={restockSet} onSubscribe={onRestock}/>
