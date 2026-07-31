@@ -499,7 +499,7 @@
 })();
 </script>
 
-<!-- ══ Drifting jellyfish — one at a time, crossing slowly from bottom→top ══
+<!-- ══ Drifting jellyfish — a couple at a time, crossing slowly from bottom→top ══
      Each one enters at a random point along the bottom and leaves at a different random point
      along the top, wandering rather than ruling a line between them. Built as an SVG (not a
      flat image) so the bell can actually contract and the tentacles trail: a real jellyfish
@@ -583,8 +583,20 @@
   window.addEventListener('touchstart',function(e){ var t=e.touches&&e.touches[0]; if(t) markPtr(t.clientX,t.clientY,1600); },{passive:true});
   window.addEventListener('touchmove',function(e){ var t=e.touches&&e.touches[0]; if(t) markPtr(t.clientX,t.clientY,400); },{passive:true});
 
-  // ── One drifter at a time ──────────────────────────────────────────────────
-  var uid=0, el=null, jf=null, raf=0, running=true, last=0;
+  // ── A couple of drifters, each on its own crossing ─────────────────────────
+  // Each slot runs an independent cycle: spawn → cross → leave → wait → spawn again. Keeping
+  // them in separate slots means one leaving never disturbs the other's climb, and they drift
+  // out of step on their own instead of rising as a matched pair.
+  var MAX=2;
+  var uid=0, live=[], slots=[], raf=0, running=true, last=0, seeded=false;
+  for(var si=0; si<MAX; si++) slots.push({d:null, at:0});
+
+  // Two entering side by side reads as a pair rather than as drift, so a new one keeps clear
+  // of whatever is already in the water.
+  function crowded(x,W){
+    for(var i=0;i<live.length;i++) if(Math.abs(live[i].cx-x)<W*0.3) return true;
+    return false;
+  }
 
   function spawn(){
     uid++;
@@ -592,13 +604,18 @@
     // The betta and clownfish in the wallpaper render 72-78px wide; keep this well under half
     // of that. The bell is ~86% of the SVG width, so a 34px svg gives a ~29px bell.
     var w=26+Math.random()*7, h=w*(330/200);
-    host.innerHTML=svg(uid);
-    el=host.firstChild;
+    var box=document.createElement('div');
+    box.innerHTML=svg(uid);
+    var el=box.firstChild;
+    host.appendChild(el);                          // append — never wipe the other drifter
     el.style.width=w+'px'; el.style.height=h+'px';
     // Like the fish in the wallpaper, it crosses: enters at a random point along the bottom and
     // leaves at a different random point along the top. Both ends can land anywhere across the
     // width, so over a few drifters the whole screen gets used.
     var m=w*0.6, span=Math.max(40,W-w*1.2), x0=m+Math.random()*span;
+    // A handful of tries to find a clear entry; on a window too narrow to separate them, take
+    // whatever came up rather than spin.
+    for(var a=0; a<8 && crowded(x0,W); a++) x0=m+Math.random()*span;
     // How far sideways it wants to end up — always a visible crossing, never a near-vertical
     // line. If that would run it off one edge, send it the other way instead.
     var reach=Math.max(60,W*0.18)+Math.random()*span*0.55, dir=Math.random()<0.5?-1:1;
@@ -606,11 +623,11 @@
     if(x1<m||x1>m+span) x1=x0-dir*reach;
     x1=Math.min(m+span,Math.max(m,x1));
     var y0=H+h*0.6;                                // start just below the bottom edge
-    jf={
-      w:w, h:h,
+    var jf={
+      el:el, w:w, h:h,
       y:y0, y0:y0,
       travel:y0-(-h-10),                           // bottom edge → clear off the top
-      x0:x0, x1:x1,
+      x0:x0, x1:x1, cx:x0, baseCx:x0, push:0, pushDir:0,
       // It doesn't rule a straight line between the two — it meanders there. Two slow waves at
       // unrelated rates never repeat the same shape twice, so each crossing wanders differently.
       wan:Math.min(W*0.20,55+Math.random()*80),    // how wide the meander swings, in px
@@ -634,15 +651,12 @@
     if(jf.bell){ jf.bell.style.transformBox='fill-box'; jf.bell.style.transformOrigin='center bottom'; }
     if(jf.arms){ jf.arms.style.transformBox='fill-box'; jf.arms.style.transformOrigin='top center'; }
     if(jf.tents){ jf.tents.style.transformBox='fill-box'; jf.tents.style.transformOrigin='top center'; }
+    live.push(jf);
+    return jf;
   }
 
-  function frame(now){
-    if(!running){ raf=0; return; }
-    if(!last) last=now;
-    var dt=Math.min(0.05,(now-last)/1000); last=now;
-    if(!jf) spawn();
-    var W=window.innerWidth;
-
+  // One drifter, one frame. Returns false once it has cleared the top and is done.
+  function step(jf,dt,now,W){
     // Where it sits this frame. The start and end lanes only set the overall trend — between
     // them it meanders, drifting off one way and then back, the way something with no say in
     // where the water takes it does. The envelope pins the wander to zero at both ends so it
@@ -654,10 +668,32 @@
                 Math.sin(t*Math.PI*2*jf.wf2+jf.wp2)*0.4)*jf.wan*env;
     jf.swayPh+=dt*Math.PI*2*jf.swayHz;
     var sway=Math.sin(jf.swayPh);
-    var cx=jf.x0+(jf.x1-jf.x0)*ease+wander+sway*jf.amp;
+    var base=jf.x0+(jf.x1-jf.x0)*ease+wander+sway*jf.amp;
+    jf.baseCx=base;
+    // Their meanders are independent, so two of them can converge mid-screen — which reads as a
+    // collision, not as drift. Ease them apart as they close: nothing at arm's length, growing
+    // smoothly the nearer they get, and both feel it so the gap opens twice as fast.
+    // Measured between the un-nudged paths, so the nudge can't keep re-deciding its own size,
+    // and the side is settled once on first approach — recompute it every frame and the
+    // direction inverts the instant they cross, which snaps them apart instead of parting them.
+    var want=0, meeting=false;
+    for(var q=0;q<live.length;q++){
+      var o=live[q]; if(o===jf) continue;
+      var ddx=base-o.baseCx, dist=Math.hypot(ddx,jf.y-o.y), R=280;
+      if(dist<R){
+        meeting=true;
+        if(!jf.pushDir) jf.pushDir=(ddx||(jf.x0-o.x0)||1)>0?1:-1;   // commit to a side
+        var f=1-dist/R;
+        want+=jf.pushDir*f*f*40;
+      }
+    }
+    if(!meeting) jf.pushDir=0;            // clear of each other — ready to decide afresh
+    jf.push+=(want-jf.push)*0.04;
+    var cx=base+jf.push;
     // The meander must never carry it off the edge, whatever the window is doing right now.
     var lo=jf.w*0.6, hi=Math.max(lo,W-jf.w*0.6);
     if(cx<lo) cx=lo; else if(cx>hi) cx=hi;
+    jf.cx=cx;                             // published so the next spawn can keep its distance
     var x=cx-jf.w/2;
     // Banks toward wherever it's actually heading — smoothed, so the tilt follows the drift
     // rather than twitching frame to frame.
@@ -697,7 +733,7 @@
     var down = jf.rise*0.55*(1-jf.act*0.5)*sink;   // stirred up, it holds its coast better
     jf.y-=(glide+up-down)*dt;
 
-    el.style.transform='translate3d('+x.toFixed(1)+'px,'+jf.y.toFixed(1)+'px,0) rotate('+lean.toFixed(2)+'deg)';
+    jf.el.style.transform='translate3d('+x.toFixed(1)+'px,'+jf.y.toFixed(1)+'px,0) rotate('+lean.toFixed(2)+'deg)';
     // Bell works harder when it's stirred up.
     var amp=1+jf.act*0.45;
     if(jf.bell) jf.bell.style.transform='scale('+(1+squash*0.10*amp).toFixed(3)+','+(1-squash*0.16*amp).toFixed(3)+')';
@@ -706,11 +742,39 @@
     if(jf.arms)  jf.arms.style.transform='scaleY('+(1+lag*0.07*amp).toFixed(3)+') skewX('+(sway*1.6).toFixed(2)+'deg)';
     if(jf.tents) jf.tents.style.transform='scaleY('+(1+lag*0.10*amp).toFixed(3)+') skewX('+(sway*2.6).toFixed(2)+'deg)';
 
-    // off the top → hand over to the next one after a beat
-    if(jf.y< -jf.h-10){
-      jf=null; host.innerHTML=''; el=null;
+    return jf.y >= -jf.h-10;              // false once it has cleared the top
+  }
+
+  function retire(slot,now){
+    if(slot.d.el.parentNode) host.removeChild(slot.d.el);
+    var k=live.indexOf(slot.d); if(k>=0) live.splice(k,1);
+    slot.d=null;
+    slot.at=now+1200+Math.random()*1800;  // a beat before this slot sends up the next one
+  }
+
+  function frame(now){
+    if(!running){ raf=0; return; }
+    if(!last) last=now;
+    var dt=Math.min(0.05,(now-last)/1000); last=now;
+    var W=window.innerWidth;
+    // First frame sets the clock: stagger the slots so they don't rise as a matched pair.
+    if(!seeded){ seeded=true; for(var i=0;i<slots.length;i++) slots[i].at=now+i*(2500+Math.random()*4500); }
+
+    var next=Infinity;
+    for(var s=0;s<slots.length;s++){
+      var slot=slots[s];
+      if(!slot.d){
+        if(now>=slot.at) slot.d=spawn();
+        else { if(slot.at<next) next=slot.at; continue; }
+      }
+      if(!step(slot.d,dt,now,W)){ retire(slot,now); if(slot.at<next) next=slot.at; }
+    }
+
+    // Nothing in the water and nothing due for a moment — let the browser idle until then
+    // rather than burning frames on an empty layer.
+    if(!live.length && next-now>250){
       raf=0;
-      setTimeout(function(){ if(running&&!raf){ last=0; raf=requestAnimationFrame(frame); } }, 1200+Math.random()*1800);
+      setTimeout(function(){ if(running&&!raf){ last=0; raf=requestAnimationFrame(frame); } }, next-now);
       return;
     }
     raf=requestAnimationFrame(frame);
@@ -723,12 +787,13 @@
     else start();
   });
   // Narrowing the window must not strand an in-flight drifter off-screen — pull both ends of
-  // its crossing back inside the new width.
+  // every crossing back inside the new width.
   window.addEventListener('resize',function(){
-    if(!jf) return;
-    var m=jf.w*0.6, hi=Math.max(m,window.innerWidth-m);
-    jf.x0=Math.min(hi,Math.max(m,jf.x0));
-    jf.x1=Math.min(hi,Math.max(m,jf.x1));
+    for(var i=0;i<live.length;i++){
+      var d=live[i], m=d.w*0.6, hi=Math.max(m,window.innerWidth-m);
+      d.x0=Math.min(hi,Math.max(m,d.x0));
+      d.x1=Math.min(hi,Math.max(m,d.x1));
+    }
   },{passive:true});
   start();
 })();
