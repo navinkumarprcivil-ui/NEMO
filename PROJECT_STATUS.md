@@ -88,11 +88,29 @@ One product, several variations, each with **its own price and packing weight** 
 - **Fixed: a fully sold-out product used to still sell.** With every option flagged sold out, the page showed "In Stock", the Add button was live, and a sold-out option went into the cart. Availability now derives from the options themselves.
 - Not yet done: static SEO pages under `/p/` still print a single price and should say "from ₹X" for option products.
 
+## Stability & performance audit (Jul 2026)
+Measured with an instrumented browser session, not eyeballed.
+
+**Long lists were the lag.** The admin rendered every order it had in one pass with no cap, and the cost scaled linearly: 10 orders 64ms → 500 orders **501ms** of frozen UI and 5754 DOM nodes, every time the panel opened. Orders accumulate forever, so it worsens daily. The shop grid had the same shape (300 products = 215ms, 5953 nodes).
+- Admin orders + products render 25 at a time with a "Show N more" that reports how many are hidden; the window resets on filter/search change and search still reaches past the cap.
+- The shop grid renders 24 and grows automatically as you reach the end (IntersectionObserver, 400px margin) with a button fallback.
+- **After: admin flat at 57-76ms / 530 nodes for 10→500 orders; shop 0ms / 665 nodes for 20→300 products.**
+
+**Stuck spinners.** 24 busy-flag handlers set `saving/busy = true` then awaited without a guard — any failure left the control disabled forever. All now use try/catch/**finally** and surface the error. Worst was **payment-proof submit**: a customer whose submit failed had no way to retry. Verified by injecting failures — the control re-enables, reports, and stays retryable.
+
+**Unbounded cloud calls.** A Firebase promise that never settles can't be rescued by `finally`, since `finally` waits on the await.
+- Every read is now time-bounded. Referral validation (the checkout Apply button) and the admin full-backup export could previously hang forever.
+- User-facing writes go through `fbWrite`'s 15s cap: order placement, settings, reviews, media.
+
+**Checked and found clean:** 60fps idle and after navigation; zero long tasks on the storefront; heap flat at 5-8MB with no growth over an idle period; DOM node count constant across navigation; no runaway timers or rAF loops; all 6 live `.on("value")` listeners have matching `.off()`; the store is fully usable with the backend unreachable. The 4 outstanding `nemo-fb-ready` listeners are 4 distinct effects each with its own cleanup, not a leak.
+
 ## Ambient jellyfish (Jul 2026)
 A single kawaii jellyfish drifts bottom→top in a slow zig-zag; when it clears the top, the next one starts from the bottom after a short pause. Lives in `index.html` next to the bubble-wallpaper canvas (`#nemo-jelly`, `z-index:-1`, `pointer-events:none`).
 - **Drawn as inline SVG, not a flat image**, so the bell can actually contract and the tentacles trail behind it. A PNG could only be slid around as one rigid piece.
-- **Swims like the real thing**: a quick bell contraction thrusts it upward, then it coasts while the bell refills — so the climb surges and glides rather than moving at a constant rate. Arms and tentacles run on a lagged phase because they're dragged, not driven; each tentacle also has a staggered CSS ripple so they don't move as one comb.
-- Roughly 4 sways over the rise (~50s on a phone screen), randomised size / lane / amplitude / stroke rate per drifter so no two look identical.
+- **Pulse-and-sink, the way a jellyfish actually travels**: a hard shove upward on the bell contraction, then it drifts back down a touch while the bell refills. Net travel is upward, but it arrives as visible little hops rather than a steady slide. Arms and tentacles run on a lagged phase because they're dragged, not driven; each tentacle also has a staggered CSS ripple so they don't move as one comb.
+- **Travels straight up**, no zig-zag — each drifter takes a fresh lane so they cover the whole screen width over time. Calm net climb is ~12-15 px/sec, just above the wallpaper bubbles (~2-11 px/sec).
+- **Sized well under half the betta/clownfish** (those render 72-78px wide; the jellyfish bell is ~25px).
+- **Pointer or touch nearby wakes it**: within 78px it pulses harder and climbs ~3x faster, then eases back to its calm drift. Wakes fast, calms slowly. The layer stays `pointer-events:none`, so proximity is measured against the pointer rather than hover — a tap stays "hot" for 1.6s since a touch is instantaneous.
 - Honours `prefers-reduced-motion` (hidden entirely) and pauses on tab-hide. Transform-only animation, one element on screen at a time.
 - To swap in a different jellyfish, edit `svg(uid)` in that block — but keep the `.jelly-bell` / `.jelly-arms` / `.jelly-tents` groups, since the animation drives those by class.
 
