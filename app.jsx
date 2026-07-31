@@ -159,6 +159,21 @@ function variantFromPrice(p){
   const pool=live.length?live:vs;
   return Math.min(...pool.map(v=>variantEffPrice(p,v)));
 }
+/* Is a product's offer still running? `offerEndsAt` used to drive only the countdown and the
+   offers row, while the PRICE ignored it — so a finished sale kept selling at the sale price
+   until someone manually zeroed the discount. Every customer-facing price and sale badge now
+   goes through here, so the offer really does stop at its end date. No end date set = the
+   discount is open-ended and stays on, which is how a plain markdown is expressed. */
+function offerActive(p){
+  if(!p||!p.offerEndsAt) return true;
+  const t=new Date(p.offerEndsAt).getTime();
+  return isNaN(t) ? true : t>Date.now();     // an unparseable date must not silently kill a live offer
+}
+/* The discount actually in force right now: 0 once the offer's end date has passed. */
+function activeDiscount(p){
+  const d=Number(p&&p.discountPct)||0;
+  return d>0 && offerActive(p) ? d : 0;
+}
 /* Absolute (pre-discount) price for a variant — prefers admin-set price, falls back to legacy multiplier */
 function variantBasePrice(p, v){
   if(!v) return p.price||0;
@@ -169,11 +184,10 @@ function variantBasePrice(p, v){
 /* Price a customer pays for a variant (discount applied) */
 function variantEffPrice(p, v){
   const base=variantBasePrice(p,v);
-  const d=p.discountPct||0;
-  return Math.round(base*(1-d/100));
+  return Math.round(base*(1-activeDiscount(p)/100));
 }
 function effectivePrice(p, discountPct){
-  const d = discountPct ?? p.discountPct ?? 0;
+  const d = discountPct ?? activeDiscount(p);
   return Math.round(p.price * (1 - d/100));
 }
 
@@ -3231,7 +3245,7 @@ function CountdownBanner({endsAt, title="Limited Time Offer", subtitle="Don't mi
 
 /* ═══════════════════ VARIANT PICKER ═══════════════════ */
 function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToCart}){
-  const onSale=(product.discountPct||0)>0;
+  const onSale=activeDiscount(product)>0;
   // Each option is its own cart line (same key format addToCart uses), so a shopper can build an
   // order of several different options without going back and forth between them.
   const qtyOf=v=>(cart.find(i=>i.key===product.id+"|"+v.id)?.qty)||0;
@@ -4195,7 +4209,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   const stk = productStockTotal(p);
   const oos = stk<=0;
   const soon = !!p.comingSoon;
-  const onSale = (p.discountPct||0) > 0;
+  const onSale = activeDiscount(p) > 0;
   // A product with options is priced "from" its cheapest one, and its Add button opens the
   // product page to choose — adding blind from the grid would pick a size for the customer.
   const opts = productVariants(p);
@@ -4239,7 +4253,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
             : <span style={{fontSize:54}}>{m.emoji}</span>}
         <div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(0,0,0,.16),transparent 40%)"}}/>
         {p.tag&&<span style={{position:"absolute",top:8,left:8,background:"rgba(0,0,0,.32)",color:"white",fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,backdropFilter:"blur(4px)"}}>{p.tag}</span>}
-        {onSale&&!soon&&<span style={{position:"absolute",bottom:8,left:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:20}}>-{p.discountPct}%</span>}
+        {onSale&&!soon&&<span style={{position:"absolute",bottom:8,left:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:20}}>-{activeDiscount(p)}%</span>}
         {Heart}
         {ShareBtn}
         {soon&&<div style={{position:"absolute",inset:0,background:"rgba(8,54,64,.55)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"white",fontSize:12,fontWeight:800,letterSpacing:1,background:"rgba(0,0,0,.3)",padding:"4px 12px",borderRadius:20}}>COMING SOON</span></div>}
@@ -4294,7 +4308,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           )}
         </div>
         {/* Flash sale countdown — shown when product has offerEndsAt in the future */}
-        {!soon&&(p.discountPct||0)>0&&p.offerEndsAt&&new Date(p.offerEndsAt).getTime()>Date.now()&&(
+        {!soon&&activeDiscount(p)>0&&p.offerEndsAt&&(
           <MiniCountdown endsAt={p.offerEndsAt} compact/>
         )}
         </>)}
@@ -4726,10 +4740,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
     if(r===null){ clearRecentSearches(); setRecent([]); return; }
     setMenuOpen(false); setQuery(r); nav("shop");
   };
-  const offer = products.find(p=>(p.discountPct||0)>0 && p.offerEndsAt && new Date(p.offerEndsAt).getTime()>Date.now());
+  const offer = products.find(p=>activeDiscount(p)>0 && p.offerEndsAt);
   const offerStock = offer ? (offer.stockCount ?? DEFAULT_STOCK) : 0;
   // Offer Zone — every product currently on offer (discount set, in stock, offer not expired).
-  const offerProducts = products.filter(p=>!p.comingSoon && (p.discountPct||0)>0 && (p.stockCount??DEFAULT_STOCK)>0 && (!p.offerEndsAt || new Date(p.offerEndsAt).getTime()>Date.now()));
+  const offerProducts = products.filter(p=>!p.comingSoon && activeDiscount(p)>0 && (p.stockCount??DEFAULT_STOCK)>0);
   return(
     <div className="slide-up">
       <CategoryDrawer open={menuOpen} onClose={()=>setMenuOpen(false)} recent={recent} nav={nav}
@@ -5571,7 +5585,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   // Stock shown/enforced is the SELECTED option's when options carry their own counts.
   const stk = selVar ? variantStockOf(p, selVar) : (p.stockCount ?? DEFAULT_STOCK);
   const oos = productStockTotal(p)<=0 || selOut;
-  const onSale = (p.discountPct||0)>0;
+  const onSale = activeDiscount(p)>0;
   const baseEff = effectivePrice(p);
   const unitPrice = selVar ? variantEffPrice(p, selVar) : baseEff;
   const maxQty = Math.max(1, Math.min(stk, MAX_PER_ORDER));
@@ -5688,7 +5702,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         </div>
 
         {/* Flash sale countdown on detail page */}
-        {onSale&&p.offerEndsAt&&new Date(p.offerEndsAt).getTime()>Date.now()&&(
+        {onSale&&p.offerEndsAt&&(
           <MiniCountdown endsAt={p.offerEndsAt} compact={false}/>
         )}
 
@@ -5859,7 +5873,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                   const cm=CAT_META[cp.category]||CAT_META["Live Fish"];
                   const cImg=getCardImg(cp,mediaCache);
                   const cPrice=effectivePrice(cp);
-                  const cOnSale=(cp.discountPct||0)>0;
+                  const cOnSale=activeDiscount(cp)>0;
                   return(
                     <div key={cp.id} style={{flexShrink:0,width:140,background:C.card,borderRadius:14,overflow:"hidden",border:`1px solid ${C.border}`}}>
                       <button className="press" onClick={()=>nav("detail",cp)} style={{display:"block",width:"100%",padding:0,border:"none",background:"none",cursor:"pointer",textAlign:"left"}}>
@@ -11435,6 +11449,30 @@ function NemoStore(){
 
   // Persist the cart so it survives reloads / return visits.
   useEffect(()=>{ try{ localStorage.setItem("nemo-cart",JSON.stringify(cart)); }catch(e){} },[cart]);
+
+  // That saved cart stores the price each line was added at, so a line added during a sale would
+  // still be charged at the sale price long after the offer's end date — exactly what the end
+  // date is meant to stop. Re-price every line against the live catalog whenever it changes.
+  // Lines whose product (or chosen option) has since gone are left alone for checkout to handle.
+  useEffect(()=>{
+    if(!products.length) return;
+    setCart(prev=>{
+      let changed=false;
+      const next=prev.map(i=>{
+        const prod=products.find(x=>x.id===i.id);
+        if(!prod) return i;
+        const vs=productVariants(prod);
+        const v=i.variantId ? (vs||[]).find(x=>x.id===i.variantId) : null;
+        if(i.variantId && !v) return i;
+        const price=v?variantEffPrice(prod,v):effectivePrice(prod);
+        const mrp=v?variantBasePrice(prod,v):(prod.price||price);
+        if(price===i.price && mrp===i.mrp) return i;
+        changed=true;
+        return {...i,price,mrp};
+      });
+      return changed?next:prev;          // unchanged -> same array, so this can't loop
+    });
+  },[products]);
 
   // ── Abandoned-cart capture ──
   // While a signed-in shopper has items in their cart, mirror a lightweight snapshot to Firebase
