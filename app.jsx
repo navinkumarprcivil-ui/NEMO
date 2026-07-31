@@ -5019,8 +5019,23 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
 /* ═══════════════════ SHOP PAGE ═══════════════════ */
 function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,addToCart,cartMap,favorites=[],onFav,interestedSet=[],onInterest,restockSet=[],onRestock,hydrated=true}){
+  // Render a window of cards and grow it as the shopper reaches the end. Drawing the whole
+  // catalogue at once cost a 215ms hitch at 300 products (it scales with the count); this keeps
+  // the grid's cost flat while still feeling like one continuous list.
+  const PAGE=24;
+  const [shown,setShown]=useState(PAGE);
+  const moreRef=useRef(null);
   const [sort,setSort]=useState("relevance");
   const [availability,setAvailability]=useState("all");
+  useEffect(()=>{ setShown(PAGE); },[query,category,sort,availability]);
+  // Grow the window when the "show more" marker scrolls into view.
+  useEffect(()=>{
+    const el=moreRef.current;
+    if(!el || typeof IntersectionObserver==="undefined") return;
+    const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)) setShown(n=>n+PAGE); },{rootMargin:"400px 0px"});
+    io.observe(el);
+    return ()=>io.disconnect();
+  },[shown,query,category,sort,availability]);
   const [recent,setRecent]=useState(()=>loadRecentSearches());
   // Record the search term once the user stops typing
   useEffect(()=>{ const q=(query||"").trim(); if(q.length<2) return; const t=setTimeout(()=>{setRecent(addRecentSearch(q)); trackSearch(q);},900); return ()=>clearTimeout(t); },[query]);
@@ -5103,8 +5118,9 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             <div style={{fontSize:12}}>Try adjusting your filters</div>
           </div>
         ):(
+          <>
           <div className="prod-grid js-stagger" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            {list.map(p=>(
+            {list.slice(0,shown).map(p=>(
               <div key={p.id}>
                 <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
                   onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
@@ -5113,6 +5129,17 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
               </div>
             ))}
           </div>
+          {/* Reaching this loads the next batch. The button is the fallback for browsers with
+              no IntersectionObserver, and for anyone who'd rather tap than scroll. */}
+          {list.length>shown&&(
+            <div ref={moreRef} style={{padding:"18px 0 4px",textAlign:"center"}}>
+              <button className="press" onClick={()=>setShown(n=>n+PAGE)}
+                style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:99,padding:"11px 22px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                Show more ({list.length-shown} left)
+              </button>
+            </div>
+          )}
+          </>
         )}
         {/* Related products — keyword matches outside the current result set */}
         {query.trim()&&(()=>{
@@ -8594,6 +8621,13 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   useEffect(()=>{ loadAnalytics().then(setVisitStats); },[]);
   const [orderFilter,setOrderFilter]=useState("All");
   const [orderSearch,setOrderSearch]=useState("");
+  // Orders accumulate forever, and rendering every one on open cost ~0.5s of frozen UI at 500
+  // orders (it scales linearly). Show a page at a time; search and the status filter are right
+  // there for finding older ones.
+  const PAGE=25;
+  const [orderShown,setOrderShown]=useState(PAGE);
+  useEffect(()=>{ setOrderShown(PAGE); },[orderFilter,orderSearch]);
+
   const [csvFrom,setCsvFrom]=useState("");
   const [csvTo,setCsvTo]=useState("");
   // Monthly "download your report" reminder — stamped in localStorage once you export (or dismiss) each month.
@@ -8601,6 +8635,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const stampExport=()=>{try{localStorage.setItem("nemo-export-month",monthKey());}catch(e){}setExportDone(true);};
   const [catFilter,setCatFilter]=useState("All");
   const [prodQ,setProdQ]=useState("");
+  const [prodShown,setProdShown]=useState(PAGE);
+  useEffect(()=>{ setProdShown(PAGE); },[catFilter,prodQ]);
   const [allReviews,setAllReviews]=useState({}); // {pid: [reviews]}
   const [loadingRev,setLoadingRev]=useState(false);
   const [expReviews,setExpReviews]=useState(null); // service & packing feedback (null = not loaded)
@@ -8996,7 +9032,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               <div style={{fontSize:12}}>Orders will appear here when customers place them</div>
             </div>
           ):(<>
-          {filteredOrders.map(o=>(
+          {filteredOrders.slice(0,orderShown).map(o=>(
             <div key={o.id} className="lift" onClick={()=>{setViewOrder(o);setTab("orderDetail");}}
               style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:10,border:`1px solid ${C.border}`,cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
@@ -9014,6 +9050,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               <div style={{marginTop:8,fontSize:11,color:C.accent,fontWeight:600}}>Tap to manage →</div>
             </div>
           ))}
+          {filteredOrders.length>orderShown&&(
+            <button className="press" onClick={()=>setOrderShown(n=>n+PAGE*2)}
+              style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:4,marginBottom:10}}>
+              Show {Math.min(PAGE*2,filteredOrders.length-orderShown)} more · {filteredOrders.length-orderShown} older order{filteredOrders.length-orderShown!==1?"s":""} hidden
+            </button>
+          )}
           </>)}
         </div>
       )}
@@ -9159,7 +9201,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             </div>
           )}
           <div style={{fontSize:12,color:C.textSub,fontWeight:500,marginBottom:12}}>{filteredProds.length} product{filteredProds.length!==1?"s":""}</div>
-          {filteredProds.map(p=>{
+          {filteredProds.slice(0,prodShown).map(p=>{
             const imgSrc=getCardImg(p,mediaCache);
             const m=CAT_META[p.category]||CAT_META["Live Fish"];
             const attn=needsStockAttn(p);
@@ -9188,6 +9230,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               </div>
             );
           })}
+          {filteredProds.length>prodShown&&(
+            <button className="press" onClick={()=>setProdShown(n=>n+PAGE*2)}
+              style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:4}}>
+              Show {Math.min(PAGE*2,filteredProds.length-prodShown)} more · {filteredProds.length-prodShown} hidden
+            </button>
+          )}
         </div>
       )}
 
