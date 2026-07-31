@@ -5336,23 +5336,44 @@ function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
 }
 
 /* ═══════════════════ MEDIA LIGHTBOX — fullscreen open · pinch/scroll zoom · pan · swipe ═══════════════════ */
-function MediaLightbox({slides=[],index=0,setIndex,onClose,name="",initialZoom=false}){
-  const [scale,setScale] = useState(initialZoom?2.6:1);
+function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
+  const [scale,setScale] = useState(1);
   const [tx,setTx]       = useState(0);
   const [ty,setTy]       = useState(0);
   const stageRef = useRef(null);
   const ptrs     = useRef(new Map());
-  const g        = useRef({mode:null,sx:0,sy:0,stx:0,sty:0,dist:0,sscale:1,moved:0,lastTap:0});
+  const g        = useRef({mode:null,sx:0,sy:0,stx:0,sty:0,dist:0,sscale:1,moved:0,lastTap:0,tapZoomAt:0});
   const cur      = slides[index]||{};
   const isVideo  = cur.type==="video";
   const reset = ()=>{ setScale(1); setTx(0); setTy(0); };
-  // Changing slide always returns to fit — but not on the very first run when we were opened
-  // zoomed on purpose, or the magnification would be thrown away immediately.
-  const firstRun = useRef(true);
-  useEffect(()=>{
-    if(firstRun.current){ firstRun.current=false; if(initialZoom) return; }
-    reset();
-  },[index]);
+  useEffect(()=>{ reset(); },[index]);
+  // Opening is a click on the photo underneath, and a double-click there sends a second click
+  // straight through to this backdrop — which would shut the viewer the instant it appeared.
+  const openedAt = useRef(Date.now());
+  const closeT   = useRef(null);
+  useEffect(()=>()=>{ if(closeT.current) clearTimeout(closeT.current); },[]);
+  /* Tap the backdrop to close — but hold that decision briefly, because the first tap of a
+     double-tap is indistinguishable from a lone one until the second arrives. Without the wait
+     the viewer closed on tap one and double-tap-to-zoom could never fire. (The stage captures
+     the pointer, so a click's target is the stage even when the photo was under the cursor —
+     which is why "only close on backdrop clicks" was never actually limiting anything.) */
+  const stageClick=()=>{
+    if(scale>1.05) return;                              // zoomed: taps belong to pan / zoom-out
+    if(Date.now()-openedAt.current<400) return;         // still settling in from opening
+    // A double-tap just zoomed (or un-zoomed): the click that completes it must not also close.
+    // Checked against a timestamp rather than g.mode, because pointerup clears mode before the
+    // click event ever runs — which is exactly how this slipped through the first time.
+    if(Date.now()-(g.current.tapZoomAt||0)<450){
+      if(closeT.current){ clearTimeout(closeT.current); closeT.current=null; }
+      return;
+    }
+    if(closeT.current) clearTimeout(closeT.current);
+    closeT.current=setTimeout(()=>{
+      closeT.current=null;
+      if(Date.now()-(g.current.tapZoomAt||0)<450) return;   // a second tap landed while we waited
+      onClose();
+    },300);
+  };
   const go = dir => setIndex(i => (i+dir+slides.length)%slides.length);
   const clamp = (sc,x,y)=>{
     const el=stageRef.current; if(!el) return [x,y];
@@ -5378,7 +5399,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name="",initialZoom=f
           const [nx,ny]=clamp(ns,-ox*(ns-1),-oy*(ns-1));
           setScale(ns); setTx(nx); setTy(ny);
         }
-        g.current.mode="tapped"; g.current.lastTap=0; return;
+        g.current.mode="tapped"; g.current.tapZoomAt=Date.now(); g.current.lastTap=0; return;
       }
       g.current.lastTap=now;
       g.current.mode = scale>1.05?"pan":"swipe";
@@ -5442,7 +5463,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name="",initialZoom=f
           <button className="press" onClick={onClose} aria-label="Close" style={{...iconBtn,pointerEvents:"auto",width:42,height:42,borderRadius:"50%",fontSize:20}}>✕</button>
         </div>
         <div ref={stageRef} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-          onClick={e=>{ if(e.target===stageRef.current && scale<=1.05) onClose(); }}
+          onClick={stageClick}
           style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",cursor:scale>1.05?"grab":"default"}}>
           {isVideo
             ? <video src={cur.src} controls autoPlay playsInline style={{width:"100%",height:"100%",objectFit:"contain"}}/>
@@ -5488,9 +5509,6 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   const [photoZoom,setPhotoZoom] = useState(null); // review photo lightbox src
   const [lightbox,setLightbox] = useState(-1); // product gallery lightbox — active slide index (-1 = closed)
   const galRef                 = useRef(null); // the hero scroller, so the arrows can drive it
-  const [zoomOnOpen,setZoomOnOpen] = useState(false); // open the lightbox already magnified
-  const clickT                 = useRef(null); // pending single-click, held back to see if a double follows
-  const ptrKind                = useRef("mouse");
 
   useEffect(()=>{
     setLoadingRev(true);
@@ -5514,24 +5532,9 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
     ...(media.video?[{type:"video",src:media.video}]:[]),
   ];
 
-  /* Opening the photo. A single click opens it fit-to-screen; a double click opens it zoomed in
-     on the spot that was clicked, so it can be dragged around to see the rest. The single click
-     is held for a moment first — without that, click one opens the viewer and click two lands on
-     the viewer and shuts it again, which is why double-clicking used to do nothing at all. Only
-     mice pay that wait: a tap opens immediately, and inside the viewer double-tap already zooms. */
-  const openPhoto=(i,zoom)=>{ setZoomOnOpen(!!zoom); setLightbox(i); };
-  const slideClick=(i,type)=>{
-    if(type!=="image") return;
-    if(ptrKind.current!=="mouse"){ openPhoto(i,false); return; }
-    if(clickT.current){ clearTimeout(clickT.current); clickT.current=null; return; }
-    clickT.current=setTimeout(()=>{ clickT.current=null; openPhoto(i,false); },240);
-  };
-  const slideDblClick=(i,type)=>{
-    if(type!=="image") return;
-    if(clickT.current){ clearTimeout(clickT.current); clickT.current=null; }
-    openPhoto(i,true);
-  };
-  useEffect(()=>()=>{ if(clickT.current) clearTimeout(clickT.current); },[]);
+  /* Tapping the photo opens it full screen, straight away — zooming belongs to the full-screen
+     viewer, where double-tap and pinch do it. Nothing here reacts to a double-tap. */
+  const openPhoto=i=>setLightbox(i);
 
   /* Step the hero gallery. Scrolling the container (rather than tracking an index ourselves)
      keeps the arrows, the swipe gesture and the dots reading from one source of truth — the
@@ -5603,11 +5606,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             </div>
           )}
           {slides.map((s,i)=>(
-            <div key={i}
-              onPointerDown={e=>{ ptrKind.current=e.pointerType||"mouse"; }}
-              onClick={()=>slideClick(i,s.type)}
-              onDoubleClick={()=>slideDblClick(i,s.type)}
-              style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
+            <div key={i} onClick={()=>{ if(s.type==="image") openPhoto(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
               {s.type==="video"
                 ? <video src={s.src} controls playsInline loop style={{width:"100%",height:"100%",objectFit:"contain"}}/>
                 : <SmoothImg src={s.src} alt={p.name} loading="eager" style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
@@ -5627,7 +5626,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           </div>
         )}
         {slides[slide]&&slides[slide].type==="image"&&(
-          <button className="press" onClick={()=>openPhoto(slide,false)} aria-label="Open photo full screen"
+          <button className="press" onClick={()=>openPhoto(slide)} aria-label="Open photo full screen"
             style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
         )}
         {slides[slide]&&<span style={{position:"absolute",top:50,right:16,background:"rgba(0,0,0,.4)",color:"white",fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,backdropFilter:"blur(6px)"}}>
@@ -5953,7 +5952,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
       </div>
 
       {lightbox>=0&&slides[lightbox]&&(
-        <MediaLightbox slides={slides} index={lightbox} setIndex={setLightbox} onClose={()=>setLightbox(-1)} name={p.name} initialZoom={zoomOnOpen}/>
+        <MediaLightbox slides={slides} index={lightbox} setIndex={setLightbox} onClose={()=>setLightbox(-1)} name={p.name}/>
       )}
       {photoZoom&&(
         <Portal>
