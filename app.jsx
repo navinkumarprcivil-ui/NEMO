@@ -7211,9 +7211,11 @@ function WhyNemoPopup({open,onClose,nav}){
         </div>
         <div style={{overflowY:"auto",padding:"14px 14px 4px",background:C.bg}}>
           <div style={{display:"flex",gap:8,padding:"0 4px 8px"}}>
-            <div style={{flex:1,fontSize:10,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.7}}>Elsewhere</div>
-            <div style={{flex:1,fontSize:10,fontWeight:800,color:C.primary,textTransform:"uppercase",letterSpacing:.7}}>At {STORE_NAME}</div>
+            <div style={{flex:1,fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.7}}>❌ Elsewhere</div>
+            <div style={{flex:1,fontSize:10,fontWeight:800,color:"#0d9488",textTransform:"uppercase",letterSpacing:.7}}>✅ At {STORE_NAME}</div>
           </div>
+          {/* The "Us" side is the point of the whole popup, so it's the one that's meant to pop:
+              green, ticked, slightly raised, with the "Others" side deliberately washed out. */}
           {WHY_US_ROWS.map(r=>(
             <div key={r.title} style={{background:C.card,borderRadius:16,padding:"12px 13px",marginBottom:9,border:`1px solid ${C.border}`}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:9}}>
@@ -7221,13 +7223,16 @@ function WhyNemoPopup({open,onClose,nav}){
                 <span style={{fontSize:13,fontWeight:800,color:C.text}}>{r.title}</span>
               </div>
               <div style={{display:"flex",gap:8,alignItems:"stretch"}}>
-                <div style={{flex:1,background:"#f8fafc",borderRadius:12,padding:"9px 10px",border:`1px solid ${C.border}`}}>
-                  <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",marginBottom:3}}>✕ Others</div>
+                <div style={{flex:1,background:"#f8fafc",borderRadius:12,padding:"9px 10px",border:`1px solid ${C.border}`,opacity:.85}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,fontWeight:800,color:"#94a3b8",marginBottom:4}}><span style={{fontSize:11,lineHeight:1}}>❌</span>Others</div>
                   <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.45}}>{r.them}</div>
                 </div>
-                <div style={{flex:1,background:"#f0fdfa",borderRadius:12,padding:"9px 10px",border:`1px solid #99f6e4`}}>
-                  <div style={{fontSize:10,fontWeight:800,color:"#0d9488",marginBottom:3}}>✓ Us</div>
-                  <div style={{fontSize:11.5,color:"#134e4a",lineHeight:1.45}} dangerouslySetInnerHTML={html(r.us)}/>
+                <div style={{flex:1,background:"linear-gradient(160deg,#ecfdf5,#f0fdfa)",borderRadius:12,padding:"9px 10px",border:"1.5px solid #5eead4",boxShadow:"0 4px 14px rgba(13,148,136,.14)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,fontWeight:800,color:"#0d9488",marginBottom:4}}><span style={{fontSize:11,lineHeight:1}}>✅</span>{STORE_NAME}</div>
+                  <div style={{display:"flex",gap:5,alignItems:"flex-start"}}>
+                    <span style={{fontSize:11,lineHeight:1.45,color:"#0d9488",flexShrink:0}}>✔</span>
+                    <span style={{fontSize:11.5,color:"#134e4a",lineHeight:1.45,fontWeight:600}} dangerouslySetInnerHTML={html(r.us)}/>
+                  </div>
                 </div>
               </div>
             </div>
