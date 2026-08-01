@@ -24,12 +24,17 @@
     "settings": { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')" },
     "media":    { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')" },
 
+    "settingsPrivate": {
+      ".read":  "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+    },
+
     "reviews": {
       ".read": true,
       "$pid": {
         "$rid": {
-          ".write": "auth != null",
-          ".validate": "newData.hasChild('rating') && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5"
+          ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
+          ".validate": "!newData.exists() || (newData.hasChild('rating') && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5)"
         }
       }
     },
@@ -46,7 +51,28 @@
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
-        ".write": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))"
+        "$oid": {
+          ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (auth.uid === $uid && newData.exists()) )",
+
+          "id":       { ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()" },
+          "orderNo":  { ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()" },
+          "placedAt": { ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()" },
+          "userUid":  { ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()" },
+
+          "total":            { ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()" },
+          "fee":              { ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()" },
+          "amountDue":        { ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()" },
+          "couponDiscount":   { ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()" },
+          "referralDiscount": { ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()" },
+          "loyaltyDiscount":  { ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()" },
+
+          "status": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || newData.val() === 'Awaiting Payment' || newData.val() === 'Payment Review' || newData.val() === 'Cancelled' || (data.exists() && newData.val() === data.val())"
+          },
+          "paymentStatus": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || newData.val() !== 'Verified' || (data.exists() && newData.val() === data.val())"
+          }
+        }
       }
     },
 
@@ -92,16 +118,19 @@
 
     "analytics": {
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
-      "total": { ".write": "auth != null", ".validate": "newData.isNumber()" },
-      "daily": { "$d": { ".write": "auth != null", ".validate": "newData.isNumber()" } },
-      "funnel": { "$step": { ".write": "auth != null", ".validate": "newData.isNumber()" } },
-      "events": { "$type": { "$key": { ".write": "auth != null", ".validate": "newData.isNumber()" } } },
-      "search": { "$term": { ".write": "auth != null", ".validate": "newData.isNumber()" } }
+      "total":  { ".write": "auth != null", ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())" },
+      "daily":  { "$d":    { ".write": "auth != null", ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())" } },
+      "funnel": { "$step": { ".write": "auth != null", ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())" } },
+      "events": { "$type": { "$key": { ".write": "auth != null", ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())" } } },
+      "search": { "$term": { ".write": "auth != null", ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())" } }
     },
 
     "orderSeq": {
       ".read": "auth != null",
-      "$day": { ".write": "auth != null", ".validate": "newData.isNumber()" }
+      "$day": {
+        ".write": "auth != null",
+        ".validate": "newData.isNumber() && (!data.exists() ? newData.val() === 1 : newData.val() === data.val() + 1)"
+      }
     },
 
     "loyalty": {
@@ -145,14 +174,20 @@
       ".read": true,
       "$id": {
         ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
-        ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))"
+        ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))",
+        "approved": {
+          ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || newData.val() === false"
+        }
       }
     },
 
     "promoUsage": {
       ".read": true,
       "$date": {
-        "$type": { ".write": "auth != null", ".validate": "newData.isNumber()" }
+        "$type": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
+        }
       }
     },
 
