@@ -1054,6 +1054,11 @@ async function deleteExperienceReview(id){
     localStorage.setItem("nemo-exp-reviews",JSON.stringify(list.filter(x=>x.id!==id))); }catch{}
 }
 
+/* Tracking & collection clause — one string, used both in the default Terms & Conditions text
+   below and as the standing clause on the Terms page (for stores whose saved terms predate it).
+   Checkout shows the same substance in short form right before the order is placed. */
+const COURIER_COLLECT_TERM = "Tracking & collection: once your order is dispatched we share the courier partner and consignment number. Please keep tracking your parcel and collect it from the courier partner as soon as it reaches your area. Door delivery depends entirely on the courier partner and is not in our hands, so we request every customer to put in that effort and take delivery of the package at the earliest — especially when ordering live fish or plants, where every extra hour the parcel spends in transit or lying at the hub affects the livestock. Loss or deterioration caused by a parcel left uncollected, collected late, refused, or returned undelivered is not covered by the Live Arrival Guarantee or by any refund or replacement.";
+
 /* Store settings (WhatsApp numbers, payment) — shared via Firebase */
 const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
@@ -1079,7 +1084,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   legalAddress: "",          // optional full address for the invoice; leave blank to show only the city
   gstin: "",                  // add once registered → invoice becomes a GST "Tax Invoice"
   jurisdiction: "Salem, Tamil Nadu",
-  termsPolicy: "By placing an order you agree to these terms. "+STORE_NAME+" Aqua Store is a home-based proprietary micro-enterprise (Udyam-registered) trading in aquarium livestock and supplies. All orders are subject to stock availability and our acceptance of your payment. Prices are in INR and inclusive of applicable taxes. We are currently a small enterprise not registered under GST, so no GST is charged at present; this notice and your invoice will be updated once we register for GST, at which point your bill will be issued as a GST Tax Invoice. Live animals are perishable goods sold under our Live Arrival Guarantee, which is your sole and exclusive remedy for any transit loss. To the maximum extent permitted by law, our total liability for any order is limited to the amount actually paid for that order; we are not liable for indirect, incidental or consequential losses, nor for any loss arising after livestock has been introduced to your tank or system. We are not responsible for delays or failures caused by courier partners, weather, power/water conditions at your premises, or other events beyond our reasonable control. These terms are governed by the laws of India and subject to the exclusive jurisdiction of the courts at Salem, Tamil Nadu.",
+  termsPolicy: "By placing an order you agree to these terms. "+STORE_NAME+" Aqua Store is a home-based proprietary micro-enterprise (Udyam-registered) trading in aquarium livestock and supplies. All orders are subject to stock availability and our acceptance of your payment. Prices are in INR and inclusive of applicable taxes. We are currently a small enterprise not registered under GST, so no GST is charged at present; this notice and your invoice will be updated once we register for GST, at which point your bill will be issued as a GST Tax Invoice. Live animals are perishable goods sold under our Live Arrival Guarantee, which is your sole and exclusive remedy for any transit loss. To the maximum extent permitted by law, our total liability for any order is limited to the amount actually paid for that order; we are not liable for indirect, incidental or consequential losses, nor for any loss arising after livestock has been introduced to your tank or system. We are not responsible for delays or failures caused by courier partners, weather, power/water conditions at your premises, or other events beyond our reasonable control. "+COURIER_COLLECT_TERM+" These terms are governed by the laws of India and subject to the exclusive jurisdiction of the courts at Salem, Tamil Nadu.",
   privacyPolicy: "We collect only the details needed to fulfil your order — your name, contact number, delivery address and email, plus the payment reference ID and screenshot you submit so we can verify your payment. This information is used solely to process, deliver and provide support for your orders. We do not sell your data or share it with anyone except our delivery partners and payment provider, and only as needed to complete your order. Payments are processed through your own UPI app or our secure payment gateway; we never see or store your card, UPI PIN or bank credentials. You can ask us to delete your stored account data at any time by messaging us on WhatsApp.",
   liveGuaranteePrice: 150,        // legacy flat fallback
   liveGuaranteePriceTN: 150,      // Inside Tamil Nadu
@@ -5706,8 +5711,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <MiniCountdown endsAt={p.offerEndsAt} compact={false}/>
         )}
 
-        {/* Variant picker for Live Fish */}
-        {variants && <VariantPicker product={p} variants={variants} selectedId={selVar?.id} onSelect={v=>setSelVarId(v.id)} cart={cart} addToCart={addToCart}/>}
+        {/* Variant picker for Live Fish.
+            On a Coming Soon product the options are shown for reference only — passing no
+            addToCart drops the per-option +Add / stepper, which was the one place a product
+            that isn't on sale yet could still be put in the cart. */}
+        {variants && <VariantPicker product={p} variants={variants} selectedId={selVar?.id} onSelect={v=>setSelVarId(v.id)} cart={cart} addToCart={p.comingSoon?null:addToCart}/>}
 
         {/* Restock alert for out-of-stock products */}
         <RestockBtn product={p} user={user} restockSet={restockSet} onSubscribe={onRestock}/>
@@ -7072,6 +7080,19 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <div style={{fontSize:12,color:"#1e3a8a",lineHeight:1.55}}>On the next screen, pay the <b>full amount</b> by UPI and upload your payment screenshot. We verify &amp; confirm within 1–2 days. Orders unpaid within {PAY_WINDOW_MIN} minutes are auto-cancelled.</div>
           </div>
 
+          {/* Courier-collection notice — the single biggest cause of a bad delivery is a parcel
+              sitting at the courier hub. Said plainly right before the order is placed. */}
+          <div style={{marginTop:12,background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <span style={{fontSize:18}}>📦</span>
+              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#92400e"}}>Please track your parcel &amp; collect it fast</span>
+            </div>
+            <div style={{fontSize:12,color:"#78350f",lineHeight:1.6}}>
+              Once your order is dispatched we'll share the courier &amp; consignment number — please <b>keep tracking it</b> and <b>collect it from the courier partner as soon as it reaches your area</b>.
+              {" "}Door delivery depends entirely on the courier partner and is <b>not in our hands</b>. We request every customer to put in that little effort to get the package the same day it arrives{hasLiveFish?<>, <b>especially for live fish &amp; plants</b> — every extra hour in the box matters</>:null}.
+            </div>
+          </div>
+
           {placeErr&&<div style={{marginTop:14,background:"#fef2f2",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
           <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={handlePlaceOrder} disabled={placing}
             style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,opacity:placing?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
@@ -7135,6 +7156,99 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
               </div>
             );
           })}
+        </div>
+      </div>
+    </div>
+    </Portal>
+  );
+}
+
+/* ═══════════════════ "WHY NEMO" WELCOME POPUP (once a day, on the first visit) ═══════════════════
+   A shopper who lands here for the first time that day sees, in one screen, how we differ from the
+   usual aquarium seller. Gated by a date stamp in localStorage so it shows at most ONCE PER DAY —
+   never twice in a session, never on the admin side. */
+const WHY_US_KEY = "nemo-whyus-day";
+function todayStamp(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function whyUsDueToday(){
+  try{ return localStorage.getItem(WHY_US_KEY)!==todayStamp(); }catch(e){ return false; } // storage blocked → don't nag
+}
+function markWhyUsShown(){ try{ localStorage.setItem(WHY_US_KEY,todayStamp()); }catch(e){} }
+
+const WHY_US_ROWS = [
+  { icon:"🪙", title:"Rewards on your spend", them:"Nothing back — you spend, that's it.",
+    us:"Points on <b>every rupee</b> you spend, straight to your wallet." },
+  { icon:"🚚", title:"Shipping charges", them:"Shipping padded up well above what the courier costs.",
+    us:"<b>No additional shipping charge.</b> If the parcel ships for less, the extra rupees come <b>back to your wallet</b>." },
+  { icon:"💜", title:"Referrals", them:"Refer all you like — nothing in it for you.",
+    us:"Refer a friend and <b>both of you get rewarded</b> on their 1st purchase." },
+  { icon:"🏷️", title:"Discounts", them:"One big sale a year, if you're lucky.",
+    us:"<b>Frequent discounts</b> through the year." },
+  { icon:"🔎", title:"Can't find what you want?", them:"\"Not in our catalogue.\"",
+    us:"<b>Product sourcing on request</b> — tell us, we'll hunt it down for you." },
+  { icon:"📘", title:"New to the hobby?", them:"You're on your own after checkout.",
+    us:"<b>Care-guide posters &amp; free Aqua Tools</b> made for beginners." },
+  { icon:"🤝", title:"Trust", them:"A faceless seller and a support ticket.",
+    us:"<b>100% trustable</b> — real people you can reach on WhatsApp." },
+  { icon:"📍", title:"Tracking your order", them:"Here's a tracking number, good luck.",
+    us:"We <b>guide you through tracking</b> your parcel, every step." },
+];
+function WhyNemoPopup({open,onClose,nav}){
+  if(!open) return null;
+  const html=s=>({__html:s});
+  return(
+    <Portal>
+    <div onClick={onClose} role="dialog" aria-modal="true" aria-label="Why shop at Nemo Aqua Store"
+      style={{position:"fixed",inset:0,background:"rgba(6,40,43,.58)",backdropFilter:"blur(3px)",zIndex:9200,display:"flex",alignItems:"center",justifyContent:"center",padding:"22px 14px",animation:"fadeIn .2s ease"}}>
+      <div onClick={e=>e.stopPropagation()} className="slide-up"
+        style={{width:"100%",maxWidth:400,maxHeight:"88vh",background:C.card,borderRadius:22,overflow:"hidden",boxShadow:"0 26px 64px rgba(0,0,0,.34)",display:"flex",flexDirection:"column"}}>
+        <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"18px 20px 16px",color:"#fff",flexShrink:0,position:"relative",overflow:"hidden"}}>
+          <div style={{position:"absolute",top:-34,right:-24,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.09)"}}/>
+          <button onClick={onClose} aria-label="Close"
+            style={{position:"absolute",top:14,right:14,background:"rgba(255,255,255,.2)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:15,cursor:"pointer",lineHeight:1,zIndex:2}}>✕</button>
+          <div style={{fontSize:11,fontWeight:800,letterSpacing:1,opacity:.85,textTransform:"uppercase"}}>Welcome to {STORE_NAME} 🐠</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:21,fontWeight:800,marginTop:5,lineHeight:1.25,paddingRight:34}}>Why we're not like the others</div>
+          <div style={{fontSize:12,opacity:.9,marginTop:5,lineHeight:1.5}}>Here's exactly what you get with us — in 30 seconds.</div>
+        </div>
+        <div style={{overflowY:"auto",padding:"14px 14px 4px",background:C.bg}}>
+          <div style={{display:"flex",gap:8,padding:"0 4px 8px"}}>
+            <div style={{flex:1,fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.7}}>❌ Elsewhere</div>
+            <div style={{flex:1,fontSize:10,fontWeight:800,color:"#0d9488",textTransform:"uppercase",letterSpacing:.7}}>✅ At {STORE_NAME}</div>
+          </div>
+          {/* The "Us" side is the point of the whole popup, so it's the one that's meant to pop:
+              green, ticked, slightly raised, with the "Others" side deliberately washed out. */}
+          {WHY_US_ROWS.map(r=>(
+            <div key={r.title} style={{background:C.card,borderRadius:16,padding:"12px 13px",marginBottom:9,border:`1px solid ${C.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:9}}>
+                <span style={{fontSize:16,lineHeight:1}}>{r.icon}</span>
+                <span style={{fontSize:13,fontWeight:800,color:C.text}}>{r.title}</span>
+              </div>
+              <div style={{display:"flex",gap:8,alignItems:"stretch"}}>
+                <div style={{flex:1,background:"#f8fafc",borderRadius:12,padding:"9px 10px",border:`1px solid ${C.border}`,opacity:.85}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,fontWeight:800,color:"#94a3b8",marginBottom:4}}><span style={{fontSize:11,lineHeight:1}}>❌</span>Others</div>
+                  <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.45}}>{r.them}</div>
+                </div>
+                <div style={{flex:1,background:"linear-gradient(160deg,#ecfdf5,#f0fdfa)",borderRadius:12,padding:"9px 10px",border:"1.5px solid #5eead4",boxShadow:"0 4px 14px rgba(13,148,136,.14)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,fontWeight:800,color:"#0d9488",marginBottom:4}}><span style={{fontSize:11,lineHeight:1}}>✅</span>{STORE_NAME}</div>
+                  <div style={{display:"flex",gap:5,alignItems:"flex-start"}}>
+                    <span style={{fontSize:11,lineHeight:1.45,color:"#0d9488",flexShrink:0}}>✔</span>
+                    <span style={{fontSize:11.5,color:"#134e4a",lineHeight:1.45,fontWeight:600}} dangerouslySetInnerHTML={html(r.us)}/>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{flexShrink:0,padding:"12px 16px calc(14px + env(safe-area-inset-bottom))",background:C.card,borderTop:`1px solid ${C.border}`}}>
+          <button className="cta press" onClick={onClose}
+            style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"14px 16px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+            Start shopping →
+          </button>
+          <div style={{textAlign:"center",marginTop:8}}>
+            <button className="press" onClick={()=>{onClose&&onClose();nav&&nav("policy-terms");}}
+              style={{background:"none",border:"none",fontSize:9.5,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer",padding:2}}>
+              Subject to our terms &amp; conditions
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -10986,6 +11100,19 @@ function PolicyPage({nav,settings={},which}){
       </div>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
         <div style={{background:C.card,borderRadius:18,padding:"20px",border:`1px solid ${C.border}`,fontSize:13.5,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{s[meta.key]}</div>
+        {/* The tracking & collection clause is part of the terms whether or not the saved text
+            carries it — a store that customised its terms before this clause existed would
+            otherwise show terms that don't match what checkout tells the customer. Shown only
+            when the saved text doesn't already cover it, so it never appears twice. */}
+        {which==="terms" && !/collect it from the courier/i.test(String(s.termsPolicy||"")) && (
+          <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:18,padding:"18px 20px",marginTop:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <span style={{fontSize:17}}>📦</span>
+              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#92400e"}}>Tracking &amp; collection</span>
+            </div>
+            <div style={{fontSize:13,color:"#78350f",lineHeight:1.75}}>{COURIER_COLLECT_TERM.replace(/^Tracking & collection: /,"")}</div>
+          </div>
+        )}
         <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,margin:"22px 4px 10px"}}>More policies</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
           {others.map(k=>(
@@ -11417,6 +11544,11 @@ function NemoStore(){
   };
 
   const addToCart=(product,qty=1,variant=null)=>{
+    // A Coming Soon product isn't on sale yet, so it must never reach the cart — whichever
+    // surface asked (option picker, cross-sell, reorder, a saved cart from an earlier session).
+    // Guarding here rather than only in the UI means one rule, enforced on every path.
+    // Negative qty still passes so an existing line can always be removed.
+    if(qty>0 && product && product.comingSoon){ setTimeout(()=>showToast("Coming soon — not on sale yet","error"),0); return; }
     let v = variant;
     // Any product with options gets one picked if the caller didn't pass one (reorder, cross-sell,
     // "buy it again") — otherwise the line would land with no option and the plain base price.
@@ -11470,6 +11602,19 @@ function NemoStore(){
         changed=true;
         return {...i,price,mrp};
       });
+      // A product flagged Coming Soon after it was added — or restored from a saved cart made
+      // before it was flagged — must not stay purchasable. Drop those lines and say why.
+      const dropped=[];
+      const kept=next.filter(i=>{
+        const prod=products.find(x=>x.id===i.id);
+        if(prod && prod.comingSoon){ dropped.push(i.name); return false; }
+        return true;
+      });
+      if(dropped.length){
+        const more=dropped.length>1?` +${dropped.length-1} more`:"";
+        setTimeout(()=>showToast(`${dropped[0]}${more} isn't on sale yet — removed from your cart`,"error"),0);
+        return kept;
+      }
       return changed?next:prev;          // unchanged -> same array, so this can't loop
     });
   },[products]);
@@ -12046,6 +12191,18 @@ function NemoStore(){
   const isAdminPage=["admin-login","admin"].includes(page);
   const [miniOpen,setMiniOpen]=useState(false);
   useEffect(()=>{ if(cart.length===0) setMiniOpen(false); },[cart.length]); // auto-close when cart empties
+
+  // ── "Why Nemo" welcome popup — first visit of the day, once per day ──
+  // Held back until the store is actually on screen (the splash is still up while `loading`),
+  // and never shown over the admin panel. The date stamp is written the moment it opens, so a
+  // reload in the same day doesn't bring it back.
+  const [whyOpen,setWhyOpen]=useState(false);
+  useEffect(()=>{
+    if(loading||isAdminPage) return;
+    if(!whyUsDueToday()) return;
+    const t=setTimeout(()=>{ markWhyUsShown(); setWhyOpen(true); },1100);
+    return ()=>clearTimeout(t);
+  },[loading,isAdminPage]);
   // Reveal-on-scroll: tagged (.js-reveal) sections spring up as they enter the viewport.
   // Progressive enhancement — only JS adds the hidden state, so content stays visible if this never runs.
   useEffect(()=>{
@@ -12183,6 +12340,7 @@ function NemoStore(){
       <style>{STYLES}</style>
       {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
       {adminExitAsk&&<AdminExitConfirm onStay={()=>setAdminExitAsk(false)} onLeave={()=>{setAdminExitAsk(false);nav("home");}}/>}
+      {!isAdminPage&&<WhyNemoPopup open={whyOpen} onClose={()=>setWhyOpen(false)} nav={nav}/>}
       {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap} walletPts={walletPts}/>}
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
         <div key={page} className="page-swap">
