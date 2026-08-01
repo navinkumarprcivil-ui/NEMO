@@ -7173,6 +7173,31 @@ function whyUsDueToday(){
   try{ return localStorage.getItem(WHY_US_KEY)!==todayStamp(); }catch(e){ return false; } // storage blocked → don't nag
 }
 function markWhyUsShown(){ try{ localStorage.setItem(WHY_US_KEY,todayStamp()); }catch(e){} }
+/* Open ?why=1 (or #why) to force the popup on demand — for checking a deploy or showing it to
+   someone. A forced showing does NOT consume the day's stamp, so the normal once-a-day
+   behaviour is unaffected. ?why=0 clears the stamp so the next ordinary visit shows it again. */
+function whyUsForced(){
+  try{
+    const q=String(window.location.search||"")+" "+String(window.location.hash||"");
+    if(/[?&]why=0\b/.test(q)){ localStorage.removeItem(WHY_US_KEY); return false; }
+    return /[?&]why=1\b/.test(q) || /#why\b/.test(q);
+  }catch(e){ return false; }
+}
+/* The cinematic splash sits at z-index 9999 and lifts a couple of seconds after load, so the
+   popup waits for it to actually clear — otherwise its entrance animation plays underneath a
+   full-screen overlay. Gives up waiting after ~12s so a stuck splash can't suppress it. */
+function whenSplashGone(cb){
+  const start=Date.now();
+  let timer=null, stopped=false;
+  const tick=()=>{
+    if(stopped) return;
+    const up = typeof document!=="undefined" && !!document.getElementById("splash");
+    if(up && Date.now()-start<12000){ timer=setTimeout(tick,220); return; }
+    cb();
+  };
+  timer=setTimeout(tick,220);
+  return ()=>{ stopped=true; clearTimeout(timer); };
+}
 
 const WHY_US_ROWS = [
   { icon:"🪙", title:"Rewards on your spend", them:"Nothing back — you spend, that's it.",
@@ -12193,15 +12218,16 @@ function NemoStore(){
   useEffect(()=>{ if(cart.length===0) setMiniOpen(false); },[cart.length]); // auto-close when cart empties
 
   // ── "Why Nemo" welcome popup — first visit of the day, once per day ──
-  // Held back until the store is actually on screen (the splash is still up while `loading`),
-  // and never shown over the admin panel. The date stamp is written the moment it opens, so a
-  // reload in the same day doesn't bring it back.
+  // Waits for the app to be ready AND for the splash to lift, so it opens onto the store rather
+  // than under the splash overlay. Never shown over the admin panel. The date stamp is written
+  // the moment it opens, so a reload the same day doesn't bring it back — except for a forced
+  // ?why=1 showing, which leaves the stamp alone.
   const [whyOpen,setWhyOpen]=useState(false);
   useEffect(()=>{
     if(loading||isAdminPage) return;
-    if(!whyUsDueToday()) return;
-    const t=setTimeout(()=>{ markWhyUsShown(); setWhyOpen(true); },1100);
-    return ()=>clearTimeout(t);
+    const forced=whyUsForced();
+    if(!forced && !whyUsDueToday()) return;
+    return whenSplashGone(()=>{ if(!forced) markWhyUsShown(); setWhyOpen(true); });
   },[loading,isAdminPage]);
   // Reveal-on-scroll: tagged (.js-reveal) sections spring up as they enter the viewport.
   // Progressive enhancement — only JS adds the hidden state, so content stays visible if this never runs.
