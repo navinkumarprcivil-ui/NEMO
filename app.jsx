@@ -7168,19 +7168,50 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
    usual aquarium seller. Gated by a date stamp in localStorage so it shows at most ONCE PER DAY —
    never twice in a session, never on the admin side. */
 const WHY_US_KEY = "nemo-whyus-day";
+let WHY_US_SHOWN = "";   // in-memory mirror of the stamp, for when no storage accepts a write
 function todayStamp(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
-function whyUsDueToday(){
-  try{ return localStorage.getItem(WHY_US_KEY)!==todayStamp(); }catch(e){ return false; } // storage blocked → don't nag
+function whyUsStamp(){
+  if(WHY_US_SHOWN) return WHY_US_SHOWN;
+  try{ const v=localStorage.getItem(WHY_US_KEY); if(v) return v; }catch(e){}
+  try{ const v=sessionStorage.getItem(WHY_US_KEY); if(v) return v; }catch(e){}
+  return "";
 }
-function markWhyUsShown(){ try{ localStorage.setItem(WHY_US_KEY,todayStamp()); }catch(e){} }
+function whyUsDueToday(){ return whyUsStamp()!==todayStamp(); }
+/* Written to every store we can reach. Safari private mode (and a full quota) accepts reads but
+   THROWS on a localStorage write — with only localStorage the stamp would never persist and the
+   popup would reappear on every single reload, so sessionStorage carries it for that session. */
+function markWhyUsShown(){
+  const d=todayStamp();
+  WHY_US_SHOWN=d;
+  try{ localStorage.setItem(WHY_US_KEY,d); }catch(e){}
+  try{ sessionStorage.setItem(WHY_US_KEY,d); }catch(e){}
+}
+function whyUsClearStamp(){
+  WHY_US_SHOWN="";
+  try{ localStorage.removeItem(WHY_US_KEY); }catch(e){}
+  try{ sessionStorage.removeItem(WHY_US_KEY); }catch(e){}
+}
 /* Open ?why=1 (or #why) to force the popup on demand — for checking a deploy or showing it to
-   someone. A forced showing does NOT consume the day's stamp, so the normal once-a-day
-   behaviour is unaffected. ?why=0 clears the stamp so the next ordinary visit shows it again. */
+   someone. A forced showing does NOT consume the day's stamp, so the normal once-a-day rule is
+   unaffected. ?why=0 clears the stamp so the next ordinary visit shows it again.
+   The parameter is stripped from the address bar as soon as it's read, so it acts once: a reload
+   (or a bookmarked / shared link that still carries it) goes back to the once-a-day rule instead
+   of forcing the popup open forever. */
 function whyUsForced(){
   try{
-    const q=String(window.location.search||"")+" "+String(window.location.hash||"");
-    if(/[?&]why=0\b/.test(q)){ localStorage.removeItem(WHY_US_KEY); return false; }
-    return /[?&]why=1\b/.test(q) || /#why\b/.test(q);
+    const loc=window.location;
+    const q=String(loc.search||"")+String(loc.hash||"");
+    const reset=/[?&]why=0(\b|$)/.test(q);
+    const force=/[?&]why=1(\b|$)/.test(q) || /#why(\b|$)/.test(q);
+    if(!reset && !force) return false;
+    if(reset) whyUsClearStamp();
+    try{
+      const u=new URL(loc.href);
+      u.searchParams.delete("why");
+      if(u.hash==="#why") u.hash="";
+      window.history.replaceState(null,"",u.pathname+u.search+u.hash);
+    }catch(e){}
+    return force;
   }catch(e){ return false; }
 }
 /* The cinematic splash sits at z-index 9999 and lifts a couple of seconds after load, so the
@@ -12223,10 +12254,12 @@ function NemoStore(){
   // the moment it opens, so a reload the same day doesn't bring it back — except for a forced
   // ?why=1 showing, which leaves the stamp alone.
   const [whyOpen,setWhyOpen]=useState(false);
+  const whyArmed=useRef(false);
   useEffect(()=>{
-    if(loading||isAdminPage) return;
+    if(loading||isAdminPage||whyArmed.current) return;
     const forced=whyUsForced();
     if(!forced && !whyUsDueToday()) return;
+    whyArmed.current=true;   // at most one showing per app session, whatever happens after this
     return whenSplashGone(()=>{ if(!forced) markWhyUsShown(); setWhyOpen(true); });
   },[loading,isAdminPage]);
   // Reveal-on-scroll: tagged (.js-reveal) sections spring up as they enter the viewport.
