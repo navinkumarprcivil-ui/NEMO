@@ -606,6 +606,12 @@ function normalizeProduct(p){
   if(typeof p.reviewCount !== "number") p.reviewCount = 0;
   if(typeof p.ratingAvg !== "number") p.ratingAvg = 0;
   if(typeof p.comingSoon !== "boolean") p.comingSoon = false;
+  // GST is claimed PER PRODUCT, never store-wide. Off by default: a product only carries tax
+  // once the owner ticks it and gives that product's own HSN and rate. Live fish are sold
+  // without claiming GST, so they simply stay off.
+  if(typeof p.gstApplicable !== "boolean") p.gstApplicable = false;
+  if(typeof p.hsn !== "string") p.hsn = "";
+  if(typeof p.gstRate !== "number") p.gstRate = (p.gstRate==null||p.gstRate==="")?null:Number(p.gstRate);
   return p;
 }
 
@@ -1083,6 +1089,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   legalCity: "Salem, Tamil Nadu, India",
   legalAddress: "",          // optional full address for the invoice; leave blank to show only the city
   gstin: "",                  // add once registered → invoice becomes a GST "Tax Invoice"
+  /* No store-wide GST rate or HSN: both are per product (see the product editor). */
   jurisdiction: "Salem, Tamil Nadu",
   termsPolicy: "By placing an order you agree to these terms. "+STORE_NAME+" Aqua Store is a home-based proprietary micro-enterprise (Udyam-registered) trading in aquarium livestock and supplies. All orders are subject to stock availability and our acceptance of your payment. Prices are in INR and inclusive of applicable taxes. We are currently a small enterprise not registered under GST, so no GST is charged at present; this notice and your invoice will be updated once we register for GST, at which point your bill will be issued as a GST Tax Invoice. Live animals are perishable goods sold under our Live Arrival Guarantee, which is your sole and exclusive remedy for any transit loss. To the maximum extent permitted by law, our total liability for any order is limited to the amount actually paid for that order; we are not liable for indirect, incidental or consequential losses, nor for any loss arising after livestock has been introduced to your tank or system. We are not responsible for delays or failures caused by courier partners, weather, power/water conditions at your premises, or other events beyond our reasonable control. "+COURIER_COLLECT_TERM+" These terms are governed by the laws of India and subject to the exclusive jurisdiction of the courts at Salem, Tamil Nadu.",
   privacyPolicy: "We collect only the details needed to fulfil your order — your name, contact number, delivery address and email, plus the payment reference ID and screenshot you submit so we can verify your payment. This information is used solely to process, deliver and provide support for your orders. We do not sell your data or share it with anyone except our delivery partners and payment provider, and only as needed to complete your order. Payments are processed through your own UPI app or our secure payment gateway; we never see or store your card, UPI PIN or bank credentials. You can ask us to delete your stored account data at any time by messaging us on WhatsApp.",
@@ -2171,6 +2178,98 @@ function openBill(order,settings){
 /* ── Professional invoice (corporate A4 layout, print → PDF) ─────────────────
    The teal "bill" above is a friendly summary for WhatsApp/email; THIS is the
    formal, print-ready document attached/downloaded as a PDF. */
+/* ═══════════════════ GST ENGINE (single source of truth) ═══════════════════
+   The tax invoice, the credit note and both GST exports all read from here, so the figures on
+   the customer's invoice and the figures you file can never drift apart.
+
+   Settled with the seller's CA (Aug 2026):
+   · Prices are GST-INCLUSIVE, so taxable value is back-calculated out of what is charged.
+   · A discount shown on the invoice before supply is EXCLUDED from taxable value — §15(3)(a).
+     Tax is therefore computed on what the customer actually pays, not on the pre-discount MRP.
+     Order-level discounts (coupon + referral + wallet) are apportioned across the lines in
+     proportion to value, which is what makes a mixed-rate basket come out right — otherwise
+     there is no principled answer to "which rate did the ₹100 coupon come off?".
+   · Every line is taxed at its OWN product rate and HSN. There is no single order-wide rate.
+   · Shipping is ancillary to a composite supply, so freight follows the PRINCIPAL supply — the
+     rate of the highest-value goods line — rather than a hard-coded default. */
+function gstPlaceOfSupply(order, settings){
+  const s=settings||{}, o=order||{};
+  const addr=o.address||{}; const billingAddr=o.billingAddress||addr;
+  const sellerStateCode=String(s.gstin||"").trim().slice(0,2);
+  const posPin=String(addr.pincode||billingAddr.pincode||"").replace(/\D/g,"");
+  const derived=pincodeToState(posPin);
+  let code=String(o.placeOfSupplyCode||billingAddr.stateCode||addr.stateCode||"").trim();
+  let name=String(o.placeOfSupplyName||addr.state||billingAddr.state||"").toUpperCase().trim();
+  if(!code&&name) code=Object.keys(GST_STATES).find(k=>GST_STATES[k]===name)||"";
+  if(!code&&derived) code=derived.code;
+  if(!name) name=(code&&GST_STATES[code])||(derived&&derived.name)||"";
+  return { sellerStateCode, code, name, inter: !!(sellerStateCode&&code&&sellerStateCode!==code) };
+}
+function orderTaxLines(order, settings){
+  const s=settings||{}, o=order||{};
+  const r2=n=>Math.round((Number(n)||0)*100)/100;
+  // No store-wide HSN and no store-wide rate: a line is taxed only if THAT product is marked
+  // "claim GST", and then only at its own HSN and rate. Live fish are sold without claiming GST,
+  // so those lines carry no tax at all rather than tax at 0%.
+  const goods=(o.items||[]).map(it=>{
+    const taxed = it.gstApplicable===true && Number(it.gstRate)>0;
+    return {
+      name:String(it.name||""), variantLabel:it.variantLabel||"", qty:Number(it.qty)||0,
+      taxed, hsn:taxed?String(it.hsn||"").trim():"",
+      rate:taxed?Number(it.gstRate):0,
+      gross:(Number(it.price)||0)*(Number(it.qty)||0),
+      isShipping:false,
+    };
+  });
+  // Principal supply = the largest goods line; freight is ancillary and rides on its rate — so
+  // shipping on an order of non-GST goods carries no GST either.
+  let principal=null; goods.forEach(g=>{ if(!principal||g.gross>principal.gross) principal=g; });
+  const shipTaxed=!!(principal&&principal.taxed);
+  const shipRate=shipTaxed?principal.rate:0;
+  const shipping=Number(o.fee)||0;
+  const lines=goods.slice();
+  if(shipping>0) lines.push({name:"Delivery / shipping",variantLabel:"",qty:0,taxed:shipTaxed,hsn:shipTaxed?"9968":"",rate:shipRate,gross:shipping,isShipping:true});
+
+  const grossTotal=r2(lines.reduce((a,l)=>a+l.gross,0));
+  const rawDisc=(Number(o.couponDiscount)||0)+(Number(o.referralDiscount)||0)+(Number(o.loyaltyDiscount)||0);
+  const discount=Math.max(0,Math.min(rawDisc,grossTotal));
+
+  let allocated=0;
+  lines.forEach(l=>{ l.discount = grossTotal>0 ? r2(discount*l.gross/grossTotal) : 0; allocated=r2(allocated+l.discount); });
+  // Hand the rounding remainder to the biggest line so the parts always add back to the whole.
+  if(lines.length){
+    const drift=r2(discount-allocated);
+    if(drift!==0){ let big=lines[0]; lines.forEach(l=>{ if(l.gross>big.gross) big=l; }); big.discount=r2(big.discount+drift); }
+  }
+  const pos=gstPlaceOfSupply(o,s);
+  lines.forEach(l=>{
+    l.net=r2(l.gross-l.discount);
+    // A line with no GST claimed contributes its full value and no tax — it is not "0% tax",
+    // it is outside the tax entirely, and it is reported separately.
+    l.taxable=l.taxed?r2(l.net/(1+l.rate/100)):0;
+    l.exempt=l.taxed?0:l.net;
+    l.tax=l.taxed?r2(l.net-l.taxable):0;
+    if(pos.inter){ l.igst=l.tax; l.cgst=0; l.sgst=0; }
+    else { l.cgst=r2(l.tax/2); l.sgst=r2(l.tax-l.cgst); l.igst=0; }
+  });
+  const sum=k=>r2(lines.reduce((a,l)=>a+(l[k]||0),0));
+  const byHsn={};
+  lines.forEach(l=>{
+    const k=l.taxed?(l.hsn||"(HSN not set)")+"|"+l.rate:"(no GST claimed)|0";
+    const b=byHsn[k]||(byHsn[k]={hsn:l.taxed?(l.hsn||"(HSN not set)"):"(no GST claimed)",rate:l.rate,taxed:l.taxed,qty:0,taxable:0,exempt:0,tax:0,cgst:0,sgst:0,igst:0});
+    b.qty+=l.qty; b.taxable=r2(b.taxable+l.taxable); b.exempt=r2(b.exempt+l.exempt); b.tax=r2(b.tax+l.tax);
+    b.cgst=r2(b.cgst+l.cgst); b.sgst=r2(b.sgst+l.sgst); b.igst=r2(b.igst+l.igst);
+  });
+  const anyTaxed=lines.some(l=>l.taxed);
+  // Missing paperwork the owner needs to know about before this goes on a document.
+  const missingHsn=lines.filter(l=>l.taxed&&!l.hsn).map(l=>l.name);
+  return { lines, byHsn, inter:pos.inter, pos, shipRate, shipping, anyTaxed, missingHsn,
+           gross:grossTotal, discount:r2(discount),
+           taxable:sum("taxable"), exempt:sum("exempt"), tax:sum("tax"),
+           cgst:sum("cgst"), sgst:sum("sgst"), igst:sum("igst"),
+           invoiceValue:r2(grossTotal-discount) };
+}
+
 function generateInvoiceHTML(order, settings, opts){
   const s=settings||{}; const o=order||{}; const addr=o.address||{};
   const cn=!!(opts&&opts.creditNote); // credit-note mode (GST sales return): reverses tax on returned goods
@@ -2188,7 +2287,10 @@ function generateInvoiceHTML(order, settings, opts){
   // A GST "Tax Invoice" is only issued once the supply is real (paid/confirmed);
   // before that it's a non-accountable PROFORMA so customers can't treat a pending order as a tax invoice.
   const paidFlag=["Verified","Paid"].includes(o.paymentStatus||"")||["Confirmed","Shipped","Delivered"].includes(o.status||"");
-  const docLabel=cn?"CREDIT NOTE":(gstin?(paidFlag?"TAX INVOICE":"PROFORMA INVOICE"):"INVOICE");
+  // A registered seller issues a TAX INVOICE only where tax is actually charged; an order made
+  // up entirely of goods sold without claiming GST is a BILL OF SUPPLY.
+  const anyTaxedDoc=orderTaxLines(o,s).anyTaxed;
+  const docLabel=cn?"CREDIT NOTE":(gstin?(paidFlag?(anyTaxedDoc?"TAX INVOICE":"BILL OF SUPPLY"):"PROFORMA INVOICE"):"INVOICE");
   // Per-line MRP (pre-discount unit price) and total line discount, for the price/discount columns.
   const unitMrp=(it)=>Math.round(Number(it.mrp||it.origPrice||(Number(it.discountPct)>0?Number(it.price||0)/(1-Number(it.discountPct)/100):it.price||0)));
   const lineDisc=(it)=>Math.max(0,Math.round((unitMrp(it)-Number(it.price||0))*Number(it.qty||0)));
@@ -2219,33 +2321,25 @@ function generateInvoiceHTML(order, settings, opts){
   // Place of supply for goods = where delivery terminates (ship-to). When no explicit
   // state is stored on the order/address we derive it from the delivery PIN, so orders
   // inside Tamil Nadu split CGST+SGST and orders to any other state charge IGST.
-  const posPin=String(addr.pincode||billingAddr.pincode||"").replace(/\D/g,"");
-  const derivedState=pincodeToState(posPin);
-  let buyerStateCode=String(o.placeOfSupplyCode||billingAddr.stateCode||addr.stateCode||"").trim();
-  let buyerStateName=String(o.placeOfSupplyName||addr.state||billingAddr.state||"").toUpperCase().trim();
-  if(!buyerStateCode&&buyerStateName) buyerStateCode=Object.keys(GST_STATES).find(k=>GST_STATES[k]===buyerStateName)||"";
-  if(!buyerStateCode&&derivedState) buyerStateCode=derivedState.code;
-  if(!buyerStateName) buyerStateName=(buyerStateCode&&GST_STATES[buyerStateCode])||(derivedState&&derivedState.name)||"";
-  const interState=!!(sellerStateCode&&buyerStateCode&&sellerStateCode!==buyerStateCode);
+  const TAX=orderTaxLines(o,s);
+  const buyerStateCode=TAX.pos.code, buyerStateName=TAX.pos.name;
+  const interState=TAX.inter;
   const placeOfSupply=buyerStateName?`${E(buyerStateName)}${buyerStateCode?` (${buyerStateCode})`:""}`:(sellerStateCode&&GST_STATES[sellerStateCode]?`${GST_STATES[sellerStateCode]} (${sellerStateCode})`:E(s.legalCity||"—"));
-  const defRate=Number(s.gstRate!=null?s.gstRate:18);
-  const defHsn=E(String(s.hsnCode||"").trim());
-  let taxableSum=0,cgstSum=0,sgstSum=0,igstSum=0;
-  const gstRows=items.map((it,i)=>{
-    const gross=Number(it.price||0)*Number(it.qty||0);
-    const rate=Number(it.gstRate!=null?it.gstRate:defRate);
-    const taxable=round2(gross/(1+rate/100)); const tax=round2(gross-taxable);
-    taxableSum+=taxable;
-    if(interState){ igstSum+=tax; } else { const c=round2(tax/2); cgstSum+=c; sgstSum+=round2(tax-c); }
-    const hsn=E(String(it.hsn||defHsn||""));
-    const mrp=unitMrp(it); const disc=lineDisc(it);
-    return `<tr><td class="c">${i+1}</td><td>${E(it.name)}${it.variantLabel?`<div class="muted">${E(it.variantLabel)}</div>`:""}</td><td class="c">${hsn||"—"}</td><td class="c">${E(it.qty)}</td><td class="r">₹${fmt(mrp)}</td><td class="r">${disc>0?"-₹"+fmt(disc):"—"}</td><td class="r">${money(taxable)}</td><td class="c">${rate}%</td><td class="r">${money(tax)}</td><td class="r">${money(gross)}</td></tr>`;
+  // Every row is priced from the shared engine: its own product rate, its own HSN, and its share
+  // of any invoice discount already taken off BEFORE tax (§15(3)(a)). The "Discount" column is
+  // the per-line product discount plus that apportioned share, so the row reads end-to-end.
+  const gstRows=TAX.lines.map((l,i)=>{
+    const src=l.isShipping?null:items[i];
+    const mrp=src?unitMrp(src):0;
+    const disc=(src?lineDisc(src):0)+l.discount;
+    return `<tr><td class="c">${i+1}</td><td>${E(l.name)}${l.variantLabel?`<div class="muted">${E(l.variantLabel)}</div>`:""}${l.isShipping?`<div class="muted">follows the principal supply @ ${l.rate}%</div>`:""}</td><td class="c">${E(l.hsn)||"—"}</td><td class="c">${l.isShipping?"—":E(l.qty)}</td><td class="r">${l.isShipping?"₹"+fmt(l.gross):"₹"+fmt(mrp)}</td><td class="r">${disc>0?"-₹"+fmt2(disc):"—"}</td><td class="r">${money(l.taxed?l.taxable:l.net)}</td><td class="c">${l.taxed?l.rate+"%":"No GST"}</td><td class="r">${l.taxed?money(l.tax):"—"}</td><td class="r">${money(l.net)}</td></tr>`;
   }).join("");
-  if(shipping>0){ const st=round2(shipping/(1+defRate/100)); const stx=round2(shipping-st); taxableSum+=st; if(interState){ igstSum+=stx; } else { const c=round2(stx/2); cgstSum+=c; sgstSum+=round2(stx-c); } }
-  taxableSum=round2(taxableSum); cgstSum=round2(cgstSum); sgstSum=round2(sgstSum); igstSum=round2(igstSum);
-  const taxTotal=round2(cgstSum+sgstSum+igstSum);
-  const roundOff=round2(grand-round2(taxableSum+taxTotal-discountTotal));
-  const taxSummaryHtml=`<table class="taxsum"><tr><td class="k">Taxable Amount</td><td class="v">${money(taxableSum)}</td></tr>${interState?`<tr><td class="k">IGST</td><td class="v">${money(igstSum)}</td></tr>`:`<tr><td class="k">CGST</td><td class="v">${money(cgstSum)}</td></tr><tr><td class="k">SGST</td><td class="v">${money(sgstSum)}</td></tr>`}${discountTotal>0?`<tr><td class="k">Discount</td><td class="v">-${money(discountTotal)}</td></tr>`:""}${Math.abs(roundOff)>=0.01?`<tr><td class="k">Round Off</td><td class="v">${roundOff<0?"-":""}${money(Math.abs(roundOff))}</td></tr>`:""}<tr class="g"><td class="k">Total Invoice Amount</td><td class="v">₹${fmt(grand)}</td></tr></table>`;
+  const taxableSum=TAX.taxable, cgstSum=TAX.cgst, sgstSum=TAX.sgst, igstSum=TAX.igst;
+  const taxTotal=TAX.tax;
+  // Taxable value is already net of the discount, so the summary reads gross → discount →
+  // taxable → tax → total. Any residue here is pure paisa rounding, not a discount.
+  const roundOff=round2(grand-round2(taxableSum+taxTotal));
+  const taxSummaryHtml=`<table class="taxsum"><tr><td class="k">Value (incl. GST)</td><td class="v">${money(TAX.gross)}</td></tr>${TAX.discount>0?`<tr><td class="k">Less: Discount</td><td class="v">-${money(TAX.discount)}</td></tr>`:""}${TAX.exempt>0?`<tr><td class="k">Value — no GST claimed</td><td class="v">${money(TAX.exempt)}</td></tr>`:""}${TAX.anyTaxed?`<tr><td class="k">Taxable Value</td><td class="v">${money(taxableSum)}</td></tr>`:""}${!TAX.anyTaxed?"":interState?`<tr><td class="k">IGST</td><td class="v">${money(igstSum)}</td></tr>`:`<tr><td class="k">CGST</td><td class="v">${money(cgstSum)}</td></tr><tr><td class="k">SGST</td><td class="v">${money(sgstSum)}</td></tr>`}${Math.abs(roundOff)>=0.01?`<tr><td class="k">Round Off</td><td class="v">${roundOff<0?"-":""}${money(Math.abs(roundOff))}</td></tr>`:""}<tr class="g"><td class="k">Total Invoice Amount</td><td class="v">₹${fmt(grand)}</td></tr></table>`;
 
   const itemRows=items.map((it,i)=>`<tr>
     <td class="c">${i+1}</td>
@@ -2419,33 +2513,13 @@ function prevMonthRange(){ const now=new Date(); const first=new Date(now.getFul
 /* GST for one order (prices are GST-inclusive; same rule as the invoice). Buyer state comes off
    the order, else derived from the delivery pincode. Returns taxable + CGST/SGST (intra) or IGST. */
 function orderGST(o, settings){
-  const s=settings||{}, a=o.address||{};
-  const sellerState=String((s.gstin||"").slice(0,2)||"33");
-  const defRate=(s.gstRate!=null)?Number(s.gstRate):18;
-  const buyerState=String(a.stateCode||((pincodeToState(a.pincode)||{}).code)||"");
-  const inter=!!(sellerState&&buyerState&&sellerState!==buyerState);
-  let taxable=0,tax=0;
-  const byHsn={};   // HSN -> { rate, qty, taxable, tax } for the GSTR-1 HSN summary
-  const defHsn=String(s.hsnCode||"").trim();
-  (o.items||[]).forEach(it=>{
-    const rate=(it.gstRate!=null)?Number(it.gstRate):defRate;
-    const gross=(Number(it.price)||0)*(Number(it.qty)||0);
-    const tv=gross/(1+rate/100); taxable+=tv; tax+=(gross-tv);
-    const hsn=String(it.hsn||defHsn||"").trim()||"(not set)";
-    const k=hsn+"|"+rate;
-    const b=byHsn[k]||(byHsn[k]={hsn,rate,qty:0,taxable:0,tax:0});
-    b.qty+=Number(it.qty)||0; b.taxable+=tv; b.tax+=(gross-tv);
-  });
-  const fee=Number(o.fee)||0;
-  if(fee>0){ const stv=fee/(1+defRate/100); taxable+=stv; tax+=(fee-stv);
-    const k="9968|"+defRate;   // courier / transport service, billed with the goods
-    const b=byHsn[k]||(byHsn[k]={hsn:"9968",rate:defRate,qty:0,taxable:0,tax:0});
-    b.taxable+=stv; b.tax+=(fee-stv); }
-  const r2=n=>Math.round(n*100)/100; taxable=r2(taxable); tax=r2(tax);
-  Object.values(byHsn).forEach(b=>{ b.taxable=r2(b.taxable); b.tax=r2(b.tax); });
-  return { taxable, cgst:inter?0:r2(tax/2), sgst:inter?0:r2(tax-tax/2), igst:inter?tax:0, total:tax,
-           state:(GST_STATES[buyerState]||a.state||""), inter, byHsn };
+  // Thin wrapper over the shared engine so the export and the invoice can never disagree.
+  const t=orderTaxLines(o,settings);
+  return { taxable:t.taxable, exempt:t.exempt, cgst:t.cgst, sgst:t.sgst, igst:t.igst, total:t.tax,
+           state:(GST_STATES[t.pos.code]||(o.address&&o.address.state)||""),
+           inter:t.inter, byHsn:t.byHsn, discount:t.discount, invoiceValue:t.invoiceValue, shipRate:t.shipRate };
 }
+
 /* Is this order an actual supply that belongs in a GST return?
    A cancelled order, or one that was never paid for, is not — filing those would over-report
    your output tax. Everything the seller has actually been paid for counts. */
@@ -2469,7 +2543,7 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
   if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
-  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID","State","Counts for GST","Supply Type","HSN Breakup","Taxable (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","GST Total (Rs.)","Delivered On","DOA Qty","DOA Claim (customer)","DOA Approval Reason","DOA Refund (Rs.)","Return Reason (customer)","Return Approval Reason","Return Resolution","Return/Refund (Rs.)"];
+  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID","State","Counts for GST","Supply Type","HSN Breakup","Taxable (Rs.)","No-GST Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","GST Total (Rs.)","Delivered On","DOA Qty","DOA Claim (customer)","DOA Approval Reason","DOA Refund (Rs.)","Return Reason (customer)","Return Approval Reason","Return Resolution","Return/Refund (Rs.)"];
   const pph=Number(settings?.loyaltyPointsPerHundred||10);
   const rupeePerPoint=Number(settings?.loyaltyRedeemValue||1);
   const rows=list.map(o=>{
@@ -2487,7 +2561,7 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     // filled in, so a stray row can't quietly inflate the output tax you file.
     const isSupply=countsForGST(o);
     const hsnTxt=isSupply?Object.values(g.byHsn).map(b=>`${b.hsn} @${b.rate}%: taxable Rs.${b.taxable.toFixed(2)}, tax Rs.${b.tax.toFixed(2)}`).join(" | "):"";
-    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||"",g.state,isSupply?"Yes":"No",isSupply?(g.inter?"IGST (inter-state)":"CGST+SGST (intra-state)"):"",hsnTxt,isSupply?g.taxable:"",isSupply?g.cgst:"",isSupply?g.sgst:"",isSupply?g.igst:"",isSupply?g.total:"",delOn?fmtDate(delOn):"",o.doa?.qty||"",o.doa?.claimReason||"",o.doa?.adminReason||"",o.doa?.refundAmount||"",o.returnReq?.reason||"",o.returnReq?.adminReason||"",o.returnReq?.adminResolution||o.returnReq?.resolution||"",o.returnReq?.refundAmount||""].map(esc).join(",");
+    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||"",g.state,isSupply?"Yes":"No",isSupply?(g.inter?"IGST (inter-state)":"CGST+SGST (intra-state)"):"",hsnTxt,isSupply?g.taxable:"",isSupply?(g.exempt||0):"",isSupply?g.cgst:"",isSupply?g.sgst:"",isSupply?g.igst:"",isSupply?g.total:"",delOn?fmtDate(delOn):"",o.doa?.qty||"",o.doa?.claimReason||"",o.doa?.adminReason||"",o.doa?.refundAmount||"",o.returnReq?.reason||"",o.returnReq?.adminReason||"",o.returnReq?.adminResolution||o.returnReq?.resolution||"",o.returnReq?.refundAmount||""].map(esc).join(",");
   });
   const csv="\uFEFF"+[head.map(esc).join(","),...rows].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -2515,23 +2589,24 @@ function exportGstHsnCSV(orders, from="", to="", settings={}){
     const g=orderGST(o,settings);
     Object.values(g.byHsn).forEach(b=>{
       const k=b.hsn+"|"+b.rate+"|"+(g.inter?"I":"L");
-      const r=agg[k]||(agg[k]={hsn:b.hsn,rate:b.rate,inter:g.inter,qty:0,taxable:0,cgst:0,sgst:0,igst:0});
-      r.qty+=b.qty; r.taxable+=b.taxable;
+      const r=agg[k]||(agg[k]={hsn:b.hsn,rate:b.rate,taxed:b.taxed,inter:g.inter,qty:0,taxable:0,exempt:0,cgst:0,sgst:0,igst:0});
+      r.qty+=b.qty; r.taxable+=b.taxable; r.exempt+=(b.exempt||0);
       if(g.inter) r.igst+=b.tax; else { const c=b.tax/2; r.cgst+=c; r.sgst+=b.tax-c; }
     });
   });
   const r2=n=>Math.round(n*100)/100;
   const rows=Object.values(agg).sort((a,b)=>String(a.hsn).localeCompare(String(b.hsn))||a.rate-b.rate);
-  const head=["HSN","Rate (%)","Supply Type","Total Qty","Taxable Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","Total Tax (Rs.)"];
-  const body=rows.map(r=>[r.hsn,r.rate,r.inter?"Inter-state (IGST)":"Intra-state (CGST+SGST)",r.qty,r2(r.taxable),r2(r.cgst),r2(r.sgst),r2(r.igst),r2(r.cgst+r.sgst+r.igst)].map(csvCell).join(","));
-  const tot=rows.reduce((a,r)=>({taxable:a.taxable+r.taxable,cgst:a.cgst+r.cgst,sgst:a.sgst+r.sgst,igst:a.igst+r.igst,qty:a.qty+r.qty}),{taxable:0,cgst:0,sgst:0,igst:0,qty:0});
-  const totalRow=["TOTAL","","",tot.qty,r2(tot.taxable),r2(tot.cgst),r2(tot.sgst),r2(tot.igst),r2(tot.cgst+tot.sgst+tot.igst)].map(csvCell).join(",");
+  const head=["HSN","Rate (%)","GST Claimed","Supply Type","Total Qty","Taxable Value (Rs.)","Value with no GST claimed (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","Total Tax (Rs.)"];
+  const body=rows.map(r=>[r.hsn,r.taxed?r.rate:"",r.taxed?"Yes":"No",r.inter?"Inter-state (IGST)":"Intra-state (CGST+SGST)",r.qty,r2(r.taxable),r2(r.exempt),r2(r.cgst),r2(r.sgst),r2(r.igst),r2(r.cgst+r.sgst+r.igst)].map(csvCell).join(","));
+  const tot=rows.reduce((a,r)=>({taxable:a.taxable+r.taxable,exempt:a.exempt+r.exempt,cgst:a.cgst+r.cgst,sgst:a.sgst+r.sgst,igst:a.igst+r.igst,qty:a.qty+r.qty}),{taxable:0,exempt:0,cgst:0,sgst:0,igst:0,qty:0});
+  const totalRow=["TOTAL","","","",tot.qty,r2(tot.taxable),r2(tot.exempt),r2(tot.cgst),r2(tot.sgst),r2(tot.igst),r2(tot.cgst+tot.sgst+tot.igst)].map(csvCell).join(",");
   const note=[
     "",
     csvCell(`Period: ${from||"start"} to ${to||"today"}`),
     csvCell(`Orders in period: ${list.length} · counted as supplies: ${supplies.length} · skipped (cancelled or unpaid): ${list.length-supplies.length}`),
     csvCell("Prices are GST-inclusive; taxable value is back-calculated from the collected amount."),
-    csvCell("HSN 9968 rows are the courier/shipping charge billed with the goods."),
+    csvCell("HSN 9968 rows are the courier/shipping charge, taxed at the principal supply's rate."),
+    csvCell("Rows marked GST Claimed = No are goods sold without claiming GST (e.g. live fish) - report them as exempt/non-GST, not at 0%."),
   ].join("\r\n");
   const csv="﻿"+[head.map(csvCell).join(","),...body,totalRow,note].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -7642,6 +7717,9 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     tag:product?.tag||"",
     desc:product?.desc||"",
     comingSoon:!!product?.comingSoon,
+    gstApplicable:!!product?.gstApplicable,
+    hsn:product?.hsn||"",
+    gstRate:(product?.gstRate==null?"":String(product.gstRate)),
     variantLabelText:product?.variantLabelText||"",
     packagingWeight:product?.packagingWeight||"",
     returnEligible:!!product?.returnEligible,
@@ -7821,6 +7899,9 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
       discountPct:Math.min(100,Math.max(0,parseInt(form.discountPct)||0)),
       offerEndsAt:form.offerEndsAt?new Date(form.offerEndsAt).toISOString():null,
       comingSoon:!!form.comingSoon,
+      gstApplicable:!!form.gstApplicable,
+      hsn:String(form.hsn||"").trim(),
+      gstRate:(form.gstApplicable&&String(form.gstRate).trim()!=="")?Number(form.gstRate):null,
       packagingWeight:Number(form.packagingWeight)||0,
       returnEligible: form.category==="Accessories" ? !!form.returnEligible : false,
       suggestSpecialDelivery:!!form.suggestSpecialDelivery,
@@ -7930,6 +8011,38 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>Shows a Coming Soon badge + "Interested" button instead of Add. Track demand before stocking.</div>
           </div>
         </label>
+
+        {/* GST is decided per product, never store-wide — live fish are sold without claiming
+            GST, dry goods have their own HSN and rate. Off by default so nothing claims tax
+            by accident; once ticked, the HSN and rate entered here are what the tax invoice,
+            the credit note and the GSTR-1 export all use for this product's lines. */}
+        <div style={{background:"#f5f3ff",borderRadius:12,padding:"12px 14px",marginBottom:16,border:"1px solid #ddd6fe"}}>
+          <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",userSelect:"none"}}>
+            <input type="checkbox" checked={!!form.gstApplicable} onChange={e=>f("gstApplicable",e.target.checked)} style={{width:18,height:18,accentColor:"#7c3aed",flexShrink:0,marginTop:1}}/>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:C.text}}>🧾 Claim GST on this product</div>
+              <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>Leave OFF for live fish and anything you don't claim GST on — those lines carry no tax at all and are billed as a Bill of Supply.</div>
+            </div>
+          </label>
+          {form.gstApplicable&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>HSN code</div>
+                <input value={form.hsn} onChange={e=>f("hsn",e.target.value)} placeholder="e.g. 2309"
+                  style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${form.hsn?C.border:"#fca5a5"}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>GST rate %</div>
+                <input type="number" min="0" max="28" step="0.5" value={form.gstRate} onChange={e=>f("gstRate",e.target.value)} placeholder="e.g. 18"
+                  style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${String(form.gstRate).trim()?C.border:"#fca5a5"}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none"}}/>
+              </div>
+              {(!form.hsn||!String(form.gstRate).trim())&&(
+                <div style={{gridColumn:"1 / -1",fontSize:11,color:"#b91c1c",fontWeight:600,lineHeight:1.45}}>⚠ Enter both the HSN and the rate — without them this product bills with no GST.</div>
+              )}
+              <div style={{gridColumn:"1 / -1",fontSize:10.5,color:C.textSub,lineHeight:1.45}}>Prices are treated as GST-inclusive. Shipping follows the biggest item in the order, so an order of no-GST goods carries no GST on delivery either.</div>
+            </div>
+          )}
+        </div>
 
         {/* #15 — return eligibility, admin-only, off by default, accessories only */}
         {form.category==="Accessories"&&(
@@ -10043,7 +10156,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               </div>
             </div>
           )}
-          <SettingsPanel settings={settings} onSave={onSaveSettings}/>
+          <SettingsPanel settings={settings} onSave={onSaveSettings} products={products}/>
         </div>
       )}
     </div>
@@ -10051,7 +10164,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
 }
 
 /* ═══════════════════ ADMIN SETTINGS PANEL ═══════════════════ */
-function SettingsPanel({settings,onSave}){
+function SettingsPanel({settings,onSave,products=[]}){
   const [f,setF]=useState({...DEFAULT_SETTINGS,...settings});
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const [logoNote,setLogoNote]=useState("");
@@ -10427,8 +10540,18 @@ function SettingsPanel({settings,onSave}){
                        : `⚠ This doesn't look like a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z5). Invoices still work, but check for a typo.`);
           return <div style={{marginTop:-8,marginBottom:16,fontSize:11.5,fontWeight:700,lineHeight:1.5,color:good?C.success:C.danger}}>{msg}</div>;
         })()}
-        {field("Default GST Rate %","gstRate","18","Applied on tax invoices once GSTIN is set (prices are treated as GST-inclusive). A product can override this per item.")}
-        {field("Default HSN / SAC Code","hsnCode","0301","Printed per line on the tax invoice. e.g. ornamental fish 0301, aquatic plants 0602, accessories per item.")}
+        {/* No store-wide HSN or rate any more — mixed baskets (fish with no GST, feed, equipment,
+            medicine) can't be billed off one number. Each product carries its own, set in the
+            product editor under "Claim GST on this product". */}
+        <div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:"#5b21b6",marginBottom:4}}>🧾 GST is set per product</div>
+          <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>HSN and rate live on each product — open a product and tick <b>Claim GST on this product</b>. Live fish stay off, so those orders bill as a Bill of Supply with no tax. Shipping follows the biggest item in the order.</div>
+          {(()=>{
+            const gaps=(products||[]).filter(p=>p.gstApplicable&&(!String(p.hsn||"").trim()||!(Number(p.gstRate)>0)));
+            if(!gaps.length) return null;
+            return <div style={{fontSize:11.5,color:"#b91c1c",fontWeight:700,marginTop:8,lineHeight:1.5}}>⚠ {gaps.length} product{gaps.length!==1?"s":""} claim GST but are missing an HSN or rate — they will bill with no GST: {gaps.slice(0,4).map(p=>p.name).join(", ")}{gaps.length>4?"…":""}</div>;
+          })()}
+        </div>
         {field("Legal Jurisdiction","jurisdiction","Salem, Tamil Nadu")}
       </div>
 
@@ -11787,7 +11910,7 @@ function NemoStore(){
       if(qty>0 && curQty+qty>maxAllowed) setTimeout(()=>showToast(`Only ${maxAllowed} available per order`,"error"),0);
       else if(qty>0){ setTimeout(()=>showToast("Added to cart"),0); trackEvent("addcart",product.id); trackFunnel("addcart"); }
       if(ex) return prev.map(i=>i.key===key?{...i,qty:nextQty}:i);
-      return [...prev,{key,id:product.id,name:product.name,category:product.category,price:unitPrice,mrp:(v?variantBasePrice(product,v):(product.price||unitPrice)),qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,suggestedPacking:product.suggestedPacking||null,suggestSpecialDelivery:!!product.suggestSpecialDelivery,returnEligible:product.returnEligible===true,stockCount:stock}];
+      return [...prev,{key,id:product.id,name:product.name,category:product.category,price:unitPrice,mrp:(v?variantBasePrice(product,v):(product.price||unitPrice)),qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,suggestedPacking:product.suggestedPacking||null,suggestSpecialDelivery:!!product.suggestSpecialDelivery,returnEligible:product.returnEligible===true,stockCount:stock,gstApplicable:product.gstApplicable===true,hsn:product.hsn||"",gstRate:(product.gstRate==null?null:Number(product.gstRate))}];
     });
   };
   const updateQty=(key,delta)=>
