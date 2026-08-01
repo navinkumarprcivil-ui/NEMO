@@ -1132,11 +1132,51 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   emailDelivered: false,  // delivered (WhatsApp instead)
   adminOrderEmail: false, // email a copy of each new order to the admin (off by default; opt in below)
 };
+/* ── Public vs private settings ───────────────────────────────────────────────
+   The `settings` node is world-readable (the storefront needs the WhatsApp number, UPI id,
+   policies, rates and so on before anyone signs in). These keys are NOT storefront data and
+   have no business being fetched by a stranger, so they live in `settingsPrivate`, which the
+   rules restrict to the admin uid:
+     · adminPassHash   — the admin password hash
+     · coAdminUid      — the helper account's uid
+     · returnAddress*  — the proprietor's physical return addresses. The customer never needs
+                         these from settings: the admin snapshots the chosen address onto the
+                         return request, and the return screen already falls back to "message
+                         us on WhatsApp for the address" when there's none on the request.
+   Everything else stays public because the customer's own browser genuinely uses it — the UPI
+   id renders the payment QR, and the EmailJS ids send the order confirmation from the client.
+   (Lock those down in the EmailJS dashboard with an allowed-domains restriction; a static site
+   cannot hide a key it has to use.) */
+const PRIVATE_SETTING_KEYS = ["adminPassHash","coAdminUid","returnAddress","returnAddress1Label","returnAddress2","returnAddress2Label"];
+function splitSettings(s){
+  const pub={...s}, priv={};
+  PRIVATE_SETTING_KEYS.forEach(k=>{ if(s[k]!==undefined) priv[k]=s[k]; delete pub[k]; });
+  return {pub,priv};
+}
 async function loadSettings(){
-  if(FB_OK){ const o=await fbGetObj("settings"); if(o) return normalizeSettings({...DEFAULT_SETTINGS,...o}); }
+  if(FB_OK){
+    const o=await fbGetObj("settings");
+    if(o){
+      // The private half is readable only by the admin; for everyone else this simply fails and
+      // the storefront carries on with the public half, which is all it needs.
+      let priv=null;
+      try{ priv=await fbGetObj("settingsPrivate"); }catch(e){}
+      return normalizeSettings({...DEFAULT_SETTINGS,...o,...(priv||{})});
+    }
+  }
   const r=await dbGet("nemo-settings"); return r?normalizeSettings({...DEFAULT_SETTINGS,...JSON.parse(r)}):{...DEFAULT_SETTINGS};
 }
-async function saveSettings(s){ await dbSet("nemo-settings",JSON.stringify(s)); if(FB_OK) await fbSetObj("settings",s); }
+async function saveSettings(s){
+  await dbSet("nemo-settings",JSON.stringify(s));   // local cache keeps the whole thing (admin's own device)
+  if(FB_OK){
+    const {pub,priv}=splitSettings(s);
+    await fbSetObj("settings",pub);
+    await fbSetObj("settingsPrivate",priv);
+    // One-time cleanup: these used to be written into the public node, so a store that saved
+    // settings before this change still has them sitting there readable. Clear them out.
+    try{ await Promise.all(PRIVATE_SETTING_KEYS.map(k=>FB_DB.ref("settings/"+k).remove())); }catch(e){}
+  }
+}
 
 /* ── Referral codes (10-char alphanumeric, one-time-use, tracked in Firebase) ── */
 function genRefCode(){
@@ -1540,6 +1580,16 @@ async function loadTestimonials(){
   if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("testimonials").get(),6000); if(s){ const v=s.val(); if(v) arr=Object.values(v).filter(x=>x&&x.id); } }catch(e){} }
   if(!arr.length){ const r=await dbGet("nemo-testimonials"); if(r) try{ arr=JSON.parse(r); }catch(e){} }
   return arr.sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+}
+/* Testimonials are public text on the storefront, so they wait for the admin the same way tank
+   photos do. Anything saved before moderation existed has no flag and stays visible. */
+function testimonialApproved(x){ return x && x.approved!==false; }
+async function approveTestimonial(item){
+  const updated={...item, approved:true, approvedAt:new Date().toISOString()};
+  if(FB_OK){ try{ await FB_DB.ref("testimonials/"+item.id).update({approved:true, approvedAt:updated.approvedAt}); }catch(e){} }
+  try{ const r=await dbGet("nemo-testimonials"); const arr=r?JSON.parse(r):[];
+    await dbSet("nemo-testimonials",JSON.stringify(arr.map(x=>x.id===item.id?updated:x))); }catch(e){}
+  return updated;
 }
 async function addTestimonial(t){
   let cloudOk=false;
@@ -2375,18 +2425,51 @@ function orderGST(o, settings){
   const buyerState=String(a.stateCode||((pincodeToState(a.pincode)||{}).code)||"");
   const inter=!!(sellerState&&buyerState&&sellerState!==buyerState);
   let taxable=0,tax=0;
-  (o.items||[]).forEach(it=>{ const rate=(it.gstRate!=null)?Number(it.gstRate):defRate; const gross=(Number(it.price)||0)*(Number(it.qty)||0); const tv=gross/(1+rate/100); taxable+=tv; tax+=(gross-tv); });
-  const fee=Number(o.fee)||0; if(fee>0){ const stv=fee/(1+defRate/100); taxable+=stv; tax+=(fee-stv); }
+  const byHsn={};   // HSN -> { rate, qty, taxable, tax } for the GSTR-1 HSN summary
+  const defHsn=String(s.hsnCode||"").trim();
+  (o.items||[]).forEach(it=>{
+    const rate=(it.gstRate!=null)?Number(it.gstRate):defRate;
+    const gross=(Number(it.price)||0)*(Number(it.qty)||0);
+    const tv=gross/(1+rate/100); taxable+=tv; tax+=(gross-tv);
+    const hsn=String(it.hsn||defHsn||"").trim()||"(not set)";
+    const k=hsn+"|"+rate;
+    const b=byHsn[k]||(byHsn[k]={hsn,rate,qty:0,taxable:0,tax:0});
+    b.qty+=Number(it.qty)||0; b.taxable+=tv; b.tax+=(gross-tv);
+  });
+  const fee=Number(o.fee)||0;
+  if(fee>0){ const stv=fee/(1+defRate/100); taxable+=stv; tax+=(fee-stv);
+    const k="9968|"+defRate;   // courier / transport service, billed with the goods
+    const b=byHsn[k]||(byHsn[k]={hsn:"9968",rate:defRate,qty:0,taxable:0,tax:0});
+    b.taxable+=stv; b.tax+=(fee-stv); }
   const r2=n=>Math.round(n*100)/100; taxable=r2(taxable); tax=r2(tax);
-  return { taxable, cgst:inter?0:r2(tax/2), sgst:inter?0:r2(tax-tax/2), igst:inter?tax:0, total:tax, state:(GST_STATES[buyerState]||a.state||"") };
+  Object.values(byHsn).forEach(b=>{ b.taxable=r2(b.taxable); b.tax=r2(b.tax); });
+  return { taxable, cgst:inter?0:r2(tax/2), sgst:inter?0:r2(tax-tax/2), igst:inter?tax:0, total:tax,
+           state:(GST_STATES[buyerState]||a.state||""), inter, byHsn };
+}
+/* Is this order an actual supply that belongs in a GST return?
+   A cancelled order, or one that was never paid for, is not — filing those would over-report
+   your output tax. Everything the seller has actually been paid for counts. */
+function countsForGST(o){
+  if(!o) return false;
+  if(String(o.status||"")==="Cancelled") return false;
+  return ["Verified","Paid"].includes(o.paymentStatus||"") || ["Confirmed","Shipped","Delivered"].includes(o.status||"");
+}
+/* Spreadsheet cells starting with = + - @ (or a leading tab/CR) are executed as FORMULAS by
+   Excel and Sheets. Customer-typed fields — name, address, order notes — land in this file and
+   the person who opens it is the shop owner, so every value is neutralised with a leading
+   apostrophe. The text still reads normally in the cell. */
+function csvCell(v){
+  let s=String(v==null?"":v);
+  if(/^[=+\-@\t\r]/.test(s)) s="'"+s;
+  return '"'+s.replace(/"/g,'""')+'"';
 }
 function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={}){
-  const esc=v=>{ const s=String(v==null?"":v).replace(/"/g,'""'); return `"${s}"`; };
+  const esc=csvCell;
   let list=[...orders];
   if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
-  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID","State","Taxable (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","GST Total (Rs.)","Delivered On","DOA Qty","DOA Claim (customer)","DOA Approval Reason","DOA Refund (Rs.)","Return Reason (customer)","Return Approval Reason","Return Resolution","Return/Refund (Rs.)"];
+  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID","State","Counts for GST","Supply Type","HSN Breakup","Taxable (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","GST Total (Rs.)","Delivered On","DOA Qty","DOA Claim (customer)","DOA Approval Reason","DOA Refund (Rs.)","Return Reason (customer)","Return Approval Reason","Return Resolution","Return/Refund (Rs.)"];
   const pph=Number(settings?.loyaltyPointsPerHundred||10);
   const rupeePerPoint=Number(settings?.loyaltyRedeemValue||1);
   const rows=list.map(o=>{
@@ -2394,11 +2477,17 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     const grand=o.amountDue??(o.total+o.fee);
     const loyaltyUsed=Number(o.loyaltyDiscount||0);
     const ptsRedeemed=loyaltyUsed>0?Math.round(loyaltyUsed/(rupeePerPoint||1)):0;
-    const ptsEarned=settings?.loyaltyEnabled?Math.floor(((Number(o.total)||0)/100)*pph):0; // product value only (excludes shipping)
+    // Coins are credited on DELIVERY, so an undelivered or cancelled order has earned none —
+    // this column used to fill in a figure for every order and overstated the liability.
+    const ptsEarned=(settings?.loyaltyEnabled!==false && String(o.status||"")==="Delivered")?Math.floor(((Number(o.total)||0)/100)*pph):0; // product value only (excludes shipping)
     const wBal=walletBalances[o.userUid]!=null?walletBalances[o.userUid]:"";
     const bd=o.shippingBreakup||{courier:Math.max(0,(o.fee||0)-(o.thermacolFee||0)-(o.specialDeliveryFee||0)),thermacol:o.thermacolFee||0,carton:0,special:o.specialDeliveryFee||0};
     const g=orderGST(o,settings); const delOn=deliveredAtOf(o);
-    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||"",g.state,g.taxable,g.cgst,g.sgst,g.igst,g.total,delOn?fmtDate(delOn):"",o.doa?.qty||"",o.doa?.claimReason||"",o.doa?.adminReason||"",o.doa?.refundAmount||"",o.returnReq?.reason||"",o.returnReq?.adminReason||"",o.returnReq?.adminResolution||o.returnReq?.resolution||"",o.returnReq?.refundAmount||""].map(esc).join(",");
+    // A cancelled or never-paid order is not a supply — its tax columns are blanked rather than
+    // filled in, so a stray row can't quietly inflate the output tax you file.
+    const isSupply=countsForGST(o);
+    const hsnTxt=isSupply?Object.values(g.byHsn).map(b=>`${b.hsn} @${b.rate}%: taxable Rs.${b.taxable.toFixed(2)}, tax Rs.${b.tax.toFixed(2)}`).join(" | "):"";
+    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||"",g.state,isSupply?"Yes":"No",isSupply?(g.inter?"IGST (inter-state)":"CGST+SGST (intra-state)"):"",hsnTxt,isSupply?g.taxable:"",isSupply?g.cgst:"",isSupply?g.sgst:"",isSupply?g.igst:"",isSupply?g.total:"",delOn?fmtDate(delOn):"",o.doa?.qty||"",o.doa?.claimReason||"",o.doa?.adminReason||"",o.doa?.refundAmount||"",o.returnReq?.reason||"",o.returnReq?.adminReason||"",o.returnReq?.adminResolution||o.returnReq?.resolution||"",o.returnReq?.refundAmount||""].map(esc).join(",");
   });
   const csv="\uFEFF"+[head.map(esc).join(","),...rows].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -2409,6 +2498,50 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   return list.length;
+}
+
+/* ── GSTR-1 HSN summary (Table 12) ───────────────────────────────────────────
+   One row per HSN + rate over the chosen period, split by intra-state (CGST+SGST) and
+   inter-state (IGST) supplies, which is how the return wants them. Only orders that are
+   genuinely supplies are counted — cancelled and unpaid orders are skipped, and the file
+   states how many were skipped so the number is never a silent omission. */
+function exportGstHsnCSV(orders, from="", to="", settings={}){
+  let list=[...orders];
+  if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
+  if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
+  const supplies=list.filter(countsForGST);
+  const agg={};   // "hsn|rate|inter" -> row
+  supplies.forEach(o=>{
+    const g=orderGST(o,settings);
+    Object.values(g.byHsn).forEach(b=>{
+      const k=b.hsn+"|"+b.rate+"|"+(g.inter?"I":"L");
+      const r=agg[k]||(agg[k]={hsn:b.hsn,rate:b.rate,inter:g.inter,qty:0,taxable:0,cgst:0,sgst:0,igst:0});
+      r.qty+=b.qty; r.taxable+=b.taxable;
+      if(g.inter) r.igst+=b.tax; else { const c=b.tax/2; r.cgst+=c; r.sgst+=b.tax-c; }
+    });
+  });
+  const r2=n=>Math.round(n*100)/100;
+  const rows=Object.values(agg).sort((a,b)=>String(a.hsn).localeCompare(String(b.hsn))||a.rate-b.rate);
+  const head=["HSN","Rate (%)","Supply Type","Total Qty","Taxable Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","Total Tax (Rs.)"];
+  const body=rows.map(r=>[r.hsn,r.rate,r.inter?"Inter-state (IGST)":"Intra-state (CGST+SGST)",r.qty,r2(r.taxable),r2(r.cgst),r2(r.sgst),r2(r.igst),r2(r.cgst+r.sgst+r.igst)].map(csvCell).join(","));
+  const tot=rows.reduce((a,r)=>({taxable:a.taxable+r.taxable,cgst:a.cgst+r.cgst,sgst:a.sgst+r.sgst,igst:a.igst+r.igst,qty:a.qty+r.qty}),{taxable:0,cgst:0,sgst:0,igst:0,qty:0});
+  const totalRow=["TOTAL","","",tot.qty,r2(tot.taxable),r2(tot.cgst),r2(tot.sgst),r2(tot.igst),r2(tot.cgst+tot.sgst+tot.igst)].map(csvCell).join(",");
+  const note=[
+    "",
+    csvCell(`Period: ${from||"start"} to ${to||"today"}`),
+    csvCell(`Orders in period: ${list.length} · counted as supplies: ${supplies.length} · skipped (cancelled or unpaid): ${list.length-supplies.length}`),
+    csvCell("Prices are GST-inclusive; taxable value is back-calculated from the collected amount."),
+    csvCell("HSN 9968 rows are the courier/shipping charge billed with the goods."),
+  ].join("\r\n");
+  const csv="﻿"+[head.map(csvCell).join(","),...body,totalRow,note].join("\r\n");
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  const tag=(from||to)?`${from||"start"}_to_${to||"now"}`:new Date().toISOString().slice(0,10);
+  a.href=url; a.download=`nemo-gst-hsn-${tag}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  return supplies.length;
 }
 
 /* Download a COMPLETE copy of the store as one JSON file (admin only — includes orders).
@@ -2924,12 +3057,14 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
     setBusy(true); setNote("");
     const t={ id:"ts-"+Date.now()+"-"+Math.random().toString(36).slice(2,6),
       uid:userKey(user)||"", name:(user.name||"Customer").slice(0,40), text:body.slice(0,280),
-      rating:Number(rating)||5, createdAt:new Date().toISOString() };
-    try{ await onSubmit(t); setText(""); setNote("🎉 Thanks for sharing!"); }
+      rating:Number(rating)||5, createdAt:new Date().toISOString(), approved:false };
+    try{ await onSubmit(t); setText(""); setNote("🎉 Thanks! We'll publish it once we've had a look."); }
     catch(e){ setNote("⚠ Couldn't reach our server — please check your connection and try again."); }
     setBusy(false);
   };
-  const list=(testimonials||[]).slice(0,12);
+  // Only approved testimonials are shown publicly; the author still sees their own pending one.
+  const list=(testimonials||[]).filter(testimonialApproved).slice(0,12);
+  const minePending=!!(mine&&mine.approved===false);
   if(!list.length && !user) return null;
   return(
     <div style={{marginBottom:26}}>
@@ -2955,7 +3090,9 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
       )}
       {user?(
         mine?(
-          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}!</div>
+          minePending
+            ? <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#9a3412",fontWeight:700}}>⏳ Thanks, {(user.name||"").split(" ")[0]||"friend"}! Your testimonial is awaiting approval — it goes live once we've read it.</div>
+            : <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}!</div>
         ):(
           <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:8}}>Share your experience</div>
@@ -8935,7 +9072,7 @@ function AdminExitConfirm({onStay,onLeave}){
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onApproveTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
@@ -9297,6 +9434,15 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               style={{width:"100%",background:"#107c41",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               ⬇ Download Excel (CSV){(csvFrom||csvTo)?" — selected range":" — all orders"}
             </button>
+            {/* GSTR-1 Table 12 wants an HSN-wise summary, not a list of orders — this is that
+                sheet. Cancelled and unpaid orders are left out; the file says how many. */}
+            <button className="press" onClick={()=>{const n=exportGstHsnCSV(orders,csvFrom,csvTo,settings);showToast(n?`HSN summary exported — ${n} supply order${n!==1?"s":""} counted`:"No countable supplies in that range",n?"success":"error");}}
+              style={{width:"100%",marginTop:8,background:"#fff",color:"#107c41",border:"1.5px solid #107c41",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+              🧾 GST HSN summary (GSTR-1){(csvFrom||csvTo)?" — selected range":" — all orders"}
+            </button>
+            <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.5,marginTop:8}}>
+              The orders sheet now marks each row <b>Counts for GST</b>. Cancelled and unpaid orders are excluded from the tax columns, so the totals you file don't include them.
+            </div>
           </div>
 
           {/* Clean up old orders — frees Firebase space (also removes their payment screenshots) */}
@@ -9864,23 +10010,35 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <div style={{padding:"16px 16px 0"}}>
               <div style={{background:C.card,borderRadius:16,padding:"16px",border:`1px solid ${C.border}`}}>
                 <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:4}}>💬 Testimonials ({testimonials.length})</div>
-                <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Posted by signed-in customers and shown on the home page. Remove any you don't want public.</div>
+                <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Posted by signed-in customers. <b>Nothing goes on the home page until you approve it</b> — pending ones are listed first.</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {testimonials.map(t=>(
-                    <div key={t.id} style={{display:"flex",alignItems:"flex-start",gap:10,background:C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${C.border}`}}>
+                  {[...testimonials].sort((a,b)=>(testimonialApproved(a)?1:0)-(testimonialApproved(b)?1:0)).map(t=>{
+                    const pending=!testimonialApproved(t);
+                    return(
+                    <div key={t.id} style={{display:"flex",alignItems:"flex-start",gap:10,background:pending?"#fff7ed":C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${pending?"#fed7aa":C.border}`}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
                           <span style={{fontSize:12.5,fontWeight:800,color:C.text}}>{t.name||"Customer"}</span>
                           <span style={{fontSize:11,color:"#f59e0b"}}>{"★".repeat(t.rating||5)}</span>
+                          {pending&&<span style={{fontSize:9,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"2px 7px"}}>PENDING</span>}
                         </div>
                         <div style={{fontSize:12,color:C.textSub,lineHeight:1.4}}>{t.text}</div>
                       </div>
-                      <button className="press" onClick={()=>{ if(window.confirm(`Remove ${t.name||"this customer"}'s testimonial?\n\n"${(t.text||"").slice(0,120)}${(t.text||"").length>120?"…":""}"\n\nThis permanently deletes it from the home page and cannot be undone.`)){ onDeleteTestimonial&&onDeleteTestimonial(t.id); } }}
-                        style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
-                        Remove
-                      </button>
+                      <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+                        {pending&&(
+                          <button className="press" onClick={()=>onApproveTestimonial&&onApproveTestimonial(t)}
+                            style={{background:"#dcfce7",color:"#15803d",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                            ✓ Approve
+                          </button>
+                        )}
+                        <button className="press" onClick={()=>{ if(window.confirm(`Remove ${t.name||"this customer"}'s testimonial?\n\n"${(t.text||"").slice(0,120)}${(t.text||"").length>120?"…":""}"\n\nThis permanently deletes it and cannot be undone.`)){ onDeleteTestimonial&&onDeleteTestimonial(t.id); } }}
+                          style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -11442,8 +11600,12 @@ function NemoStore(){
     if(reqs)setRequests(reqs);
     // Settings — seed if missing
     const stObj=await fbGetObj("settings");
+    // The admin-only half comes back null for everyone else — merging it here matters because
+    // this result replaces the in-memory settings. Without it an admin's session would silently
+    // lose its private keys and the next save would blank them.
+    const stPriv=await fbGetObj("settingsPrivate");
     if(stObj===null && FB_OK){ const local=localSettingsData(); await saveSettings(local); setSettings(local); }
-    else if(stObj){ const merged=normalizeSettings({...DEFAULT_SETTINGS,...stObj}); setSettings(merged); try{dbSet("nemo-settings",JSON.stringify(merged));}catch(e){} }
+    else if(stObj){ const merged=normalizeSettings({...DEFAULT_SETTINGS,...stObj,...(stPriv||{})}); setSettings(merged); try{dbSet("nemo-settings",JSON.stringify(merged));}catch(e){} }
     setSettingsReady(true);
     // Showcase + testimonials are loaded via a live listener (see the global content effect).
   };
@@ -11796,6 +11958,11 @@ function NemoStore(){
     const updated=await approveShowcasePhoto(item);
     setShowcase(s=>s.map(x=>x.id===item.id?updated:x));
     showToast("✓ Tank approved — now live for 24h");
+  };
+  const handleApproveTestimonial=async(t)=>{
+    const updated=await approveTestimonial(t);
+    setTestimonials(list=>list.map(x=>x.id===t.id?updated:x));
+    showToast("✓ Testimonial approved — now on the home page");
   };
   const handleTestimonialSubmit=async(t)=>{
     const cloudOk=await addTestimonial(t);
@@ -12421,7 +12588,7 @@ function NemoStore(){
         {page==="about"    &&<AboutPage nav={nav} settings={settings}/>}
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
-        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
+        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onApproveTestimonial={handleApproveTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
       </div>
