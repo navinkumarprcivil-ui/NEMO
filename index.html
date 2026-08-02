@@ -127,6 +127,24 @@
   #installBanner .ib-close{flex:0 0 auto;background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:50%;
     width:28px;height:28px;font-size:18px;line-height:1;cursor:pointer;}
   @media (max-width:380px){ #installBanner .ib-sub{display:none;} }
+  /* ── "Get it on Google Play" badge ──
+     The artwork is Google's own, served from play.google.com so it always matches their current
+     brand guidelines. That PNG ships with its own clear-space padding baked in, which is why the
+     <img> is set taller than the badge you actually see (60px image ≈ 40px visible badge, Google's
+     stated minimum). If the image can't load — offline, or a network that blocks Google — .gp-fb
+     takes over so the slot never shows a broken image. */
+  .gp-badge{display:inline-block;line-height:0;flex:0 0 auto;text-decoration:none;}
+  .gp-badge img{height:60px;width:auto;display:block;}
+  .gp-badge .gp-fb{display:none;align-items:center;gap:9px;background:#000;border:1px solid #a6a6a6;
+    border-radius:8px;padding:8px 13px;margin:8px 0;color:#fff;line-height:1;white-space:nowrap;
+    font-family:'Plus Jakarta Sans',Roboto,system-ui,sans-serif;}
+  .gp-badge .gp-fb.on{display:inline-flex;}
+  .gp-badge .gp-fb i{font-size:8px;letter-spacing:.7px;text-transform:uppercase;font-style:normal;}
+  .gp-badge .gp-fb b{font-size:16px;font-weight:600;letter-spacing:.2px;display:block;margin-top:3px;}
+  /* In the slim top banner, pull the badge's built-in clear space back in so the bar stays compact */
+  #installBanner .gp-badge{display:none;margin:-9px 0;}
+  #installBanner .gp-badge.on{display:block;}
+  #installBanner .gp-badge .gp-fb{margin:0;}
 </style>
 <!-- Warm up connections to the CDNs the app pulls from — shaves latency off the very first load -->
 <link rel="preconnect" href="https://unpkg.com" crossorigin/>
@@ -171,9 +189,21 @@
 <div id="installBanner" role="dialog" aria-label="Install Nemo Aqua Store">
   <img src="assets/favicon-192.png" alt="" class="ib-icon"/>
   <div class="ib-text">
-    <div class="ib-title">Install Nemo Aqua Store</div>
+    <div class="ib-title" id="ib-title">Install Nemo Aqua Store</div>
     <div class="ib-sub" id="ib-sub">Add to your home screen for faster shopping</div>
   </div>
+  <a id="ib-play" class="gp-badge" href="https://play.google.com/store/apps/details?id=in.nemoaquastore.app&amp;referrer=utm_source%3Dwebsite%26utm_medium%3Dinstall_banner" target="_blank" rel="noopener">
+    <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" onerror="this.style.display='none';this.nextElementSibling.className='gp-fb on'"/>
+    <span class="gp-fb">
+      <svg width="19" height="21" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+        <path fill="#00d3ff" d="M47 0C34 6.8 25.3 19.2 25.3 35.3v441.3c0 16.1 8.7 28.5 21.7 35.3l256.6-256L47 0z"/>
+        <path fill="#ffce00" d="M472.2 225.6l-58.9-34.1-65.7 65.5 65.7 65.5 60.1-34.1c18-14.3 18-46.5-1.2-62.8z"/>
+        <path fill="#00e676" d="M104.6 13l280.8 161.2-60.1 60.1L104.6 13z"/>
+        <path fill="#ff3a44" d="M104.6 499l220.7-221.3 60.1 60.1L104.6 499z"/>
+      </svg>
+      <span><i>Get it on</i><b>Google Play</b></span>
+    </span>
+  </a>
   <button id="ib-action" class="ib-action" type="button">Install</button>
   <button id="ib-close" class="ib-close" type="button" aria-label="Dismiss">&times;</button>
 </div>
@@ -277,25 +307,43 @@
 </script>
 <script>
 (function(){
-  // ── PWA install banner: slides down for a few seconds on every visit ──
-  // Skips entirely when the app is already installed (running standalone).
+  // ── Get-the-app banner: slides down for a few seconds on every visit ──
+  // On Android it offers the real Play Store app; everywhere else it offers the PWA install.
+  // Skips entirely when the app is already installed (running standalone / inside the TWA).
   var deferred=null, AUTO_HIDE=4500, el, shownAt=0, hideTimer;
   var standalone=(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;
   function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream; }
+  function isAndroid(){ return /android/i.test(navigator.userAgent); }
+  /* Shared with the React app (app.jsx) so the in-app Play badges follow the same rules:
+     nemoInApp    — this IS the installed app, so don't advertise installing it
+     nemoHasPlay  — Chrome told us the Play app is already on this device
+     Both start false/negative and the probe below flips nemoHasPlay, firing 'nemo-play-app'. */
+  window.nemoInApp=standalone; window.nemoHasPlay=false;
   // Chrome/Android fires this when the app is installable — stash it to trigger the native prompt later.
   window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferred=e; });
   function hide(){ if(!el) return; clearTimeout(hideTimer); el.classList.remove('show'); }
   function show(){
-    if(standalone) return;
+    if(standalone || window.nemoHasPlay) return;
     el=document.getElementById('installBanner'); if(!el) return;
-    var sub=document.getElementById('ib-sub'), action=document.getElementById('ib-action');
-    if(isIOS()){ if(sub) sub.textContent='Tap the Share icon, then "Add to Home Screen"'; if(action) action.style.display='none'; }
+    var title=document.getElementById('ib-title'), sub=document.getElementById('ib-sub');
+    var action=document.getElementById('ib-action'), play=document.getElementById('ib-play');
+    if(isAndroid()){
+      // The Play Store app is the better install on Android — it updates itself and can be
+      // reinstalled from the user's library, which an "add to home screen" shortcut can't.
+      if(title) title.textContent='Get the Nemo Aqua Store app';
+      if(sub) sub.textContent='Now on Google Play — shop and track orders from your phone';
+      el.setAttribute('aria-label','Get the Nemo Aqua Store app on Google Play');
+      if(action) action.style.display='none';
+      if(play) play.classList.add('on');
+    }
+    else if(isIOS()){ if(sub) sub.textContent='Tap the Share icon, then "Add to Home Screen"'; if(action) action.style.display='none'; }
     else if(!deferred){ if(sub) sub.textContent='Use your browser menu → "Install app" / "Add to Home screen"'; }
     requestAnimationFrame(function(){ el.classList.add('show'); shownAt=Date.now(); });
     hideTimer=setTimeout(hide, AUTO_HIDE);
   }
   document.addEventListener('DOMContentLoaded', function(){
     var close=document.getElementById('ib-close'); if(close) close.onclick=hide;
+    var play=document.getElementById('ib-play'); if(play) play.addEventListener('click', hide);
     var action=document.getElementById('ib-action');
     if(action) action.onclick=function(){
       if(deferred){ deferred.prompt(); try{ deferred.userChoice.finally(function(){ deferred=null; hide(); }); }catch(e){ hide(); } }
@@ -303,10 +351,23 @@
     };
   });
   window.addEventListener('appinstalled', hide);
+  /* Ask Chrome whether the Play app declared in the manifest is already installed on this device.
+     Needs manifest related_applications + a matching /.well-known/assetlinks.json (both are in
+     place). Unsupported everywhere else, so treat any failure as "not installed" and carry on. */
+  function probe(){
+    try{
+      if(!navigator.getInstalledRelatedApps) return Promise.resolve();
+      var asked=navigator.getInstalledRelatedApps().then(function(apps){
+        if(apps && apps.length){ window.nemoHasPlay=true; document.dispatchEvent(new CustomEvent('nemo-play-app')); }
+      }).catch(function(){});
+      // Never let the banner wait on this — if the probe stalls, show the offer anyway.
+      return Promise.race([asked, new Promise(function(r){ setTimeout(r, 1200); })]);
+    }catch(e){ return Promise.resolve(); }
+  }
   // Reveal once the splash has begun to fade (it covers the screen while React mounts).
   var tries=0, iv=setInterval(function(){
     var s=document.getElementById('splash');
-    if(!s || s.classList.contains('hide') || tries++>50){ clearInterval(iv); setTimeout(show, 350); }
+    if(!s || s.classList.contains('hide') || tries++>50){ clearInterval(iv); setTimeout(function(){ Promise.resolve(probe()).then(show); }, 350); }
   }, 150);
 })();
 </script>
