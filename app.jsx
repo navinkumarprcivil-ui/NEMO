@@ -2542,13 +2542,19 @@ function csvCell(v){
   if(/^[=+\-@\t\r]/.test(s)) s="'"+s;
   return '"'+s.replace(/"/g,'""')+'"';
 }
+/* Machine-readable instant for anything that consumes these files downstream. The human date
+   columns are formatted for the shop owner's eye — "2 Aug, 05:29 am" — and carry NO YEAR, which
+   is fine on screen and useless for comparing across years. So every timestamp also ships in full
+   ISO-8601 UTC. These columns are APPENDED at the end of the row, never inserted, so a reader
+   that indexes by position keeps working. */
+function isoStamp(v){ if(!v) return ""; const d=new Date(v); return isNaN(d.getTime())?"":d.toISOString(); }
 function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={}){
   const esc=csvCell;
   let list=[...orders];
   if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
-  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID","State","Counts for GST","Supply Type","HSN Breakup","Taxable (Rs.)","No-GST Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","GST Total (Rs.)","Delivered On","DOA Qty","DOA Claim (customer)","DOA Approval Reason","DOA Refund (Rs.)","Return Reason (customer)","Return Approval Reason","Return Resolution","Return/Refund (Rs.)"];
+  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID","State","Counts for GST","Supply Type","HSN Breakup","Taxable (Rs.)","No-GST Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","GST Total (Rs.)","Delivered On","DOA Qty","DOA Claim (customer)","DOA Approval Reason","DOA Refund (Rs.)","Return Reason (customer)","Return Approval Reason","Return Resolution","Return/Refund (Rs.)","Placed At (ISO)","Paid At (ISO)","Delivered On (ISO)"];
   const pph=Number(settings?.loyaltyPointsPerHundred||10);
   const rupeePerPoint=Number(settings?.loyaltyRedeemValue||1);
   const rows=list.map(o=>{
@@ -2566,7 +2572,7 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     // filled in, so a stray row can't quietly inflate the output tax you file.
     const isSupply=countsForGST(o);
     const hsnTxt=isSupply?Object.values(g.byHsn).map(b=>`${b.hsn} @${b.rate}%: taxable Rs.${b.taxable.toFixed(2)}, tax Rs.${b.tax.toFixed(2)}`).join(" | "):"";
-    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||"",g.state,isSupply?"Yes":"No",isSupply?(g.inter?"IGST (inter-state)":"CGST+SGST (intra-state)"):"",hsnTxt,isSupply?g.taxable:"",isSupply?(g.exempt||0):"",isSupply?g.cgst:"",isSupply?g.sgst:"",isSupply?g.igst:"",isSupply?g.total:"",delOn?fmtDate(delOn):"",o.doa?.qty||"",o.doa?.claimReason||"",o.doa?.adminReason||"",o.doa?.refundAmount||"",o.returnReq?.reason||"",o.returnReq?.adminReason||"",o.returnReq?.adminResolution||o.returnReq?.resolution||"",o.returnReq?.refundAmount||""].map(esc).join(",");
+    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||"",g.state,isSupply?"Yes":"No",isSupply?(g.inter?"IGST (inter-state)":"CGST+SGST (intra-state)"):"",hsnTxt,isSupply?g.taxable:"",isSupply?(g.exempt||0):"",isSupply?g.cgst:"",isSupply?g.sgst:"",isSupply?g.igst:"",isSupply?g.total:"",delOn?fmtDate(delOn):"",o.doa?.qty||"",o.doa?.claimReason||"",o.doa?.adminReason||"",o.doa?.refundAmount||"",o.returnReq?.reason||"",o.returnReq?.adminReason||"",o.returnReq?.adminResolution||o.returnReq?.resolution||"",o.returnReq?.refundAmount||"",isoStamp(o.placedAt),isoStamp(o.paidAt),isoStamp(delOn)].map(esc).join(",");
   });
   const csv="\uFEFF"+[head.map(esc).join(","),...rows].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -2624,11 +2630,100 @@ function exportGstHsnCSV(orders, from="", to="", settings={}){
   return supplies.length;
 }
 
+/* ── Line items: one row per product sold ────────────────────────────────────
+   The orders sheet packs every line of an order into a single "Items" cell — readable, but you
+   have to parse a string to do anything per-SKU with it. This is the same data unpacked: one row
+   per item, plus the order's shipping as its own row, each carrying its share of the discount and
+   its own tax straight off the shared engine. Summing "Line Net" across an order reproduces that
+   order's invoice value, so the two sheets always reconcile. */
+function exportOrderItemsCSV(orders, from="", to="", settings={}, products=[]){
+  let list=[...orders];
+  if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
+  if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
+  list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
+  const catOf={}; (products||[]).forEach(p=>{ if(p&&p.id) catOf[p.id]=p.category||""; });
+  const head=["Order ID","Placed At (ISO)","Date","Status","Payment Status","Counts for GST","Customer ID","Customer","State","City","Pincode","Zone","Line No","Line Type","Product ID","Product Name","Variant","Category","Qty","Unit Price (Rs.)","Line Gross (Rs.)","Line Discount (Rs.)","Line Net (Rs.)","GST Claimed","HSN","Rate (%)","Taxable (Rs.)","No-GST Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","Line Tax (Rs.)"];
+  const rows=[];
+  list.forEach(o=>{
+    const t=orderTaxLines(o,settings);
+    // Same rule as the orders sheet: a cancelled or never-paid order is not a supply, so its tax
+    // columns stay empty rather than being filled with figures that would inflate a return.
+    const isSupply=countsForGST(o);
+    const items=o.items||[];
+    const state=GST_STATES[t.pos.code]||(o.address&&o.address.state)||"";
+    // orderTaxLines builds its goods lines from o.items in order and appends shipping last, so
+    // index i lines up with items[i] for every non-shipping line.
+    t.lines.forEach((l,i)=>{
+      const src=l.isShipping?null:items[i];
+      rows.push([
+        o.orderNo||orderId(o.id),isoStamp(o.placedAt),fmtDate(o.placedAt),o.status,o.paymentStatus||"",
+        isSupply?"Yes":"No",o.userUid||"",o.address?.name||"",state,o.address?.city||"",o.address?.pincode||"",o.shippingZoneLabel||"",
+        i+1,l.isShipping?"Shipping":"Item",
+        src?(src.id||""):"",l.name,l.variantLabel||"",src?(catOf[src.id]||""):"",
+        l.qty,src?(Number(src.price)||0):"",l.gross,l.discount,l.net,
+        l.taxed?"Yes":"No",l.hsn||"",l.taxed?l.rate:"",
+        isSupply?l.taxable:"",isSupply?l.exempt:"",isSupply?l.cgst:"",isSupply?l.sgst:"",isSupply?l.igst:"",isSupply?l.tax:"",
+      ].map(csvCell).join(","));
+    });
+  });
+  const csv="﻿"+[head.map(csvCell).join(","),...rows].join("\r\n");
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  const tag=(from||to)?`${from||"start"}_to_${to||"now"}`:new Date().toISOString().slice(0,10);
+  a.href=url; a.download=`nemo-order-items-${tag}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  return rows.length;
+}
+
+/* ── Inventory snapshot ───────────────────────────────────────────────────────
+   One row per sellable unit: a plain product is one row, a product with options is one row per
+   option, because price and stock genuinely live at the option level. Stock is a point-in-time
+   reading — the store keeps no history of it — so to chart stock over time, export on a schedule
+   and keep the files. "Snapshot At (ISO)" is identical on every row of one export, which is what
+   makes each file a clean snapshot to key on. */
+function exportProductsCSV(products, settings={}){
+  const snap=new Date().toISOString();
+  const head=["Snapshot At (ISO)","Product ID","Name","Category","Variant","Variant ID","Base Price (Rs.)","Discount %","Effective Price (Rs.)","Offer Ends (ISO)","Stock","Sold Out","Coming Soon","Product Stock Total","Tag","Rating","Reviews","GST Claimed","HSN","GST Rate (%)","Packing Weight (kg)"];
+  const rows=[];
+  (products||[]).forEach(p=>{
+    if(!p) return;
+    const disc=activeDiscount(p);
+    const vs=productVariants(p);
+    // Shared by every row this product produces
+    const lead=[snap,p.id||"",p.name||"",p.category||""];
+    const tail=[p.comingSoon?"Yes":"",productStockTotal(p),p.tag||"",p.rating??"",p.reviews??"",p.gstApplicable===true?"Yes":"No",p.hsn||"",Number(p.gstRate)||0];
+    if(vs&&vs.length){
+      vs.forEach(v=>rows.push([...lead,v.label||"",v.id||"",variantBasePrice(p,v),disc,variantEffPrice(p,v),isoStamp(p.offerEndsAt),
+        variantStockOf(p,v),variantSoldOut(p,v)?"Yes":"",...tail,(v.packagingWeight??p.packagingWeight??"")].map(csvCell).join(",")));
+    } else {
+      const st=p.stockCount??DEFAULT_STOCK;
+      rows.push([...lead,"","",p.price||0,disc,effectivePrice(p,disc),isoStamp(p.offerEndsAt),
+        st,st<=0?"Yes":"",...tail,(p.packagingWeight??"")].map(csvCell).join(","));
+    }
+  });
+  const csv="﻿"+[head.map(csvCell).join(","),...rows].join("\r\n");
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download=`nemo-inventory-${snap.slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  return rows.length;
+}
+
 /* Download a COMPLETE copy of the store as one JSON file (admin only — includes orders).
    Mirrors the Firebase structure so it can be re-imported via Firebase Console → Import JSON. */
 async function downloadFullBackup(){
   const out={};
-  const nodes=["products","guides","settings","showcase","reviews","media","orders","requests"];
+  /* Every top-level node, not just the catalogue ones. The old list covered 8 and the database
+     has 19, so a "full backup" silently left out the behavioural side — abandoned carts, wallet
+     and loyalty ledgers, referrals, wishlists, restock interest, visit analytics. Anything the
+     signed-in admin can't read is skipped by the try/catch below rather than failing the export. */
+  const nodes=["products","guides","settings","showcase","reviews","media","orders","requests",
+    "abandonedCarts","analytics","experienceReviews","favorites","interest","loyalty","orderSeq",
+    "promoUsage","referrals","restock","testimonials","userrefs"];
   if(FB_OK){
     for(const n of nodes){
       // Generous bound — a full export is legitimately big, but it still must not hang forever
@@ -9623,8 +9718,20 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               style={{width:"100%",marginTop:8,background:"#fff",color:"#107c41",border:"1.5px solid #107c41",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               🧾 GST HSN summary (GSTR-1){(csvFrom||csvTo)?" — selected range":" — all orders"}
             </button>
+            {/* One row per product sold — what any reporting tool actually wants, instead of
+                having to unpack the orders sheet's packed "Items" cell. */}
+            <button className="press" onClick={()=>{const n=exportOrderItemsCSV(orders,csvFrom,csvTo,settings,products);showToast(n?`Exported ${n} line item${n!==1?"s":""}`:"No line items in that range",n?"success":"error");}}
+              style={{width:"100%",marginTop:8,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+              📦 Line items — one row per product{(csvFrom||csvTo)?" — selected range":" — all orders"}
+            </button>
+            {/* Stock has no history in the store, so this is a dated snapshot — export it on a
+                schedule and keep the files if you want to chart stock over time. */}
+            <button className="press" onClick={()=>{const n=exportProductsCSV(products,settings);showToast(n?`Inventory snapshot — ${n} row${n!==1?"s":""}`:"No products to export",n?"success":"error");}}
+              style={{width:"100%",marginTop:8,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+              🗃 Inventory snapshot — stock &amp; prices now
+            </button>
             <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.5,marginTop:8}}>
-              The orders sheet now marks each row <b>Counts for GST</b>. Cancelled and unpaid orders are excluded from the tax columns, so the totals you file don't include them.
+              The orders sheet marks each row <b>Counts for GST</b>. Cancelled and unpaid orders are excluded from the tax columns, so the totals you file don't include them. Every sheet also carries full <b>ISO date</b> columns for reporting tools — the short dates on screen have no year.
             </div>
           </div>
 
