@@ -145,6 +145,9 @@
   #installBanner .gp-badge{display:none;margin:-9px 0;}
   #installBanner .gp-badge.on{display:block;}
   #installBanner .gp-badge .gp-fb{margin:0;}
+  /* Desktop carries the Install button and the badge together (.ib-dual). Drop the badge when the
+     window is too narrow for both — Android shows the badge on its own, so it's never affected. */
+  @media (max-width:700px){ #installBanner.ib-dual .gp-badge.on{display:none;} }
 </style>
 <!-- Warm up connections to the CDNs the app pulls from — shaves latency off the very first load -->
 <link rel="preconnect" href="https://unpkg.com" crossorigin/>
@@ -330,14 +333,29 @@
     if(isAndroid()){
       // The Play Store app is the better install on Android — it updates itself and can be
       // reinstalled from the user's library, which an "add to home screen" shortcut can't.
-      if(title) title.textContent='Get the Nemo Aqua Store app';
-      if(sub) sub.textContent='Now on Google Play — shop and track orders from your phone';
+      // Copy stays short: the badge eats ~155px, so anything longer wraps to five lines on a phone.
+      if(title) title.textContent='Get the Nemo app';
+      if(sub) sub.textContent='Now on Google Play';
       el.setAttribute('aria-label','Get the Nemo Aqua Store app on Google Play');
       if(action) action.style.display='none';
       if(play) play.classList.add('on');
     }
-    else if(isIOS()){ if(sub) sub.textContent='Tap the Share icon, then "Add to Home Screen"'; if(action) action.style.display='none'; }
-    else if(!deferred){ if(sub) sub.textContent='Use your browser menu → "Install app" / "Add to Home screen"'; }
+    else if(isIOS()){
+      // No badge here — an Android app is a dead end on an iPhone.
+      if(sub) sub.textContent='Tap the Share icon, then "Add to Home Screen"';
+      if(action) action.style.display='none';
+    }
+    else {
+      // Desktop: offer both. Installing the site as an app is the one that works on this machine,
+      // and the badge lets them send the Android app to their phone while they're thinking about it.
+      if(title) title.textContent='Get the Nemo Aqua Store app';
+      if(sub) sub.textContent = deferred
+        ? 'Install it on this computer — or get the Android app on Google Play'
+        : 'Use your browser menu → "Install app" — or get the Android app on Google Play';
+      el.setAttribute('aria-label','Get the Nemo Aqua Store app');
+      el.classList.add('ib-dual');
+      if(play) play.classList.add('on');
+    }
     requestAnimationFrame(function(){ el.classList.add('show'); shownAt=Date.now(); });
     hideTimer=setTimeout(hide, AUTO_HIDE);
   }
