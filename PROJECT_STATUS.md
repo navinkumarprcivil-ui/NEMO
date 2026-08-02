@@ -48,7 +48,7 @@ Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built 
 
 **"Get it on Google Play" badges on the website — DONE ✅**
 Now that the app is live, the site points customers at it in three places, all sharing one `.gp-badge` style block (defined in `index.html` so the top banner can use it before React mounts):
-- **Top install banner** (`index.html`) — on **Android** it now says "Get the Nemo Aqua Store app" and shows the Play badge instead of the PWA "Install" button; desktop and iOS keep the old add-to-home-screen wording untouched.
+- **Top install banner** (`index.html`) — three-way split by platform. **Android**: badge only, replacing the PWA "Install" button (copy is deliberately terse — "Get the Nemo app" / "Now on Google Play" — because the badge eats ~155px and longer text wrapped to five lines on a phone). **Desktop**: badge *and* Install button side by side (`.ib-dual`), since installing the site is the offer that works on that machine; the badge drops out under 700px so the two never crowd each other. **iOS**: no badge — an Android app is a dead end on an iPhone — so it keeps the add-to-home-screen hint.
 - **Desktop home footer** — a "Get the App" column (`PlayAppBlock`, `app.jsx`), sitting between Follow Us and Secure Payment.
 - **Mobile side menu** — same block at the bottom of the drawer, because `.home-footer` is desktop-only.
 
