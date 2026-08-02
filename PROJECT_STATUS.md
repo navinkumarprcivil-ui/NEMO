@@ -69,6 +69,25 @@ Details worth knowing:
 - Optional "Report content" button → would raise rating Teen→Everyone (fixes Germany USK16).
 - Birthday field (Personal info→Other info, NOT Calendar) for b'day offers — future.
 
+## Exports — the contract with the external analytics app (Aug 2026)
+A separate analytics app is being built on these files, so **treat the columns as a published API: append, never insert or rename.** Admin → Export now offers four downloads, all UTF-8-with-BOM, CRLF, every cell quoted, and all range filters applied to `placedAt` (when the order was *placed*, not paid or delivered).
+
+| File | Function | Shape |
+|---|---|---|
+| `nemo-orders-<range>.csv` | `exportOrdersCSV` | **66 cols**, one row per order, newest first |
+| `nemo-order-items-<range>.csv` | `exportOrderItemsCSV` | **32 cols**, one row per line item + one per order's shipping |
+| `nemo-inventory-<date>.csv` | `exportProductsCSV` | **21 cols**, one row per sellable unit (product, or product × option) |
+| `nemo-gst-hsn-<range>.csv` | `exportGstHsnCSV` | **11 cols**, one row per HSN × rate × supply-type, then `TOTAL`, then prose notes |
+
+- **ISO date columns.** `fmtDate` renders "2 Aug, 05:29 am" — **no year** — which is right on screen and unusable for reporting. Every export therefore also carries full ISO-8601 UTC via `isoStamp()`. On the orders sheet these are the last three columns (64–66: Placed/Paid/Delivered), *appended* so a positional reader doesn't break. Prefer them over the display columns for anything computational.
+- **Line items exist so nobody has to parse the packed `Items` cell.** Each row carries its pro-rata share of the order discount and its own tax, from the same `orderTaxLines` engine as the invoice — so **`sum(Line Net)` over an order equals that order's invoice value** (verified). Shipping is its own row, riding the principal supply's rate.
+- **Tax columns are blank, not zero, when `Counts for GST = No`** (cancelled or never paid). Blank means *excluded from the return*, and a consumer that coerces it to 0 will still be right on totals but wrong on counts.
+- **`No-GST Value` is outside GST entirely** (live fish), not zero-rated — report as exempt/non-GST.
+- **Inventory is a snapshot, not a history.** The store keeps no stock history, so `Snapshot At (ISO)` is identical across one file and charting stock over time means exporting on a schedule and keeping the files.
+- **Formula guard**: any cell starting with `= + - @ tab CR` gets a leading `'` (spreadsheets execute those). Strip it before parsing numbers — a refund can arrive as `'-50`.
+- **Full backup now covers all 20 nodes**, not the original 8. It previously omitted the whole behavioural side — `abandonedCarts, analytics, experienceReviews, favorites, interest, loyalty, orderSeq, promoUsage, referrals, restock, testimonials, userrefs`. Nodes the admin can't read are skipped, not fatal.
+- **Known gap:** GST credit notes for sales returns are generated as documents (`generateCreditNoteHTML`) but are **not** in any CSV. GSTR-1 credit notes remain manual; the orders sheet's return columns (60–63) flag which orders need one. COGS is also absent store-wide, so true margin can't be computed from these files.
+
 ## Returns & GST credit notes
 - **Two return addresses** in Settings → About & Policies (Address 1 + Address 2, each with a short name). Admin **picks which address** when handling a return (Admin → order → Return panel); the choice is snapshotted onto the request and shown to the customer ("Courier it back to — <label>").
 - **GST Credit Note** for sales returns: Return panel has a **🧾 GST Credit Note** button (shown once a GSTIN is set). It generates a proper Section-34 credit note for the **returned items only** (no shipping/discounts), reversing **CGST+SGST (TN) or IGST (other states)** against the original tax invoice — this is the document to report in GSTR-1 for the return. `generateCreditNoteHTML()` reuses the invoice engine via `generateInvoiceHTML(order,settings,{creditNote:true})`.
