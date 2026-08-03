@@ -123,6 +123,9 @@ function productVariants(p){
   return p.category==="Live Fish" ? DEFAULT_FISH_VARIANTS : null;
 }
 function hasVariants(p){ const v=productVariants(p); return !!(v && v.length); }
+/* More than one option to pick between — the case where a single price can't speak for the
+   product, so listings quote it "Starts from" its cheapest option instead. */
+function hasMultiOptions(p){ const v=productVariants(p); return !!(v && v.length>1); }
 
 /* ── Per-option stock ──────────────────────────────────────────────────────────
    Each option keeps its own count in `variantStock` (a map keyed by option id, NOT an array
@@ -155,7 +158,7 @@ function variantHeading(p){
   if(t) return t;
   return p.category==="Live Fish" ? "Choose Type" : "Choose an option";
 }
-/* Cheapest price across a product's options — the catalog grid shows "from ₹X" so a shopper
+/* Cheapest price across a product's options — the catalog grid shows "Starts from ₹X" so a shopper
    isn't quoted the base price for a product whose real options all cost more. */
 function variantFromPrice(p){
   const vs=productVariants(p);
@@ -4581,10 +4584,9 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   const oos = stk<=0;
   const soon = !!p.comingSoon;
   const onSale = activeDiscount(p) > 0;
-  // A product with options is priced "from" its cheapest one, and its Add button opens the
-  // product page to choose — adding blind from the grid would pick a size for the customer.
-  const opts = productVariants(p);
-  const multi = !!(opts && opts.length>1);
+  // A product with options is priced "Starts from" its cheapest one, and its Add button opens
+  // the product page to choose — adding blind from the grid would pick a size for the customer.
+  const multi = hasMultiOptions(p);
   const eff = multi ? variantFromPrice(p) : effectivePrice(p);
   const remaining = Math.max(0, stk - inCart);
   // Live cursor-reactive tilt + spotlight (desktop fine-pointer only; honors reduced-motion)
@@ -4643,7 +4645,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           </div>
         ) : (<>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-          {multi&&<span style={{fontSize:10,color:C.textSub,fontWeight:700}}>from</span>}
+          {multi&&<span style={{fontSize:10,color:C.textSub,fontWeight:700,whiteSpace:"nowrap"}}>Starts from</span>}
           <div style={{fontFamily:PRICE_FONT,fontSize:16,fontWeight:800,color:C.primary}}>₹{eff}</div>
           {onSale&&!multi&&<div style={{fontSize:11,color:C.textSub,textDecoration:"line-through"}}>₹{p.price}</div>}
         </div>
@@ -5218,7 +5220,11 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                       <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
                       <div style={{fontSize:11,color:C.textSub}}>{p.category}</div>
                     </div>
-                    <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary,flexShrink:0}}>₹{effectivePrice(p)}</div>
+                    {/* Option products are quoted from their cheapest option, same as the cards below */}
+                    <div style={{flexShrink:0,textAlign:"right"}}>
+                      {hasMultiOptions(p)&&<div style={{fontSize:9.5,color:C.textSub,fontWeight:700,lineHeight:1.1}}>Starts from</div>}
+                      <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{hasMultiOptions(p)?variantFromPrice(p):effectivePrice(p)}</div>
+                    </div>
                   </button>
                 );
               })}
@@ -11820,6 +11826,43 @@ function NemoStore(){
   const saveSettingsHandler=async(s)=>{ setSettings(s); RUNTIME_CO_ADMIN=(s&&s.coAdminUid||"").trim(); await saveSettings(s); showToast("Settings saved"); };
   // Keep the runtime co-admin UID in sync so an entered helper account also unlocks admin (cloud writes still gated by Firebase rules).
   useEffect(()=>{ RUNTIME_CO_ADMIN=((settings&&settings.coAdminUid)||"").trim(); },[settings.coAdminUid]);
+
+  /* ── Scrolling must never edit a value ────────────────────────────────────────
+     A focused number field swallows the wheel and steps itself, so a shopper who
+     scrolls the page while the cursor sits over a quantity box silently buys a
+     different amount — and an admin scrolling down a product form quietly rewrites
+     a price, a stock count or a GST rate. One document-level guard covers every
+     such field in the app: drop focus and the wheel goes back to scrolling the
+     page, leaving the entered value exactly as typed. A slider can't be fixed by
+     blurring (some browsers step it on hover alone), so its wheel is swallowed and
+     the scroll it was meant to do is passed on to the panel behind it. */
+  useEffect(()=>{
+    const scroller=el=>{
+      for(let n=el&&el.parentElement;n;n=n.parentElement){
+        const ov=getComputedStyle(n).overflowY;
+        if((ov==="auto"||ov==="scroll")&&n.scrollHeight>n.clientHeight+1) return n;
+      }
+      return null;
+    };
+    const guard=e=>{
+      const el=e.target;
+      if(!el||!el.tagName) return;
+      const tag=el.tagName.toUpperCase();
+      const type=(el.type||"").toLowerCase();
+      if(tag==="INPUT"&&type==="range"){
+        e.preventDefault();
+        const box=scroller(el);
+        const lines=e.deltaMode===1, pages=e.deltaMode===2;
+        const dy=e.deltaY*(lines?16:pages?((box?box.clientHeight:window.innerHeight)):1);
+        if(box) box.scrollTop+=dy; else window.scrollBy(0,dy);
+        return;
+      }
+      const stepsOnWheel = (tag==="INPUT"&&type==="number") || tag==="SELECT";
+      if(stepsOnWheel&&document.activeElement===el) el.blur();
+    };
+    document.addEventListener("wheel",guard,{passive:false,capture:true});
+    return ()=>document.removeEventListener("wheel",guard,{capture:true});
+  },[]);
 
   const showToast=(msg,type="success")=>setToast({msg,type});
 
