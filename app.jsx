@@ -7637,52 +7637,48 @@ function WhyNemoPopup({open,onClose,nav}){
   return(
     <Portal>
     <div onClick={onClose} role="dialog" aria-modal="true" aria-label="Why shop at Nemo Aqua Store"
-      style={{position:"fixed",inset:0,background:"rgba(6,40,43,.58)",backdropFilter:"blur(3px)",zIndex:9200,display:"flex",alignItems:"center",justifyContent:"center",padding:"22px 14px",animation:"fadeIn .2s ease"}}>
+      style={{position:"fixed",inset:0,background:"rgba(6,40,43,.58)",backdropFilter:"blur(3px)",zIndex:9200,display:"flex",alignItems:"center",justifyContent:"center",padding:"14px 12px",animation:"fadeIn .2s ease"}}>
       <div onClick={e=>e.stopPropagation()} className="slide-up"
-        style={{width:"100%",maxWidth:400,maxHeight:"88vh",background:C.card,borderRadius:22,overflow:"hidden",boxShadow:"0 26px 64px rgba(0,0,0,.34)",display:"flex",flexDirection:"column"}}>
-        <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"18px 20px 16px",color:"#fff",flexShrink:0,position:"relative",overflow:"hidden"}}>
+        style={{width:"100%",maxWidth:430,maxHeight:"92vh",background:C.card,borderRadius:22,overflow:"hidden",boxShadow:"0 26px 64px rgba(0,0,0,.34)",display:"flex",flexDirection:"column"}}>
+        <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"14px 18px 12px",color:"#fff",flexShrink:0,position:"relative",overflow:"hidden"}}>
           <div style={{position:"absolute",top:-34,right:-24,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.09)"}}/>
           <button onClick={onClose} aria-label="Close"
             style={{position:"absolute",top:14,right:14,background:"rgba(255,255,255,.2)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:15,cursor:"pointer",lineHeight:1,zIndex:2}}>✕</button>
           <div style={{fontSize:11,fontWeight:800,letterSpacing:1,opacity:.85,textTransform:"uppercase"}}>Welcome to {STORE_NAME} 🐠</div>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:21,fontWeight:800,marginTop:5,lineHeight:1.25,paddingRight:34}}>Why we're not like the others</div>
-          <div style={{fontSize:12,opacity:.9,marginTop:5,lineHeight:1.5}}>Here's exactly what you get with us — in 30 seconds.</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,marginTop:4,lineHeight:1.25,paddingRight:34}}>Why we're not like the others</div>
         </div>
-        <div style={{overflowY:"auto",padding:"14px 14px 4px",background:C.bg}}>
-          <div style={{display:"flex",gap:8,padding:"0 4px 8px"}}>
-            <div style={{flex:1,fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.7}}>❌ Elsewhere</div>
-            <div style={{flex:1,fontSize:10,fontWeight:800,color:"#0d9488",textTransform:"uppercase",letterSpacing:.7}}>✅ At {STORE_NAME}</div>
+        <div style={{overflowY:"auto",padding:"9px 10px 2px",background:C.bg}}>
+          {/* The two column headings carry the "Others vs At Nemo" framing once, at the top — the
+              rows below stay label-free so all 8 points fit on one screen without scrolling. */}
+          <div style={{display:"flex",gap:6,padding:"0 3px 6px",position:"sticky",top:0,background:C.bg,zIndex:1}}>
+            <div style={{width:22,flexShrink:0}}/>
+            <div style={{flex:1,fontSize:9.5,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.6}}>❌ Elsewhere</div>
+            <div style={{flex:1,fontSize:9.5,fontWeight:800,color:"#0d9488",textTransform:"uppercase",letterSpacing:.6}}>✅ At {STORE_NAME}</div>
           </div>
           {/* The "Us" side is the point of the whole popup, so it's the one that's meant to pop:
-              green, ticked, slightly raised, with the "Others" side deliberately washed out. */}
+              green, slightly raised, with the "Others" side deliberately washed out. */}
           {WHY_US_ROWS.map(r=>(
-            <div key={r.title} style={{background:C.card,borderRadius:16,padding:"12px 13px",marginBottom:9,border:`1px solid ${C.border}`}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:9}}>
-                <span style={{fontSize:16,lineHeight:1}}>{r.icon}</span>
-                <span style={{fontSize:13,fontWeight:800,color:C.text}}>{r.title}</span>
+            <div key={r.title} style={{display:"flex",gap:6,alignItems:"stretch",marginBottom:5}}>
+              <div title={r.title} style={{width:22,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,lineHeight:1}}>{r.icon}</div>
+              <div style={{flex:1,background:"#f8fafc",borderRadius:10,padding:"6px 8px",border:`1px solid ${C.border}`,opacity:.85}}>
+                <div style={{fontSize:9.5,fontWeight:800,color:"#94a3b8",marginBottom:2,lineHeight:1.3}}>{r.title}</div>
+                <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.35}}>{r.them}</div>
               </div>
-              <div style={{display:"flex",gap:8,alignItems:"stretch"}}>
-                <div style={{flex:1,background:"#f8fafc",borderRadius:12,padding:"9px 10px",border:`1px solid ${C.border}`,opacity:.85}}>
-                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,fontWeight:800,color:"#94a3b8",marginBottom:4}}><span style={{fontSize:11,lineHeight:1}}>❌</span>Others</div>
-                  <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.45}}>{r.them}</div>
-                </div>
-                <div style={{flex:1,background:"linear-gradient(160deg,#ecfdf5,#f0fdfa)",borderRadius:12,padding:"9px 10px",border:"1.5px solid #5eead4",boxShadow:"0 4px 14px rgba(13,148,136,.14)"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,fontWeight:800,color:"#0d9488",marginBottom:4}}><span style={{fontSize:11,lineHeight:1}}>✅</span>{STORE_NAME}</div>
-                  <div style={{display:"flex",gap:5,alignItems:"flex-start"}}>
-                    <span style={{fontSize:11,lineHeight:1.45,color:"#0d9488",flexShrink:0}}>✔</span>
-                    <span style={{fontSize:11.5,color:"#134e4a",lineHeight:1.45,fontWeight:600}} dangerouslySetInnerHTML={html(r.us)}/>
-                  </div>
+              <div style={{flex:1,background:"linear-gradient(160deg,#ecfdf5,#f0fdfa)",borderRadius:10,padding:"6px 8px",border:"1.5px solid #5eead4",boxShadow:"0 3px 10px rgba(13,148,136,.12)"}}>
+                <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
+                  <span style={{fontSize:10,lineHeight:1.35,color:"#0d9488",flexShrink:0}}>✔</span>
+                  <span style={{fontSize:10.5,color:"#134e4a",lineHeight:1.35,fontWeight:600}} dangerouslySetInnerHTML={html(r.us)}/>
                 </div>
               </div>
             </div>
           ))}
         </div>
-        <div style={{flexShrink:0,padding:"12px 16px calc(14px + env(safe-area-inset-bottom))",background:C.card,borderTop:`1px solid ${C.border}`}}>
+        <div style={{flexShrink:0,padding:"10px 14px calc(11px + env(safe-area-inset-bottom))",background:C.card,borderTop:`1px solid ${C.border}`}}>
           <button className="cta press" onClick={onClose}
-            style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"14px 16px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+            style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"12px 16px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
             Start shopping →
           </button>
-          <div style={{textAlign:"center",marginTop:8}}>
+          <div style={{textAlign:"center",marginTop:6}}>
             <button className="press" onClick={()=>{onClose&&onClose();nav&&nav("policy-terms");}}
               style={{background:"none",border:"none",fontSize:9.5,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer",padding:2}}>
               Subject to our terms &amp; conditions
