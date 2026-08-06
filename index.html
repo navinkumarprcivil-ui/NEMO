@@ -51,6 +51,19 @@
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=3"/>
 <!-- Preload logo so it appears instantly when React mounts -->
 <link rel="preload" as="image" href="assets/nemo-logo.png" fetchpriority="high"/>
+<script>
+  /* Ordered fallbacks for the splash logo; each onerror advances one step. */
+  (function(){
+    var step=0;
+    var tries=["assets/nemo-logo.png?retry=1","assets/favicon-192.png"];
+    window.__nemoLogoFallback=function(img){
+      if(step<tries.length){ img.src=tries[step++]; return; }
+      img.style.display="none";
+      var fb=img.parentNode&&img.parentNode.querySelector(".emoji-fallback");
+      if(fb) fb.style.display="block";
+    };
+  })();
+</script>
 <!-- Preload the precompiled bundle so it's ready the moment the page is interactive -->
 <link rel="preload" href="app.js" as="fetch" crossorigin/>
 <!-- ── Google Analytics 4 (traffic + acquisition) ──────────────────────────────
@@ -181,7 +194,13 @@
 <div id="splash">
   <div class="bub b1"></div><div class="bub b2"></div><div class="bub b3"></div><div class="bub b4"></div><div class="bub b5"></div><div class="bub b6"></div>
   <div class="logo">
-    <img src="assets/nemo-logo.png" alt="Nemo Aqua Store" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"/>
+    <!-- The logo failing once used to drop straight to a fish emoji, which is what a shopper
+         then saw for the whole cinematic hold. A single failure is nearly always a stale or
+         half-written cache entry rather than a missing file, so it retries past the cache first,
+         then tries the app icon (same brand mark, cached separately), and only gives up to the
+         emoji if all three are gone. -->
+    <img src="assets/nemo-logo.png" alt="Nemo Aqua Store" id="splash-logo"
+         onerror="window.__nemoLogoFallback&&window.__nemoLogoFallback(this)"/>
     <span class="emoji-fallback">🐠</span>
   </div>
   <div class="sub">Bring Colour to Your Life</div>

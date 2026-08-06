@@ -1,5 +1,5 @@
 /* Nemo Aqua Store — service worker (offline fallback + always-fresh code) */
-const CACHE = 'nemo-v65';
+const CACHE = 'nemo-v66';
 const ASSETS = ['./index.html', './app.js', './app.jsx', './assets/nemo-logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
@@ -31,7 +31,7 @@ self.addEventListener('fetch', (e) => {
     e.respondWith((async () => {
       const cached = await caches.match(e.request);
       const network = fetch(e.request)
-        .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {}); return res; })
+        .then((res) => { if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {}); } return res; })
         .catch(() => null);
       if (!cached) { const n = await network; return n || fetch(e.request); }
       const timeout = new Promise((r) => setTimeout(() => r('__timeout__'), 1500));
@@ -40,12 +40,20 @@ self.addEventListener('fetch', (e) => {
     })());
   } else {
     // CACHE-FIRST for static assets (images, fonts, manifest) — fast & rarely change.
+    // A cached error/opaque response would be served forever — a deploy that briefly 404'd an
+    // image (or an interrupted write) is exactly how the splash logo ends up permanently
+    // "broken" on a device. So only OK responses are cached, and only OK ones are served back.
     e.respondWith(
-      caches.match(e.request).then((cached) => cached || fetch(e.request).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
-        return res;
-      }))
+      caches.match(e.request).then((cached) => {
+        if (cached && cached.ok) return cached;
+        return fetch(e.request).then((res) => {
+          if (res && res.ok && res.type === 'basic') {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+          }
+          return res;
+        }).catch(() => cached || Response.error());
+      })
     );
   }
 });
