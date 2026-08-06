@@ -141,6 +141,18 @@ function variantStockOf(p, v){
 }
 /* An option is unavailable if the admin flagged it sold out OR it has run down to zero. */
 function variantSoldOut(p, v){ return !!(v && (v.soldOut || variantStockOf(p,v)<=0)); }
+/* Customer-facing ordering: what can be bought right now comes first, then what has sold out,
+   and "Coming Soon" last — it is a teaser, not stock, and a shelf that opens with things nobody
+   can buy reads as an empty shop. Used as the primary sort key on every customer listing, so
+   the chosen sort (price, rating, name…) only decides the order WITHIN each of those groups. */
+function availabilityRank(p){
+  if(!p) return 3;
+  if(p.comingSoon) return 2;
+  return productStockTotal(p)>0 ? 0 : 1;
+}
+function byAvailabilityThen(cmp){
+  return (a,b)=>(availabilityRank(a)-availabilityRank(b)) || (cmp?cmp(a,b):0);
+}
 function availableVariants(p){ const vs=productVariants(p); return vs ? vs.filter(v=>!variantSoldOut(p,v)) : null; }
 /* Units a shopper can actually buy. For an option product that's the sum of what's left across
    its available options — so a product whose every option is gone reads as out of stock, instead
@@ -3046,6 +3058,50 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
 }
 .home-footer{display:none;}
 @media(min-width:1000px){ .home-footer{display:block;} }
+/* ── Tablet held sideways ──────────────────────────────────────────────────────
+   A tablet in landscape is ~820–1000px wide and only ~600–780px tall. Judged on
+   width alone it fell into the "small screen" tier and rendered as a 640px phone
+   strip marooned in white space, with the bottom nav eating scarce height. So the
+   landscape tiers key off BOTH axes: wide-enough landscape gets the desktop top
+   nav and a real grid, and anything short gets its vertical chrome trimmed. */
+@media(min-width:820px) and (max-width:999px) and (orientation:landscape){
+  #root{background:#eef9fa !important;}
+  .nemo-app{max-width:min(1000px,100%) !important;box-shadow:none;}
+  .desk-nav{display:flex;}
+  .mobile-bottom-nav{display:none !important;}
+  .prod-grid{grid-template-columns:repeat(3,1fr) !important;}
+  .home-hero-logo{display:none !important;}
+  .home-hero-chrome{display:none !important;}
+  .home-body{padding-left:26px !important;padding-right:26px !important;}
+  .dt-read{max-width:720px;margin-left:auto !important;margin-right:auto !important;}
+  .home-footer{display:block;}
+}
+/* Smaller tablets & big phones sideways: keep the touch chrome, but fill the width
+   instead of leaving two thick empty margins. */
+@media(min-width:560px) and (max-width:819px) and (orientation:landscape){
+  .nemo-app{max-width:100% !important;}
+  .prod-grid{grid-template-columns:repeat(3,1fr) !important;}
+  .home-body{padding-left:18px !important;padding-right:18px !important;}
+}
+/* Short viewport (any device on its side): headers, hero and sheets give height back. */
+@media(orientation:landscape) and (max-height:620px){
+  .vh-head{padding-top:calc(env(safe-area-inset-top, 0px) + 8px) !important;padding-bottom:14px !important;}
+  .admin-head{padding-top:calc(env(safe-area-inset-top, 0px) + 10px) !important;}
+  .home-hero{padding-top:16px !important;padding-bottom:16px !important;}
+  .home-hero .hero-tagline{font-size:clamp(22px,3.4vw,34px) !important;margin-bottom:8px !important;}
+  .sheet-panel{max-height:96vh !important;}
+  .mobile-bottom-nav{padding-top:4px !important;padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 4px) !important;}
+}
+/* Landscape notches/rounded corners live on the left and right edges. */
+@media(orientation:landscape){
+  .nemo-app{padding-left:env(safe-area-inset-left, 0px);padding-right:env(safe-area-inset-right, 0px);}
+}
+/* The welcome popup is built to fit one screen; sideways there is width to spare and
+   almost no height, so its rows go two-up instead of stacking. */
+@media(orientation:landscape) and (max-height:620px){
+  .why-panel{max-width:820px !important;}
+  .why-rows{display:grid;grid-template-columns:1fr 1fr;column-gap:10px;}
+}
 .desk-link:hover{background:#eef9fa !important;}
 `;
 
@@ -5251,7 +5307,7 @@ function AquaToolsPage({nav}){
 }
 
 function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true}){
-  const featured=products.slice(0,6);
+  const featured=[...products].sort(byAvailabilityThen()).slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
   const [walletOpen,setWalletOpen]=useState(false);
   const [recent,setRecent]=useState(()=>loadRecentSearches());
@@ -5685,14 +5741,14 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
     if(effectivePrice(p) > priceMax) return false;
     return true;
   });
-  list = [...list].sort((a,b)=>{
+  list = [...list].sort(byAvailabilityThen((a,b)=>{
     if(sort==="price-asc")  return effectivePrice(a)-effectivePrice(b);
     if(sort==="price-desc") return effectivePrice(b)-effectivePrice(a);
     if(sort==="name")       return a.name.localeCompare(b.name);
     if(sort==="rating")     return (b.rating||0)-(a.rating||0);
     if(sort==="new")        return (b.createdAt||"").localeCompare(a.createdAt||"");
     return 0;
-  });
+  }));
 
   const activeFilters = (availability!=="all"?1:0) + (priceMax<priceCap?1:0) + (sort!=="relevance"?1:0);
 
@@ -7789,7 +7845,7 @@ function WhyNemoPopup({open,onClose,nav}){
     <Portal>
     <div onClick={onClose} role="dialog" aria-modal="true" aria-label="Why shop at Nemo Aqua Store"
       style={{position:"fixed",inset:0,background:"rgba(6,40,43,.58)",backdropFilter:"blur(3px)",zIndex:9200,display:"flex",alignItems:"center",justifyContent:"center",padding:"14px 12px",animation:"fadeIn .2s ease"}}>
-      <div onClick={e=>e.stopPropagation()} className="slide-up"
+      <div onClick={e=>e.stopPropagation()} className="slide-up why-panel"
         style={{width:"100%",maxWidth:430,maxHeight:"92vh",background:C.card,borderRadius:22,overflow:"hidden",boxShadow:"0 26px 64px rgba(0,0,0,.34)",display:"flex",flexDirection:"column"}}>
         <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"14px 18px 12px",color:"#fff",flexShrink:0,position:"relative",overflow:"hidden"}}>
           <div style={{position:"absolute",top:-34,right:-24,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.09)"}}/>
@@ -7808,6 +7864,7 @@ function WhyNemoPopup({open,onClose,nav}){
           </div>
           {/* The "Us" side is the point of the whole popup, so it's the one that's meant to pop:
               green, slightly raised, with the "Others" side deliberately washed out. */}
+          <div className="why-rows">
           {WHY_US_ROWS.map(r=>(
             <div key={r.title} style={{display:"flex",gap:6,alignItems:"stretch",marginBottom:5}}>
               <div title={r.title} style={{width:22,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,lineHeight:1}}>{r.icon}</div>
@@ -7823,6 +7880,7 @@ function WhyNemoPopup({open,onClose,nav}){
               </div>
             </div>
           ))}
+          </div>
         </div>
         <div style={{flexShrink:0,padding:"10px 14px calc(11px + env(safe-area-inset-bottom))",background:C.card,borderTop:`1px solid ${C.border}`}}>
           <button className="cta press" onClick={onClose}
@@ -11654,7 +11712,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
 
 /* ═══════════════════ SAVED ITEMS PAGE ═══════════════════ */
 function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav,interestedSet=[],onInterest,user,restockSet=[],onRestock}){
-  const saved=products.filter(p=>favorites.includes(p.id));
+  const saved=products.filter(p=>favorites.includes(p.id)).sort(byAvailabilityThen());
   return(
     <div className="slide-up">
       <div className="vh-head" style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>

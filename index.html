@@ -407,6 +407,7 @@
   var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var DPR=Math.min(window.devicePixelRatio||1,2);
   var W=0,H=0,bubbles=[],fish=[],snails=[],mouse={x:-9999,y:-9999,active:false},running=true,looping=false;
+  var pops=[];   // burst effects left behind by tapped bubbles
   function mk(y){
     var r=3+Math.random()*9;
     return {x:Math.random()*W, y:(y==null?H+r+Math.random()*H:y), r:r,
@@ -523,6 +524,7 @@
       if(b.y+b.r<-20){ Object.assign(b,mk()); b.y=H+b.r+Math.random()*40; }
       drawBubble(sx+b.ox,b.y+b.oy,b.r,b.alpha);
     }
+    drawPops();
     // snails crawl the walls; touching one makes it duck into its shell for 5s, then reverse
     for(var s=0;s<snails.length;s++){
       var sn=snails[s]; sn.phase+=0.03;
@@ -578,6 +580,44 @@
     }
     requestAnimationFrame(loop);
   }
+  /* Tapping a bubble pops it. The wallpaper is pointer-events:none so it can never swallow a
+     tap meant for the app — the hit test just reads the same pointer position the drift already
+     tracks, and only the nearest bubble under the finger bursts. A generous slop radius makes it
+     land on a touchscreen, where the finger is far bigger than a 6px bubble. */
+  function popAt(px,py){
+    var best=-1, bestD=1e9;
+    for(var i=0;i<bubbles.length;i++){
+      var b=bubbles[i];
+      var bx=b.x+Math.sin(b.phase)*b.swayA+b.ox, by=b.y+b.oy;
+      var d=Math.hypot(bx-px,by-py);
+      if(d<b.r+16 && d<bestD){ bestD=d; best=i; }
+    }
+    if(best<0) return false;
+    var v=bubbles[best];
+    pops.push({x:v.x+Math.sin(v.phase)*v.swayA+v.ox, y:v.y+v.oy, r:v.r, t:0});
+    // Retire the popped bubble and send a fresh one up from below, so the count stays steady.
+    Object.assign(v,mk()); v.y=H+v.r+Math.random()*40;
+    return true;
+  }
+  function drawPops(){
+    for(var i=pops.length-1;i>=0;i--){
+      var p=pops[i]; p.t+=0.045;
+      if(p.t>=1){ pops.splice(i,1); continue; }
+      var e=1-Math.pow(1-p.t,2);          // fast out, slow settle
+      var a=(1-p.t)*0.55;
+      // the shell blowing outwards
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r*(1+e*1.9),0,Math.PI*2);
+      ctx.strokeStyle='rgba(52,168,202,'+a+')'; ctx.lineWidth=Math.max(1.2,p.r*0.34*(1-p.t)); ctx.stroke();
+      // and the droplets it throws off
+      for(var k=0;k<6;k++){
+        var ang=(Math.PI*2/6)*k+p.r, dist=p.r*(0.9+e*2.4);
+        ctx.beginPath();
+        ctx.arc(p.x+Math.cos(ang)*dist, p.y+Math.sin(ang)*dist, Math.max(0.6,p.r*0.22*(1-p.t)), 0, Math.PI*2);
+        ctx.fillStyle='rgba(74,187,220,'+(a*1.5)+')'; ctx.fill();
+      }
+    }
+  }
+  window.addEventListener('pointerdown',function(e){ mouse.x=e.clientX; mouse.y=e.clientY; mouse.active=true; popAt(e.clientX,e.clientY); },{passive:true});
   window.addEventListener('resize',resize,{passive:true});
   window.addEventListener('pointermove',function(e){ mouse.x=e.clientX; mouse.y=e.clientY; mouse.active=true; },{passive:true});
   window.addEventListener('pointerout',function(e){ if(!e.relatedTarget){ mouse.active=false; } });
