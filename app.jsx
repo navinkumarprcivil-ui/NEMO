@@ -1864,6 +1864,35 @@ function fileToBase64(f){ return new Promise((res,rej)=>{ const r=new FileReader
    canvas — no microphone, no audio track from the source — so the sound is dropped
    by design rather than muted at playback, and a noisy shop recording never ships
    with the product. */
+/* What the video picker offers. MIME types only: this once read `video/*,.gif`,
+   and mixing a wildcard with a bare extension is a well-known way to have
+   Android's file chooser quietly narrow the list. */
+const VIDEO_ACCEPT = [
+  "video/mp4",        // what essentially every phone records
+  "video/quicktime",  // .mov, iPhone
+  "video/webm",
+  "video/x-matroska", // .mkv
+  "video/3gpp",       // older Android
+  "video/*",          // backstop for anything not named above
+  "image/gif",
+].join(",");
+
+/* Second line of defence, for pickers that ignore `accept` and hand back
+   whatever was tapped. Deliberately generous: Android pickers frequently report
+   no MIME type at all, and an owner holding an obviously-named .mp4 must not be
+   turned away because their file manager said nothing about it. Something that
+   gets through and still cannot be decoded fails later with its own message —
+   a wrong guess here is recoverable, a refusal is not. */
+const VIDEO_EXT_RE = /\.(mp4|m4v|mov|qt|webm|mkv|3gp|3g2|avi|wmv|flv|mpe?g|mts|m2ts|ts|hevc|gif)$/i;
+function looksLikeVideo(file){
+  if(!file) return false;
+  const type=(file.type||"").toLowerCase();
+  if(type.startsWith("video/")) return true;
+  if(type==="image/gif") return true;
+  // No type, or a generic one the picker made up: fall back to the name.
+  if(!type||type==="application/octet-stream") return VIDEO_EXT_RE.test(file.name||"");
+  return false;
+}
 const CLIP_MAX_SEC = 15;
 const CLIP_MAX_BYTES = 5*1024*1024;   // every clip is encoded to fit under this, never rejected for it
 const CLIP_SHORT_SIDE = 720;          // 720p on the short side — 540p read as soft on a big screen
@@ -8462,6 +8491,12 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
      taking the file as-is, and there the old size limit still applies. */
   const handleVid=async file=>{
     setBusyNote("");
+    // Belt and braces: `accept` is a hint, and some pickers ignore it.
+    if(!looksLikeVideo(file)){
+      const what=(file.type||"").split("/")[0];
+      setBusyNote(`⚠ "${file.name}" isn't a video${what?` — that's ${what==="image"?"a photo":`a ${what} file`}`:""}. Pick a clip instead.`);
+      return;
+    }
     if(canTrimVideo()){ setTrimFile(file); return; }
     const url=URL.createObjectURL(file);
     if(file.size>5*1024*1024){ setVideo({key:uid("mv"),src:url,tooLarge:true}); setBusyNote(`⚠ Video ${fmtSize(file.size)} — this device can't trim clips, so pick one under 5MB`); }
@@ -8912,7 +8947,11 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
               <label style={{aspectRatio:"1",borderRadius:12,border:`1.5px dashed ${C.primary}`,background:C.accentLight,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",color:C.primary}}>
                 <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{addImages(e.target.files);e.target.value="";}}/>
                 <span style={{fontSize:24,lineHeight:1}}>＋</span>
-                <span style={{fontSize:10,fontWeight:700,marginTop:2}}>Add</span>
+                {/* "Photo", not "Add". This tile is image-only, and the video
+                    control is further down the form — labelled "Add" it reads as
+                    the way to add any media, so a video file shows up greyed out
+                    in the picker with nothing explaining why. */}
+                <span style={{fontSize:10,fontWeight:700,marginTop:2}}>Photo</span>
               </label>
             )}
           </div>
@@ -8930,7 +8969,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             </div>
           ):(
             <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:12,border:`1.5px dashed ${C.border}`,background:C.bg,padding:"16px",cursor:"pointer",color:C.textSub,fontSize:13,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              <input type="file" accept="video/*,.gif" style={{display:"none"}} onChange={e=>{if(e.target.files[0])handleVid(e.target.files[0]);e.target.value="";}}/>
+              <input type="file" accept={VIDEO_ACCEPT} style={{display:"none"}} onChange={e=>{if(e.target.files[0])handleVid(e.target.files[0]);e.target.value="";}}/>
               🎬 Add a short video
             </label>
           )}
