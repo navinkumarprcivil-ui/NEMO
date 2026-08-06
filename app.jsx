@@ -1811,6 +1811,8 @@ function fileToBase64(f){ return new Promise((res,rej)=>{ const r=new FileReader
    with the product. */
 const CLIP_MAX_SEC = 15;
 const CLIP_MAX_BYTES = 5*1024*1024;   // every clip is encoded to fit under this, never rejected for it
+const CLIP_SHORT_SIDE = 720;          // 720p on the short side — 540p read as soft on a big screen
+const CLIP_BITRATE = 2000000;         // ~3.8MB for a full 15s clip, so 720p still fits the budget
 function clipMimeType(){
   if(typeof MediaRecorder==="undefined") return "";
   return ["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm","video/mp4"]
@@ -1832,10 +1834,13 @@ function loadVideoEl(src){
   });
 }
 async function exportClip(src,start,end,opts={}){
-  const {maxWidth=540, fps=25, bitrate=1100000, onProgress} = opts;
+  const {maxShort=CLIP_SHORT_SIDE, fps=30, bitrate=CLIP_BITRATE, onProgress} = opts;
   const v=await loadVideoEl(src);
-  const sw=v.videoWidth||maxWidth, sh=v.videoHeight||maxWidth;
-  const scale=Math.min(1,maxWidth/sw);
+  const sw=v.videoWidth||maxShort, sh=v.videoHeight||maxShort;
+  // "720p" is the SHORT side, so a landscape clip lands at 1280x720 and a portrait phone clip at
+  // 720x1280 — capping the width instead would quietly halve the resolution of every portrait
+  // video, which is most of what a phone shoots.
+  const scale=Math.min(1,maxShort/Math.min(sw,sh));
   const canvas=document.createElement("canvas");
   // Even dimensions keep every encoder happy.
   canvas.width=Math.max(2,Math.round(sw*scale/2)*2);
@@ -1872,18 +1877,18 @@ async function exportClip(src,start,end,opts={}){
 async function exportClipUnderSize(src,start,end,targetBytes,opts={}){
   const {onProgress,onPass}=opts;
   const dur=Math.max(0.5,end-start);
-  let width=540;
+  let short=CLIP_SHORT_SIDE;
   // 78% of the budget: WebM container overhead plus the encoder's own rate wobble.
-  let bitrate=Math.max(220000,Math.round(Math.min(1100000,(targetBytes*8*0.78)/dur)));
+  let bitrate=Math.max(220000,Math.round(Math.min(CLIP_BITRATE,(targetBytes*8*0.78)/dur)));
   let blob=null;
   for(let pass=1;pass<=3;pass++){
     if(onPass) onPass(pass);
-    blob=await exportClip(src,start,end,{maxWidth:width,bitrate,onProgress});
+    blob=await exportClip(src,start,end,{maxShort:short,bitrate,onProgress});
     if(!blob||!blob.size) throw new Error("Nothing was recorded — try a shorter selection");
     if(blob.size<=targetBytes) return blob;
     const over=blob.size/targetBytes;
     bitrate=Math.max(180000,Math.round(bitrate/over*0.78));
-    width=Math.max(320,Math.round(width*0.78));
+    short=Math.max(360,Math.round(short*0.78));
   }
   return blob;
 }
