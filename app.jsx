@@ -1864,15 +1864,25 @@ function fileToBase64(f){ return new Promise((res,rej)=>{ const r=new FileReader
    canvas — no microphone, no audio track from the source — so the sound is dropped
    by design rather than muted at playback, and a noisy shop recording never ships
    with the product. */
-/* Is this file something we can treat as a clip?
+/* What the video picker offers. MIME types only: this once read `video/*,.gif`,
+   and mixing a wildcard with a bare extension is a well-known way to have
+   Android's file chooser quietly narrow the list. */
+const VIDEO_ACCEPT = [
+  "video/mp4",        // what essentially every phone records
+  "video/quicktime",  // .mov, iPhone
+  "video/webm",
+  "video/x-matroska", // .mkv
+  "video/3gpp",       // older Android
+  "video/*",          // backstop for anything not named above
+  "image/gif",
+].join(",");
 
-   The file input carries no `accept`, because no value of it was selectable
-   across Android's pickers (see the input for the history), so this is the only
-   gate. It is deliberately generous: a picker that reports no MIME type at all
-   is common on Android, and an owner holding an obviously-named .mp4 must not
-   be turned away because their file manager said nothing about it. Anything
-   that gets through and still cannot be decoded fails later with a message of
-   its own — a wrong guess here is recoverable, a refusal is not. */
+/* Second line of defence, for pickers that ignore `accept` and hand back
+   whatever was tapped. Deliberately generous: Android pickers frequently report
+   no MIME type at all, and an owner holding an obviously-named .mp4 must not be
+   turned away because their file manager said nothing about it. Something that
+   gets through and still cannot be decoded fails later with its own message —
+   a wrong guess here is recoverable, a refusal is not. */
 const VIDEO_EXT_RE = /\.(mp4|m4v|mov|qt|webm|mkv|3gp|3g2|avi|wmv|flv|mpe?g|mts|m2ts|ts|hevc|gif)$/i;
 function looksLikeVideo(file){
   if(!file) return false;
@@ -8481,9 +8491,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
      taking the file as-is, and there the old size limit still applies. */
   const handleVid=async file=>{
     setBusyNote("");
-    // The picker now offers every file on the device, so this is where a photo
-    // or a PDF gets turned away — with a sentence, rather than by being absent
-    // from the list with no explanation.
+    // Belt and braces: `accept` is a hint, and some pickers ignore it.
     if(!looksLikeVideo(file)){
       const what=(file.type||"").split("/")[0];
       setBusyNote(`⚠ "${file.name}" isn't a video${what?` — that's ${what==="image"?"a photo":`a ${what} file`}`:""}. Pick a clip instead.`);
@@ -8939,7 +8947,11 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
               <label style={{aspectRatio:"1",borderRadius:12,border:`1.5px dashed ${C.primary}`,background:C.accentLight,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",color:C.primary}}>
                 <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{addImages(e.target.files);e.target.value="";}}/>
                 <span style={{fontSize:24,lineHeight:1}}>＋</span>
-                <span style={{fontSize:10,fontWeight:700,marginTop:2}}>Add</span>
+                {/* "Photo", not "Add". This tile is image-only, and the video
+                    control is further down the form — labelled "Add" it reads as
+                    the way to add any media, so a video file shows up greyed out
+                    in the picker with nothing explaining why. */}
+                <span style={{fontSize:10,fontWeight:700,marginTop:2}}>Photo</span>
               </label>
             )}
           </div>
@@ -8948,7 +8960,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
         {/* Video */}
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Video <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
-          <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginBottom:8}}>Pick any video off your phone — any format, any size. You'll drag to select up to <b>{CLIP_MAX_SEC} seconds</b>. It's compressed to fit, the sound is removed, and it loops silently on the product page.</div>
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginBottom:8}}>Pick any video off your phone, any size — you'll drag to select up to <b>{CLIP_MAX_SEC} seconds</b>. It's compressed to fit, the sound is removed, and it loops silently on the product page.</div>
           {video?(
             <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:`1.5px solid ${C.border}`,background:"#000"}}>
               <video src={video.src} controls playsInline style={{width:"100%",maxHeight:200,display:"block"}}/>
@@ -8957,24 +8969,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             </div>
           ):(
             <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:12,border:`1.5px dashed ${C.border}`,background:C.bg,padding:"16px",cursor:"pointer",color:C.textSub,fontSize:13,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              {/* No `accept` at all, deliberately.
-
-                  It began as `video/*,.gif` — a wildcard mixed with a bare
-                  extension — which greys out .mp4 on Android. Narrowing the list
-                  to pure MIME types did not help either: on this device the file
-                  chooser still would not offer an mp4. Android turns `accept`
-                  into an intent MIME filter, every OEM file manager and gallery
-                  app reads it differently, and any of them can decide an mp4
-                  does not qualify. The Play Store build goes through the same
-                  WebView chooser, so it fails the same way.
-
-                  There is no version of this attribute that is reliably correct
-                  across those pickers, and the cost of it being wrong is total:
-                  the owner cannot list a video at all. So the filter is gone and
-                  the check moved into handleVid, where it is our code deciding,
-                  on a file we can actually inspect. The picker shows everything;
-                  pick a non-video and you get a sentence saying so. */}
-              <input type="file" style={{display:"none"}} onChange={e=>{if(e.target.files[0])handleVid(e.target.files[0]);e.target.value="";}}/>
+              <input type="file" accept={VIDEO_ACCEPT} style={{display:"none"}} onChange={e=>{if(e.target.files[0])handleVid(e.target.files[0]);e.target.value="";}}/>
               🎬 Add a short video
             </label>
           )}
