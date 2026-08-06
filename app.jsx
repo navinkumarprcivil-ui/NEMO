@@ -1810,6 +1810,7 @@ function fileToBase64(f){ return new Promise((res,rej)=>{ const r=new FileReader
    by design rather than muted at playback, and a noisy shop recording never ships
    with the product. */
 const CLIP_MAX_SEC = 15;
+const CLIP_MAX_BYTES = 5*1024*1024;   // every clip is encoded to fit under this, never rejected for it
 function clipMimeType(){
   if(typeof MediaRecorder==="undefined") return "";
   return ["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm","video/mp4"]
@@ -1863,6 +1864,28 @@ async function exportClip(src,start,end,opts={}){
   rec.stop();
   await stopped;
   return new Blob(chunks,{type:mime||"video/webm"});
+}
+/* Encode the selection so it lands UNDER a byte budget, whatever the phone shot.
+   The first pass sizes the bitrate from the budget and the clip length, which alone is enough
+   for a 15s clip; if the encoder overshoots anyway, each further pass drops the bitrate by the
+   overshoot and shrinks the frame, so the answer converges instead of failing. */
+async function exportClipUnderSize(src,start,end,targetBytes,opts={}){
+  const {onProgress,onPass}=opts;
+  const dur=Math.max(0.5,end-start);
+  let width=540;
+  // 78% of the budget: WebM container overhead plus the encoder's own rate wobble.
+  let bitrate=Math.max(220000,Math.round(Math.min(1100000,(targetBytes*8*0.78)/dur)));
+  let blob=null;
+  for(let pass=1;pass<=3;pass++){
+    if(onPass) onPass(pass);
+    blob=await exportClip(src,start,end,{maxWidth:width,bitrate,onProgress});
+    if(!blob||!blob.size) throw new Error("Nothing was recorded — try a shorter selection");
+    if(blob.size<=targetBytes) return blob;
+    const over=blob.size/targetBytes;
+    bitrate=Math.max(180000,Math.round(bitrate/over*0.78));
+    width=Math.max(320,Math.round(width*0.78));
+  }
+  return blob;
 }
 function fmtClock(sec){
   const s=Math.max(0,Math.floor(sec||0));
@@ -6146,7 +6169,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
           onClick={stageClick}
           style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",cursor:scale>1.05?"grab":"default"}}>
           {isVideo
-            ? <video src={cur.src} controls autoPlay muted playsInline style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+            ? <video src={cur.src} controls autoPlay muted loop playsInline preload="auto" style={{width:"100%",height:"100%",objectFit:"contain"}}/>
             : <img src={cur.src} alt={name} draggable={false}
                 style={{width:"100%",height:"100%",objectFit:"contain",transform:"translate("+tx+"px,"+ty+"px) scale("+scale+")",transition:g.current.mode?"none":"transform .28s cubic-bezier(.22,1,.36,1)",willChange:"transform"}}/>}
         </div>
@@ -6288,7 +6311,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           {slides.map((s,i)=>(
             <div key={i} onClick={()=>{ if(s.type==="image") openPhoto(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
               {s.type==="video"
-                ? <video src={s.src} controls muted playsInline loop style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+                ? <video src={s.src} controls autoPlay muted loop playsInline preload="auto" style={{width:"100%",height:"100%",objectFit:"contain"}}/>
                 : <SmoothImg src={s.src} alt={p.name} loading="eager" style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
             </div>
           ))}
@@ -8164,6 +8187,7 @@ function VideoTrimmer({file,onCancel,onDone}){
   const [now,setNow]=useState(0);
   const [busy,setBusy]=useState(false);
   const [pct,setPct]=useState(0);
+  const [pass,setPass]=useState(1);
   const [err,setErr]=useState("");
   const len=Math.max(0.5,range.b-range.a);
 
@@ -8222,7 +8246,8 @@ function VideoTrimmer({file,onCancel,onDone}){
     if(busy) return;
     setBusy(true); setErr(""); setPct(0);
     try{
-      const blob=await exportClip(url,range.a,Math.min(range.b,range.a+CLIP_MAX_SEC),{onProgress:p=>setPct(Math.round(p*100))});
+      const blob=await exportClipUnderSize(url,range.a,Math.min(range.b,range.a+CLIP_MAX_SEC),CLIP_MAX_BYTES,
+        {onProgress:p=>setPct(Math.round(p*100)), onPass:n=>setPass(n)});
       if(!blob||!blob.size) throw new Error("Nothing was recorded — try a shorter selection");
       onDone(blob);
     }catch(e){
@@ -8243,7 +8268,7 @@ function VideoTrimmer({file,onCancel,onDone}){
               style={{background:"none",border:"none",fontSize:20,color:C.textSub,cursor:"pointer",lineHeight:1}}>✕</button>
           </div>
           <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:12}}>
-            Drag the blue handles to pick up to <b>{CLIP_MAX_SEC} seconds</b>. The sound is removed automatically.
+            Drag the blue handles to pick up to <b>{CLIP_MAX_SEC} seconds</b>. Whatever the file size, it is compressed to fit — and the sound is removed.
           </div>
           <video ref={vidRef} src={url} onLoadedMetadata={onMeta} onTimeUpdate={onTime} muted playsInline controls
             style={{width:"100%",maxHeight:"38vh",background:"#000",borderRadius:14,display:"block"}}/>
@@ -8265,7 +8290,7 @@ function VideoTrimmer({file,onCancel,onDone}){
               <div style={{height:8,background:C.bg,borderRadius:99,overflow:"hidden"}}>
                 <div style={{height:"100%",width:pct+"%",background:C.primary,transition:"width .2s"}}/>
               </div>
-              <div style={{fontSize:11.5,color:C.textSub,marginTop:6,fontWeight:600}}>Processing the clip in real time — {pct}%</div>
+              <div style={{fontSize:11.5,color:C.textSub,marginTop:6,fontWeight:600}}>Processing the clip in real time — {pct}%{pass>1?` · compressing further (pass ${pass})`:""}</div>
             </div>
           )}
           <div style={{display:"flex",gap:10}}>
@@ -8387,11 +8412,12 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     try{
       const b64=await fileToBase64(blob);
       const url=URL.createObjectURL(blob);
-      const tooLarge=blob.size>5*1024*1024;
+      // The encoder targets CLIP_MAX_BYTES, so this only trips on a pathological source.
+      const tooLarge=blob.size>CLIP_MAX_BYTES;
       setVideo({key:uid("mv"),src:url,b64:tooLarge?undefined:b64,tooLarge});
       setBusyNote(tooLarge
-        ? `⚠ Clip still ${fmtSize(blob.size)} — trim it shorter to save it`
-        : `✓ Clip ${fmtSize(blob.size)} ready · sound removed`);
+        ? `⚠ Clip still ${fmtSize(blob.size)} — pick a shorter selection`
+        : `✓ Clip ${fmtSize(blob.size)} ready · silent, loops on the product page`);
     }catch(e){ setBusyNote("⚠ Couldn't read the trimmed clip — try again"); }
   };
 
@@ -8835,7 +8861,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
         {/* Video */}
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Video <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
-          <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginBottom:8}}>Pick any video off your phone — you'll drag to select up to <b>{CLIP_MAX_SEC} seconds</b>, and the sound is removed automatically.</div>
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginBottom:8}}>Pick any video off your phone, any size — you'll drag to select up to <b>{CLIP_MAX_SEC} seconds</b>. It's compressed to fit, the sound is removed, and it loops silently on the product page.</div>
           {video?(
             <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:`1.5px solid ${C.border}`,background:"#000"}}>
               <video src={video.src} controls playsInline style={{width:"100%",maxHeight:200,display:"block"}}/>
