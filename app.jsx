@@ -1800,6 +1800,74 @@ const DEMO_GOOGLE_ACCOUNTS = [
 ];
 
 function fileToBase64(f){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=rej; r.readAsDataURL(f); }); }
+/* ── Short product clips ──────────────────────────────────────────────────────
+   A phone video of a fish is 20–100MB, so "pick a file under 5MB" was a rule
+   nothing off a camera could satisfy — the upload simply never worked. Instead of
+   asking for a smaller file, the chosen range is re-encoded here in the browser:
+   frames are drawn to a downscaled canvas and recorded off canvas.captureStream(),
+   which yields a small, web-friendly clip. The recorder is only ever handed the
+   canvas — no microphone, no audio track from the source — so the sound is dropped
+   by design rather than muted at playback, and a noisy shop recording never ships
+   with the product. */
+const CLIP_MAX_SEC = 15;
+function clipMimeType(){
+  if(typeof MediaRecorder==="undefined") return "";
+  return ["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm","video/mp4"]
+    .find(t=>{ try{ return MediaRecorder.isTypeSupported(t); }catch(e){ return false; } }) || "";
+}
+function canTrimVideo(){
+  return typeof MediaRecorder!=="undefined"
+    && typeof document!=="undefined"
+    && !!document.createElement("canvas").captureStream
+    && !!clipMimeType();
+}
+function loadVideoEl(src){
+  return new Promise((res,rej)=>{
+    const v=document.createElement("video");
+    v.preload="metadata"; v.muted=true; v.playsInline=true; v.setAttribute("playsinline","");
+    v.onloadedmetadata=()=>res(v);
+    v.onerror=()=>rej(new Error("This video format can't be read on this device"));
+    v.src=src;
+  });
+}
+async function exportClip(src,start,end,opts={}){
+  const {maxWidth=540, fps=25, bitrate=1100000, onProgress} = opts;
+  const v=await loadVideoEl(src);
+  const sw=v.videoWidth||maxWidth, sh=v.videoHeight||maxWidth;
+  const scale=Math.min(1,maxWidth/sw);
+  const canvas=document.createElement("canvas");
+  // Even dimensions keep every encoder happy.
+  canvas.width=Math.max(2,Math.round(sw*scale/2)*2);
+  canvas.height=Math.max(2,Math.round(sh*scale/2)*2);
+  const ctx=canvas.getContext("2d");
+  const mime=clipMimeType();
+  const stream=canvas.captureStream(fps);
+  const rec=new MediaRecorder(stream, mime?{mimeType:mime,videoBitsPerSecond:bitrate}:{videoBitsPerSecond:bitrate});
+  const chunks=[];
+  rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+  const stopped=new Promise(r=>{ rec.onstop=r; });
+  v.currentTime=Math.max(0,start);
+  await new Promise(r=>{ v.onseeked=r; setTimeout(r,1200); });   // don't hang on a seek that never reports
+  rec.start();
+  try{ await v.play(); }catch(e){ /* autoplay refusal on a muted, off-screen element is harmless */ }
+  await new Promise(res=>{
+    const tick=()=>{
+      ctx.drawImage(v,0,0,canvas.width,canvas.height);
+      if(onProgress) onProgress(Math.min(1,(v.currentTime-start)/Math.max(0.1,end-start)));
+      if(v.currentTime>=end || v.ended){ res(); return; }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  try{ v.pause(); }catch(e){}
+  rec.stop();
+  await stopped;
+  return new Blob(chunks,{type:mime||"video/webm"});
+}
+function fmtClock(sec){
+  const s=Math.max(0,Math.floor(sec||0));
+  return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+}
 function uid(pfx="p"){ return pfx+Date.now()+Math.random().toString(36).slice(2,5); }
 function fmtSize(b){ if(b<1024)return b+"B"; if(b<1048576)return(b/1024).toFixed(0)+"KB"; return(b/1048576).toFixed(1)+"MB"; }
 function fmtDate(iso){ return new Date(iso).toLocaleDateString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }
@@ -6078,7 +6146,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
           onClick={stageClick}
           style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",cursor:scale>1.05?"grab":"default"}}>
           {isVideo
-            ? <video src={cur.src} controls autoPlay playsInline style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+            ? <video src={cur.src} controls autoPlay muted playsInline style={{width:"100%",height:"100%",objectFit:"contain"}}/>
             : <img src={cur.src} alt={name} draggable={false}
                 style={{width:"100%",height:"100%",objectFit:"contain",transform:"translate("+tx+"px,"+ty+"px) scale("+scale+")",transition:g.current.mode?"none":"transform .28s cubic-bezier(.22,1,.36,1)",willChange:"transform"}}/>}
         </div>
@@ -6220,7 +6288,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           {slides.map((s,i)=>(
             <div key={i} onClick={()=>{ if(s.type==="image") openPhoto(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
               {s.type==="video"
-                ? <video src={s.src} controls playsInline loop style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+                ? <video src={s.src} controls muted playsInline loop style={{width:"100%",height:"100%",objectFit:"contain"}}/>
                 : <SmoothImg src={s.src} alt={p.name} loading="eager" style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
             </div>
           ))}
@@ -8084,6 +8152,135 @@ function MediaUploader({label,accept,preview,previewType,onChange,onClear,note,f
 }
 
 /* ═══════════════════ ADMIN PRODUCT FORM ═══════════════════ */
+/* Drag-to-select trimmer for a product clip. The window is capped at CLIP_MAX_SEC, so the
+   handles physically cannot select more than 15 seconds — there is no "too long" error to hit.
+   Dragging inside the window slides the whole selection; the handles resize it. */
+function VideoTrimmer({file,onCancel,onDone}){
+  const url=useMemo(()=>URL.createObjectURL(file),[file]);
+  useEffect(()=>()=>URL.revokeObjectURL(url),[url]);
+  const vidRef=useRef(null), barRef=useRef(null), dragRef=useRef(null);
+  const [dur,setDur]=useState(0);
+  const [range,setRange]=useState({a:0,b:CLIP_MAX_SEC});
+  const [now,setNow]=useState(0);
+  const [busy,setBusy]=useState(false);
+  const [pct,setPct]=useState(0);
+  const [err,setErr]=useState("");
+  const len=Math.max(0.5,range.b-range.a);
+
+  const onMeta=e=>{
+    const d=e.currentTarget.duration||0;
+    setDur(d);
+    setRange({a:0,b:Math.min(CLIP_MAX_SEC,d||CLIP_MAX_SEC)});
+  };
+  // Keep the preview inside the selection so what plays is exactly what will be saved.
+  const onTime=e=>{
+    const t=e.currentTarget.currentTime;
+    if(t<range.a-0.1||t>range.b){ e.currentTarget.currentTime=range.a; }
+    setNow(t);
+  };
+  const seek=t=>{ const v=vidRef.current; if(v){ v.currentTime=Math.max(0,Math.min(dur,t)); } };
+
+  const posFromEvent=e=>{
+    const bar=barRef.current; if(!bar||!dur) return null;
+    const r=bar.getBoundingClientRect();
+    const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+    return Math.max(0,Math.min(1,x/r.width))*dur;
+  };
+  const startDrag=(mode)=>e=>{
+    e.preventDefault(); e.stopPropagation();
+    dragRef.current={mode,grab:posFromEvent(e),a:range.a,b:range.b};
+  };
+  const moveDrag=e=>{
+    const d=dragRef.current; if(!d) return;
+    const t=posFromEvent(e); if(t==null) return;
+    if(d.mode==="a"){
+      const a=Math.max(0,Math.min(t,d.b-0.5));
+      setRange({a,b:Math.min(d.b, a+CLIP_MAX_SEC)});
+      seek(a);
+    } else if(d.mode==="b"){
+      const b=Math.min(dur,Math.max(t,d.a+0.5));
+      setRange({a:Math.max(d.a, b-CLIP_MAX_SEC),b});
+      seek(Math.max(0,b-0.4));
+    } else {
+      const width=d.b-d.a;
+      let a=d.a+(t-d.grab);
+      a=Math.max(0,Math.min(a,dur-width));
+      setRange({a,b:a+width});
+      seek(a);
+    }
+  };
+  const endDrag=()=>{ dragRef.current=null; };
+  useEffect(()=>{
+    const mv=e=>moveDrag(e), up=()=>endDrag();
+    window.addEventListener("pointermove",mv); window.addEventListener("pointerup",up);
+    window.addEventListener("touchmove",mv,{passive:false}); window.addEventListener("touchend",up);
+    return ()=>{ window.removeEventListener("pointermove",mv); window.removeEventListener("pointerup",up);
+      window.removeEventListener("touchmove",mv); window.removeEventListener("touchend",up); };
+  });
+
+  const use=async()=>{
+    if(busy) return;
+    setBusy(true); setErr(""); setPct(0);
+    try{
+      const blob=await exportClip(url,range.a,Math.min(range.b,range.a+CLIP_MAX_SEC),{onProgress:p=>setPct(Math.round(p*100))});
+      if(!blob||!blob.size) throw new Error("Nothing was recorded — try a shorter selection");
+      onDone(blob);
+    }catch(e){
+      setErr((e&&e.message)||"Couldn't process this video");
+      setBusy(false);
+    }
+  };
+
+  const pctOf=t=>dur?Math.max(0,Math.min(100,(t/dur)*100)):0;
+  const handle={position:"absolute",top:-4,width:16,height:"calc(100% + 8px)",background:C.primary,borderRadius:6,cursor:"ew-resize",touchAction:"none",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(0,0,0,.25)"};
+  return(
+    <Portal>
+      <div style={{position:"fixed",inset:0,background:"rgba(6,40,43,.72)",zIndex:9400,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:"0"}}>
+        <div className="slide-up" style={{width:"100%",maxWidth:560,background:C.card,borderRadius:"22px 22px 0 0",padding:"16px 16px calc(16px + env(safe-area-inset-bottom))",maxHeight:"94vh",overflowY:"auto"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>Trim the clip</div>
+            <button className="press" onClick={onCancel} disabled={busy}
+              style={{background:"none",border:"none",fontSize:20,color:C.textSub,cursor:"pointer",lineHeight:1}}>✕</button>
+          </div>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:12}}>
+            Drag the blue handles to pick up to <b>{CLIP_MAX_SEC} seconds</b>. The sound is removed automatically.
+          </div>
+          <video ref={vidRef} src={url} onLoadedMetadata={onMeta} onTimeUpdate={onTime} muted playsInline controls
+            style={{width:"100%",maxHeight:"38vh",background:"#000",borderRadius:14,display:"block"}}/>
+          <div ref={barRef} onPointerDown={startDrag("move")}
+            style={{position:"relative",height:44,margin:"16px 8px 8px",borderRadius:10,background:"#e2e8f0",touchAction:"none",cursor:"grab"}}>
+            <div style={{position:"absolute",left:pctOf(range.a)+"%",width:(pctOf(range.b)-pctOf(range.a))+"%",top:0,bottom:0,background:"rgba(14,165,233,.22)",border:`2px solid ${C.primary}`,borderRadius:10}}/>
+            <div style={{position:"absolute",left:pctOf(now)+"%",top:-3,bottom:-3,width:2,background:C.coral,borderRadius:2}}/>
+            <div onPointerDown={startDrag("a")} style={{...handle,left:`calc(${pctOf(range.a)}% - 8px)`}}><span style={{color:"#fff",fontSize:11}}>⋮</span></div>
+            <div onPointerDown={startDrag("b")} style={{...handle,left:`calc(${pctOf(range.b)}% - 8px)`}}><span style={{color:"#fff",fontSize:11}}>⋮</span></div>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,color:C.textSub,fontWeight:700,margin:"0 8px 14px"}}>
+            <span>{fmtClock(range.a)}</span>
+            <span style={{color:len>CLIP_MAX_SEC+0.05?C.danger:C.primary}}>{len.toFixed(1)}s selected</span>
+            <span>{fmtClock(dur)}</span>
+          </div>
+          {err&&<div style={{fontSize:12,color:C.danger,fontWeight:700,marginBottom:10}}>{err}</div>}
+          {busy&&(
+            <div style={{marginBottom:10}}>
+              <div style={{height:8,background:C.bg,borderRadius:99,overflow:"hidden"}}>
+                <div style={{height:"100%",width:pct+"%",background:C.primary,transition:"width .2s"}}/>
+              </div>
+              <div style={{fontSize:11.5,color:C.textSub,marginTop:6,fontWeight:600}}>Processing the clip in real time — {pct}%</div>
+            </div>
+          )}
+          <div style={{display:"flex",gap:10}}>
+            <button className="press" onClick={onCancel} disabled={busy}
+              style={{flex:1,padding:"13px",borderRadius:14,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textSub,fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+            <button className="press" onClick={use} disabled={busy}
+              style={{flex:2,padding:"13px",borderRadius:14,border:"none",background:C.primary,color:"#fff",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:busy?.7:1}}>
+              {busy?"Processing…":"Use this clip"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
 function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
   const isEdit=!!product;
   const [form,setForm]=useState({
@@ -8120,6 +8317,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
   const [images,setImages]=useState(initImgs);
   const [video,setVideo]=useState(product?._mediaVid?{key:(product.media?.find(m=>m.type==="video")?.key)||uid("mv"),src:product._mediaVid,existing:true}:null);
   const [saving,setSaving]=useState(false);
+  const [trimFile,setTrimFile]=useState(null);   // video waiting to be trimmed
   const [delConfirm,setDelConfirm]=useState(false);
   const [busyNote,setBusyNote]=useState("");
   const MAX_IMAGES=4;
@@ -8174,10 +8372,27 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
   const removeImage=(key)=>setImages(prev=>prev.filter(i=>i.key!==key));
   const moveImage=(key,dir)=>setImages(prev=>{ const i=prev.findIndex(x=>x.key===key); const j=i+dir; if(j<0||j>=prev.length)return prev; const next=[...prev]; [next[i],next[j]]=[next[j],next[i]]; return next; });
 
+  /* Any video the phone produces goes through the trimmer: pick up to 15s, and what comes back
+     is a small, silent clip. Only a device with no MediaRecorder/captureStream falls back to
+     taking the file as-is, and there the old size limit still applies. */
   const handleVid=async file=>{
+    setBusyNote("");
+    if(canTrimVideo()){ setTrimFile(file); return; }
     const url=URL.createObjectURL(file);
-    if(file.size>5*1024*1024){ setVideo({key:uid("mv"),src:url,tooLarge:true}); setBusyNote(`⚠ Video ${fmtSize(file.size)} — too large to save (keep under 5MB)`); }
+    if(file.size>5*1024*1024){ setVideo({key:uid("mv"),src:url,tooLarge:true}); setBusyNote(`⚠ Video ${fmtSize(file.size)} — this device can't trim clips, so pick one under 5MB`); }
     else { const b64=await fileToBase64(file); setVideo({key:uid("mv"),src:url,b64}); setBusyNote(`✓ Video ${fmtSize(file.size)} ready`); }
+  };
+  const acceptClip=async blob=>{
+    setTrimFile(null);
+    try{
+      const b64=await fileToBase64(blob);
+      const url=URL.createObjectURL(blob);
+      const tooLarge=blob.size>5*1024*1024;
+      setVideo({key:uid("mv"),src:url,b64:tooLarge?undefined:b64,tooLarge});
+      setBusyNote(tooLarge
+        ? `⚠ Clip still ${fmtSize(blob.size)} — trim it shorter to save it`
+        : `✓ Clip ${fmtSize(blob.size)} ready · sound removed`);
+    }catch(e){ setBusyNote("⚠ Couldn't read the trimmed clip — try again"); }
   };
 
   const handleSave=async()=>{
@@ -8619,7 +8834,8 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
 
         {/* Video */}
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Video <span style={{fontWeight:400,textTransform:"none"}}>(optional, ≤5MB)</span></div>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Video <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginBottom:8}}>Pick any video off your phone — you'll drag to select up to <b>{CLIP_MAX_SEC} seconds</b>, and the sound is removed automatically.</div>
           {video?(
             <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:`1.5px solid ${C.border}`,background:"#000"}}>
               <video src={video.src} controls playsInline style={{width:"100%",maxHeight:200,display:"block"}}/>
@@ -8632,6 +8848,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
               🎬 Add a short video
             </label>
           )}
+          {trimFile&&<VideoTrimmer file={trimFile} onCancel={()=>setTrimFile(null)} onDone={acceptClip}/>}
         </div>
         {/* While saving, the progress rides on the button itself — no need to repeat it here. */}
         {busyNote&&!saving&&<div style={{fontSize:12,color:busyNote.startsWith("⚠")?C.danger:C.textSub,fontWeight:600,marginBottom:12,marginTop:-4}}>{busyNote}</div>}
