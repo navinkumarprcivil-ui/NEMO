@@ -178,6 +178,10 @@
 <script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
 <script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
+<!-- App Check. These tags are async and land in any order, so tryInitFirebase()
+     waits briefly for this one before it touches the database — activating after
+     the first request would leave that request unattested. -->
+<script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
 <!-- EmailJS (customer confirmation emails) -->
 <script async src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>

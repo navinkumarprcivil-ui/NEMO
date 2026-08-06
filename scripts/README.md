@@ -13,6 +13,25 @@ browser if `app.js` is *missing*. A **stale** `app.js` is not detected — the s
 serving the old code, and a new feature looks like it was never added. Rebuild in the same
 commit as the `app.jsx` change, and bump `CACHE` in `sw.js` so installed devices refetch.
 
+## `check-appcheck.mjs` — App Check must activate before the first request
+
+```
+npm i --no-save playwright
+node scripts/check-appcheck.mjs        # REACT_DIR=<dir> to run offline
+```
+
+Under App Check enforcement a request made before `activate()` is refused. The
+Firebase tags in `index.html` are `async` and land in any order, so
+app-check-compat often arrives *after* auth and database — which is why
+`tryInitFirebase()` waits a bounded moment for it (`APPCHECK_GRACE_MS`) instead
+of quietly connecting unattested.
+
+That grace has to stay under the `waitForFirebase(2200)` boot budget, or the
+store decides there is no cloud and drops to local-only browsing. This checks
+both ends: a late script is still attested, a blocked one still lets the store
+open.
+
+
 ## `nemo-backup.gs` — automatic Drive backup + GST/inventory export (Google Apps Script)
 
 Runs inside **nemoaquastore@gmail.com** (Google Apps Script, https://script.google.com).

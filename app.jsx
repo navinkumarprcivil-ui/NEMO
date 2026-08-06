@@ -664,10 +664,14 @@ async function dbSet(k,v) {
 }
 async function dbDel(k)   { try { localStorage.removeItem(k); } catch {} }
 
-/* Where the analytics console is deployed. Same Firebase project, separate
-   app: it signs in on its own and reads this store's data live, so nothing is
-   passed across in the URL. */
-const ANALYTICS_URL = "https://nemo-analytics.vercel.app/analytics.html";
+/* Where the analytics app is deployed. It signs in on its own and reads this
+   store's data live, so nothing is passed across in the URL.
+
+   This is the business console at the site root — the same page you get typing
+   the address in — not /analytics.html. It opens inside the admin panel rather
+   than in a new tab, which is why the analytics side allows this origin as a
+   frame ancestor; its X-Frame-Options had to go for the embed to load at all. */
+const ANALYTICS_URL = "https://nemo-analytics.vercel.app/";
 
 /* ── Firebase Realtime Database ──
    If the deployment URL/region differs, edit databaseURL below to match the
@@ -682,11 +686,57 @@ const FIREBASE_CONFIG = {
   appId: "1:771650250460:web:94a3df5aec9bd125a7b619",
 };
 let FB_DB=null, FB_AUTH=null, FB_STORAGE=null, FB_OK=false;
+
+/* ── App Check ──
+   reCAPTCHA v3 site key. Not a secret: a site key is public by design and is
+   bound to the domains registered against it, not to a project.
+
+   Ordering is the whole game here. App Check has to be activated before the
+   first database/auth call, because under enforcement an unattested request is
+   simply refused. The Firebase tags in index.html are `async`, so
+   app-check-compat can — and often will — land *after* auth and database. If
+   init went ahead at that moment, `firebase.appCheck` would be undefined, the
+   guard below would skip, and the page would run unattested for its whole life
+   rather than recovering on a retry.
+
+   So tryInitFirebase waits for appCheck to show up. Not forever: if the script
+   is blocked or the shopper is offline it gives up after the grace period and
+   connects anyway. An unattested session surfaces as permission errors, which
+   at least say what is wrong; a store that refuses to open says nothing and
+   costs a sale.
+
+   The grace has to stay comfortably under the 2200ms budget the boot path
+   allows for Firebase (`waitForFirebase(2200)`) — overrun it and the store
+   decides there is no cloud and browses in local-only mode. By the time this
+   runs the other four tags have already landed from the same host, so
+   app-check is usually there already or a few hundred ms behind. */
+const APPCHECK_SITE_KEY = "6LeLCnMtAAAAANCr565qco_YgRKCSMtmxShfo3Jr";
+const APPCHECK_GRACE_MS = 1200;
+let fbSdkFirstSeen = 0;
+
 function tryInitFirebase(){
   if(FB_OK) return true;
   if(typeof firebase==="undefined" || !firebase.database || !firebase.auth) return false;
+  // Core SDKs are here; give app-check-compat a bounded moment to catch up.
+  if(!fbSdkFirstSeen) fbSdkFirstSeen=Date.now();
+  if(!firebase.appCheck && Date.now()-fbSdkFirstSeen<APPCHECK_GRACE_MS) return false;
   try{
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    /* Before database() or auth() are touched. Same shape as the analytics
+       app's src/live/firebase.js. */
+    try{
+      if(location.hostname==="localhost"||location.hostname==="127.0.0.1"){
+        // Prints a token to register under App Check → Manage debug tokens,
+        // or local development breaks the moment enforcement goes on.
+        self.FIREBASE_APPCHECK_DEBUG_TOKEN=true;
+      }
+      if(firebase.appCheck){
+        firebase.appCheck().activate(
+          new firebase.appCheck.ReCaptchaV3Provider(APPCHECK_SITE_KEY),
+          true
+        );
+      }
+    }catch(e){ console.warn("App Check not activated:", e?.message||e); }
     FB_DB=firebase.database(); FB_AUTH=firebase.auth(); FB_OK=true;
     try{ if(firebase.storage) FB_STORAGE=firebase.storage(); }catch(e){}
     // Re-sync whenever auth state resolves. IMPORTANT: only sign in anonymously when
@@ -9816,6 +9866,45 @@ function AdminExitConfirm({onStay,onLeave}){
   );
 }
 
+/* ── Analytics, inside the admin panel ──
+   The console is a separate deployment, so this is an <iframe> rather than a
+   route. It only loads because the analytics side lists this origin under
+   `frame-ancestors`; X-Frame-Options cannot name one other origin, so that
+   header had to be dropped there for the embed to work at all.
+
+   The "Open in a new tab" link is deliberate, not a hedge for its own sake. A
+   cross-origin frame that is refused renders as a blank box and gives the
+   parent nothing to catch — no error, no event — so there is no way to detect
+   it and swap in a message. The way out is always visible instead. */
+function AnalyticsOverlay({onClose}){
+  useEffect(()=>{
+    const onKey=e=>{ if(e.key==="Escape") onClose(); };
+    window.addEventListener("keydown",onKey);
+    const prev=document.body.style.overflow;
+    document.body.style.overflow="hidden"; // the frame scrolls, not the page behind it
+    return()=>{ window.removeEventListener("keydown",onKey); document.body.style.overflow=prev; };
+  },[onClose]);
+
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:4000,background:C.adminBg,display:"flex",flexDirection:"column"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"max(10px, env(safe-area-inset-top)) 12px 10px",flexShrink:0}}>
+        <span style={{fontSize:16}}>📊</span>
+        <span style={{flex:1,minWidth:0,fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:"white"}}>Analytics</span>
+        <a className="press" href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer"
+          style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:9,padding:"7px 12px",color:"white",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"none"}}>
+          New tab ↗
+        </a>
+        <button className="press" onClick={onClose} aria-label="Close analytics"
+          style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:9,width:34,height:34,color:"white",fontSize:17,lineHeight:1,fontWeight:700}}>
+          ×
+        </button>
+      </div>
+      <iframe src={ANALYTICS_URL} title="Nemo Analytics"
+        style={{flex:1,width:"100%",border:"none",background:"white"}}/>
+    </div>
+  );
+}
+
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
 function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onApproveTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
@@ -9855,6 +9944,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [thumbMsg,setThumbMsg]=useState("");
   const [visitStats,setVisitStats]=useState(null);
   useEffect(()=>{ loadAnalytics().then(setVisitStats); },[]);
+  const [analyticsOpen,setAnalyticsOpen]=useState(false);
   const [orderFilter,setOrderFilter]=useState("All");
   const [orderSearch,setOrderSearch]=useState("");
   // Orders accumulate forever, and rendering every one on open cost ~0.5s of frozen UI at 500
@@ -9975,6 +10065,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
 
   return(
     <div className="slide-up">
+      {analyticsOpen&&<AnalyticsOverlay onClose={()=>setAnalyticsOpen(false)}/>}
       {/* Header */}
       <div className="admin-head" style={{background:C.adminBg,padding:"52px 16px 0"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8}}>
@@ -9983,6 +10074,13 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{tab==="products"?"Products":tab==="dashboard"?"Dashboard":tab==="reviews"?"Reviews":tab==="requests"?"Requests":"Orders"}</div>
           </div>
           <div style={{display:"flex",gap:8,flexShrink:0}}>
+            {/* Analytics sits next to Store because it is the same kind of thing:
+                somewhere you go, not something on the page you are looking at.
+                It opens in an overlay rather than a tab — see AnalyticsOverlay. */}
+            <button className="press" onClick={()=>setAnalyticsOpen(true)} title="Open the analytics console"
+              style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              📊 Analytics
+            </button>
             <button className="press" onClick={()=>{ if(window.confirm("Leave the Admin panel and go back to the store?")) onBack(); }}
               style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               🛍 Store
@@ -10035,18 +10133,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── DASHBOARD TAB (analytics — separated from order management, #9) ── */}
       {tab==="dashboard"&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
-          {/* Analytics console — first thing in the tab. On a phone anything
-              below the sales dashboard takes a long scroll to reach, which is
-              how the first placement (down in the Orders tab) went unfound. */}
-          <a className="press" href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer"
-            style={{display:"flex",alignItems:"center",gap:10,background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white",textDecoration:"none"}}>
-            <span style={{fontSize:20}}>📊</span>
-            <span style={{flex:1,minWidth:0}}>
-              <span style={{display:"block",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800}}>Analytics</span>
-              <span style={{display:"block",fontSize:11,opacity:.9,lineHeight:1.5}}>What to restock, what to chase, GST-ready — live from this store</span>
-            </span>
-            <span style={{fontSize:18,opacity:.9}}>→</span>
-          </a>
+          {/* The Analytics card used to sit here. It moved to the header, next
+              to Store, so it is reachable from every tab instead of only this
+              one — and so it stops competing with the sales figures below. */}
           <AdminSalesDashboard orders={orders} products={products} settings={settings}/>
           {/* Visitor analytics */}
           <div style={{background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
@@ -10169,12 +10258,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55,marginBottom:10}}>
               Action dashboard, stock reorder points and a GST-ready file — reading this store's data live. Nothing to export.
             </div>
-            {/* rel="noopener" matters: without it the opened page can navigate
-                this one through window.opener, from a page holding an admin session. */}
-            <a className="press" href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer"
-              style={{display:"block",textAlign:"center",background:C.accent,color:"white",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"none"}}>
+            {/* Opens the same overlay as the header button, so there is one way
+                in and no stray tab holding an admin session. */}
+            <button className="press" onClick={()=>setAnalyticsOpen(true)}
+              style={{display:"block",width:"100%",border:"none",textAlign:"center",background:C.accent,color:"white",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               Open Analytics →
-            </a>
+            </button>
           </div>
 
           {/* Excel export with date range */}
