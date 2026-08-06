@@ -1864,6 +1864,17 @@ function fileToBase64(f){ return new Promise((res,rej)=>{ const r=new FileReader
    canvas — no microphone, no audio track from the source — so the sound is dropped
    by design rather than muted at playback, and a noisy shop recording never ships
    with the product. */
+/* What the video picker will offer. MIME types only — never mix a wildcard with
+   a bare extension like ".gif", which is what stopped .mp4 being selectable. */
+const VIDEO_ACCEPT = [
+  "video/mp4",        // what essentially every phone records
+  "video/quicktime",  // .mov, iPhone
+  "video/webm",
+  "video/x-matroska", // .mkv
+  "video/3gpp",       // older Android
+  "video/*",          // backstop for anything not named above
+  "image/gif",
+].join(",");
 const CLIP_MAX_SEC = 15;
 const CLIP_MAX_BYTES = 5*1024*1024;   // every clip is encoded to fit under this, never rejected for it
 const CLIP_SHORT_SIDE = 720;          // 720p on the short side — 540p read as soft on a big screen
@@ -8462,6 +8473,14 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
      taking the file as-is, and there the old size limit still applies. */
   const handleVid=async file=>{
     setBusyNote("");
+    // `video/*` means some pickers hand back anything at all. Only turn away a
+    // file that positively says it is something else — plenty of Android
+    // pickers report an empty type for a perfectly good clip, and refusing
+    // those would put back the very wall this is meant to remove.
+    if(file.type && !/^video\//.test(file.type) && file.type!=="image/gif"){
+      setBusyNote(`⚠ That's a ${file.type.split("/")[0]||"—"} file, not a video — pick a clip instead`);
+      return;
+    }
     if(canTrimVideo()){ setTrimFile(file); return; }
     const url=URL.createObjectURL(file);
     if(file.size>5*1024*1024){ setVideo({key:uid("mv"),src:url,tooLarge:true}); setBusyNote(`⚠ Video ${fmtSize(file.size)} — this device can't trim clips, so pick one under 5MB`); }
@@ -8930,7 +8949,16 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
             </div>
           ):(
             <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:12,border:`1.5px dashed ${C.border}`,background:C.bg,padding:"16px",cursor:"pointer",color:C.textSub,fontSize:13,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              <input type="file" accept="video/*,.gif" style={{display:"none"}} onChange={e=>{if(e.target.files[0])handleVid(e.target.files[0]);e.target.value="";}}/>
+              {/* Every entry here is a MIME type, and that is the whole point.
+                  This used to read `video/*,.gif` — a wildcard mixed with a bare
+                  file extension — which greys out .mp4 in the Android file
+                  picker and in the Play Store build's WebView chooser. Android
+                  turns the accept list into an intent MIME filter, and a list it
+                  cannot reconcile collapses to something far narrower than
+                  intended, so the one format every phone records was the one the
+                  owner could not pick. The named types come first for pickers
+                  that match exactly; `video/*` stays as the backstop. */}
+              <input type="file" accept={VIDEO_ACCEPT} style={{display:"none"}} onChange={e=>{if(e.target.files[0])handleVid(e.target.files[0]);e.target.value="";}}/>
               🎬 Add a short video
             </label>
           )}
