@@ -664,6 +664,11 @@ async function dbSet(k,v) {
 }
 async function dbDel(k)   { try { localStorage.removeItem(k); } catch {} }
 
+/* Where the analytics console is deployed. Same Firebase project, separate
+   app: it signs in on its own and reads this store's data live, so nothing is
+   passed across in the URL. */
+const ANALYTICS_URL = "https://nemo-analytics.vercel.app/analytics.html";
+
 /* ── Firebase Realtime Database ──
    If the deployment URL/region differs, edit databaseURL below to match the
    URL shown at the top of your Realtime Database data page. */
@@ -10142,6 +10147,23 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               </div>
             );
           })()}
+
+          {/* Analytics console — reads this store's data live */}
+          <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <span style={{fontSize:16}}>📈</span>
+              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Analytics</span>
+            </div>
+            <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55,marginBottom:10}}>
+              Action dashboard, stock reorder points and a GST-ready file — reading this store's data live. Nothing to export.
+            </div>
+            {/* rel="noopener" matters: without it the opened page can navigate
+                this one through window.opener, from a page holding an admin session. */}
+            <a className="press" href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer"
+              style={{display:"block",textAlign:"center",background:C.accent,color:"white",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"none"}}>
+              Open Analytics →
+            </a>
+          </div>
 
           {/* Excel export with date range */}
           <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
