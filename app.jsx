@@ -10035,6 +10035,18 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── DASHBOARD TAB (analytics — separated from order management, #9) ── */}
       {tab==="dashboard"&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
+          {/* Analytics console — first thing in the tab. On a phone anything
+              below the sales dashboard takes a long scroll to reach, which is
+              how the first placement (down in the Orders tab) went unfound. */}
+          <a className="press" href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer"
+            style={{display:"flex",alignItems:"center",gap:10,background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white",textDecoration:"none"}}>
+            <span style={{fontSize:20}}>📊</span>
+            <span style={{flex:1,minWidth:0}}>
+              <span style={{display:"block",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800}}>Analytics</span>
+              <span style={{display:"block",fontSize:11,opacity:.9,lineHeight:1.5}}>What to restock, what to chase, GST-ready — live from this store</span>
+            </span>
+            <span style={{fontSize:18,opacity:.9}}>→</span>
+          </a>
           <AdminSalesDashboard orders={orders} products={products} settings={settings}/>
           {/* Visitor analytics */}
           <div style={{background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
