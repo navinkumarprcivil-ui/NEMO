@@ -4716,7 +4716,7 @@ function productExpectsImage(p){
 /* Shimmer skeleton grid — shown on a cold first load until product data hydrates */
 function SkeletonGrid({n=6}){
   return(
-    <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+    <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
       {Array.from({length:n}).map((_,i)=>(
         <div key={i} style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`}}>
           <div className="shimmer-bar" style={{height:120}}/>
@@ -4822,16 +4822,19 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   );
   return(
     <div className="lift" ref={cardRef} onClick={()=>onPress(p)} onMouseMove={onTilt} onMouseLeave={onTiltEnd}
-      style={{background:C.card,borderRadius:24,overflow:"hidden",border:"none",boxShadow:"0 4px 20px rgba(15,23,42,0.05)",cursor:"pointer",position:"relative"}}>
+      style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.06)",cursor:"pointer",position:"relative"}}>
       {fine&&<div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:5,opacity:"var(--spot,0)",transition:"opacity .3s ease",background:"radial-gradient(200px circle at var(--mx,50%) var(--my,50%),rgba(14,165,233,.14),transparent 62%)"}}/>}
-      <div style={{height:120,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",
-        background:imgSrc?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`}}>
+      {/* The photo is the product — it gets a square tile (roughly 60% of the card) and is fitted
+          WHOLE inside it. It used to be a 120px letterbox with object-fit:cover, which cropped a
+          portrait fish photo down to a horizontal sliver and cut the animal in half. */}
+      <div style={{aspectRatio:"1 / 1",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden",
+        background:imgSrc?"#f7fbfc":`linear-gradient(140deg,${m.c1},${m.c2})`}}>
         {imgSrc
-          ? <SmoothImg src={imgSrc} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+          ? <SmoothImg src={imgSrc} alt={p.name} style={{width:"100%",height:"100%",objectFit:"contain",padding:6}}/>
           : productExpectsImage(p)
             ? <div className="shimmer-bar" style={{position:"absolute",inset:0}}/>
             : <span style={{fontSize:54}}>{m.emoji}</span>}
-        <div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(0,0,0,.16),transparent 40%)"}}/>
+        {!imgSrc&&<div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(0,0,0,.16),transparent 40%)"}}/>}
         {p.tag&&<span style={{position:"absolute",top:8,left:8,background:"rgba(0,0,0,.32)",color:"white",fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,backdropFilter:"blur(4px)"}}>{p.tag}</span>}
         {onSale&&!soon&&<span style={{position:"absolute",bottom:8,left:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:20}}>-{activeDiscount(p)}%</span>}
         {Heart}
@@ -4839,9 +4842,9 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
         {soon&&<div style={{position:"absolute",inset:0,background:"rgba(8,54,64,.55)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"white",fontSize:12,fontWeight:800,letterSpacing:1,background:"rgba(0,0,0,.3)",padding:"4px 12px",borderRadius:20}}>COMING SOON</span></div>}
         {!soon&&oos&&<div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"white",fontSize:12,fontWeight:700}}>Sold Out</span></div>}
       </div>
-      <div style={{padding:"26px 12px 12px"}}>
+      <div style={{padding:"11px 12px 12px"}}>
         <div style={{fontSize:9,color:C.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>{p.category}</div>
-        <div style={{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.35,marginBottom:6,minHeight:34}}>{p.name}</div>
+        <div style={{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3,marginBottom:6,minHeight:33}}>{p.name}</div>
         {soon ? (
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
             <div style={{fontSize:10.5,color:C.accent,fontWeight:700}}>Launching soon</div>
@@ -5211,7 +5214,7 @@ function AquaToolsPage({nav}){
   const worst=pairs.length?Math.max(...pairs.map(p=>p.v)):-1;
   const minTank=sel.length?Math.max(...sel.map(k=>SPECIES[k].min)):0;
   const VER=[{c:"#16a34a",bg:"#ecfdf5",bd:"#a7f3d0",t:"✅ Compatible"},{c:"#b45309",bg:"#fffbeb",bd:"#fde68a",t:"⚠️ Use caution"},{c:"#dc2626",bg:"#fef2f2",bd:"#fecaca",t:"❌ Not recommended"}];
-  const card={background:C.card,borderRadius:24,padding:"18px 16px",marginBottom:16,boxShadow:"0 4px 20px rgba(15,23,42,0.05)"};
+  const card={background:C.card,borderRadius:20,padding:"18px 16px",marginBottom:20,border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.06)"};
   const H=({children})=><div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:4}}>{children}</div>;
   const Sub=({children})=><div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:12}}>{children}</div>;
   const numIn=(val,set,ph)=>(
@@ -5505,7 +5508,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
               </span>
               <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.coral,fontWeight:700,background:"none",border:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View All →</button>
             </div>
-            <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
               {offerProducts.map(p=>(
                 <ProductCard key={p.id} product={p} imgSrc={getCardImg(p,mediaCache)}
                   onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
@@ -5541,7 +5544,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.accent,fontWeight:700,background:"none",border:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View All →</button>
           </div>
           {!hydrated ? <SkeletonGrid n={6}/> : (
-          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
             {featured.map(p=>(
               <ProductCard key={p.id} product={p} imgSrc={getCardImg(p,mediaCache)}
                 onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
@@ -5808,7 +5811,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
           </div>
         ):(
           <>
-          <div className="prod-grid js-stagger" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="prod-grid js-stagger" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
             {list.slice(0,shown).map(p=>(
               <div key={p.id}>
                 <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
@@ -11683,7 +11686,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
           const content=g.content||"";
           const hasPoster=!!img;
           return(
-            <div key={g.id} style={{background:C.card,borderRadius:16,overflow:"hidden",marginBottom:12,border:`1px solid ${C.border}`}}>
+            <div key={g.id} style={{background:C.card,borderRadius:16,overflow:"hidden",marginBottom:16,border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.06)"}}>
               <button className="press" onClick={()=>{ if(hasPoster){ const pi=posterList.findIndex(x=>x.src===img); setZoom({start:pi<0?0:pi}); } else { setOpenId(open?null:g.id); } }}
                 style={{display:"flex",alignItems:"center",gap:13,width:"100%",padding:"13px 15px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
                 <div style={{flexShrink:0,width:52,height:52,borderRadius:12,overflow:"hidden",background:hasPoster?"#0c2b30":C.accentLight,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -11728,7 +11731,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
             <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Browse Products</button>
           </div>
         ):(
-          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
             {saved.map(p=>(
               <div key={p.id}>
                 <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
