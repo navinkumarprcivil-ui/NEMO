@@ -686,11 +686,57 @@ const FIREBASE_CONFIG = {
   appId: "1:771650250460:web:94a3df5aec9bd125a7b619",
 };
 let FB_DB=null, FB_AUTH=null, FB_STORAGE=null, FB_OK=false;
+
+/* ── App Check ──
+   reCAPTCHA v3 site key. Not a secret: a site key is public by design and is
+   bound to the domains registered against it, not to a project.
+
+   Ordering is the whole game here. App Check has to be activated before the
+   first database/auth call, because under enforcement an unattested request is
+   simply refused. The Firebase tags in index.html are `async`, so
+   app-check-compat can — and often will — land *after* auth and database. If
+   init went ahead at that moment, `firebase.appCheck` would be undefined, the
+   guard below would skip, and the page would run unattested for its whole life
+   rather than recovering on a retry.
+
+   So tryInitFirebase waits for appCheck to show up. Not forever: if the script
+   is blocked or the shopper is offline it gives up after the grace period and
+   connects anyway. An unattested session surfaces as permission errors, which
+   at least say what is wrong; a store that refuses to open says nothing and
+   costs a sale.
+
+   The grace has to stay comfortably under the 2200ms budget the boot path
+   allows for Firebase (`waitForFirebase(2200)`) — overrun it and the store
+   decides there is no cloud and browses in local-only mode. By the time this
+   runs the other four tags have already landed from the same host, so
+   app-check is usually there already or a few hundred ms behind. */
+const APPCHECK_SITE_KEY = "6LeLCnMtAAAAANCr565qco_YgRKCSMtmxShfo3Jr";
+const APPCHECK_GRACE_MS = 1200;
+let fbSdkFirstSeen = 0;
+
 function tryInitFirebase(){
   if(FB_OK) return true;
   if(typeof firebase==="undefined" || !firebase.database || !firebase.auth) return false;
+  // Core SDKs are here; give app-check-compat a bounded moment to catch up.
+  if(!fbSdkFirstSeen) fbSdkFirstSeen=Date.now();
+  if(!firebase.appCheck && Date.now()-fbSdkFirstSeen<APPCHECK_GRACE_MS) return false;
   try{
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    /* Before database() or auth() are touched. Same shape as the analytics
+       app's src/live/firebase.js. */
+    try{
+      if(location.hostname==="localhost"||location.hostname==="127.0.0.1"){
+        // Prints a token to register under App Check → Manage debug tokens,
+        // or local development breaks the moment enforcement goes on.
+        self.FIREBASE_APPCHECK_DEBUG_TOKEN=true;
+      }
+      if(firebase.appCheck){
+        firebase.appCheck().activate(
+          new firebase.appCheck.ReCaptchaV3Provider(APPCHECK_SITE_KEY),
+          true
+        );
+      }
+    }catch(e){ console.warn("App Check not activated:", e?.message||e); }
     FB_DB=firebase.database(); FB_AUTH=firebase.auth(); FB_OK=true;
     try{ if(firebase.storage) FB_STORAGE=firebase.storage(); }catch(e){}
     // Re-sync whenever auth state resolves. IMPORTANT: only sign in anonymously when
