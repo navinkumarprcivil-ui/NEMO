@@ -1074,7 +1074,7 @@ async function deleteExperienceReview(id){
 const COURIER_COLLECT_TERM = "Tracking & collection: once your order is dispatched we share the courier partner and consignment number. Please keep tracking your parcel and collect it from the courier partner as soon as it reaches your area. Door delivery depends entirely on the courier partner and is not in our hands, so we request every customer to put in that effort and take delivery of the package at the earliest — especially when ordering live fish or plants, where every extra hour the parcel spends in transit or lying at the hub affects the livestock. Loss or deterioration caused by a parcel left uncollected, collected late, refused, or returned undelivered is not covered by the Live Arrival Guarantee or by any refund or replacement.";
 
 /* Store settings (WhatsApp numbers, payment) — shared via Firebase */
-const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"",
+const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"", website:"", bankAccountName:"", bankName:"", bankBranch:"", bankAccountNo:"", bankIfsc:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
   liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
@@ -2278,6 +2278,32 @@ function orderTaxLines(order, settings){
            invoiceValue:r2(grossTotal-discount) };
 }
 
+/* "Total Amount (in words)" — a GST invoice is expected to spell the amount out, in the Indian
+   system (lakh/crore), down to the paise. Rule 46 doesn't demand it, but every supplier invoice
+   carries it and a bank/auditor looks for it, so ours does too. */
+function amountInWordsINR(amount){
+  const n=Math.abs(Math.round((Number(amount)||0)*100));
+  const rupees=Math.floor(n/100), paise=n%100;
+  const ONES=["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"];
+  const TENS=["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
+  const two=v=>v<20?ONES[v]:(TENS[Math.floor(v/10)]+(v%10?" "+ONES[v%10]:""));
+  const three=v=>(v>=100?ONES[Math.floor(v/100)]+" Hundred"+(v%100?" "+two(v%100):""):two(v));
+  const words=v=>{
+    if(v===0) return "Zero";
+    // Indian grouping: crore, lakh, thousand, then the last three digits.
+    const parts=[];
+    const cr=Math.floor(v/10000000); v%=10000000;
+    const lk=Math.floor(v/100000);   v%=100000;
+    const th=Math.floor(v/1000);     v%=1000;
+    if(cr) parts.push(three(cr)+" Crore");
+    if(lk) parts.push(three(lk)+" Lakh");
+    if(th) parts.push(three(th)+" Thousand");
+    if(v)  parts.push(three(v));
+    return parts.join(" ");
+  };
+  const head=(amount<0?"Minus ":"")+words(rupees)+" Rupees";
+  return paise?`${head} and ${words(paise)} Paise Only`:`${head} Only`;
+}
 function generateInvoiceHTML(order, settings, opts){
   const s=settings||{}; const o=order||{}; const addr=o.address||{};
   const cn=!!(opts&&opts.creditNote); // credit-note mode (GST sales return): reverses tax on returned goods
@@ -2291,6 +2317,7 @@ function generateInvoiceHTML(order, settings, opts){
   const storeWA=E(s.ownerWhatsapp||BUSINESS_WA);
   const storeEmail=E(s.orderEmail||"");
   const logo=E(s.storeLogo||"");
+  const storeSite=E(String(s.website||"").trim().replace(/^https?:\/\//,""));
   const gstin=E((s.gstin||"").trim());
   // A GST "Tax Invoice" is only issued once the supply is real (paid/confirmed);
   // before that it's a non-accountable PROFORMA so customers can't treat a pending order as a tax invoice.
@@ -2336,18 +2363,80 @@ function generateInvoiceHTML(order, settings, opts){
   // Every row is priced from the shared engine: its own product rate, its own HSN, and its share
   // of any invoice discount already taken off BEFORE tax (§15(3)(a)). The "Discount" column is
   // the per-line product discount plus that apportioned share, so the row reads end-to-end.
+  // The "Disc" column carries the per-line MRP discount AND the apportioned order discount, so
+  // the Sub-Total under it has to be the sum of what is printed, not just the order-level part.
+  let discColTotal=0;
   const gstRows=TAX.lines.map((l,i)=>{
     const src=l.isShipping?null:items[i];
     const mrp=src?unitMrp(src):0;
     const disc=(src?lineDisc(src):0)+l.discount;
+    discColTotal=round2(discColTotal+disc);
     return `<tr><td class="c">${i+1}</td><td>${E(l.name)}${l.variantLabel?`<div class="muted">${E(l.variantLabel)}</div>`:""}${l.isShipping?`<div class="muted">follows the principal supply @ ${l.rate}%</div>`:""}</td><td class="c">${E(l.hsn)||"—"}</td><td class="c">${l.isShipping?"—":E(l.qty)}</td><td class="r">${l.isShipping?"₹"+fmt(l.gross):"₹"+fmt(mrp)}</td><td class="r">${disc>0?"-₹"+fmt2(disc):"—"}</td><td class="r">${money(l.taxed?l.taxable:l.net)}</td><td class="c">${l.taxed?l.rate+"%":"No GST"}</td><td class="r">${l.taxed?money(l.tax):"—"}</td><td class="r">${money(l.net)}</td></tr>`;
   }).join("");
   const taxableSum=TAX.taxable, cgstSum=TAX.cgst, sgstSum=TAX.sgst, igstSum=TAX.igst;
   const taxTotal=TAX.tax;
   // Taxable value is already net of the discount, so the summary reads gross → discount →
   // taxable → tax → total. Any residue here is pure paisa rounding, not a discount.
-  const roundOff=round2(grand-round2(taxableSum+taxTotal));
-  const taxSummaryHtml=`<table class="taxsum"><tr><td class="k">Value (incl. GST)</td><td class="v">${money(TAX.gross)}</td></tr>${TAX.discount>0?`<tr><td class="k">Less: Discount</td><td class="v">-${money(TAX.discount)}</td></tr>`:""}${TAX.exempt>0?`<tr><td class="k">Value — no GST claimed</td><td class="v">${money(TAX.exempt)}</td></tr>`:""}${TAX.anyTaxed?`<tr><td class="k">Taxable Value</td><td class="v">${money(taxableSum)}</td></tr>`:""}${!TAX.anyTaxed?"":interState?`<tr><td class="k">IGST</td><td class="v">${money(igstSum)}</td></tr>`:`<tr><td class="k">CGST</td><td class="v">${money(cgstSum)}</td></tr><tr><td class="k">SGST</td><td class="v">${money(sgstSum)}</td></tr>`}${Math.abs(roundOff)>=0.01?`<tr><td class="k">Round Off</td><td class="v">${roundOff<0?"-":""}${money(Math.abs(roundOff))}</td></tr>`:""}<tr class="g"><td class="k">Total Invoice Amount</td><td class="v">₹${fmt(grand)}</td></tr></table>`;
+  // Goods sold without claiming GST carry no taxable value, so they have to be added back before
+  // this comparison — otherwise the whole exempt amount would masquerade as a rounding difference.
+  const roundOff=round2(grand-round2(taxableSum+TAX.exempt+taxTotal));
+  // Tax is shown SLAB BY SLAB ("CGST @9%", "CGST @2.5%"…), not as one lump — a mixed basket of
+  // feed, medicine and equipment carries three or four different rates, and both the buyer's
+  // accountant and GSTR-1 need to see each one separately.
+  const bands=Object.values(TAX.byHsn).filter(b=>b.taxed&&b.rate>0).reduce((acc,b)=>{
+    const half=round2(b.rate/2);
+    const a=acc[b.rate]||(acc[b.rate]={rate:b.rate,half,taxable:0,cgst:0,sgst:0,igst:0});
+    a.taxable=round2(a.taxable+b.taxable); a.cgst=round2(a.cgst+b.cgst);
+    a.sgst=round2(a.sgst+b.sgst); a.igst=round2(a.igst+b.igst);
+    return acc;
+  },{});
+  const bandList=Object.values(bands).sort((a,b)=>a.rate-b.rate);
+  const bandRows=bandList.map(b=>interState
+    ? `<tr><td class="k">IGST @${b.rate}%</td><td class="v">${money(b.igst)}</td></tr>`
+    : `<tr><td class="k">CGST @${b.half}%</td><td class="v">${money(b.cgst)}</td></tr><tr><td class="k">SGST @${b.half}%</td><td class="v">${money(b.sgst)}</td></tr>`).join("");
+  const taxSummaryHtml=`<table class="taxsum"><tr><td class="k">Value (incl. GST)</td><td class="v">${money(TAX.gross)}</td></tr>${TAX.discount>0?`<tr><td class="k">Less: Discount</td><td class="v">-${money(TAX.discount)}</td></tr>`:""}${TAX.exempt>0?`<tr><td class="k">Value — no GST claimed</td><td class="v">${money(TAX.exempt)}</td></tr>`:""}${TAX.anyTaxed?`<tr><td class="k">Taxable Value</td><td class="v">${money(taxableSum)}</td></tr>`:""}${bandRows}${TAX.anyTaxed?`<tr><td class="k">Total Tax</td><td class="v">${money(taxTotal)}</td></tr>`:""}${Math.abs(roundOff)>=0.01?`<tr><td class="k">Round Off</td><td class="v">${roundOff<0?"-":""}${money(Math.abs(roundOff))}</td></tr>`:""}<tr class="g"><td class="k">Total Invoice Amount</td><td class="v">₹${fmt(grand)}</td></tr></table>`;
+
+  // HSN/SAC-wise summary — Rule 46(g) of the CGST Rules. One row per HSN + rate, with the
+  // taxable value and the tax split, plus a Total row that has to tie back to the invoice.
+  const hsnBuckets=Object.values(TAX.byHsn).filter(b=>b.taxed);
+  const hsnSummaryHtml=(hasGst&&hsnBuckets.length)?`<div class="tablewrap"><table class="items hsn">
+    <thead><tr><th>HSN/SAC</th><th class="r">Taxable Value</th>${interState
+      ? `<th class="c">IGST Rate</th><th class="r">IGST Amount</th>`
+      : `<th class="c">CGST Rate</th><th class="r">CGST Amount</th><th class="c">SGST Rate</th><th class="r">SGST Amount</th>`}<th class="r">Total Tax</th></tr></thead>
+    <tbody>${hsnBuckets.sort((a,b)=>a.rate-b.rate).map(b=>`<tr><td>${E(b.hsn)}</td><td class="r">${money(b.taxable)}</td>${interState
+      ? `<td class="c">${b.rate}%</td><td class="r">${money(b.igst)}</td>`
+      : `<td class="c">${round2(b.rate/2)}%</td><td class="r">${money(b.cgst)}</td><td class="c">${round2(b.rate/2)}%</td><td class="r">${money(b.sgst)}</td>`}<td class="r">${money(b.tax)}</td></tr>`).join("")}
+      <tr class="tot"><td><b>Total</b></td><td class="r"><b>${money(taxableSum)}</b></td>${interState
+        ? `<td></td><td class="r"><b>${money(igstSum)}</b></td>`
+        : `<td></td><td class="r"><b>${money(cgstSum)}</b></td><td></td><td class="r"><b>${money(sgstSum)}</b></td>`}<td class="r"><b>${money(taxTotal)}</b></td></tr>
+    </tbody></table></div>${TAX.exempt>0?`<p class="hsnnote">Goods sold without claiming GST (e.g. live fish): ${money(TAX.exempt)} — outside the tax, reported separately.</p>`:""}`:"";
+
+  // Shipment / consignment details, filled in the moment the order is marked Shipped.
+  const pkgKg=(()=>{
+    const r=(s.shippingRates||{});
+    const w=items.reduce((a,it)=>a+((Number(it.variantPackagingWeight!=null?it.variantPackagingWeight:it.packagingWeight)||0)*(Number(it.qty)||0)),0);
+    const base=Number(items.some(it=>it.isLiveFish||it.category==="Live Fish")?(r.liveBasePackagingKg??r.basePackagingKg??0.5):(r.basePackagingKg??0.5))||0;
+    const tot=w+base;
+    return tot>0?tot.toFixed(2)+" kg (approx.)":"";
+  })();
+  const shipRows=[
+    o.courierName?["Courier",E(o.courierName)]:null,
+    o.trackingNumber?["AWB / Consignment No.",E(o.trackingNumber)]:null,
+    pkgKg?["Package Weight",pkgKg]:null,
+    o.shippingZoneLabel?["Delivery Zone",E(o.shippingZoneLabel)]:null,
+  ].filter(Boolean);
+  const shipmentHtml=shipRows.length?`<div class="infoblk"><div class="ih">SHIPMENT DETAILS</div><table class="kv">${shipRows.map(([k,v])=>`<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`).join("")}</table></div>`:"";
+
+  // Payment / bank details — the buyer's accountant needs somewhere to send the money and
+  // something to reconcile the credit against.
+  const bankRows=[
+    s.bankAccountName?["Name",E(s.bankAccountName)]:null,
+    s.bankName?["Bank",E(s.bankName)+(s.bankBranch?", "+E(s.bankBranch):"")]:null,
+    s.bankAccountNo?["Account No.",E(s.bankAccountNo)]:null,
+    s.bankIfsc?["IFSC Code",E(String(s.bankIfsc).toUpperCase())]:null,
+    s.upiId?["UPI ID",E(s.upiId)]:null,
+  ].filter(Boolean);
+  const bankHtml=bankRows.length?`<div class="infoblk"><div class="ih">${cn?"REFUND / BANK DETAILS":"BANK &amp; PAYMENT DETAILS"}</div><table class="kv">${bankRows.map(([k,v])=>`<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`).join("")}</table></div>`:"";
 
   const itemRows=items.map((it,i)=>`<tr>
     <td class="c">${i+1}</td>
@@ -2401,47 +2490,77 @@ table.items tbody tr:nth-child(even){background:#f6f8fb}
 .tablewrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 table.items.gst thead th{padding:7px 7px;font-size:10px}
 table.items.gst tbody td{padding:7px 7px;font-size:11px}
+table.items tbody tr.sub td{background:#eef2f8;border-top:2px solid #2f4b7c;border-bottom:none}
 .taxsum{margin-top:10px;margin-left:auto;border-collapse:collapse;min-width:270px}
 .taxsum td{padding:4px 10px;font-size:12px}
 .taxsum td.k{color:#566;font-weight:600}.taxsum td.v{text-align:right;font-weight:700;color:#1f2733;min-width:110px}
 .taxsum tr.g td{font-size:14px;font-weight:800;color:#1f3864;border-top:2px solid #2f4b7c;padding-top:8px}
+.copy{font-size:9.5px;font-weight:700;letter-spacing:.8px;color:#7a8694;margin-top:3px}
+.words{margin-top:14px;font-size:12px;color:#1f2733;font-weight:700;line-height:1.6;background:#f6f8fb;border-left:3px solid #2f4b7c;padding:9px 12px}
+.words .wl{font-size:10px;font-weight:700;letter-spacing:.5px;color:#7a8694;text-transform:uppercase}
+table.items.hsn{margin-top:16px}
+table.items.hsn thead th{padding:7px 8px;font-size:10px}
+table.items.hsn tbody td{padding:6px 8px;font-size:11px}
+table.items.hsn tbody tr.tot td{background:#eef2f8;border-top:2px solid #2f4b7c}
+.hsnnote{font-size:10.5px;color:#7a8694;margin:6px 0 0}
+.blkrow{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.infoblk{border:1px solid #e3e8ef;border-radius:4px;overflow:hidden}
+.infoblk .ih{background:#f6f8fb;border-bottom:1px solid #e3e8ef;font-size:10px;font-weight:700;letter-spacing:.6px;color:#2f4b7c;padding:6px 10px}
+table.kv{width:100%;border-collapse:collapse}
+table.kv td{font-size:11.5px;padding:5px 10px;vertical-align:top}
+table.kv td.k{color:#7a8694;font-weight:600;white-space:nowrap;width:44%}
+table.kv td.v{color:#1f2733;font-weight:700}
 .payrow{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-top:16px}
 .sign{font-size:12px;color:#1f2733;text-align:center}.sign .sgap{height:44px}
 .paybox{margin-top:18px;text-align:center}
 .paybox a{display:inline-block;background:#16834a;color:#fff;text-decoration:none;border-radius:6px;padding:11px 26px;font-size:13px;font-weight:800}
-@media(max-width:640px){.page{padding:22px 16px 26px}.title .big{font-size:30px}.co h2{font-size:16px}.parties{grid-template-columns:1fr}.parties .col:first-child .b{border-right:none;border-bottom:1px solid #e3e8ef}.payrow{flex-direction:column;align-items:stretch;gap:16px}.sign{text-align:left}}
-@media print{body{background:#fff;padding:0}.page{box-shadow:none}.np{display:none!important}}
+/* On a phone the invoice keeps its A4 proportions and is scaled down to the screen width
+   (see the fit script at the end) rather than reflowing into a shape no printed bill has — so
+   what the customer sees on the phone is exactly the sheet that comes out of the printer.
+   "Actual size" turns the scaling off for pinch-zoom reading. */
+.fitwrap{transform-origin:top left}
+body.fit{overflow-x:hidden}
+body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!important}
+.fitbtn{position:fixed;right:12px;bottom:12px;z-index:50;background:#2f4b7c;color:#fff;border:none;border-radius:99px;padding:10px 18px;font-size:12.5px;font-weight:700;box-shadow:0 6px 18px rgba(31,56,100,.35);cursor:pointer;display:none}
+@media(max-width:820px){.fitbtn{display:inline-block}body{padding:0}}
+@page{size:A4;margin:12mm}
+@media print{body{background:#fff;padding:0}.page{box-shadow:none;max-width:none;width:auto;padding:0}.np{display:none!important}.fitwrap{transform:none!important;width:auto!important;height:auto!important}table.items tbody tr,.infoblk,.words{page-break-inside:avoid}table.items thead{display:table-header-group}}
 </style></head>
-<body><div class="page">
+<body class="fit"><div class="fitwrap"><div class="page">
   <div class="top">
     <div class="co">
       ${logo?`<img class="lg" src="${logo}" alt=""/>`:""}
       <div class="coinfo">
       <h2>${storeName}</h2>
-      <p>${storeEntity?E(storeEntity)+"<br>":""}${storeAddr?storeAddr+"<br>":""}${storeWA?"☎ "+storeWA+"<br>":""}${storeEmail?storeEmail+"<br>":""}${gstin?"GSTIN: "+gstin+"<br>":""}${hasGst&&pan?"PAN: "+pan+"<br>":""}${hasGst&&cin?"CIN: "+cin:""}</p>
+      <p>${storeEntity?E(storeEntity)+"<br>":""}${storeAddr?storeAddr+"<br>":""}${storeWA?"☎ "+storeWA+"<br>":""}${storeEmail?storeEmail+"<br>":""}${storeSite?storeSite+"<br>":""}${gstin?"GSTIN: "+gstin+"<br>":""}${hasGst&&pan?"PAN: "+pan+"<br>":""}${hasGst&&cin?"CIN: "+cin:""}</p>
       </div>
     </div>
     <div class="title">
       <div class="big">${docLabel}</div>
+      ${cn?"":`<div class="copy">ORIGINAL FOR RECIPIENT</div>`}
       <table class="meta">
-        <tr><td class="k">DATE</td><td>${dateStr}</td></tr>
         <tr><td class="k">${cn?"CREDIT NOTE #":"INVOICE #"}</td><td>${invNo}</td></tr>
+        <tr><td class="k">${cn?"DATE":"INVOICE DATE"}</td><td>${dateStr}</td></tr>
         ${cn&&o.againstInvoice?`<tr><td class="k">AGAINST INVOICE</td><td>${E(o.againstInvoice)}</td></tr>`:""}
+        ${cn?"":`<tr><td class="k">ORDER ID</td><td>${E(o.orderNo||orderId(o.id||""))}</td></tr><tr><td class="k">ORDER DATE</td><td>${dateStr}</td></tr>`}
         ${custId?`<tr><td class="k">CUSTOMER ID</td><td>${custId}</td></tr>`:""}
         ${cn?"":`<tr><td class="k">STATUS</td><td>${E(o.status||"—")}</td></tr>`}
         ${hasGst?`<tr><td class="k">PLACE OF SUPPLY</td><td>${placeOfSupply}</td></tr><tr><td class="k">REVERSE CHARGE</td><td>No</td></tr>`:""}
+        ${cn?"":`<tr><td class="k">PAYMENT MODE</td><td>${E(o.paymentMode||(payLink?"Online (UPI / Card / Netbanking)":"UPI"))}</td></tr><tr><td class="k">PAYMENT STATUS</td><td>${isPaid?"PAID":"PAYMENT DUE"}</td></tr>`}
         ${o.txnId?`<tr><td class="k">PAYMENT REF</td><td>${E(o.txnId)}</td></tr>`:""}
       </table>
     </div>
   </div>
   <div class="bar"></div>
   <div class="parties">
-    <div class="col"><div class="h">BILL TO</div><div class="b">${addrBlock(billingAddr)}${buyerGstin?`<div class="muted">GSTIN: ${buyerGstin}</div>`:""}</div></div>
+    <div class="col"><div class="h">BILL TO</div><div class="b">${addrBlock(billingAddr)}${buyerGstin?`<div class="muted">GSTIN: ${buyerGstin}</div>`:""}${hasGst?`<div class="muted">Place of Supply: ${placeOfSupply}</div>`:""}</div></div>
     <div class="col"><div class="h">SHIP TO</div><div class="b">${addrBlock(addr)}${o.shippingZoneLabel?`<div class="muted">Zone: ${E(o.shippingZoneLabel)}</div>`:""}</div></div>
   </div>
   ${hasGst?`<div class="tablewrap"><table class="items gst">
     <thead><tr><th class="c" style="width:24px">#</th><th>Description</th><th class="c">HSN/SAC</th><th class="c">Qty</th><th class="r">Rate</th><th class="r">Disc</th><th class="r">Taxable</th><th class="c">GST</th><th class="r">Tax</th><th class="r">Total</th></tr></thead>
-    <tbody>${gstRows}</tbody>
+    <tbody>${gstRows}
+      <tr class="sub"><td></td><td colspan="2"><b>Sub-Total</b></td><td class="c"><b>${TAX.lines.reduce((a,l)=>a+(l.isShipping?0:Number(l.qty)||0),0)}</b></td><td></td><td class="r"><b>${discColTotal>0?"-₹"+fmt2(discColTotal):"—"}</b></td><td class="r"><b>${money(taxableSum)}</b></td><td></td><td class="r"><b>${money(taxTotal)}</b></td><td class="r"><b>${money(TAX.gross-TAX.discount)}</b></td></tr>
+    </tbody>
   </table></div>`:`<div class="tablewrap"><table class="items">
     <thead><tr><th class="c" style="width:34px">#</th><th>Description</th><th class="c" style="width:44px">Qty</th><th class="r" style="width:84px">MRP</th><th class="r" style="width:74px">Disc</th><th class="r" style="width:96px">Total</th></tr></thead>
     <tbody>${itemRows}</tbody>
@@ -2460,6 +2579,9 @@ table.items.gst tbody td{padding:7px 7px;font-size:11px}
     ${totRow("TOTAL","₹"+fmt(grand),{grand:true})}
   </table>
   ${hasGst?taxSummaryHtml:""}
+  <div class="words"><span class="wl">Total Amount (in words)</span><br>${E(amountInWordsINR(grand))}</div>
+  ${hsnSummaryHtml}
+  ${(shipmentHtml||bankHtml)?`<div class="blkrow">${shipmentHtml}${bankHtml}</div>`:""}
   ${(!cn&&!isPaid&&payLink)?`<div class="np paybox"><a href="${E(payLink)}" target="_blank" rel="noopener">💳 Pay ₹${fmt(grand)} securely online →</a></div>`:""}
   <div class="payrow">
     <div class="note">${cn?`<span class="pay paid">CREDIT NOTE</span>`:`<span class="pay ${isPaid?"paid":"due"}">${isPaid?"PAID":"PAYMENT DUE"}</span>${o.txnId?` <span style="font-size:11px;color:#7a8694">Txn/Ref: ${E(o.txnId)}</span>`:""}`}</div>
@@ -2470,12 +2592,41 @@ table.items.gst tbody td{padding:7px 7px;font-size:11px}
     ${cn?`<p>This <b>credit note</b> reverses the GST charged on the goods returned against Tax Invoice <b>${E(o.againstInvoice||"—")}</b>. All amounts are in INR and inclusive of GST; the tax shown above is credited back / adjusted against output tax liability under Section 34 of the CGST Act, 2017.</p>`:`<p>${hasGst?"All amounts are in INR and inclusive of GST. Tax is payable on reverse charge basis: No.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this document is issued as a Bill of Supply."}</p>`}
     ${hasGst?`<p>We certify that our registration under the Goods and Services Tax Act, 2017 is in force and that this ${cn?"credit note relates to a genuine sales return":"tax invoice reflects the goods actually supplied"}. ${pan?"PAN: "+pan+". ":""}GSTIN: ${gstin}.</p>`:""}
     ${o.liveGuarantee?`<p><b>Live Arrival Guarantee</b> applies to this order. Report any Dead-on-Arrival with a continuous unboxing video on WhatsApp ${storeWA} within 2 hours of delivery.</p>`:""}
-    <p>For any questions about this invoice, contact <b>${storeName}</b> on WhatsApp ${storeWA}${storeEmail?` or ${storeEmail}`:""}.</p>
+    ${cn?"":`<p><b>Declaration:</b> We declare that this ${docLabel.toLowerCase()} shows the actual price of the goods described and that all particulars are true and correct. Goods once sold are subject to our published Return &amp; Replacement Policy.</p>`}
+    <p>For any questions about this invoice, contact <b>${storeName}</b> on WhatsApp ${storeWA}${storeEmail?` or ${storeEmail}`:""}${storeSite?` · ${storeSite}`:""}.</p>
     <p style="font-size:10px">This is a computer-generated invoice and does not require a physical signature. E. &amp; O.E. Subject to ${E(s.jurisdiction||"India")} jurisdiction.</p>
     <p style="font-size:10px"><b>Returns &amp; Refunds:</b> ${s.returnPolicy?E(s.returnPolicy):"Live fish are covered only under our Live Arrival Guarantee (report DOA with a continuous unboxing video within 2 hours of delivery). Being perishable livestock, fish are otherwise non-returnable. Dry goods &amp; accessories may be returned within 7 days if unused and in original packaging; approved refunds are issued to the original payment method or as store credit within 5–7 working days."}</p>
   </div>
   <div class="np" style="text-align:right;margin-top:18px"><button onclick="window.print()" style="background:#2f4b7c;color:#fff;border:none;border-radius:6px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save as PDF</button></div>
-</div></body></html>`;
+</div></div>
+<button class="np fitbtn" id="fitbtn" type="button">🔍 Actual size</button>
+<script>
+(function(){
+  var wrap=document.querySelector(".fitwrap"), page=document.querySelector(".page"), btn=document.getElementById("fitbtn"), actual=false;
+  function fit(){
+    if(actual){ wrap.style.transform=""; wrap.style.width=""; wrap.style.height=""; return; }
+    var avail=document.documentElement.clientWidth;
+    wrap.style.width="780px";
+    var scale=Math.min(1, avail/780);
+    wrap.style.transform = scale<1 ? "scale("+scale+")" : "";
+    /* A scaled sheet no longer reserves its own height in the flow, so hand the wrapper the
+       post-scale height back — otherwise the page scrolls a full A4 past the end of the bill. */
+    wrap.style.height = scale<1 ? (page.offsetHeight*scale)+"px" : "";
+  }
+  btn.addEventListener("click",function(){
+    actual=!actual;
+    document.body.classList.toggle("actual",actual);
+    btn.textContent=actual?"\u2194 Fit to screen":"🔍 Actual size";
+    fit();
+  });
+  window.addEventListener("resize",fit);
+  window.addEventListener("beforeprint",function(){wrap.style.transform="";wrap.style.width="";wrap.style.height="";});
+  window.addEventListener("afterprint",fit);
+  window.addEventListener("load",fit);
+  fit();
+})();
+<\/script>
+</body></html>`;
 }
 function openInvoice(order,settings){
   openDocHTML(generateInvoiceHTML(order,settings||{}));
@@ -10731,6 +10882,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             return <div style={{fontSize:11.5,color:"#b91c1c",fontWeight:700,marginTop:8,lineHeight:1.5}}>⚠ {gaps.length} product{gaps.length!==1?"s":""} claim GST but are missing an HSN or rate — they will bill with no GST: {gaps.slice(0,4).map(p=>p.name).join(", ")}{gaps.length>4?"…":""}</div>;
           })()}
         </div>
+        {field("Website (invoice + About page)","website","www.nemoaquastore.in")}
         {field("Legal Jurisdiction","jurisdiction","Salem, Tamil Nadu")}
       </div>
 
@@ -10743,6 +10895,18 @@ function SettingsPanel({settings,onSave,products=[]}){
         {field("UPI ID","upiId","yourname@oksbi","Direct UPI collection. Clear this field + Save to remove it once your gateway is live.")}
         {field("UPI Display Name","upiName","Nemo Aqua Store")}
         {field("Payment Gateway / Razorpay Link","razorpayLink","https://rzp.io/i/xxxx","Paste your Razorpay Payment Link / Page (or any gateway checkout URL) for card, netbanking & UPI. This is the long-term option once you have a current account.")}
+        {/* Printed in the "Bank & Payment Details" box on every invoice — a business buyer's
+            accountant needs an account to pay into and something to reconcile against. All
+            optional: any field left blank simply doesn't print. */}
+        <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px 12px 2px",marginTop:6}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>🏦 Bank Details (printed on invoices)</div>
+          <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Optional, but wholesale/GST buyers expect it. Leave any field blank to hide it. This is <b>business account</b> information that already appears on your invoices — never enter a personal PIN, password or OTP anywhere.</div>
+          {field("Account Name","bankAccountName","NEMO AQUA STORE")}
+          {field("Bank","bankName","ICICI Bank")}
+          {field("Branch","bankBranch","Salem")}
+          {field("Account No.","bankAccountNo","218405001600")}
+          {field("IFSC Code","bankIfsc","ICIC0002184")}
+        </div>
       </div>
 
       {/* Drive removed — photos are uploaded directly from device in the product form */}
