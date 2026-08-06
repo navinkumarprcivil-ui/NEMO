@@ -2,6 +2,17 @@
 
 Helper scripts that live **outside** the website but are kept here so GitHub is their backup.
 
+## `build.mjs` — compile `app.jsx` → `app.js` (run this after every app.jsx edit)
+
+```
+node scripts/build.mjs      # needs esbuild 0.25.x: npm i esbuild
+```
+
+`index.html` runs the precompiled **`app.js`**; it only falls back to compiling `app.jsx` in the
+browser if `app.js` is *missing*. A **stale** `app.js` is not detected — the site just keeps
+serving the old code, and a new feature looks like it was never added. Rebuild in the same
+commit as the `app.jsx` change, and bump `CACHE` in `sw.js` so installed devices refetch.
+
 ## `nemo-backup.gs` — automatic Drive backup + GST/inventory export (Google Apps Script)
 
 Runs inside **nemoaquastore@gmail.com** (Google Apps Script, https://script.google.com).
