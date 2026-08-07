@@ -14,24 +14,22 @@ assets/                 ← UPLOAD THE WHOLE FOLDER (logo, favicons, share banne
   └─ favicon-16/32/48/96/144/192/512.png
 favicon.ico             ← root favicon Google probes by default
 favicon.png
-p/                      ← UPLOAD THE WHOLE FOLDER (SEO product pages + social images)
-  ├─ index.html         ← product catalog page
-  ├─ <product>.html     ← one page per product (clownfish, java-fern, …)
-  └─ og/                ← share images for each product (.jpg)
+api/                    ← serverless functions (share links, /p/ pages, sitemap)
+lib/catalog.mjs         ← renders the /p/ pages and sitemap from the live catalogue
 manifest.webmanifest    ← PWA manifest (installable app)
 sw.js                   ← service worker (offline shell + install)
 robots.txt              ← search-engine crawl rules
-sitemap.xml             ← page list for Google
 google….html            ← Google Search Console verification file
 vercel.json             ← static config + security headers
 database.rules.json     ← Firebase security rules (NOT served — paste into Firebase, see below)
-seo/                    ← build-time script only; the LIVE site does NOT need it
+seo/README.md           ← how the /p/ pages work
+test/                   ← node test/catalog.test.mjs
 README.md               ← this file
 LAUNCH_CHECKLIST.md     ← pre-launch checklist
 .gitignore
 ```
 
-> ⚠️ **Keep the folder structure exactly as above — upload the `assets/` and `p/` folders WITH their contents (including `p/og/`).** `index.html` and the product pages reference files *inside* these folders by path, so if a folder uploads empty you'll get a broken logo/favicons and 404s on every `/p/...` product link. Only `seo/` is safe to leave off the live host (it's a build script). If your host's uploader skips folder contents, see **"Uploading"** at the bottom — zip-and-extract or `git push` keeps the structure intact.
+> ⚠️ **Keep the folder structure exactly as above — upload the `assets/` folder WITH its contents.** `index.html` references files *inside* it by path, so if it uploads empty you'll get a broken logo and favicons. `api/` and `lib/` must go up too: `/p/`, `/s/` and `/sitemap.xml` are served by those functions, not by files. If your host's uploader skips folder contents, see **"Uploading"** at the bottom — zip-and-extract or `git push` keeps the structure intact.
 
 ## ⭐ NEW since last version
 - **Installable app (PWA):** customers get an "Install Nemo App" button + browser "Add to Home Screen". Needs `manifest.webmanifest` + `sw.js` in the repo (already included).
@@ -50,9 +48,8 @@ It exists because the storefront is a single page. A link like `/?p=<id>` looks
 different to a person and identical to a scraper: WhatsApp and Facebook read the
 tags out of the HTML and never run the JavaScript that would swap the product
 in, so every product ever shared previewed with the same site-wide banner and
-blurb. The static pages under `/p/` are for Google and only cover products that
-existed the last time `seo/generate.mjs` was run — a product listed this morning
-has none.
+blurb. The pages under `/p/` are the same idea aimed at Google rather than at
+WhatsApp — see `seo/README.md`.
 
 Nothing here needs credentials: the catalogue is world-readable and product
 photos are public, which is what makes a request-time lookup safe. If the

@@ -1,6 +1,11 @@
 {
   "cleanUrls": true,
-  "rewrites": [{ "source": "/s/:id", "destination": "/api/share?id=:id" }],
+  "rewrites": [
+    { "source": "/s/:id", "destination": "/api/share?id=:id" },
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/p", "destination": "/api/product-page" },
+    { "source": "/p/:slug", "destination": "/api/product-page?slug=:slug" }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",

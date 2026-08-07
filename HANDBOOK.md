@@ -60,7 +60,7 @@ If you lose them, some things become very hard or impossible to recover. **Never
 | **`manifest.webmanifest`** | Makes it a PWA (installable app): name, icons, colors, shortcuts. |
 | **`vercel.json`** | Hosting settings (clean URLs + security headers). |
 | **`.well-known/assetlinks.json`** | Links the website to the Android app (package `in.nemoaquastore.app`) so the app opens full-screen without a browser bar. Contains the app-signing fingerprints. |
-| **`robots.txt`, `sitemap.xml`** | Tell Google how to crawl the site (SEO). |
+| **`robots.txt`, `/sitemap.xml`** | Tell Google how to crawl the site (SEO). The sitemap is generated per request by `api/sitemap.js` from the live catalogue — there is no file to maintain. |
 | **`google3334e7d0ab51496e.html`** | Google Search Console ownership verification. Don't delete. |
 
 ### Customer-facing extra pages (required for Play Store / trust)
