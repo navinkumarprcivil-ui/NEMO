@@ -803,6 +803,69 @@ function evictMediaCache(targetBytes){
   for(const key of keys){ const val=localStorage.getItem(key)||""; try{ localStorage.removeItem(key); freed+=val.length; }catch(e){} if(freed>=targetBytes) break; }
   return freed;
 }
+/* ── Clear every cache this device is holding ──────────────────────────────
+   For the times a stale copy is on screen: an old logo in a link preview, a
+   product photo that was replaced, a code change that has not taken. All of it
+   is a *cache* — the real copy lives in Firebase and comes straight back on the
+   next load — so clearing is safe in a way that "reset" usually is not.
+
+   What is deliberately NOT touched:
+     · nemo-settings — the store's own configuration, which is the local copy
+       the admin panel is editing right now. Wiping it mid-edit loses work.
+     · nemo-cart, nemo-fav-* — a shopper's basket and saved items. On the
+       owner's own phone these are theirs; clearing a cache should not empty
+       someone's basket.
+   Everything else here is derived from the server and re-fetches on demand.
+
+   Returns a short human summary of what went, so the button can say something
+   truthful rather than just "done". */
+async function clearAllCaches(){
+  const report={caches:0,media:0,data:0,bytes:0};
+
+  // 1. Service-worker caches, and the compiled-bundle cache the loader keeps.
+  //    This is what holds the old app shell, old icons and old share banner.
+  try{
+    if(typeof caches!=="undefined"&&caches.keys){
+      const names=await caches.keys();
+      await Promise.all(names.map(n=>caches.delete(n).catch(()=>{})));
+      report.caches=names.length;
+    }
+  }catch(e){}
+
+  // 2. Cached media bytes and derived data in localStorage. Keys are matched by
+  //    prefix rather than listed one by one, so a cache added later is cleared
+  //    too instead of quietly surviving every future press of this button.
+  const KEEP=new Set(["nemo-settings","nemo-cart"]);
+  const KEEP_PREFIX=["nemo-fav-"];
+  const MEDIA_PREFIX=["nemo-img-","nemo-vid-","nemo-m-"];
+  try{
+    const doomed=[];
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(!key||key.indexOf("nemo-")!==0) continue;
+      if(KEEP.has(key)||KEEP_PREFIX.some(p=>key.indexOf(p)===0)) continue;
+      doomed.push(key);
+    }
+    for(const key of doomed){
+      const isMedia=MEDIA_PREFIX.some(p=>key.indexOf(p)===0);
+      report.bytes+=(localStorage.getItem(key)||"").length;
+      try{ localStorage.removeItem(key); isMedia?report.media++:report.data++; }catch(e){}
+    }
+  }catch(e){}
+
+  // 3. Make the service worker fetch a fresh copy of everything on next load.
+  //    update() rather than unregister(): unregistering drops the offline
+  //    fallback until a new worker installs, and this can be pressed offline.
+  try{
+    if(navigator.serviceWorker&&navigator.serviceWorker.getRegistrations){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.update().catch(()=>{})));
+    }
+  }catch(e){}
+
+  return report;
+}
+
 async function dbSet(k,v) {
   try { localStorage.setItem(k,v); return true; }
   catch(e){
@@ -3001,15 +3064,32 @@ function generateCreditNoteHTML(order, settings){
 function openCreditNote(order,settings){
   openDocHTML(generateCreditNoteHTML(order,settings||{}));
 }
+/* Share one product.
+
+   The link is `/s/<id>`, not `/?p=<id>`. A query string changes nothing a
+   scraper can see — WhatsApp reads the Open Graph tags out of the HTML and
+   never runs the JavaScript that would swap in the product — so every product
+   link used to preview with the same site-wide banner and blurb. `/s/<id>`
+   renders that product's own tags server-side and then sends the reader on to
+   the same place. See api/share.js.
+
+   The message is three short lines because the preview card underneath it
+   already shows the picture, the name and the price. Repeating them in text is
+   what made the old message look like a listing rather than a recommendation. */
 async function shareProduct(p, showToast){
-  const url=(typeof location!=="undefined")?(location.origin+location.pathname+"?p="+encodeURIComponent(p.id)):"";
+  const origin=(typeof location!=="undefined")?location.origin:"";
+  const url=origin?`${origin}/s/${encodeURIComponent(p.id)}`:"";
   const price=effectivePrice(p);
-  const text=`🐠 ${p.name} — ₹${price} at ${STORE_NAME} Aqua Store\n${p.desc?p.desc.slice(0,90)+"… ":""}${url}`;
+  const text=`🐠 ${p.name} — ₹${price}\n${STORE_NAME} Aqua Store`;
   try{
-    if(navigator.share){ await navigator.share({title:`${p.name} · ${STORE_NAME}`, text, url}); return; }
+    // `text` deliberately carries no URL: the share sheet appends `url` itself,
+    // and a link in both is why the message used to arrive with it twice.
+    if(navigator.share){ await navigator.share({title:`${p.name} · ${STORE_NAME} Aqua Store`, text, url}); return; }
   }catch(e){ if(String(e).includes("AbortError"))return; }
-  try{ await navigator.clipboard.writeText(text); showToast&&showToast("Link copied — paste to share!"); }
-  catch(e){ window.open(`https://wa.me/?text=${encodeURIComponent(text)}`,"_blank"); }
+  // No share sheet: nothing appends the link, so it goes in the text once.
+  const full=`${text}\n${url}`;
+  try{ await navigator.clipboard.writeText(full); showToast&&showToast("Link copied — paste to share!"); }
+  catch(e){ window.open(`https://wa.me/?text=${encodeURIComponent(full)}`,"_blank"); }
 }
 
 /* Month key + previous-month range — used by the monthly "download your report" reminder. */
@@ -11187,6 +11267,8 @@ function SettingsPanel({settings,onSave,products=[]}){
   const [npw2,setNpw2]=useState("");
   const [pwMsg,setPwMsg]=useState("");
   const [backupMsg,setBackupMsg]=useState("");
+  const [cacheMsg,setCacheMsg]=useState("");
+  const [cacheBusy,setCacheBusy]=useState(false);
   const [sec,setSec]=useState("store"); // settings are split into pages; this is the active one
   const adminOk=isAdminSignedIn();
   // Live daily-promo usage (today) — refreshed on mount so admin sees "X of N used today"
@@ -11511,6 +11593,44 @@ function SettingsPanel({settings,onSave,products=[]}){
           <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",fontSize:12,color:"#9a3412",lineHeight:1.5}}>🔒 Sign in with your Google admin account to download the full backup (it includes orders, which only you can read).</div>
         )}
         {backupMsg&&<div style={{fontSize:11.5,color:backupMsg[0]==="✓"?C.success:backupMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8}}>{backupMsg}</div>}
+      </div>
+
+      {/* Clear cached copies ─────────────────────────────────────────────────
+          For when something old is still on screen: a replaced product photo,
+          a previous logo in a link preview, an update that has not shown up.
+          Safe by construction — everything cleared is a copy of what is in
+          Firebase, and it comes back on the next load. The basket, saved items
+          and the store settings on this page are left alone. */}
+      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🧹 Clear Cached Copies</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>
+          Clears saved photos, the app shell and offline copies on <b>this device</b>, then reloads fresh from the server.
+          Use it when an old picture or an old version of the app is still showing.
+          Nothing is lost — it all lives in Firebase and downloads again. Your cart, saved items and the settings on this page are untouched.
+        </div>
+        <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5,background:C.bg,border:`1px dashed ${C.border}`,borderRadius:10,padding:"9px 11px"}}>
+          💡 A link preview on WhatsApp is cached by <b>WhatsApp</b>, not by this device — clearing here will not refresh one already sent.
+          Share the link again after this and the new preview shows.
+        </div>
+        <button className="press" disabled={cacheBusy} onClick={async()=>{
+            setCacheBusy(true); setCacheMsg("Clearing…");
+            try{
+              const r=await clearAllCaches();
+              const bits=[];
+              if(r.caches) bits.push(`${r.caches} app cache${r.caches!==1?"s":""}`);
+              if(r.media)  bits.push(`${r.media} image${r.media!==1?"s":""}`);
+              if(r.data)   bits.push(`${r.data} saved item${r.data!==1?"s":""}`);
+              const freed=r.bytes>1048576?`${(r.bytes/1048576).toFixed(1)} MB`:`${Math.round(r.bytes/1024)} KB`;
+              setCacheMsg(`✓ Cleared ${bits.length?bits.join(", "):"nothing — already clean"}${r.bytes?` · ${freed} freed`:""}. Reloading…`);
+              // Reload so the page rebuilds from the server rather than from
+              // whatever is still in memory from before the clear.
+              setTimeout(()=>{ try{ location.reload(); }catch(e){} }, 1200);
+            }catch(e){ setCacheMsg("⚠ Could not clear — try again"); setCacheBusy(false); }
+          }}
+          style={{width:"100%",background:cacheBusy?C.textSub:"#0f766e",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:cacheBusy?"default":"pointer"}}>
+          {cacheBusy?"Clearing…":"🧹 Clear Cache & Reload"}
+        </button>
+        {cacheMsg&&<div style={{fontSize:11.5,color:cacheMsg[0]==="✓"?C.success:cacheMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8,lineHeight:1.5}}>{cacheMsg}</div>}
       </div>
 
       </>)}
