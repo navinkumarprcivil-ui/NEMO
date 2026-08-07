@@ -632,7 +632,161 @@ function normalizeProduct(p){
   if(typeof p.gstApplicable !== "boolean") p.gstApplicable = false;
   if(typeof p.hsn !== "string") p.hsn = "";
   if(typeof p.gstRate !== "number") p.gstRate = (p.gstRate==null||p.gstRate==="")?null:Number(p.gstRate);
+  if(typeof p.sku !== "string") p.sku = "";
   return p;
+}
+
+/* ═══════════════════ PRODUCT ID (SKU) ═══════════════════
+   `p.id` is a machine key — "p1738912345678abc" — fine for the database and
+   useless for a human. The owner keeps physical stock in the analytics app and
+   has to be able to *type* the thing that joins the two, so every product also
+   carries a short, stable, readable Product ID:
+
+       NA-FSH-GUPPY-0007          the product
+       NA-FSH-GUPPY-0007-V2       one variant of it
+
+   Rules that matter:
+   · Assigned once, at first save, and never regenerated. Renaming a product or
+     moving its category keeps the ID — it is printed on a shelf label and typed
+     into inventory, so a "tidier" ID later would silently orphan the stock.
+   · The serial is allocated against every product that already exists, so two
+     products with the same name never collide.
+   · Variant suffix comes from the variant's own position-independent code, so
+     deleting variant 2 does not renumber variant 3 underneath the owner. */
+const SKU_PREFIX = "NA";
+const SKU_CAT_CODE = { "Live Fish":"FSH", "Plants":"PLT", "Accessories":"ACC", "Tanks":"TNK", "Feed":"FED", "Medicine":"MED" };
+
+function skuCat(category){
+  return SKU_CAT_CODE[category] || String(category||"GEN").toUpperCase().replace(/[^A-Z]/g,"").slice(0,3).padEnd(3,"X");
+}
+/* Name → a short readable stem. Drops noise words so "Blue Dwarf Gourami (Pair)"
+   reads as BLUEDWARF rather than a truncated mess. */
+function skuStem(name){
+  const stop = new Set(["THE","AND","FOR","WITH","PACK","PAIR","SET","OF","A","AN","PCS","PC","PLUS"]);
+  const words = String(name||"").toUpperCase().replace(/[^A-Z0-9 ]+/g," ").split(/\s+/).filter(w=>w&&!stop.has(w));
+  if(!words.length) return "ITEM";
+  // Whole words only, up to 10 characters — "Blue Dwarf Gourami" reads as
+  // BLUEDWARF, not BLUEDWARFG. A single long word is the one case that has to
+  // be cut, and it is cut on its own.
+  let stem = "";
+  for(const w of words){
+    if(stem && stem.length + w.length > 10) break;
+    stem += w;
+  }
+  // The trailing slice is what cuts a single word longer than the budget — the
+  // loop takes the first word whole however long it is, since a stem has to
+  // start somewhere.
+  return stem.slice(0,10);
+}
+/* Highest serial already handed out, so the next one cannot collide. */
+function nextSkuSerial(products){
+  let max = 0;
+  (products||[]).forEach(p=>{
+    const m = /-(\d{4,})$/.exec(String(p&&p.sku||""));
+    if(m){ const n = parseInt(m[1],10); if(n>max) max = n; }
+  });
+  return max + 1;
+}
+/** Build a product's ID. Pass every existing product so the serial is unique. */
+function makeProductSku(product, products){
+  const serial = String(nextSkuSerial(products)).padStart(4,"0");
+  return [SKU_PREFIX, skuCat(product&&product.category), skuStem(product&&product.name), serial].join("-");
+}
+/* Variant code: "v3" → "V3" for the seeded ids, and a short stable hash for
+   generated ones ("v1738912345678abc"), which are too long to print. */
+function variantSkuCode(variantId, index){
+  const id = String(variantId||"");
+  const m = /^v(\d{1,3})$/.exec(id);
+  if(m) return "V"+m[1];
+  if(!id) return "V"+(index+1);
+  let h = 5381;
+  for(let i=0;i<id.length;i++) h = ((h*33) ^ id.charCodeAt(i)) >>> 0;
+  return "V"+h.toString(36).toUpperCase().slice(0,4);
+}
+/** The Product ID for one variant of a product — what goes on the inventory row. */
+function variantSku(product, variant, index){
+  const base = (product&&product.sku) || "";
+  if(!base) return "";
+  if(!variant) return base;
+  return base + "-" + (variant.sku || variantSkuCode(variant.id, index||0));
+}
+
+/* ═══════════════════ HSN MASTER ═══════════════════
+   The HSN and rate are typed by hand on the first product of a kind, and after
+   that they should never be typed again — the same code on two products, or two
+   rates on one code, is what turns into a wrong return.
+
+   So every HSN/rate the owner actually uses is recorded here, against the
+   product names and categories it was used on. Listing the next product,
+   `suggestHsnCodes` ranks that list by how well it matches the new product and
+   offers the best ones in a dropdown. Nothing is guessed from a built-in table:
+   the master only ever contains codes this store has genuinely used.
+
+   Lives in `settings.hsnMaster` and is edited in Settings → GST & HSN. */
+const HSN_STOP = new Set(["THE","AND","FOR","WITH","PACK","PAIR","SET","OF","A","AN","PCS","PC","PLUS","NEW","SIZE","ML","GM","KG","CM","MM","INCH","LTR","L"]);
+function hsnWords(s){
+  return String(s||"").toUpperCase().replace(/[^A-Z0-9 ]+/g," ").split(/\s+/)
+    .filter(w=>w.length>2&&!HSN_STOP.has(w)&&!/^\d+$/.test(w));
+}
+/** Read the master out of settings, tolerating anything that isn't a clean array. */
+function readHsnMaster(settings){
+  const raw = settings && settings.hsnMaster;
+  if(!Array.isArray(raw)) return [];
+  return raw.map(e=>({
+    hsn:String(e&&e.hsn||"").trim(),
+    rate:Number(e&&e.rate)||0,
+    label:String(e&&e.label||"").trim(),
+    categories:Array.isArray(e&&e.categories)?e.categories.filter(Boolean):[],
+    keywords:Array.isArray(e&&e.keywords)?e.keywords.filter(Boolean):[],
+    uses:Number(e&&e.uses)||0,
+    updatedAt:e&&e.updatedAt||"",
+  })).filter(e=>e.hsn);
+}
+/**
+ * Record one use of an HSN + rate. Keyed on code AND rate together, because the
+ * same code at two rates is two different lines on a return, not one entry to
+ * be overwritten by whichever product was saved last.
+ */
+function upsertHsnMaster(master, {hsn, rate, name, category}){
+  const code = String(hsn||"").trim();
+  if(!code) return master;
+  const r = Number(rate)||0;
+  const list = master.slice();
+  const at = list.findIndex(e=>e.hsn===code && e.rate===r);
+  const words = hsnWords(name);
+  const now = new Date().toISOString();
+  if(at<0){
+    list.push({ hsn:code, rate:r, label:String(name||"").trim(), categories:category?[category]:[], keywords:words, uses:1, updatedAt:now });
+    return list;
+  }
+  const e = list[at];
+  list[at] = {
+    ...e,
+    label: e.label || String(name||"").trim(),
+    categories: e.categories.includes(category)||!category ? e.categories : e.categories.concat(category),
+    // Keywords accumulate but stay bounded — an unbounded list would slowly match everything.
+    keywords: Array.from(new Set(e.keywords.concat(words))).slice(0,40),
+    uses: e.uses+1,
+    updatedAt: now,
+  };
+  return list;
+}
+/**
+ * Rank the master for a product being listed. Category is the strongest signal —
+ * an owner who tagged three feeds with 2309 means the fourth feed is 2309 too —
+ * then shared words in the name, then how often the entry has been used.
+ */
+function suggestHsnCodes(master, {name, category}){
+  const words = new Set(hsnWords(name));
+  return master.map(e=>{
+    let score = 0;
+    if(category && e.categories.includes(category)) score += 6;
+    let hits = 0;
+    for(const w of e.keywords) if(words.has(w)) hits++;
+    score += Math.min(hits,4) * 3;
+    score += Math.min(e.uses,5) * 0.4;
+    return { ...e, score, hits };
+  }).sort((a,b)=> b.score-a.score || String(a.hsn).localeCompare(String(b.hsn)));
 }
 
 /* ═══════════════════ STORAGE ═══════════════════ */
@@ -667,10 +821,11 @@ async function dbDel(k)   { try { localStorage.removeItem(k); } catch {} }
 /* Where the analytics app is deployed. It signs in on its own and reads this
    store's data live, so nothing is passed across in the URL.
 
-   This is the business console at the site root — the same page you get typing
-   the address in — not /analytics.html. It opens inside the admin panel rather
-   than in a new tab, which is why the analytics side allows this origin as a
-   frame ancestor; its X-Frame-Options had to go for the embed to load at all. */
+   The Analytics buttons are plain links to it — no overlay, no embed, no
+   in-between screen. That used to be an <iframe>, and a cross-origin frame
+   that is refused renders as a blank box with no error the parent can catch,
+   so the failure mode was an empty page and a "New tab" link to escape it.
+   A link has no such failure mode. */
 const ANALYTICS_URL = "https://nemo-analytics.vercel.app/";
 
 /* ── Firebase Realtime Database ──
@@ -2988,7 +3143,11 @@ function exportOrderItemsCSV(orders, from="", to="", settings={}, products=[]){
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
   const catOf={}; (products||[]).forEach(p=>{ if(p&&p.id) catOf[p.id]=p.category||""; });
-  const head=["Order ID","Placed At (ISO)","Date","Status","Payment Status","Counts for GST","Customer ID","Customer","State","City","Pincode","Zone","Line No","Line Type","Product ID","Product Name","Variant","Category","Qty","Unit Price (Rs.)","Line Gross (Rs.)","Line Discount (Rs.)","Line Net (Rs.)","GST Claimed","HSN","Rate (%)","Taxable (Rs.)","No-GST Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","Line Tax (Rs.)"];
+  // Product ID (the machine key) → its catalogue row, so a line can be resolved
+  // back to the readable SKU even for an order placed before SKUs existed.
+  const prodOf={}; (products||[]).forEach(p=>{ if(p&&p.id) prodOf[p.id]=p; });
+  // Appended, never inserted — the analytics contract pins the 32 baseline columns.
+  const head=["Order ID","Placed At (ISO)","Date","Status","Payment Status","Counts for GST","Customer ID","Customer","State","City","Pincode","Zone","Line No","Line Type","Product ID","Product Name","Variant","Category","Qty","Unit Price (Rs.)","Line Gross (Rs.)","Line Discount (Rs.)","Line Net (Rs.)","GST Claimed","HSN","Rate (%)","Taxable (Rs.)","No-GST Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","Line Tax (Rs.)","SKU","Variant SKU"];
   const rows=[];
   list.forEach(o=>{
     const t=orderTaxLines(o,settings);
@@ -3001,6 +3160,21 @@ function exportOrderItemsCSV(orders, from="", to="", settings={}, products=[]){
     // index i lines up with items[i] for every non-shipping line.
     t.lines.forEach((l,i)=>{
       const src=l.isShipping?null:items[i];
+      // The SKU stamped on the line at checkout is the truth — it is what the
+      // product was called when it sold. Fall back to today's catalogue only for
+      // orders placed before SKUs existed, and to "" when the product is gone.
+      let sku="", vsku="";
+      if(src){
+        const p=prodOf[src.id];
+        sku=src.sku||(p&&p.sku)||"";
+        if(src.variantSku) vsku=src.variantSku;
+        else if(p&&src.variantId){
+          const vs=productVariants(p)||[];
+          const at=vs.findIndex(v=>v.id===src.variantId);
+          if(at>=0) vsku=variantSku(p,vs[at],at);
+        }
+        if(!vsku) vsku=sku;
+      }
       rows.push([
         o.orderNo||orderId(o.id),isoStamp(o.placedAt),fmtDate(o.placedAt),o.status,o.paymentStatus||"",
         isSupply?"Yes":"No",o.userUid||"",o.address?.name||"",state,o.address?.city||"",o.address?.pincode||"",o.shippingZoneLabel||"",
@@ -3009,6 +3183,7 @@ function exportOrderItemsCSV(orders, from="", to="", settings={}, products=[]){
         l.qty,src?(Number(src.price)||0):"",l.gross,l.discount,l.net,
         l.taxed?"Yes":"No",l.hsn||"",l.taxed?l.rate:"",
         isSupply?l.taxable:"",isSupply?l.exempt:"",isSupply?l.cgst:"",isSupply?l.sgst:"",isSupply?l.igst:"",isSupply?l.tax:"",
+        sku,vsku,
       ].map(csvCell).join(","));
     });
   });
@@ -3031,7 +3206,9 @@ function exportOrderItemsCSV(orders, from="", to="", settings={}, products=[]){
    makes each file a clean snapshot to key on. */
 function exportProductsCSV(products, settings={}){
   const snap=new Date().toISOString();
-  const head=["Snapshot At (ISO)","Product ID","Name","Category","Variant","Variant ID","Base Price (Rs.)","Discount %","Effective Price (Rs.)","Offer Ends (ISO)","Stock","Sold Out","Coming Soon","Product Stock Total","Tag","Rating","Reviews","GST Claimed","HSN","GST Rate (%)","Packing Weight (kg)"];
+  // "SKU" columns are APPENDED, never inserted: the analytics side pins each
+  // declared column to its position and treats a shift as a broken contract.
+  const head=["Snapshot At (ISO)","Product ID","Name","Category","Variant","Variant ID","Base Price (Rs.)","Discount %","Effective Price (Rs.)","Offer Ends (ISO)","Stock","Sold Out","Coming Soon","Product Stock Total","Tag","Rating","Reviews","GST Claimed","HSN","GST Rate (%)","Packing Weight (kg)","SKU","Variant SKU"];
   const rows=[];
   (products||[]).forEach(p=>{
     if(!p) return;
@@ -3041,12 +3218,14 @@ function exportProductsCSV(products, settings={}){
     const lead=[snap,p.id||"",p.name||"",p.category||""];
     const tail=[p.comingSoon?"Yes":"",productStockTotal(p),p.tag||"",p.rating??"",p.reviews??"",p.gstApplicable===true?"Yes":"No",p.hsn||"",Number(p.gstRate)||0];
     if(vs&&vs.length){
-      vs.forEach(v=>rows.push([...lead,v.label||"",v.id||"",variantBasePrice(p,v),disc,variantEffPrice(p,v),isoStamp(p.offerEndsAt),
-        variantStockOf(p,v),variantSoldOut(p,v)?"Yes":"",...tail,(v.packagingWeight??p.packagingWeight??"")].map(csvCell).join(",")));
+      vs.forEach((v,i)=>rows.push([...lead,v.label||"",v.id||"",variantBasePrice(p,v),disc,variantEffPrice(p,v),isoStamp(p.offerEndsAt),
+        variantStockOf(p,v),variantSoldOut(p,v)?"Yes":"",...tail,(v.packagingWeight??p.packagingWeight??""),
+        p.sku||"",variantSku(p,v,i)].map(csvCell).join(",")));
     } else {
       const st=p.stockCount??DEFAULT_STOCK;
       rows.push([...lead,"","",p.price||0,disc,effectivePrice(p,disc),isoStamp(p.offerEndsAt),
-        st,st<=0?"Yes":"",...tail,(p.packagingWeight??"")].map(csvCell).join(","));
+        st,st<=0?"Yes":"",...tail,(p.packagingWeight??""),
+        p.sku||"",p.sku||""].map(csvCell).join(","));
     }
   });
   const csv="﻿"+[head.map(csvCell).join(","),...rows].join("\r\n");
@@ -8395,7 +8574,7 @@ function VideoTrimmer({file,onCancel,onDone}){
     </Portal>
   );
 }
-function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
+function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},products=[]}){
   const isEdit=!!product;
   const [form,setForm]=useState({
     name:product?.name||"",
@@ -8450,7 +8629,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     if(!src) return [blankVariant()];
     const base = Number(product?.price)||0;
     const vstock = product?.variantStock||{};
-    return src.map(v=>({ id:v.id||uid("v"), label:v.label,
+    return src.map(v=>({ id:v.id||uid("v"), sku:v.sku||"", label:v.label,
       price:(typeof v.price==="number"?v.price:Math.round(base*(v.priceMul||1))),
       stock:(typeof vstock[v.id]==="number"?vstock[v.id]:null),
       packagingWeight:(v.packagingWeight??null),   // was dropped here, losing per-option shipping weight on edit
@@ -8467,6 +8646,17 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     setVariants(DEFAULT_FISH_VARIANTS.map(v=>({id:uid("v"),label:v.label,price:Math.round(base*(v.priceMul||1)),packagingWeight:null,soldOut:!!v.soldOut})));
   };
   const removeVariant=(id)=>setVariants(prev=>prev.filter(v=>v.id!==id));
+
+  // Ranked against the name and category as they are being typed. Recomputed
+  // only when one of those actually changes — the master is small, but this
+  // renders on every keystroke in the form otherwise.
+  const hsnSuggestions=useMemo(
+    ()=>suggestHsnCodes(readHsnMaster(settings),{name:form.name,category:form.category}),
+    [settings,form.name,form.category]
+  );
+  // Shown read-only: assigned on the first save and never changed after, so
+  // there is nothing here to edit — only to read off and type into inventory.
+  const shownSku=product?.sku||"";
 
   const addImages=async(fileList)=>{
     const files=[...fileList].slice(0,MAX_IMAGES-images.length);
@@ -8534,6 +8724,9 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
 
   const saveProduct=async()=>{
     const id=product?.id||uid();
+    // Assigned once and kept for life — see makeProductSku. An existing product
+    // that predates Product IDs gets one here, on its next save.
+    const sku=product?.sku || makeProductSku({name:form.name,category:form.category}, products);
     const newImgCount=images.filter(im=>im.b64).length;   // only freshly-added photos need uploading
     let uploaded=0;
     // Persist any newly-added media items.
@@ -8595,8 +8788,11 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
     const savedVariantFields=(()=>{
       const rows=variants.filter(v=>String(v.label||"").trim());
       if(!rows.length) return { variants:null, variantStock:null };
-      const list=rows.map(v=>({
+      const list=rows.map((v,i)=>({
         id:v.id,
+        // Frozen on first save, like the product's own. A variant keeps its code
+        // even if the rows above it are deleted.
+        sku:v.sku||variantSkuCode(v.id,i),
         label:v.label.trim(),
         price:Math.max(0,Math.round(Number(v.price)||0)),
         packagingWeight:(v.packagingWeight===""||v.packagingWeight==null)?null:Math.max(0,Number(v.packagingWeight)||0),
@@ -8606,7 +8802,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
       const stockMap=anyStock?rows.reduce((m,v)=>{ m[v.id]=Math.max(0,parseInt(v.stock)||0); return m; },{}):null;
       return { variants:list, variantStock:stockMap };
     })();
-    const saved={id,name:form.name,category:form.category,tag:form.tag,desc:form.desc,
+    const saved={id,sku,name:form.name,category:form.category,tag:form.tag,desc:form.desc,
       price:Number(form.price),
       stockCount:savedVariantFields.variantStock
         ? Object.values(savedVariantFields.variantStock).reduce((a,b)=>a+b,0)   // options are the truth; the product total follows them
@@ -8719,6 +8915,39 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
         </div>
         {fld("Tag / Badge","tag","text","e.g. Popular, New Arrival, Sale")}
 
+        {/* Product ID — the join between this catalogue and the physical stock kept
+            in the analytics app. Read-only on purpose: it is assigned once and then
+            printed on labels and typed into inventory, so an edit here would orphan
+            the stock behind it. */}
+        <div style={{background:"#f0fdf4",borderRadius:12,padding:"12px 14px",marginBottom:16,border:"1px solid #bbf7d0"}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:4}}>🏷 Product ID</div>
+          {shownSku?(
+            <>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <code style={{fontSize:14,fontWeight:800,letterSpacing:.5,color:"#065f46",background:"white",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px"}}>{shownSku}</code>
+                <button type="button" className="press" onClick={()=>{ try{ navigator.clipboard.writeText(shownSku); showToast("Product ID copied"); }catch(e){} }}
+                  style={{background:"white",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",fontSize:11.5,fontWeight:700,color:"#065f46",cursor:"pointer"}}>Copy</button>
+              </div>
+              {variants.filter(v=>String(v.label||"").trim()).length>0&&(
+                <div style={{marginTop:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>One ID per option — use these in inventory</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    {variants.filter(v=>String(v.label||"").trim()).map((v,i)=>(
+                      <div key={v.id} style={{display:"flex",gap:8,alignItems:"baseline",fontSize:11.5}}>
+                        <code style={{fontWeight:800,color:"#065f46"}}>{shownSku}-{v.sku||variantSkuCode(v.id,i)}</code>
+                        <span style={{color:C.textSub}}>{v.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>New options get their ID when you save.</div>
+                </div>
+              )}
+            </>
+          ):(
+            <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5}}>Generated when you save — one for the product and one for each option. Use it in the analytics app's inventory so stock follows the right item.</div>
+          )}
+        </div>
+
         <label style={{display:"flex",alignItems:"center",gap:10,background:"#eef9fa",borderRadius:12,padding:"12px 14px",marginBottom:16,cursor:"pointer",userSelect:"none",border:`1px solid ${C.border}`}}>
           <input type="checkbox" checked={!!form.comingSoon} onChange={e=>f("comingSoon",e.target.checked)} style={{width:18,height:18,accentColor:C.accent,flexShrink:0}}/>
           <div>
@@ -8741,6 +8970,28 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={}}){
           </label>
           {form.gstApplicable&&(
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}>
+              {/* Pick from what this store has already used, ranked against this
+                  product's name and category. Empty on the very first GST product —
+                  the master only holds codes actually used here, never a guess. */}
+              {hsnSuggestions.length>0&&(
+                <div style={{gridColumn:"1 / -1"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Use a code from your HSN master</div>
+                  <select value="" onChange={e=>{
+                      const pick=hsnSuggestions[Number(e.target.value)];
+                      if(!pick) return;
+                      f("hsn",pick.hsn); f("gstRate",String(pick.rate));
+                    }}
+                    style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none",background:"white"}}>
+                    <option value="">Choose a saved HSN…</option>
+                    {hsnSuggestions.slice(0,12).map((s,i)=>(
+                      <option key={s.hsn+"|"+s.rate} value={i}>
+                        {s.hsn} @ {s.rate}%{s.label?` — ${s.label}`:""}{s.score>=6?"  ★":""}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.45}}>★ marks codes you've used on {form.category}. Manage the full list in Settings → GST &amp; HSN.</div>
+                </div>
+              )}
               <div>
                 <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>HSN code</div>
                 <input value={form.hsn} onChange={e=>f("hsn",e.target.value)} placeholder="e.g. 2309"
@@ -9905,45 +10156,6 @@ function AdminExitConfirm({onStay,onLeave}){
   );
 }
 
-/* ── Analytics, inside the admin panel ──
-   The console is a separate deployment, so this is an <iframe> rather than a
-   route. It only loads because the analytics side lists this origin under
-   `frame-ancestors`; X-Frame-Options cannot name one other origin, so that
-   header had to be dropped there for the embed to work at all.
-
-   The "Open in a new tab" link is deliberate, not a hedge for its own sake. A
-   cross-origin frame that is refused renders as a blank box and gives the
-   parent nothing to catch — no error, no event — so there is no way to detect
-   it and swap in a message. The way out is always visible instead. */
-function AnalyticsOverlay({onClose}){
-  useEffect(()=>{
-    const onKey=e=>{ if(e.key==="Escape") onClose(); };
-    window.addEventListener("keydown",onKey);
-    const prev=document.body.style.overflow;
-    document.body.style.overflow="hidden"; // the frame scrolls, not the page behind it
-    return()=>{ window.removeEventListener("keydown",onKey); document.body.style.overflow=prev; };
-  },[onClose]);
-
-  return(
-    <div style={{position:"fixed",inset:0,zIndex:4000,background:C.adminBg,display:"flex",flexDirection:"column"}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,padding:"max(10px, env(safe-area-inset-top)) 12px 10px",flexShrink:0}}>
-        <span style={{fontSize:16}}>📊</span>
-        <span style={{flex:1,minWidth:0,fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:"white"}}>Analytics</span>
-        <a className="press" href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer"
-          style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:9,padding:"7px 12px",color:"white",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"none"}}>
-          New tab ↗
-        </a>
-        <button className="press" onClick={onClose} aria-label="Close analytics"
-          style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:9,width:34,height:34,color:"white",fontSize:17,lineHeight:1,fontWeight:700}}>
-          ×
-        </button>
-      </div>
-      <iframe src={ANALYTICS_URL} title="Nemo Analytics"
-        style={{flex:1,width:"100%",border:"none",background:"white"}}/>
-    </div>
-  );
-}
-
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
 function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onApproveTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
@@ -9983,7 +10195,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [thumbMsg,setThumbMsg]=useState("");
   const [visitStats,setVisitStats]=useState(null);
   useEffect(()=>{ loadAnalytics().then(setVisitStats); },[]);
-  const [analyticsOpen,setAnalyticsOpen]=useState(false);
   const [orderFilter,setOrderFilter]=useState("All");
   const [orderSearch,setOrderSearch]=useState("");
   // Orders accumulate forever, and rendering every one on open cost ~0.5s of frozen UI at 500
@@ -10082,7 +10293,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   });
 
   if(tab==="form")return(
-    <ProductForm product={editProduct} showToast={showToast} settings={settings}
+    <ProductForm product={editProduct} showToast={showToast} settings={settings} products={products}
       onSave={async(saved,vidUrl)=>{await onSaveProd(saved,vidUrl);setTab("products");}}
       onDelete={async(id)=>{await onDeleteProd(id);setTab("products");}}
       onBack={()=>setTab("products")}/>
@@ -10104,7 +10315,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
 
   return(
     <div className="slide-up">
-      {analyticsOpen&&<AnalyticsOverlay onClose={()=>setAnalyticsOpen(false)}/>}
       {/* Header */}
       <div className="admin-head" style={{background:C.adminBg,padding:"52px 16px 0"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8}}>
@@ -10115,11 +10325,15 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           <div style={{display:"flex",gap:8,flexShrink:0}}>
             {/* Analytics sits next to Store because it is the same kind of thing:
                 somewhere you go, not something on the page you are looking at.
-                It opens in an overlay rather than a tab — see AnalyticsOverlay. */}
-            <button className="press" onClick={()=>setAnalyticsOpen(true)} title="Open the analytics console"
-              style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                A plain link, straight to the analytics app — no in-between screen.
+                It has to be a new tab: this panel warns on beforeunload, so
+                navigating the admin tab itself would put a "leave site?" prompt
+                between the click and the app, which is the thing being removed.
+                rel=noopener because this page holds an admin session. */}
+            <a className="press" href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer" title="Open the analytics app"
+              style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"none"}}>
               📊 Analytics
-            </button>
+            </a>
             <button className="press" onClick={()=>{ if(window.confirm("Leave the Admin panel and go back to the store?")) onBack(); }}
               style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               🛍 Store
@@ -10297,12 +10511,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55,marginBottom:10}}>
               Action dashboard, stock reorder points and a GST-ready file — reading this store's data live. Nothing to export.
             </div>
-            {/* Opens the same overlay as the header button, so there is one way
-                in and no stray tab holding an admin session. */}
-            <button className="press" onClick={()=>setAnalyticsOpen(true)}
-              style={{display:"block",width:"100%",border:"none",textAlign:"center",background:C.accent,color:"white",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            {/* Same destination as the header button — the analytics app itself,
+                with nothing in between. */}
+            <a className="press" href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer"
+              style={{display:"block",width:"100%",boxSizing:"border-box",border:"none",textAlign:"center",background:C.accent,color:"white",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"none"}}>
               Open Analytics →
-            </button>
+            </a>
           </div>
 
           {/* Excel export with date range */}
@@ -11094,7 +11308,7 @@ function SettingsPanel({settings,onSave,products=[]}){
     <div className="dt-read" style={{padding:"18px 16px 100px"}}>
       {/* Settings are split into pages for ease — pick a section */}
       <div style={{display:"flex",gap:8,overflowX:"auto",marginBottom:16,paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
-        {[["store","🏪 Store"],["payship","🚚 Payments & Shipping"],["promos","🎁 Promotions"],["content","📄 Content"],["emails","🔐 Email & Security"]].map(([k,label])=>(
+        {[["store","🏪 Store"],["payship","🚚 Payments & Shipping"],["hsn","🧾 GST & HSN"],["promos","🎁 Promotions"],["content","📄 Content"],["emails","🔐 Email & Security"]].map(([k,label])=>(
           <button key={k} className="press" onClick={()=>setSec(k)}
             style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${sec===k?C.primary:C.border}`,background:sec===k?C.primary:"white",color:sec===k?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap",cursor:"pointer"}}>
             {label}
@@ -11556,6 +11770,103 @@ function SettingsPanel({settings,onSave,products=[]}){
       </div>
 
       </>)}
+      {sec==="hsn"&&(<>
+      {/* ── HSN master ──────────────────────────────────────────────────────
+          The list of HSN codes and rates this store actually uses. It fills
+          itself in: list a product with GST claimed and its code lands here,
+          and the next product of that kind offers it back in a dropdown rather
+          than asking for it again.
+
+          Editing a row here changes what future products are offered — it does
+          NOT rewrite products already listed. That is deliberate: a product's
+          HSN is part of invoices already issued against it, and quietly
+          restating those from a settings screen is how a filed return stops
+          matching the invoices behind it. Products carrying the old code are
+          listed under each row so they can be corrected by hand. */}
+      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🧾 HSN Master List</div>
+        <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55,marginBottom:14}}>
+          Every HSN code and GST rate you've used, kept so you never type one twice. When you list a
+          product and tick "Claim GST", the code you enter is added here automatically — and suggested
+          on the next product with a similar name or the same category.
+        </div>
+
+        {(() => {
+          const master = readHsnMaster(f);
+          const setMaster = (next) => set("hsnMaster", next);
+          const editRow = (i, patch) => setMaster(master.map((e, j) => j === i ? { ...e, ...patch } : e));
+          // Which listed products carry this exact code + rate — the ones that
+          // would need correcting by hand if the row is edited.
+          const usersOf = (e) => (products || []).filter(p =>
+            p && p.gstApplicable && String(p.hsn || "").trim() === e.hsn && (Number(p.gstRate) || 0) === e.rate);
+
+          if (!master.length) {
+            return (
+              <div style={{ background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 12, padding: "18px 14px", textAlign: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Nothing here yet</div>
+                <div style={{ fontSize: 11.5, color: C.textSub, lineHeight: 1.5 }}>
+                  List a product, tick <b>Claim GST</b> and enter its HSN and rate. It appears here on save, and
+                  every similar product after it gets offered the same code.
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {master.map((e, i) => {
+                const used = usersOf(e);
+                return (
+                  <div key={e.hsn + "|" + e.rate + "|" + i} style={{ background: C.bg, borderRadius: 12, padding: "12px 13px", border: `1px solid ${C.border}` }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1.1fr .7fr", gap: 8, marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textSub, marginBottom: 4 }}>HSN CODE</div>
+                        <input value={e.hsn} onChange={ev => editRow(i, { hsn: ev.target.value.trim() })}
+                          style={{ width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 9, border: `1.5px solid ${e.hsn ? C.border : "#fca5a5"}`, fontSize: 13, fontWeight: 700, outline: "none", background: "white" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textSub, marginBottom: 4 }}>GST RATE %</div>
+                        <input type="number" min="0" max="28" step="0.5" value={e.rate}
+                          onChange={ev => editRow(i, { rate: Number(ev.target.value) || 0 })}
+                          style={{ width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 13, fontWeight: 700, outline: "none", background: "white" }} />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textSub, marginBottom: 4 }}>DESCRIPTION</div>
+                    <input value={e.label} placeholder="e.g. Fish feed &amp; supplements"
+                      onChange={ev => editRow(i, { label: ev.target.value })}
+                      style={{ width: "100%", boxSizing: "border-box", padding: "9px 11px", borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 12.5, outline: "none", background: "white" }} />
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 9 }}>
+                      {e.categories.map(c => (
+                        <span key={c} style={{ fontSize: 10.5, fontWeight: 700, color: C.textSub, background: "white", border: `1px solid ${C.border}`, borderRadius: 20, padding: "3px 9px" }}>{c}</span>
+                      ))}
+                      <span style={{ fontSize: 10.5, color: C.textSub }}>
+                        used on {used.length} listed product{used.length === 1 ? "" : "s"}
+                      </span>
+                      <button type="button" className="press" onClick={() => setMaster(master.filter((_, j) => j !== i))}
+                        style={{ marginLeft: "auto", background: "white", border: `1px solid ${C.danger}`, color: C.danger, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        Remove
+                      </button>
+                    </div>
+                    {used.length > 0 && (
+                      <div style={{ fontSize: 10.5, color: C.textSub, marginTop: 6, lineHeight: 1.45 }}>
+                        {used.slice(0, 6).map(p => p.name).join(", ")}{used.length > 6 ? ` +${used.length - 6} more` : ""}
+                        {" — editing this row does not change them; update each product to move it."}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <button type="button" className="press"
+                onClick={() => setMaster(master.concat({ hsn: "", rate: 0, label: "", categories: [], keywords: [], uses: 0, updatedAt: new Date().toISOString() }))}
+                style={{ background: "white", border: `1.5px dashed ${C.border}`, borderRadius: 10, padding: "11px", fontSize: 12.5, fontWeight: 700, color: C.textSub, cursor: "pointer" }}>
+                + Add an HSN code by hand
+              </button>
+            </div>
+          );
+        })()}
+      </div>
+      </>)}
+
       {sec==="promos"&&(<>
       {/* Coupon codes */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
@@ -12761,7 +13072,10 @@ function NemoStore(){
       if(qty>0 && curQty+qty>maxAllowed) setTimeout(()=>showToast(`Only ${maxAllowed} available per order`,"error"),0);
       else if(qty>0){ setTimeout(()=>showToast("Added to cart"),0); trackEvent("addcart",product.id); trackFunnel("addcart"); }
       if(ex) return prev.map(i=>i.key===key?{...i,qty:nextQty}:i);
-      return [...prev,{key,id:product.id,name:product.name,category:product.category,price:unitPrice,mrp:(v?variantBasePrice(product,v):(product.price||unitPrice)),qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,suggestedPacking:product.suggestedPacking||null,suggestSpecialDelivery:!!product.suggestSpecialDelivery,returnEligible:product.returnEligible===true,stockCount:stock,gstApplicable:product.gstApplicable===true,hsn:product.hsn||"",gstRate:(product.gstRate==null?null:Number(product.gstRate))}];
+      // The Product ID travels with the line, so the order records what the item
+      // was called when it sold rather than what the catalogue says today.
+      const vIdx=v?((productVariants(product)||[]).findIndex(x=>x.id===v.id)):-1;
+      return [...prev,{key,id:product.id,sku:product.sku||"",variantSku:variantSku(product,v,vIdx<0?0:vIdx),name:product.name,category:product.category,price:unitPrice,mrp:(v?variantBasePrice(product,v):(product.price||unitPrice)),qty:nextQty,variantId:v?.id||null,variantLabel:v?.label||null,packagingWeight:product.packagingWeight??null,variantPackagingWeight:v?.packagingWeight??null,suggestedPacking:product.suggestedPacking||null,suggestSpecialDelivery:!!product.suggestSpecialDelivery,returnEligible:product.returnEligible===true,stockCount:stock,gstApplicable:product.gstApplicable===true,hsn:product.hsn||"",gstRate:(product.gstRate==null?null:Number(product.gstRate))}];
     });
   };
   const updateQty=(key,delta)=>
@@ -13052,6 +13366,20 @@ function NemoStore(){
     // Only the edited row goes to the cloud, not the whole catalog. Awaited so the form's
     // spinner reflects the real write — and it's time-bounded, so it can't spin forever.
     const confirmed=await saveOneProd(saved,next);
+    // Learn the HSN + rate this product was listed with, so the next similar
+    // product can offer it instead of asking for it again. Saved separately from
+    // the product itself: a failure here must not cost the owner the listing.
+    if(saved.gstApplicable && String(saved.hsn||"").trim() && Number(saved.gstRate)>0){
+      const master=readHsnMaster(settings);
+      const updated=upsertHsnMaster(master,{hsn:saved.hsn,rate:saved.gstRate,name:saved.name,category:saved.category});
+      // upsert always returns a new array; only write when something really moved.
+      const changed=JSON.stringify(updated)!==JSON.stringify(master);
+      if(changed){
+        const s={...settings,hsnMaster:updated};
+        setSettings(s);
+        try{ await saveSettings(s); }catch(e){}
+      }
+    }
     showToast(confirmed||!FB_OK?"Product saved!":"Saved on this device — syncing when the connection returns");
   };
   const deleteProdHandler=async id=>{
