@@ -118,6 +118,50 @@ function returnWindowOpen(o){
   const base=deliveredAtOf(o); if(!base) return false;
   return (Date.now()-new Date(base).getTime()) <= RETURN_WINDOW_DAYS*86400000;
 }
+/* When a DOA claim can be raised: from the moment the order is paid, until 24 hours after it
+   was delivered.
+
+   Opening at payment rather than at delivery is deliberate. "Delivered" is a status the store
+   sets by hand, and a parcel routinely arrives before anyone gets round to flipping it — so
+   gating on the status locked out exactly the customer this is for, the one holding a dead fish
+   an hour after the courier came. The evidence rule is unchanged and does the real work: the
+   Live Arrival Guarantee still wants the unboxing video within 2 hours of delivery, so a claim
+   raised before the fish could possibly have arrived has nothing to support it.
+
+   The 24 hours run from the delivery timestamp, so the window only starts closing once there
+   IS one. An order that has shipped but is not yet marked delivered stays open. */
+const DOA_WINDOW_HOURS = 24;
+function doaEntryOpen(o){
+  if(!o || o.status==="Cancelled") return false;
+  // Before payment there is no order to claim against.
+  const paid = !!o.paidAt || ["Payment Review","Confirmed","Shipped","Delivered"].includes(o.status);
+  if(!paid) return false;
+  const base=deliveredAtOf(o);
+  // Not delivered yet, or delivered with no usable timestamp: the window cannot be shown to
+  // have closed, so it stays open and the store judges the claim.
+  if(!base) return true;
+  const t=new Date(base).getTime();
+  if(isNaN(t)) return true;
+  return (Date.now()-t) <= DOA_WINDOW_HOURS*3600000;
+}
+/* Hours left before the window shuts — 0 until there is a delivery timestamp to count from,
+   which the UI reads as "no deadline running yet". */
+function doaHoursLeft(o){
+  const base=deliveredAtOf(o); if(!base) return 0;
+  const t=new Date(base).getTime(); if(isNaN(t)) return 0;
+  return Math.max(0, Math.ceil((DOA_WINDOW_HOURS*3600000-(Date.now()-t))/3600000));
+}
+/* Why the fish arrived dead. Asked per item because the answer differs per bag, and because it
+   is the only field that tells the store whether the loss was packing, transit time or heat —
+   which is what a claim is actually reviewed against. */
+const DOA_CAUSES = [
+  "Parcel arrived late / delayed in transit",
+  "Box was damaged or crushed",
+  "Bag leaked / water lost",
+  "Parcel was very hot when it arrived",
+  "Fish looked weak or injured on arrival",
+  "Other (explain below)",
+];
 function selfCancelOpen(o){
   if(!o||o.closed) return false;
   // Customer may cancel any time BEFORE the admin confirms the order.
@@ -1401,7 +1445,7 @@ const COURIER_COLLECT_TERM = "Tracking & collection: once your order is dispatch
 const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"", website:"", bankAccountName:"", bankName:"", bankBranch:"", bankAccountNo:"", bankIfsc:"", invoiceSignature:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
-  liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
+  liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nThe replacement shipping will be taken care & the packaging solely based on store's decision. Replacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
   returnPolicy:"NO RETURNS & NO REPLACEMENTS once live fish or plants have been received in good condition — all livestock sales are final on safe delivery. The only cover for transit loss is the Live Arrival Guarantee (DOA) above, which is one-time and limited to the cost of the fish. Live fish & plants are non-returnable and non-refundable once delivered safely. Approved DOA refunds are processed within 5–7 working days of our approval of your unboxing video — no item needs to be returned. Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect, and refunds for returned dry goods are issued within 5–7 working days after we receive and inspect the item. Refunds (where applicable) are issued as store credit or to the original payment method. Orders cannot be cancelled once payment is confirmed.",
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   returnAddress:"", returnAddress1Label:"", returnAddress2:"", returnAddress2Label:"",
@@ -1776,6 +1820,55 @@ function foodReorderDue(orders, products, days=30){
 }
 
 /* Favorites / Saved items — per user (local cache + cloud sync) */
+/* ── Saved delivery addresses ──────────────────────────────────────────────────────────
+   Kept on the device, not in Firebase: the database rules have no node for addresses, and
+   adding one is a rules change that has to be deployed separately. What makes that
+   acceptable is `seedAddressBook` below — a customer on a new device gets their previous
+   addresses back from their own past orders, which ARE in the cloud. So the book is a local
+   convenience over cloud-backed truth, not the only copy of anything.
+
+   The draft is separate from the book: it is whatever is half-typed in the checkout form
+   right now, saved on every keystroke so a reload or a wander into another tab doesn't
+   throw the address away. */
+function addrBookKey(uid){ return "nemo-addrbook-"+(uid||"anon"); }
+function addrDraftKey(uid){ return "nemo-addrdraft-"+(uid||"anon"); }
+function loadAddrBook(uid){ try{ const r=localStorage.getItem(addrBookKey(uid)); const v=r?JSON.parse(r):[]; return Array.isArray(v)?v:[]; }catch(e){ return []; } }
+function saveAddrBook(uid,list){ try{ localStorage.setItem(addrBookKey(uid),JSON.stringify(list||[])); }catch(e){} }
+function loadAddrDraft(uid){ try{ const r=localStorage.getItem(addrDraftKey(uid)); const v=r?JSON.parse(r):null; return (v&&typeof v==="object")?v:null; }catch(e){ return null; } }
+function saveAddrDraft(uid,a){ try{ localStorage.setItem(addrDraftKey(uid),JSON.stringify(a||{})); }catch(e){} }
+function clearAddrDraft(uid){ try{ localStorage.removeItem(addrDraftKey(uid)); }catch(e){} }
+/* Two addresses are "the same place" if the street line, pincode and phone match — enough to
+   stop a returning customer collecting five copies of their own home. */
+function addrFingerprint(a){
+  const n=x=>String(x||"").toLowerCase().replace(/\s+/g," ").trim();
+  return [n(a&&a.address),n(a&&a.pincode),n(a&&a.phone)].join("|");
+}
+function addrIsBlank(a){ return !a || !(String(a.address||"").trim() && String(a.pincode||"").trim()); }
+/* Past orders are the cross-device backstop: whatever was shipped before is an address that
+   worked, so a fresh device is seeded from them rather than starting empty. Newest first. */
+function seedAddressBook(uid, orders){
+  const book=loadAddrBook(uid);
+  const seen=new Set(book.map(addrFingerprint));
+  const extra=[];
+  [...(orders||[])]
+    .sort((a,b)=>String(b.placedAt||"").localeCompare(String(a.placedAt||"")))
+    .forEach(o=>{
+      const a=o&&o.address;
+      if(addrIsBlank(a)) return;
+      const fp=addrFingerprint(a);
+      if(seen.has(fp)) return;
+      seen.add(fp);
+      extra.push({ id:uid_addr(), label:"", name:a.name||"", phone:a.phone||"", whatsapp:a.whatsapp||"",
+        address:a.address||"", city:a.city||"", pincode:a.pincode||"", state:a.state||"", stateCode:a.stateCode||"",
+        notes:a.notes||"", fromOrder:true });
+    });
+  if(!extra.length) return book;
+  const merged=[...book,...extra];
+  saveAddrBook(uid,merged);
+  return merged;
+}
+function uid_addr(){ return "ad"+Math.random().toString(36).slice(2,9); }
+
 function favKey(uid){ return "nemo-fav-"+uid; }
 function loadFavLocal(uid){ try{ const r=localStorage.getItem(favKey(uid)); return r?JSON.parse(r):[]; }catch{ return []; } }
 async function loadFavorites(uid){
@@ -3553,6 +3646,15 @@ button,a,label,.press,.lift{touch-action:manipulation;}
    the first frame and for anything without visualViewport. */
 .nemo-app{height:100vh;}@supports(height:100dvh){.nemo-app{height:100dvh;}}
 .nemo-app{height:var(--app-vh,100dvh);}
+/* …and because it is exactly one viewport tall with its own inner scroller, the DOCUMENT
+   must never scroll. The bottom nav is pinned to the shell's bottom edge, not the window's,
+   so a drag that starts on the nav — which is not the scroller — used to pan the document
+   instead and carry the nav up off the screen with it. Killing document scroll below the
+   desktop breakpoint pins it for good; above it the nav is display:none and the page scrolls
+   normally, so this must stay scoped. */
+@media(max-width:999px){
+  html,body{overflow:hidden;overscroll-behavior:none;}
+}
 ::-webkit-scrollbar{display:none;}
 *{-ms-overflow-style:none;scrollbar-width:none;}
 input,textarea,select{font-family:'Plus Jakarta Sans',sans-serif;color:#0f172a;background:#f8fafc;}
@@ -4914,6 +5016,90 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
   );
 }
 
+/* One live-fish line's Dead-on-Arrival claim.
+   Replaces a single order-level "Report DOA" link that could not say WHICH fish died, so the
+   store had to work it out from a free-text sentence. Each live line now carries its own
+   button, its own cause, and its own count — and the claims accumulate on the order, so a
+   customer who opens two bags an hour apart can report each as they find it. */
+function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onReportDoa}){
+  const [open,setOpen]=useState(false);
+  const [cause,setCause]=useState("");
+  const [note,setNote]=useState("");
+  const [qty,setQty]=useState(1);
+  const [reso,setReso]=useState("replacement");
+  const maxQty=Math.max(1,Number(item.qty)||1);
+
+  if(claim) return(
+    <div style={{marginTop:6,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:9,padding:"8px 10px"}}>
+      <div style={{fontSize:11,fontWeight:800,color:"#065f46"}}>🐟 DOA reported · {claim.qty||1} fish</div>
+      {claim.cause&&<div style={{fontSize:10.5,color:"#047857",marginTop:2,lineHeight:1.45}}>{claim.cause}</div>}
+      <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${order.orderNo||orderId(order.id)} — item: ${item.name}. Here is my unboxing video.`))}
+        style={{marginTop:7,background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"7px 11px",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video</button>
+    </div>
+  );
+  if(!windowOpen) return null;
+
+  if(!open) return(
+    <button className="press" onClick={()=>setOpen(true)}
+      style={{marginTop:6,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"7px 11px",fontSize:10.5,fontWeight:800,color:"#9a3412",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+      {/* The countdown only appears once delivery has been recorded; before that there is no
+          deadline running and quoting one would be a lie. */}
+      🐟 Report this fish as Dead on Arrival{hoursLeft>0?` · ${hoursLeft}h left`:""}
+    </button>
+  );
+  const ready=!!cause && (cause!=="Other (explain below)" || note.trim().length>0);
+  return(
+    <div style={{marginTop:8,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:11,padding:"11px"}}>
+      <div style={{fontSize:11.5,fontWeight:800,color:"#9a3412",marginBottom:7}}>DOA — {item.name}</div>
+
+      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>How many arrived dead?</div>
+      <div style={{display:"flex",alignItems:"center",gap:10,background:"#fff",borderRadius:9,padding:"5px 10px",border:"1px solid #fed7aa",width:"fit-content",marginBottom:10}}>
+        <button className="press" onClick={()=>setQty(q=>Math.max(1,q-1))} style={{background:"none",border:"none",fontSize:16,color:"#9a3412",fontWeight:800,lineHeight:1,cursor:"pointer"}}>−</button>
+        <span style={{fontSize:12.5,fontWeight:800,color:"#9a3412",minWidth:14,textAlign:"center"}}>{qty}</span>
+        <button className="press" onClick={()=>setQty(q=>Math.min(maxQty,q+1))} disabled={qty>=maxQty}
+          style={{background:"none",border:"none",fontSize:16,color:qty>=maxQty?"#fdba74":"#9a3412",fontWeight:800,lineHeight:1,cursor:qty>=maxQty?"default":"pointer"}}>+</button>
+        <span style={{fontSize:10,color:"#c2410c",fontWeight:700}}>of {maxQty}</span>
+      </div>
+
+      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>Reason for dead arrival?</div>
+      <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:9}}>
+        {DOA_CAUSES.map(c=>(
+          <label key={c} style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:"#7c2d12",cursor:"pointer",lineHeight:1.4}}>
+            <input type="radio" name={`doacause-${order.id}-${item.id}`} checked={cause===c} onChange={()=>setCause(c)}
+              style={{width:15,height:15,accentColor:"#9a3412",flexShrink:0}}/>
+            {c}
+          </label>
+        ))}
+      </div>
+      <textarea value={note} onChange={e=>setNote(e.target.value.slice(0,300))} rows={2}
+        placeholder={cause==="Other (explain below)"?"Please describe what happened (required)":"Anything else we should know? (optional)"}
+        style={{width:"100%",boxSizing:"border-box",borderRadius:9,border:"1.5px solid #fed7aa",padding:"8px 10px",fontSize:11.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",marginBottom:9,fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+
+      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>Preferred resolution</div>
+      <div style={{display:"flex",gap:6,marginBottom:10}}>
+        {[["replacement","🐟 Replace"],["refund","💸 Refund"],["coins","🪙 Coins"]].map(([k,l])=>(
+          <button key={k} type="button" className="press" onClick={()=>setReso(k)}
+            style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${reso===k?"#9a3412":"#fed7aa"}`,background:reso===k?"#9a3412":"white",color:reso===k?"white":"#9a3412",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l}</button>
+        ))}
+      </div>
+      <div style={{fontSize:10,color:"#9a3412",lineHeight:1.5,marginBottom:9}}>
+        Send ONE clear, continuous unboxing video (from the sealed package) on WhatsApp within <b>2 hours</b> of delivery — that video is what the claim is judged on, so film the unboxing before anything else. Claims close {DOA_WINDOW_HOURS} hours after delivery. The final resolution — replacement, store credit or refund of the fish value — is ours to decide, and replacement shipping &amp; packing are arranged at our discretion.
+      </div>
+      <div style={{display:"flex",gap:7}}>
+        <button className="press" disabled={!ready} onClick={()=>{
+            const full=[cause,note.trim()].filter(Boolean).join(" — ");
+            openWA(ownerWA,encodeURIComponent(`Hi, Dead on Arrival report for order ${order.orderNo||orderId(order.id)}.\nItem: ${item.name}${item.variantLabel?` (${item.variantLabel})`:""}\nHow many dead: ${qty}\nReason: ${full}\nI'm sharing my unboxing video for review.`));
+            onReportDoa&&onReportDoa(order,{resolution:reso,reason:full,cause,note:note.trim(),qty,itemId:item.id,itemName:item.name});
+            setOpen(false);
+          }}
+          style={{flex:1,background:ready?"#25D366":"#bbf7d0",color:"white",border:"none",borderRadius:9,padding:"10px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:ready?"pointer":"not-allowed"}}>💬 Share video on WhatsApp</button>
+        <button className="press" onClick={()=>setOpen(false)}
+          style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:9,padding:"10px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, onRateOrderProducts, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
   const [openId,setOpenId]=useState(null); // which order is expanded (list shows summaries; details open on tap)
   // Re-add the exact option that was bought (the 10" net, not whichever size happens to be first).
@@ -5131,7 +5317,8 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 // or re-read the care notes. Only offered while the product still exists.
                 const open=prod?()=>nav("detail",prod):null;
                 return(
-                  <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 0",borderTop:i===0?"none":`1px solid ${C.border}`}}>
+                  <div key={i} style={{padding:"8px 0",borderTop:i===0?"none":`1px solid ${C.border}`}}>
+                  <div style={{display:"flex",gap:10,alignItems:"center"}}>
                     <div role={open?"button":undefined} tabIndex={open?0:undefined} onClick={open||undefined}
                       onKeyDown={open?(e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } }):undefined}
                       aria-label={open?`View ${item.name}`:undefined}
@@ -5155,6 +5342,14 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                       </div>
                     </div>
                     {delivered && prod && already && <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ Reviewed</span>}
+                  </div>
+                  {/* Per-item DOA, for every live line from payment until the window shuts.
+                      Sits with the fish it is about rather than in one order-level box. */}
+                  {item.category==="Live Fish" && o.liveGuarantee!==false && (
+                    <ItemDoaBlock order={o} item={item} claim={(o.doaItems||{})[item.id]}
+                      windowOpen={doaEntryOpen(o) && !((o.doa&&o.doa.status)&&o.doa.status!=="Requested")}
+                      hoursLeft={doaHoursLeft(o)} ownerWA={ownerWA} onReportDoa={onReportDoa}/>
+                  )}
                   </div>
                 );
               })}
@@ -5249,50 +5444,53 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               {o.status==="Confirmed"&&(
                 <div style={{marginTop:10,background:"#dcfce7",border:`1px solid #bbf7d0`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#15803d",fontWeight:600,lineHeight:1.5}}>✅ Payment verified — your order is confirmed &amp; being prepared!</div>
               )}
-              {/* Dead-on-Arrival reporting — only for delivered orders that contained live fish */}
-              {o.status==="Delivered" && o.items.some(it=>it.category==="Live Fish") && (
-                <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-                  {o.doa?(
-                    <div style={{background:o.doa.status==="Declined"?"#fef2f2":(o.doa.status||"").startsWith("Approved")?"#ecfdf5":"#fff7ed",border:`1px solid ${o.doa.status==="Declined"?"#fecaca":(o.doa.status||"").startsWith("Approved")?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 12px"}}>
-                      <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:3}}>🐟 Dead-on-Arrival request</div>
-                      <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>{doaStatusText[o.doa.status]||"Submitted."}</div>
-                      {o.doa.note&&<div style={{fontSize:11.5,color:C.text,marginTop:6,lineHeight:1.5}}><b>Note from store:</b> {o.doa.note}</div>}
-                      {(o.doa.status==="Requested"||o.doa.status==="Under Review")&&(
-                        <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${o.orderNo||orderId(o.id)} — here is my unboxing video.`))}
-                          style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Send video on WhatsApp</button>
-                      )}
-                    </div>
-                  ):o.liveGuarantee===false?(
+              {/* Dead-on-Arrival — the claim itself is now raised per fish, up with the item it
+                  concerns (see ItemDoaBlock above). What stays here is the order-level status of
+                  whatever has been claimed, plus the two cases where no button appears at all. */}
+              {o.items.some(it=>it.category==="Live Fish") && (()=>{
+                const claims=Object.entries(o.doaItems||{});
+                const win=doaEntryOpen(o), left=doaHoursLeft(o);
+                if(o.liveGuarantee===false) return(
+                  <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
                     <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>ℹ️ The <b>Live Arrival Guarantee (DOA cover)</b> doesn't apply to this order — a packing option below our recommendation was chosen at checkout. Per our Terms, DOA claims need the recommended (or safer) packing.</div>
-                  ):doaOpen===o.id?(
-                    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px"}}>
-                      <div style={{fontSize:12.5,fontWeight:800,color:"#9a3412",marginBottom:6}}>Report Dead on Arrival (DOA)</div>
-                      <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.6,marginBottom:10}}>If a fish arrived dead, send us ONE clear, unedited unboxing video (starting from the sealed package) on WhatsApp within 2 hours of delivery. We'll review it against the Live Arrival Guarantee and, if approved, make it right <b>one time</b> — a replacement, refund to your original account, or reward coins (your choice, up to the fish's value). Refunds cover the fish value only and exclude shipping.</div>
-                      <div style={{fontSize:11,fontWeight:700,color:"#9a3412",marginBottom:6}}>What happened? <span style={{fontWeight:400}}>(how many, which fish)</span></div>
-                      <textarea value={doaClaim} onChange={e=>setDoaClaim(e.target.value.slice(0,300))} rows={2} placeholder="e.g. 1 of the 5 guppies arrived dead"
-                        style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:"1.5px solid #fed7aa",padding:"9px 11px",fontSize:12.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",marginBottom:10,fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
-                      <div style={{fontSize:11,fontWeight:700,color:"#9a3412",marginBottom:6}}>Preferred resolution</div>
-                      <div style={{display:"flex",gap:6,marginBottom:10}}>
-                        {[["replacement","🐟 Replace"],["refund","💸 Refund"],["coins","🪙 Coins"]].map(([k,l])=>(
-                          <button key={k} type="button" className="press" onClick={()=>setDoaReso(k)}
-                            style={{flex:1,padding:"8px 4px",borderRadius:9,border:`1.5px solid ${doaReso===k?"#9a3412":"#fed7aa"}`,background:doaReso===k?"#9a3412":"white",color:doaReso===k?"white":"#9a3412",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
+                  </div>
+                );
+                if(!claims.length){
+                  // Nothing to say before the order is paid — the claim isn't open yet.
+                  if(!win && !deliveredAtOf(o)) return null;
+                  return(
+                  <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
+                    <div style={{fontSize:11,color:C.textSub,lineHeight:1.5}}>
+                      {win
+                        ? <>🐟 Fish arrived dead? Use the <b>Report</b> button under that fish above{left>0?` — ${left}h left to raise a claim`:""}.</>
+                        : <>The {DOA_WINDOW_HOURS}-hour window to raise a Dead-on-Arrival claim for this order has closed.</>}
+                    </div>
+                  </div>
+                  );
+                }
+                const st=(o.doa&&o.doa.status)||"Requested";
+                return(
+                  <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
+                    <div style={{background:st==="Declined"?"#fef2f2":st.startsWith("Approved")?"#ecfdf5":"#fff7ed",border:`1px solid ${st==="Declined"?"#fecaca":st.startsWith("Approved")?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 12px"}}>
+                      <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:3}}>🐟 Dead-on-Arrival request · {claims.length} item{claims.length>1?"s":""}</div>
+                      <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>{doaStatusText[st]||"Submitted."}</div>
+                      <div style={{marginTop:7,display:"flex",flexDirection:"column",gap:4}}>
+                        {claims.map(([iid,c])=>(
+                          <div key={iid} style={{fontSize:11,color:C.text,lineHeight:1.45}}>
+                            • <b>{c.name||"Item"}</b> — {c.qty||1} dead{c.cause?` · ${c.cause}`:""}
+                          </div>
                         ))}
                       </div>
-                      <div style={{display:"flex",gap:8}}>
-                        <button className="press" onClick={()=>{ openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${o.orderNo||orderId(o.id)}.${doaClaim.trim()?` (${doaClaim.trim()})`:""} I'm sharing my unboxing video for review — please help with a replacement/refund.`)); onReportDoa&&onReportDoa(o,{resolution:doaReso,reason:doaClaim.trim()}); setDoaOpen(null); }}
-                          style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Share video on WhatsApp</button>
-                        <button className="press" onClick={()=>setDoaOpen(null)}
-                          style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
-                      </div>
+                      {o.doa&&o.doa.note&&<div style={{fontSize:11.5,color:C.text,marginTop:7,lineHeight:1.5}}><b>Note from store:</b> {o.doa.note}</div>}
+                      {(st==="Requested"||st==="Under Review")&&(
+                        <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${o.orderNo||orderId(o.id)} — here is my unboxing video.`))}
+                          style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video on WhatsApp</button>
+                      )}
+                      {win&&(st==="Requested")&&<div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>Found another one? You can still report other fish above{left>0?` for ${left}h`:""}.</div>}
                     </div>
-                  ):(
-                    <button className="press" onClick={()=>setDoaOpen(o.id)}
-                      style={{background:"none",border:"none",padding:0,color:C.textSub,fontSize:11,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
-                      Received a fish Dead on Arrival? Report DOA →
-                    </button>
-                  )}
-                </div>
-              )}
+                  </div>
+                );
+              })()}
               {/* Self-cancel within the allowed window (instant) */}
               {selfCancelOpen(o)&&<SelfCancelBtn o={o} onCancel={onCancelByCustomer}/>}
               {/* Return / replacement for damaged dry goods */}
@@ -5300,8 +5498,10 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 <ReturnRequestBlock o={o} products={products} ownerWA={ownerWA} settings={settings}
                   onRequestReturn={onRequestReturn} onSubmitReturnShipment={onSubmitReturnShipment}/>
               )}
-              {/* Refer-a-friend lives inside the most recent delivered order once the top banner's temporary window ends (#13) */}
-              {isDelivered&&recentDeliveredOrder&&o.id===recentDeliveredOrder.id&&refCode&&(
+              {/* Refer-a-friend lives inside the most recent delivered order once the top banner's
+                  temporary window ends (#13) — the `!showTempPrompts` guard is what makes that true.
+                  Without it both rendered at once and the same code appeared twice on the page. */}
+              {!showTempPrompts&&isDelivered&&recentDeliveredOrder&&o.id===recentDeliveredOrder.id&&refCode&&(
                 <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
                   <div style={{background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:12,padding:"12px",color:"white"}}>
                     <div style={{fontSize:12.5,fontWeight:800,marginBottom:4}}>💜 Refer a friend &amp; earn rewards</div>
@@ -5712,7 +5912,7 @@ function DoaInsights({orders=[]}){
       bump(season,seasonOf(o.placedAt),"doa");
       new Set((o.items||[]).filter(it=>it.category==="Live Fish").map(it=>it.name)).forEach(nm=>{ if(species[nm]) species[nm].doa++; });
     });
-    return { total:deliveredLive.length, doa:doaOrders.length, species, zone, season };
+    return { total:deliveredLive.length, doa:doaOrders.length, species, zone, season, doaOrders };
   },[orders]);
   const [open,setOpen]=useState(false);
   if(data.total===0) return null;
@@ -5755,6 +5955,33 @@ function DoaInsights({orders=[]}){
         <div style={{marginTop:12,fontSize:12,color:"#15803d",fontWeight:600,background:"#ecfdf5",borderRadius:10,padding:"10px 12px"}}>✓ No DOA reported yet — your fish are arriving safe!</div>
       ):(
         <div>
+          {/* The rates say WHERE losses cluster; this says WHICH orders they were, so a number
+              that looks wrong can be traced back to the actual order instead of being taken on
+              trust. Newest first — the ones still open are the ones being chased. */}
+          <div style={{marginTop:12}}>
+            <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:6}}>Orders with a DOA claim</div>
+            {[...data.doaOrders]
+              .sort((a,b)=>String(deliveredAtOf(b)||b.placedAt||"").localeCompare(String(deliveredAtOf(a)||a.placedAt||"")))
+              .map(o=>{
+                const st=(o.doa&&o.doa.status)||"Requested";
+                const claims=Object.values(o.doaItems||{});
+                const col=st==="Declined"?"#dc2626":st.startsWith("Approved")?"#15803d":"#c2410c";
+                return(
+                  <div key={o.id} style={{padding:"8px 0",borderTop:`1px solid ${C.border}`}}>
+                    <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
+                      <code style={{fontSize:12,fontWeight:800,color:C.text,fontFamily:"monospace"}}>{o.orderNo||orderId(o.id)}</code>
+                      <span style={{fontSize:10.5,color:C.textSub}}>{o.shippingZoneLabel||"Unknown"}</span>
+                      <span style={{fontSize:10.5,fontWeight:800,color:col,marginLeft:"auto"}}>{st}</span>
+                    </div>
+                    <div style={{fontSize:10.5,color:C.textSub,marginTop:2,lineHeight:1.45}}>
+                      {claims.length
+                        ? claims.map(c=>`${c.name||"Item"} x${c.qty||1}${c.cause?` (${c.cause})`:""}`).join(" · ")
+                        : (o.doa&&o.doa.claimReason)||"No item detail recorded"}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
           <Section title="By species (most losses)" map={data.species} opts={{onlyDoa:true,sortByRate:true}}/>
           <Section title="By destination zone" map={data.zone} opts={{sortByRate:true}}/>
           <Section title="By season" map={data.season} opts={{sortByRate:true}}/>
@@ -7613,17 +7840,45 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
   );
 }
 
-function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,updateQty,user,settings={},orders=[]}){
+function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,updateQty,user,settings={},orders=[],products=[],mediaCache={},savedAddresses=[],onSaveAddress,onDeleteAddress}){
   const [step,setStep]=useState(1);
   useEffect(()=>{ trackFunnel("checkout"); },[]); // funnel: reached checkout
   const [exitAsk,setExitAsk]=useState(false);
   const savingsTotal=cart.reduce((s,i)=>s+Math.max(0,((Number(i.mrp)||i.price)-i.price))*i.qty,0);
-  const [addr,setAddr]=useState({...BLANK_ADDR,name:user?.name||"",phone:user?.phone||""});
+  /* The half-typed address survives a reload or a trip to another tab: it is restored here on
+     mount and written back on every change below. Without this, wandering off the checkout page
+     — to check a pincode, to answer a message — meant typing the whole address again. */
+  const addrUk=userKey(user);
+  const [addr,setAddr]=useState(()=>{
+    const draft=loadAddrDraft(addrUk);
+    const base={...BLANK_ADDR,name:user?.name||"",phone:user?.phone||""};
+    return draft?{...base,...draft}:base;
+  });
+  const [addrPickOpen,setAddrPickOpen]=useState(false);
+  const [addrEditId,setAddrEditId]=useState(null);   // which saved card the form is editing, if any
+  useEffect(()=>{ saveAddrDraft(addrUk,addr); },[addr,addrUk]);
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const supWA=(settings.supporterWhatsapp||"").replace(/\D/g,"");
   const onlineAvail=!!(settings.upiId||settings.razorpayLink);
   const hasLiveFish=cart.some(i=>i.category==="Live Fish");
   const [errs,setErrs]=useState({});
+  /* Scroll the first unfilled mandatory field into view when Continue is pressed. The form is
+     longer than the screen, so a failed validation used to look like the button was simply
+     dead: the red borders were all below the fold with nothing to say so. This list is in DOM
+     order, which is also the order validate() checks in, so "first error" means the topmost. */
+  const fieldRefs=useRef({});
+  const ADDR_FIELD_ORDER=["name","phone","whatsapp","address","city","pincode"];
+  const [errFocus,setErrFocus]=useState("");
+  const focusFirstError=e=>{
+    const first=ADDR_FIELD_ORDER.find(k=>e[k]);
+    setErrFocus(first||"");
+    const el=first&&fieldRefs.current[first];
+    if(!el) return;
+    try{ el.scrollIntoView({behavior:"smooth",block:"center"}); }catch(err){ try{ el.scrollIntoView(); }catch(e2){} }
+    // Focus after the smooth scroll is under way; preventScroll stops the browser jumping the
+    // field to the top edge and undoing the centring.
+    setTimeout(()=>{ try{ el.focus({preventScroll:true}); }catch(err){ try{ el.focus(); }catch(e2){} } },340);
+  };
   const [placed,setPlaced]=useState(null);
   const [submitted,setSubmitted]=useState(false);
   // If the cart empties while still choosing address/review, drop back to step 1 — but NEVER
@@ -7751,7 +8006,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     if(!addr.city.trim())e.city="Required";
     if(!/^\d{6}$/.test(addr.pincode))e.pincode="Valid 6-digit pincode required";
     setErrs(e);
-    return Object.keys(e).length===0;
+    if(Object.keys(e).length){ focusFirstError(e); return false; }
+    setErrFocus("");
+    return true;
   };
 
   const handlePlaceOrder=async()=>{
@@ -7820,6 +8077,10 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     if(refApplied&&refInput.trim()) bumpPromoUsage("referral");
     // Root app handles state + storage + stock decrement
     onOrderPlaced(order);
+    // The order carries the address now, so the half-typed draft has done its job. It is also
+    // filed in the address book, so the next order starts one tap away instead of blank.
+    clearAddrDraft(addrUk);
+    if(onSaveAddress) onSaveAddress({...addr, id:addrEditId||null});
     setPlaced(order);
     setStep(3);
     setPlacing(false);
@@ -7828,8 +8089,10 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   const inp=(label,key,type="text",ph="",half=false,opt=false)=>(
     <div style={{flex:half?"1":"auto",minWidth:half?"0":"auto",marginBottom:14}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>{label}{opt&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}> (optional)</span>}</div>
-      <input type={type} value={addr[key]} onChange={e=>f(key,e.target.value)} placeholder={ph}
-        style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs[key]?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+      <input ref={el=>{ if(el) fieldRefs.current[key]=el; }} type={type} value={addr[key]}
+        onChange={e=>{ f(key,e.target.value); if(errFocus===key) setErrFocus(""); }} placeholder={ph}
+        style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs[key]?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",
+          boxShadow:errFocus===key?"0 0 0 4px rgba(239,68,68,.20)":"none",transition:"box-shadow .2s ease"}}/>
       {errs[key]&&<div style={{fontSize:11,color:C.danger,marginTop:4,fontWeight:600}}>{errs[key]}</div>}
     </div>
   );
@@ -8002,6 +8265,55 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             </div>
             </>
           )}
+          {/* Saved addresses — tap one to fill the form. Seeded from past orders, so this is
+              populated even for a customer who has never pressed "Save" (and on a device they
+              have never checked out from before). */}
+          {savedAddresses.length>0&&(
+            <div style={{background:"#fff",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:addrPickOpen?10:0}}>
+                <div style={{fontSize:12.5,fontWeight:800,color:C.text}}>📒 Your saved addresses <span style={{color:C.textSub,fontWeight:600}}>({savedAddresses.length})</span></div>
+                <button className="press" onClick={()=>setAddrPickOpen(v=>!v)}
+                  style={{background:"none",border:"none",color:C.accent,fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",padding:0}}>
+                  {addrPickOpen?"▲ Hide":"Use one →"}
+                </button>
+              </div>
+              {addrPickOpen&&(
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {savedAddresses.map(a=>{
+                    const active=addrFingerprint(a)===addrFingerprint(addr);
+                    return(
+                      <div key={a.id} style={{border:`1.5px solid ${active?C.primary:C.border}`,background:active?C.accentLight:"#fff",borderRadius:12,padding:"10px 12px"}}>
+                        <div style={{fontSize:12.5,fontWeight:800,color:C.text}}>
+                          {a.name||"Address"}{a.label?<span style={{color:C.textSub,fontWeight:600}}> · {a.label}</span>:null}
+                          {a.fromOrder&&<span style={{fontSize:9,fontWeight:800,color:C.textSub,background:C.bg,borderRadius:20,padding:"2px 7px",marginLeft:6}}>FROM A PAST ORDER</span>}
+                        </div>
+                        <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5,marginTop:3}}>
+                          {a.address}{a.city?`, ${a.city}`:""} — {a.pincode}{a.phone?<><br/>📞 {a.phone}</>:null}
+                        </div>
+                        <div style={{display:"flex",gap:8,marginTop:9,flexWrap:"wrap"}}>
+                          <button className="press" onClick={()=>{
+                              // Only the address fields are taken; the notes/summary and the
+                              // WhatsApp-updates choice belong to THIS order, not to the card.
+                              setAddr(cur=>({...cur,name:a.name||"",phone:a.phone||"",whatsapp:a.whatsapp||"",
+                                address:a.address||"",city:a.city||"",pincode:a.pincode||"",state:a.state||"",stateCode:a.stateCode||""}));
+                              setAddrEditId(a.id); setErrs({}); setErrFocus(""); setAddrPickOpen(false);
+                            }}
+                            style={{background:C.primary,color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                            {active?"✓ In use":"Use this"}
+                          </button>
+                          <button className="press" onClick={()=>onDeleteAddress&&onDeleteAddress(a.id)}
+                            style={{background:"#fff",color:C.danger,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.45}}>Saved on this device. Addresses from past orders reappear automatically when you sign in elsewhere.</div>
+                </div>
+              )}
+            </div>
+          )}
           {inp("Full Name","name","text","John Doe")}
           {inp("Mobile Number","phone","tel","9876543210")}
           {inp("WhatsApp Number","whatsapp","tel","9876543210 (if different)",false,true)}
@@ -8172,6 +8484,15 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             Continue to Review →
           </button>
+          {/* Explicit save, for a customer who wants this address on file before committing to
+              the order. Placing the order saves it anyway — this is just the earlier chance. */}
+          {onSaveAddress&&(
+            <button className="press" onClick={()=>{ if(validate()) onSaveAddress({...addr, id:addrEditId||null}); }}
+              style={{width:"100%",marginTop:9,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"12px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              💾 {addrEditId?"Update this saved address":"Save this address for next time"}
+            </button>
+          )}
+          <div style={{fontSize:10.5,color:C.textSub,textAlign:"center",marginTop:7,lineHeight:1.45}}>What you type is kept as you go, so you can leave this page and come back without losing it.</div>
         </div>
       )}
 
@@ -8195,7 +8516,14 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
             return(
               <div key={item.key||item.id} style={{background:C.card,borderRadius:14,padding:"12px",marginBottom:8,display:"flex",gap:12,alignItems:"center",border:`1px solid ${C.border}`}}>
-                <div style={{width:44,height:44,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{m.emoji}</div>
+                {/* Cart lines are snapshots and carry no picture, so the photo is looked up from
+                    the catalogue — the same helper the cart and order history use. This tile
+                    showed the bare category emoji until now, which made the last screen before
+                    payment the one place you could not see what you were buying. */}
+                <div style={{width:44,height:44,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,overflow:"hidden"}}>
+                  {(()=>{ const src=getCartLineImg(item,products,mediaCache);
+                    return src?<img src={src} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji; })()}
+                </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:700,color:C.text}}>{item.name}</div>
                   {item.variantLabel&&<div style={{fontSize:12,color:C.textSub}}>{item.variantLabel}</div>}
@@ -8216,6 +8544,52 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               </div>
             );
           })}
+          {/* Live-fish packing, chosen right here between the items and the money. It was only
+              reachable through a "Change packing" link buried inside the totals card, below the
+              shipping rows — so the one decision that governs both the shipping charge and
+              whether the Live Arrival Guarantee applies was the hardest thing on the page to
+              find. The charge for each option is quoted against the real parcel weight. */}
+          {hasLiveFish&&(
+            <div style={{background:"#f0f9ff",borderRadius:14,padding:"14px",marginTop:12,border:"1px solid #bae6fd"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:4}}>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13.5,fontWeight:800,color:"#0c4a6e"}}>🐠 Live-Fish Packing</div>
+                {guaranteeActive
+                  ? <span style={{fontSize:9.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"3px 8px",whiteSpace:"nowrap"}}>🛡️ GUARANTEE ON</span>
+                  : <span style={{fontSize:9.5,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"3px 8px",whiteSpace:"nowrap"}}>⚠ NOT COVERED</span>}
+              </div>
+              <div style={{fontSize:11,color:"#0c4a6e",lineHeight:1.5,marginBottom:10}}>
+                The <b>Live Arrival Guarantee</b> applies on <b>{packingLabel(suggestedPacking)}</b> (our recommendation) or any safer option. Changing this changes your shipping charge below.
+              </div>
+              {!zone&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>Enter a recognised pincode on the shipping step to see the charge for each option.</div>}
+              {PACKING_OPTIONS.map(opt=>{
+                const sel=packing===opt.key;
+                const isSug=opt.key===suggestedPacking;
+                const covered=opt.rank>=packingOpt(suggestedPacking).rank;
+                const optFee=zone?calcShipping(cart,zone,{packing:opt.key},settings):null;
+                return(
+                  <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:10,background:sel?"#e0f2fe":"#fff",borderRadius:12,padding:"10px 12px",marginBottom:7,cursor:"pointer",border:`1.5px solid ${sel?"#0284c7":C.border}`}}>
+                    <input type="radio" name="packmain" checked={sel} onChange={()=>setPacking(opt.key)} style={{width:17,height:17,accentColor:"#0284c7",flexShrink:0,marginTop:1}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                        <span style={{fontSize:12,fontWeight:800,color:sel?"#0369a1":C.text}}>{opt.label}</span>
+                        {isSug&&<span style={{fontSize:8.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
+                        {covered
+                          ? <span style={{fontSize:9,fontWeight:800,color:"#15803d"}} title="Live Arrival Guarantee applies">🛡️</span>
+                          : <span style={{fontSize:8.5,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"1px 6px"}}>NO DOA COVER</span>}
+                      </div>
+                      <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
+                    </div>
+                    <span style={{fontSize:12,fontWeight:800,color:sel?"#0369a1":C.text,whiteSpace:"nowrap"}}>{optFee==null?"—":`₹${optFee}`}</span>
+                  </label>
+                );
+              })}
+              {!guaranteeActive&&(
+                <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",lineHeight:1.5}}>
+                  ⚠ You've picked packing below our recommendation. Your fish still travel with our usual care, but a <b>Dead-on-Arrival claim can't be honoured</b> on this order.
+                </div>
+              )}
+            </div>
+          )}
           <div style={{background:C.card,borderRadius:14,padding:"14px",marginTop:12,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:13,color:C.textSub}}>Subtotal</span>
@@ -10814,32 +11188,11 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           </div>
           {/* Behaviour insights — funnel, most viewed/added, top searches */}
           <AdminInsights stats={visitStats} products={products}/>
-        </div>
-      )}
-      {/* ── ORDERS TAB (order management only) ── */}
-      {tab==="orders"&&(
-        <div className="dt-read" style={{padding:"16px 16px 100px"}}>
-          {/* Search orders by number / name / phone — top of the tab so it's always reachable */}
-          <div style={{position:"relative",marginBottom:10}}>
-            <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:.5}}>🔍</span>
-            <input value={orderSearch} onChange={e=>setOrderSearch(e.target.value)}
-              placeholder="Search order # / name / phone / WhatsApp…"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 36px 11px 36px",fontSize:13.5,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
-            {orderSearch&&<button className="press" onClick={()=>setOrderSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,color:C.textSub,cursor:"pointer"}}>×</button>}
-          </div>
-          {/* Status filter */}
-          <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:14}}>
-            {["All",...ALL_STATUSES].map(s=>(
-              <button key={s} className="press" onClick={()=>setOrderFilter(s)}
-                style={{flexShrink:0,background:orderFilter===s?C.primary:C.card,color:orderFilter===s?"white":C.textSub,border:`1.5px solid ${orderFilter===s?C.primary:C.border}`,borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                {s}
-                {s!=="All"&&<span style={{marginLeft:4,background:orderFilter===s?"rgba(255,255,255,.25)":C.border,borderRadius:10,padding:"1px 6px",fontSize:10}}>
-                  {orders.filter(o=>o.status===s).length}
-                </span>}
-              </button>
-            ))}
-          </div>
-          {orderSearch.trim()&&<div style={{fontSize:11.5,color:C.textSub,fontWeight:600,marginBottom:10,marginTop:-4}}>{filteredOrders.length} match{filteredOrders.length!==1?"es":""} for “{orderSearch.trim()}”</div>}
+          {/* ── Moved here from the Orders tab ────────────────────────────────────────────
+              Reports, housekeeping and the loss/abandonment panels all used to sit ABOVE the
+              order list, so opening Orders meant scrolling past six cards to reach the thing
+              the tab is named after. They are reference and maintenance, not order handling,
+              which makes the dashboard where they belong. Orders now opens on the list. */}
           {/* ── Abandoned carts — shoppers who left items behind; nudge them on WhatsApp ── */}
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:abandonedCarts.length?12:6}}>
@@ -10909,23 +11262,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               </div>
             );
           })()}
-
-          {/* Analytics console — reads this store's data live */}
-          <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-              <span style={{fontSize:16}}>📈</span>
-              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Analytics</span>
-            </div>
-            <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55,marginBottom:10}}>
-              Action dashboard, stock reorder points and a GST-ready file — reading this store's data live. Nothing to export.
-            </div>
-            {/* Same destination as the header button — the analytics app itself,
-                with nothing in between. */}
-            <a className="press" href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer"
-              style={{display:"block",width:"100%",boxSizing:"border-box",border:"none",textAlign:"center",background:C.accent,color:"white",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"none"}}>
-              Open Analytics →
-            </a>
-          </div>
 
           {/* Excel export with date range */}
           <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
@@ -11152,6 +11488,32 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             );
           })()}
 
+        </div>
+      )}
+      {/* ── ORDERS TAB (order management only) ── */}
+      {tab==="orders"&&(
+        <div className="dt-read" style={{padding:"16px 16px 100px"}}>
+          {/* Search orders by number / name / phone — top of the tab so it's always reachable */}
+          <div style={{position:"relative",marginBottom:10}}>
+            <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:.5}}>🔍</span>
+            <input value={orderSearch} onChange={e=>setOrderSearch(e.target.value)}
+              placeholder="Search order # / name / phone / WhatsApp…"
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 36px 11px 36px",fontSize:13.5,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+            {orderSearch&&<button className="press" onClick={()=>setOrderSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,color:C.textSub,cursor:"pointer"}}>×</button>}
+          </div>
+          {/* Status filter */}
+          <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:14}}>
+            {["All",...ALL_STATUSES].map(s=>(
+              <button key={s} className="press" onClick={()=>setOrderFilter(s)}
+                style={{flexShrink:0,background:orderFilter===s?C.primary:C.card,color:orderFilter===s?"white":C.textSub,border:`1.5px solid ${orderFilter===s?C.primary:C.border}`,borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                {s}
+                {s!=="All"&&<span style={{marginLeft:4,background:orderFilter===s?"rgba(255,255,255,.25)":C.border,borderRadius:10,padding:"1px 6px",fontSize:10}}>
+                  {orders.filter(o=>o.status===s).length}
+                </span>}
+              </button>
+            ))}
+          </div>
+          {orderSearch.trim()&&<div style={{fontSize:11.5,color:C.textSub,fontWeight:600,marginBottom:10,marginTop:-4}}>{filteredOrders.length} match{filteredOrders.length!==1?"es":""} for “{orderSearch.trim()}”</div>}
           {filteredOrders.length===0?(
             <div style={{textAlign:"center",padding:"50px 0",color:C.textSub}}>
               <div style={{fontSize:48,marginBottom:14}}>📋</div>
@@ -13331,6 +13693,7 @@ function NemoStore(){
   const [reviewIntent,setReviewIntent] = useState(null);
   const [reviewPreset,setReviewPreset]   = useState(0);
   const [favorites,setFavorites]   = useState([]);
+  const [savedAddresses,setSavedAddresses] = useState([]);   // reusable delivery addresses (this device)
   const [interestedSet,setInterestedSet] = useState([]);
   const [interestCounts,setInterestCounts] = useState({});
   const [fbReady,setFbReady]       = useState(0);
@@ -13835,6 +14198,38 @@ function NemoStore(){
   };
   const markReviewed=(pid)=>{ if(user){ setReviewedSet(addReviewedLocal(userKey(user),pid)); } };
   const startReview=(prod,preset=0)=>{ setReviewIntent(prod.id); setReviewPreset(Number(preset)||0); nav("detail",prod); };
+
+  /* ── Address book ──────────────────────────────────────────────────────────────────
+     Loaded per signed-in customer and re-seeded from their orders whenever those arrive,
+     so a new device recovers the addresses they have actually shipped to before. */
+  useEffect(()=>{
+    const uk=userKey(user);
+    if(!uk){ setSavedAddresses([]); return; }
+    // Never seed while the admin panel is open: there `orders` holds EVERY customer's orders,
+    // and seeding from it would file other people's addresses into the admin's own book.
+    if(page==="admin") return;
+    setSavedAddresses(seedAddressBook(uk, orders));
+  },[user,orders.length,page]);
+  const saveAddressBookEntry=entry=>{
+    const uk=userKey(user);
+    if(!uk||addrIsBlank(entry)) return;
+    setSavedAddresses(prev=>{
+      const fp=addrFingerprint(entry);
+      // Editing an existing card updates it in place; a new place is appended. Matching on
+      // the fingerprint as well as the id stops "save" quietly duplicating the same address.
+      const idx=prev.findIndex(a=>(entry.id&&a.id===entry.id)||addrFingerprint(a)===fp);
+      const row={...entry, id:entry.id||uid_addr(), fromOrder:false};
+      const next=idx>=0 ? prev.map((a,i)=>i===idx?{...a,...row,id:a.id}:a) : [...prev,row];
+      saveAddrBook(uk,next);
+      return next;
+    });
+    showToast("Address saved ✓");
+  };
+  const deleteAddressBookEntry=id=>{
+    const uk=userKey(user);
+    if(!uk) return;
+    setSavedAddresses(prev=>{ const next=prev.filter(a=>a.id!==id); saveAddrBook(uk,next); return next; });
+  };
   const toggleFav=(prod)=>{
     if(!user){ goAuth("home"); showToast("Sign in to save items"); return; }
     const on=!favorites.includes(prod.id);
@@ -14204,7 +14599,18 @@ function NemoStore(){
   // Customer reports a Dead-on-Arrival fish → flags the order (best-effort cloud write) and routes them to WhatsApp
   const reportDoa=async(order,opts={})=>{
     if(order.doa&&order.doa.status&&order.doa.status!=="Requested") return; // don't overwrite an in-progress/resolved request
-    const updated={...order,doa:{status:"Requested",requestedAt:new Date().toISOString(),note:"",resolution:opts.resolution||"replacement",claimReason:opts.reason||""}};
+    // Claims are recorded per item and accumulate, so a customer who opens a second bag an hour
+    // later adds to the same request rather than replacing the first one. The order-level `doa`
+    // record is kept as the umbrella the admin screen and the status text still read.
+    const prevItems=(order.doaItems&&typeof order.doaItems==="object")?order.doaItems:{};
+    const doaItems=opts.itemId
+      ? {...prevItems,[opts.itemId]:{ name:opts.itemName||"", qty:Number(opts.qty)||1, cause:opts.cause||"",
+          note:opts.note||"", resolution:opts.resolution||"replacement", requestedAt:new Date().toISOString() }}
+      : prevItems;
+    // The umbrella reason stays human-readable: every item's claim, one per line.
+    const allReasons=Object.values(doaItems).map(c=>`${c.name||"Item"} x${c.qty||1}: ${[c.cause,c.note].filter(Boolean).join(" — ")}`).join(" | ")
+      || opts.reason || "";
+    const updated={...order,doaItems,doa:{status:"Requested",requestedAt:(order.doa&&order.doa.requestedAt)||new Date().toISOString(),note:(order.doa&&order.doa.note)||"",resolution:opts.resolution||"replacement",claimReason:allReasons}};
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
     showToast("DOA request noted — please send your video on WhatsApp");
@@ -14494,14 +14900,16 @@ function NemoStore(){
       {adminExitAsk&&<AdminExitConfirm onStay={()=>setAdminExitAsk(false)} onLeave={()=>{setAdminExitAsk(false);nav("home");}}/>}
       {!isAdminPage&&<WhyNemoPopup open={whyOpen} onClose={()=>setWhyOpen(false)} nav={nav}/>}
       {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap} walletPts={walletPts}/>}
-      <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
+      {/* overscrollBehavior:contain stops a flick that reaches the end of this list from
+          chaining out to the document and dragging the pinned bottom nav with it. */}
+      <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
         <div key={page} className="page-swap">
         {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
         {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={products} mediaCache={mediaCache}/>}
         {page==="checkout" &&(user
-          ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders}/>
+          ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders} products={products} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
         {page==="orders"   &&(user
           ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} onRateOrderProducts={rateOrderProducts} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
