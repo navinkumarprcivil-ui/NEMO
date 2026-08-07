@@ -57,7 +57,7 @@ const MIME = {
 // limit that lets the next 200 KB in without anyone noticing.
 const HTML_BUDGET = 90_000;
 /** The shell: everything a phone downloads that is not the app bundle itself. */
-const SHELL_BUDGET = 60_000;
+const SHELL_BUDGET = 100_000;   // includes the two aquarium sprites (~37 KB)
 const APP_CODE = new Set(['/app.js', '/app.jsx']);
 
 let failures = 0;
@@ -150,8 +150,11 @@ try {
   console.log(`\ndesktop     ${total(desktop)} bytes over ${desktop.length} requests`);
   console.log(`mobile      ${total(mobile)} bytes over ${mobile.length} requests`);
 
-  check(sprites(desktop).length > 0, 'a wide screen fetches the aquarium sprites, which it draws');
-  check(sprites(mobile).length === 0, 'a phone fetches no sprite it will never draw');
+  // The fish are on every screen now (they are 37 KB of WebP, not 313 KB of
+  // inline base64), so both viewports fetch them — the budget below is what
+  // keeps that honest.
+  check(sprites(desktop).length > 0, 'a wide screen fetches the aquarium sprites');
+  check(sprites(mobile).length > 0, 'a phone fetches them too, and draws them');
   check(
     sprites(desktop).every((r) => r.path.endsWith('.webp')),
     'the sprites come across as WebP, not as the PNG fallback'

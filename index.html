@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<!-- user-scalable=no is a deliberate choice, asked for twice: the store should
+     feel like an app, not a page that slides around under a thumb. It is a real
+     accessibility cost — someone who needs to magnify text now cannot — so the
+     app carries its own zoom where it matters instead: product photos, the
+     invoice ("Actual size"), and payment proofs all open in pinchable viewers
+     that set their own touch-action. Android and iOS system-wide magnification
+     still work regardless; this only stops the page itself scaling. -->
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
 <title>Nemo Aqua Store</title>
 <meta name="theme-color" content="#ffffff"/>
 <meta name="description" content="Buy premium aquarium fish, live plants, tanks &amp; accessories online at Nemo Aqua Store — hand-picked, healthy livestock delivered with care across India."/>
@@ -352,6 +359,24 @@
      in a new tab and come back. Publishing the measured height as a custom
      property fixes it in the one place that is always right: the visual
      viewport itself. -->
+<!-- iOS Safari ignores user-scalable=no in the viewport tag, so the meta above
+     only settles it on Android. These two listeners close the gap: gesturestart
+     is the pinch, and a second tap inside 300ms is the double-tap zoom. Both are
+     cancelled only on the page itself — the media lightbox, the invoice viewer
+     and the payment-proof viewer set their own touch-action and handle their own
+     gestures, so pinching a fish photo still works. -->
+<script>
+  (function(){
+    var zoomable = function(t){ return !!(t && t.closest && t.closest('[data-zoomable]')); };
+    document.addEventListener('gesturestart', function(e){ if(!zoomable(e.target)) e.preventDefault(); }, {passive:false});
+    var last = 0;
+    document.addEventListener('touchend', function(e){
+      var now = Date.now();
+      if (now - last <= 300 && !zoomable(e.target)) e.preventDefault();
+      last = now;
+    }, {passive:false});
+  })();
+</script>
 <script>
   (function(){
     var vv = window.visualViewport;
@@ -527,17 +552,17 @@
   function seed(){
     var count=Math.round(Math.min(30,Math.max(12,(W*H)/46000)));
     bubbles=[]; for(var i=0;i<count;i++) bubbles.push(mk(Math.random()*H));
-    /* The fish used to be desktop-only, at >=1000px. That was a bytes decision,
-       not a design one: they were 313 KB of base64 inside index.html, so every
-       phone paid for them whether or not it drew them, and the cheapest answer
-       was to draw them on the machines least bothered by the weight. They are
-       37 KB of WebP now, fetched only when this branch is taken, so the reason
-       is gone — and 1000px excluded every tablet, which is where they were most
-       missed. Tablets and large phones sideways get them; a small phone still
-       keeps to bubbles and snails, where the screen is too busy to spare them
-       the room. */
-    if(window.innerWidth>=700){ loadFish(); fish=[mkFish(bettaImg,false,78), mkFish(clownImg,true,72)]; }
-    else fish=[];
+    /* The fish are on every screen now. They were desktop-only at >=1000px, and
+       that was always a bytes decision rather than a design one: at 313 KB of
+       base64 inside index.html every phone paid for them whether or not it drew
+       them, so the cheapest answer was to draw them only where the weight
+       mattered least. They are 37 KB of lazily fetched WebP, so there is nothing
+       left to ration — and the aquarium is the point of the storefront. They
+       scale down with the viewport so two fish on a 390px screen read as
+       background rather than as an obstruction. */
+    var fw=window.innerWidth<560?Math.max(44,Math.round(window.innerWidth*0.14)):78;
+    loadFish();
+    fish=[mkFish(bettaImg,false,fw), mkFish(clownImg,true,Math.round(fw*0.92))];
     snails=[mkSnail('bottom'), mkSnail('left'), mkSnail('right')];
   }
   function resize(){
@@ -731,11 +756,12 @@
   if(reduce){ ctx.clearRect(0,0,W,H); bg();
     for(var i=0;i<bubbles.length;i++){ var b=bubbles[i]; drawBubble(b.x,b.y,b.r,b.alpha); }
     drawSnail(W*0.4,H-8,14,1,0.6,0,1);
-    if(window.innerWidth>=700){
+    (function(){
+      var w=window.innerWidth<560?Math.max(44,Math.round(window.innerWidth*0.14)):78;
       loadFish();
-      var rdz=function(){ drawFish(bettaImg,W*0.55,H*0.32,78,1,0,0.92,0); drawFish(clownImg,W*0.7,H*0.5,72,-1,0,0.92,0); };
+      var rdz=function(){ drawFish(bettaImg,W*0.55,H*0.32,w,1,0,0.92,0); drawFish(clownImg,W*0.7,H*0.5,Math.round(w*0.92),-1,0,0.92,0); };
       bettaImg.onload=rdz; clownImg.onload=rdz; rdz();
-    }
+    })();
   }
   else { start(); }
 })();
