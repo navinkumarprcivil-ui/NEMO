@@ -1,6 +1,6 @@
 /* Nemo Aqua Store — service worker (offline fallback + always-fresh code) */
-const CACHE = 'nemo-v76';
-const ASSETS = ['./index.html', './app.js', './app.jsx', './assets/nemo-logo.png', './manifest.webmanifest'];
+const CACHE = 'nemo-v77';
+const ASSETS = ['./index.html', './app.js', './app.jsx', './assets/nemo-logo.webp', './assets/nemo-logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

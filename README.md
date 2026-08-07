@@ -8,7 +8,9 @@ A mobile-first aquarium storefront (HTML + React + Firebase Realtime Database).
 index.html              ← the app (served at the root)
 app.jsx                 ← all the app code
 assets/                 ← UPLOAD THE WHOLE FOLDER (logo, favicons, share banner)
-  ├─ nemo-logo.png
+  ├─ nemo-logo.webp     ← what the splash shows; the .png beside it is the fallback
+  ├─ nemo-logo.png      ← and what share cards and structured data point at
+  ├─ fish-betta/clown.webp  ← the two aquarium fish, desktop-only, .png fallback
   ├─ share-banner.png
   ├─ apple-touch-icon.png
   └─ favicon-16/32/48/96/144/192/512.png

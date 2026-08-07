@@ -32,6 +32,37 @@ both ends: a late script is still attested, a blocked one still lets the store
 open.
 
 
+## `check-firstpaint.mjs` — what a first visit actually downloads
+
+```
+npm i --no-save playwright
+node scripts/check-firstpaint.mjs      # CHROME_PATH=<chromium> to reuse one
+```
+
+Serves the repo, visits it cold at a desktop and a phone viewport with no cache
+and no service worker, and counts bytes and requests against a budget.
+
+Two things it exists to keep fixed:
+
+- **The document stays small.** `index.html` used to carry the two aquarium fish
+  as 313 KB of inline base64 — 84% of the file, in the middle of the markup the
+  browser must parse before it can paint. They are files under `assets/` now,
+  and because the fish are only drawn at ≥1000px wide they are fetched only on a
+  screen wide enough to show them: a phone downloads neither.
+- **`app.js` is downloaded once.** It is preloaded in `<head>` and then read with
+  `fetch()`. A preload is reused only when its credentials mode matches the
+  request that follows, and a mismatch is silent — the browser just pulls the
+  whole 850 KB bundle a second time. The pairing is correct; this is what stops
+  an innocuous edit to either half undoing it. The count comes from the server,
+  not the browser, because a reused preload still fires a response event.
+
+React, Firebase and the CDN scripts are blocked so the numbers are about this
+repo and not the network. One consequence: with React missing the bundle never
+defines `NemoStore`, so the loader's Babel fallback fires and pulls `app.jsx`.
+That is correct behaviour, and it is why the byte budget measures the *shell* —
+the document plus everything that is not the app's own code — rather than the
+page total.
+
 ## `nemo-backup.gs` — automatic Drive backup + GST/inventory export (Google Apps Script)
 
 Runs inside **nemoaquastore@gmail.com** (Google Apps Script, https://script.google.com).
