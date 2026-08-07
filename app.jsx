@@ -1390,7 +1390,7 @@ async function deleteExperienceReview(id){
 const COURIER_COLLECT_TERM = "Tracking & collection: once your order is dispatched we share the courier partner and consignment number. Please keep tracking your parcel and collect it from the courier partner as soon as it reaches your area. Door delivery depends entirely on the courier partner and is not in our hands, so we request every customer to put in that effort and take delivery of the package at the earliest — especially when ordering live fish or plants, where every extra hour the parcel spends in transit or lying at the hub affects the livestock. Loss or deterioration caused by a parcel left uncollected, collected late, refused, or returned undelivered is not covered by the Live Arrival Guarantee or by any refund or replacement.";
 
 /* Store settings (WhatsApp numbers, payment) — shared via Firebase */
-const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"", website:"", bankAccountName:"", bankName:"", bankBranch:"", bankAccountNo:"", bankIfsc:"",
+const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"", website:"", bankAccountName:"", bankName:"", bankBranch:"", bankAccountNo:"", bankIfsc:"", invoiceSignature:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
   liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nReplacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
@@ -1487,7 +1487,11 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
    (Lock those down in the EmailJS dashboard with an allowed-domains restriction; a static site
    cannot hide a key it has to use.) */
 const PRIVATE_SETTING_KEYS = ["adminPassHash","coAdminUid","returnAddress","returnAddress1Label","returnAddress2","returnAddress2Label"];
-const SIGNED_IN_SETTING_KEYS = ["bankAccountName","bankName","bankBranch","bankAccountNo","bankIfsc"];
+/* `invoiceSignature` sits here rather than in the public `settings` node for the
+   same reason the bank details do: the customer's browser renders the invoice, so
+   it has to be readable by a signed-in account — but a proprietor's handwritten
+   signature has no business being a `curl` away for the whole internet. */
+const SIGNED_IN_SETTING_KEYS = ["bankAccountName","bankName","bankBranch","bankAccountNo","bankIfsc","invoiceSignature"];
 /* Keys that must not survive in the world-readable `settings` node. */
 const NON_PUBLIC_SETTING_KEYS = [...PRIVATE_SETTING_KEYS, ...SIGNED_IN_SETTING_KEYS];
 function splitSettings(s){
@@ -2893,6 +2897,19 @@ function generateInvoiceHTML(order, settings, opts){
   ].filter(Boolean);
   const bankHtml=bankRows.length?`<div class="infoblk"><div class="ih">${cn?"REFUND / BANK DETAILS":"BANK &amp; PAYMENT DETAILS"}</div><table class="kv">${bankRows.map(([k,v])=>`<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`).join("")}</table></div>`:"";
 
+  /* Authorised signature. Indian tax invoices carry one between "For <firm>" and
+     "Authorised Signatory"; the note underneath says plainly that it was affixed
+     by the system rather than signed by hand, which is what keeps an auto-signed
+     bill honest. Upload it in Admin → Settings; with none set the ruled space is
+     still printed, so the sheet can be signed by hand. */
+  const sigImg=s.invoiceSignature||"";
+  const sigHtml=`<div class="sigbox">
+    <div class="sigfor">For ${storeName}</div>
+    ${sigImg?`<img class="sigimg" src="${sigImg}" alt=""/>`:`<div class="sigpad"></div>`}
+    <div class="sigrole">Authorized Signatory</div>
+    <div class="sigauto">This is Auto-Generated</div>
+  </div>`;
+
   const itemRows=items.map((it,i)=>`<tr>
     <td class="c">${i+1}</td>
     <td>${E(it.name)}${it.variantLabel?`<div class="muted">${E(it.variantLabel)}</div>`:""}</td>
@@ -2973,6 +2990,12 @@ table.kv td.v{color:#1f2733;font-weight:700}
    (see the fit script at the end) rather than reflowing into a shape no printed bill has — so
    what the customer sees on the phone is exactly the sheet that comes out of the printer.
    "Actual size" turns the scaling off for pinch-zoom reading. */
+.sigbox{margin-top:22px;margin-left:auto;width:250px;text-align:center;page-break-inside:avoid}
+.sigfor{font-size:11.5px;font-weight:700;color:#1f3864;margin-bottom:2px}
+.sigimg{display:block;margin:0 auto;max-width:190px;max-height:66px;object-fit:contain}
+.sigpad{height:56px}
+.sigrole{border-top:1px solid #99a7bd;padding-top:5px;font-size:11px;font-weight:700;color:#1f2733}
+.sigauto{font-size:8.5px;color:#7d8a9c;margin-top:2px;letter-spacing:.2px}
 .fitwrap{transform-origin:top left}
 body.fit{overflow-x:hidden}
 body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!important}
@@ -3049,9 +3072,10 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
     ${o.liveGuarantee?`<p><b>Live Arrival Guarantee</b> applies to this order. Report any Dead-on-Arrival with a continuous unboxing video on WhatsApp ${storeWA} within 2 hours of delivery.</p>`:""}
     ${cn?"":`<p><b>Declaration:</b> We declare that this ${docLabel.toLowerCase()} shows the actual price of the goods described and that all particulars are true and correct. Goods once sold are subject to our published Return &amp; Replacement Policy.</p>`}
     <p>For any questions about this invoice, contact <b>${storeName}</b> on WhatsApp ${storeWA}${storeEmail?` or ${storeEmail}`:""}${storeSite?` · ${storeSite}`:""}.</p>
-    <p style="font-size:10px">This is a computer-generated invoice and does not require a physical signature. E. &amp; O.E. Subject to ${E(s.jurisdiction||"India")} jurisdiction.</p>
+    <p style="font-size:10px">E. &amp; O.E. Subject to ${E(s.jurisdiction||"India")} jurisdiction.</p>
     <p style="font-size:10px"><b>Returns &amp; Refunds:</b> ${s.returnPolicy?E(s.returnPolicy):"Live fish are covered only under our Live Arrival Guarantee (report DOA with a continuous unboxing video within 2 hours of delivery). Being perishable livestock, fish are otherwise non-returnable. Dry goods &amp; accessories may be returned within 7 days if unused and in original packaging; approved refunds are issued to the original payment method or as store credit within 5–7 working days."}</p>
   </div>
+  ${sigHtml}
   <div class="np" style="text-align:right;margin-top:18px"><button onclick="window.print()" style="background:#2f4b7c;color:#fff;border:none;border-radius:6px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save as PDF</button></div>
 </div></div>
 <button class="np fitbtn" id="fitbtn" type="button">🔍 Actual size</button>
@@ -3060,7 +3084,13 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
   var wrap=document.querySelector(".fitwrap"), page=document.querySelector(".page"), btn=document.getElementById("fitbtn"), actual=false;
   function fit(){
     if(actual){ wrap.style.transform=""; wrap.style.width=""; wrap.style.height=""; return; }
-    var avail=document.documentElement.clientWidth;
+    /* The width the sheet actually has to fit into. visualViewport is the honest
+       one on a phone: documentElement.clientWidth is the layout viewport, which
+       stays wide while the visible area is narrower (pinch-zoomed, or a browser
+       that has not settled after a rotation), and scaling against it leaves the
+       right edge of the bill off the screen. */
+    var vv=window.visualViewport;
+    var avail=Math.min(vv&&vv.width?vv.width:Infinity, document.documentElement.clientWidth)||780;
     wrap.style.width="780px";
     var scale=Math.min(1, avail/780);
     wrap.style.transform = scale<1 ? "scale("+scale+")" : "";
@@ -3078,6 +3108,21 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
   window.addEventListener("beforeprint",function(){wrap.style.transform="";wrap.style.width="";wrap.style.height="";});
   window.addEventListener("afterprint",fit);
   window.addEventListener("load",fit);
+  /* Everything that changes the sheet's height or the space it has, after the
+     first pass: the logo and the signature arrive late and make the page taller
+     (leaving a scroll past the end, or clipping it); a rotation reports its new
+     width a beat after the event; and a bill reopened from the back/forward
+     cache never fires resize or load at all. A ResizeObserver on the page is the
+     catch-all — any late reflow re-fits without needing to know what caused it. */
+  window.addEventListener("orientationchange",function(){ setTimeout(fit,250); });
+  window.addEventListener("pageshow",fit);
+  document.addEventListener("visibilitychange",function(){ if(!document.hidden) setTimeout(fit,60); });
+  if(window.visualViewport){ window.visualViewport.addEventListener("resize",fit); }
+  if(window.ResizeObserver){ new ResizeObserver(fit).observe(page); }
+  Array.prototype.forEach.call(document.images,function(img){
+    if(!img.complete) img.addEventListener("load",fit,{once:true});
+  });
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fit).catch(function(){});
   fit();
 })();
 <\/script>
@@ -11327,6 +11372,7 @@ function SettingsPanel({settings,onSave,products=[]}){
   const [f,setF]=useState({...DEFAULT_SETTINGS,...settings});
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const [logoNote,setLogoNote]=useState("");
+  const [sigNote,setSigNote]=useState("");
   const [npw,setNpw]=useState("");
   const [npw2,setNpw2]=useState("");
   const [pwMsg,setPwMsg]=useState("");
@@ -11431,6 +11477,19 @@ function SettingsPanel({settings,onSave,products=[]}){
     set("adminPassHash", await hashPassStrong(npw));
     setNpw(""); setNpw2("");
     setPwMsg("✓ New password set — tap Save Settings, then enter the emailed code to apply.");
+  };
+  /* The signature is stored inline on the settings record, so it has to stay
+     small — a phone camera shot is several megabytes and would blow the write.
+     Narrow and short is all a signature needs, and JPEG is fine: it is printed
+     on white, so there is no transparency to lose. */
+  const handleSignature=async(file)=>{
+    if(!file)return;
+    setSigNote("Preparing…");
+    try{
+      const small=await compressImage(file, 600, 0.85);
+      set("invoiceSignature", small);
+      setSigNote("✓ Signature ready — tap Save Settings");
+    }catch(e){ setSigNote("⚠ Could not read that image — try a PNG or JPG"); }
   };
   const handleLogo=async(file)=>{
     if(!file)return;
@@ -11783,6 +11842,33 @@ function SettingsPanel({settings,onSave,products=[]}){
           {field("Branch","bankBranch","Salem")}
           {field("Account No.","bankAccountNo","218405001600")}
           {field("IFSC Code","bankIfsc","ICIC0002184")}
+        </div>
+
+        {/* Authorised signature. Kept out of the public settings node — it rides
+            with the bank details, which the rules open to a signed-in account and
+            to nobody else. The customer's browser draws the invoice, so it has to
+            be readable there; the open internet does not need the proprietor's
+            signature. */}
+        <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px",marginTop:12}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>✍️ Authorised Signature (printed on invoices)</div>
+          <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
+            Signs on a white background, cropped close, PNG or JPG. It prints between <b>For {STORE_NAME.toUpperCase()} AQUA STORE</b> and <b>Authorized Signatory</b>, with <b>This is Auto-Generated</b> underneath. Leave it empty and the invoice prints a ruled space to sign by hand instead.
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:14}}>
+            <div style={{width:120,height:56,borderRadius:10,background:"white",border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
+              {f.invoiceSignature
+                ? <img src={f.invoiceSignature} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}}/>
+                : <span style={{fontSize:10.5,color:C.textSub}}>none</span>}
+            </div>
+            <div style={{flex:1}}>
+              <label className="press" style={{display:"inline-block",background:C.accentLight,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                Choose Signature
+                <input type="file" accept="image/*" onChange={e=>handleSignature(e.target.files&&e.target.files[0])} style={{display:"none"}}/>
+              </label>
+              {f.invoiceSignature&&<button className="press" onClick={()=>{set("invoiceSignature","");setSigNote("Removed — tap Save Settings");}} style={{marginLeft:8,background:"#fee2e2",color:C.danger,border:"none",borderRadius:10,padding:"9px 12px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Remove</button>}
+              {sigNote&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>{sigNote}</div>}
+            </div>
+          </div>
         </div>
       </div>
 
