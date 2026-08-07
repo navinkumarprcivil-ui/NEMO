@@ -1,5 +1,5 @@
 /* Nemo Aqua Store — service worker (offline fallback + always-fresh code) */
-const CACHE = 'nemo-v73';
+const CACHE = 'nemo-v74';
 const ASSETS = ['./index.html', './app.js', './app.jsx', './assets/nemo-logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
@@ -19,6 +19,10 @@ self.addEventListener('fetch', (e) => {
   // Never touch Firebase / Google / CDN — always straight to network
   if (/gstatic|googleapis|firebaseio|firebasedatabase|google|unpkg|jsdelivr/.test(url.host)) return;
   if (e.request.method !== 'GET') return;
+  // /s/<id> is the share-link shim: server-rendered per product, read once on
+  // the way through to the storefront. Caching a redirect saves nothing and is
+  // one more place a stale product name could survive.
+  if (url.pathname.startsWith('/s/') || url.pathname.startsWith('/api/')) return;
 
   const isCode = /\.(html|jsx|js)$/.test(url.pathname) || e.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('/');
 
