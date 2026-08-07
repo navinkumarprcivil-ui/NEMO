@@ -45,6 +45,7 @@
         "invoiceDate":    { ".validate": "newData.isString() && newData.val().length === 10" },
         "purpose":        { ".validate": "newData.isString() && newData.val().length <= 40" },
         "notes":          { ".validate": "newData.isString() && newData.val().length <= 400" },
+        "invoiceUrl":     { ".validate": "newData.isString() && newData.val().length <= 500" },
         "hsn":            { ".validate": "newData.isString() && newData.val().length <= 12" },
         "itcEligibility": { ".validate": "newData.val() === 'eligible' || newData.val() === 'ineligible' || newData.val() === 'capital'" },
         "createdAt":      { ".validate": "newData.isString() && newData.val().length >= 20" },
