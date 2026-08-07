@@ -8950,6 +8950,32 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
   // "Has the admin actually filled anything in?" — drives the hints that only make sense
   // before any real option exists.
   const anyNamedVariant=()=>variants.some(v=>String(v.label||"").trim());
+  /* ── Options override the common fields ───────────────────────────────────────────────
+     That is already the rule everywhere the store reads a product: variantBasePrice,
+     variantPackagingWeight and variantStockOf each look at the chosen option first and only
+     fall back to the product when the option has nothing of its own. The form used to hide
+     that — the common Price and Packing Weight boxes stayed editable and looked authoritative
+     even once every option carried its own number, so typing in them changed nothing a
+     customer would ever see.
+
+     `variantCoverage` says how far the options have taken a field over, and the form uses it
+     to get out of the way: "all" retires the common box to a read-only summary of what the
+     options say, "some" keeps it editable but labels it as the fallback it actually is. */
+  const filledVal=x=>x!=null&&String(x).trim()!=="";
+  const namedVariants=()=>variants.filter(v=>String(v.label||"").trim());
+  const variantCoverage=key=>{
+    const rows=namedVariants();
+    if(!rows.length) return "none";
+    const n=rows.filter(v=>filledVal(v[key])).length;
+    return n===0 ? "none" : (n===rows.length ? "all" : "some");
+  };
+  /* Spread of a numeric field across the named options — what the retired common box shows
+     in place of an input. */
+  const variantRange=key=>{
+    const nums=namedVariants().filter(v=>filledVal(v[key])).map(v=>Number(v[key])||0);
+    if(!nums.length) return null;
+    return { min:Math.min(...nums), max:Math.max(...nums), n:nums.length };
+  };
   const [variants,setVariants]=useState(seedVariants);
   const setVar=(id,key,val)=>setVariants(prev=>prev.map(v=>v.id===id?{...v,[key]:val}:v));
   const addVariant=()=>setVariants(prev=>[...prev,{id:uid("v"),label:"",price:Number(form.price)||0,packagingWeight:null,soldOut:false}]);
@@ -9106,7 +9132,11 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
         // even if the rows above it are deleted.
         sku:v.sku||variantSkuCode(v.id,i),
         label:v.label.trim(),
-        price:Math.max(0,Math.round(Number(v.price)||0)),
+        // An option's own price wins; a blank one inherits the common price. It used to be
+        // coerced straight to 0 — clearing the box silently put the option on sale for free.
+        price:Math.max(0,Math.round(Number(filledVal(v.price)?v.price:form.price)||0)),
+        // Left blank on purpose: shipping reads the common weight when an option has none,
+        // so storing null here is what keeps that fallback alive.
         packagingWeight:(v.packagingWeight===""||v.packagingWeight==null)?null:Math.max(0,Number(v.packagingWeight)||0),
         soldOut:!!v.soldOut,
       }));
@@ -9115,7 +9145,13 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
       return { variants:list, variantStock:stockMap };
     })();
     const saved={id,sku,name:form.name,category:form.category,tag:form.tag,desc:form.desc,
-      price:Number(form.price),
+      // Options are the truth once they all carry a price, so the product's own price follows
+      // them down to the cheapest — the same rule stockCount has always used. It stays a real
+      // number rather than being dropped because it is still the fallback for any option added
+      // later with its price left blank, and what a legacy read path quotes.
+      price:savedVariantFields.variants && savedVariantFields.variants.length && variantCoverage("price")==="all"
+        ? Math.min(...savedVariantFields.variants.map(v=>v.price))
+        : Number(form.price),
       stockCount:savedVariantFields.variantStock
         ? Object.values(savedVariantFields.variantStock).reduce((a,b)=>a+b,0)   // options are the truth; the product total follows them
         : Math.max(0,parseInt(form.stockCount)||0),
@@ -9178,23 +9214,49 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
           </div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Price (₹)</div>
-            <input type="number" value={form.price} onChange={e=>f("price",e.target.value)} placeholder="350" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
-          </div>
+          {(()=>{
+            // Every option priced → the common box has nothing left to say, so it becomes a
+            // read-only summary of what the options charge. Some priced → it stays editable,
+            // because it is what the unpriced ones fall back to.
+            const cov=variantCoverage("price");
+            const r=variantRange("price");
+            if(cov==="all"&&r) return(
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Price (₹)</div>
+                <div style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,background:C.bg,color:C.textSub,fontFamily:PRICE_FONT,fontWeight:700}}>
+                  {r.min===r.max?`₹${r.min}`:`₹${r.min} – ₹${r.max}`}
+                </div>
+                <div style={{fontSize:11,color:C.textSub,marginTop:4}}>Set per option below — each option's own price is what customers pay.</div>
+              </div>
+            );
+            return(
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Price (₹)</div>
+                <input type="number" value={form.price} onChange={e=>f("price",e.target.value)} placeholder="350" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+                {cov==="some"&&<div style={{fontSize:11,color:C.textSub,marginTop:4}}>Used only by options with no price of their own.</div>}
+              </div>
+            );
+          })()}
           {(()=>{
             // Once options carry their own counts, they ARE the stock — the product total is
             // their sum, so editing it here would just be overwritten. Show the sum instead.
             const perOption=variants.filter(v=>String(v.label||"").trim()&&v.stock!=null&&v.stock!=="");
-            if(perOption.length) return(
+            if(perOption.length){
+              // Once ANY option carries a count, the options own the stock — and an option
+              // left blank saves as 0, i.e. sold out. Worth saying out loud rather than
+              // letting it be discovered as a product that won't sell.
+              const blank=namedVariants().length-perOption.length;
+              return(
               <div>
                 <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Stock Count</div>
-                <div style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,background:C.bg,color:C.textSub,fontFamily:PRICE_FONT,fontWeight:700}}>
+                <div style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,background:C.bg,color:C.textSub,fontFamily:PRICE_FONT,fontWeight:700}}>
                   {perOption.reduce((a,v)=>a+(parseInt(v.stock)||0),0)}
                 </div>
                 <div style={{fontSize:11,color:C.textSub,marginTop:4}}>Total across your options — set each one's stock below.</div>
+                {blank>0&&<div style={{fontSize:11,color:C.danger,fontWeight:700,marginTop:3,lineHeight:1.4}}>⚠ {blank} option{blank>1?"s have":" has"} no stock set and will save as 0 (sold out).</div>}
               </div>
-            );
+              );
+            }
             return(
               <div>
                 <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Stock Count</div>
@@ -9351,7 +9413,8 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
               <span style={{fontSize:11,color:C.textSub}}>{variants.length} option{variants.length!==1?"s":""}</span>
             </div>
             <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.45}}>
-              Optional. Add a row per variation and the customer picks one on the product page — each row has its own <b>price</b> and <b>packing weight</b>, and the weight is what shipping is calculated from. Leave this empty for a plain single-price product. {hint}
+              Optional. Add a row per variation and the customer picks one on the product page — each row has its own <b>price</b>, <b>stock</b> and <b>packing weight</b>. Leave this empty for a plain single-price product. {hint}
+              <div style={{marginTop:6,color:C.primaryDark,fontWeight:600}}>Anything you set here <b>overrides the common fields above</b>. A box left blank falls back to the common value — except stock, where a blank counts as 0.</div>
             </div>
             {anyNamedVariant()&&(
               <div style={{marginBottom:12}}>
@@ -9472,12 +9535,33 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
           </div>
         ) : (
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5}}>packaging weight (kg)</div>
-            <input type="number" step="0.1" min="0" value={form.packagingWeight} onChange={e=>f("packagingWeight",e.target.value)} placeholder="e.g. 0.2"
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Weight of product + packaging in kg, used for shipping.</div>
-          </div>
+          {(()=>{
+            // Shipping already reads the option's weight first and only falls back here, so
+            // once every option carries one this box is dead weight — show what the options
+            // say instead of an input that changes nothing.
+            const cov=variantCoverage("packagingWeight");
+            const r=variantRange("packagingWeight");
+            const kg=x=>`${Number(x).toFixed(2)} kg`;
+            if(cov==="all"&&r) return(
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5}}>packaging weight (kg)</div>
+                <div style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,background:C.bg,color:C.textSub,fontFamily:PRICE_FONT,fontWeight:700}}>
+                  {r.min===r.max?kg(r.min):`${kg(r.min)} – ${kg(r.max)}`}
+                </div>
+                <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Set per option below — shipping uses each option's own weight.</div>
+              </div>
+            );
+            return(
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5}}>packaging weight (kg)</div>
+                <input type="number" step="0.1" min="0" value={form.packagingWeight} onChange={e=>f("packagingWeight",e.target.value)} placeholder="e.g. 0.2"
+                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                <div style={{fontSize:10,color:C.textSub,marginTop:3}}>
+                  {cov==="some"?"Used only by options with no weight of their own.":"Weight of product + packaging in kg, used for shipping."}
+                </div>
+              </div>
+            );
+          })()}
           <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-start",paddingTop:4}}>
             <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",userSelect:"none"}}>
               <input type="checkbox" checked={!!form.suggestSpecialDelivery} onChange={e=>f("suggestSpecialDelivery",e.target.checked)} style={{width:16,height:16,accentColor:C.primary,flexShrink:0,marginTop:2}}/>
