@@ -42,6 +42,26 @@ LAUNCH_CHECKLIST.md     ← pre-launch checklist
 ## 🔐 Admin is already locked to your Google account
 Your admin Google UID (`cI2HmMt6FdR7fO7uUnugH85GeZt2`) is **already filled into `database.rules.json`** — only that account can edit products/guides/settings; customers can only read the catalog and manage their own orders. There is **nothing to paste**; you just need to **publish the rules** (step 4 in the deploy steps below).
 
+### The `stockLedger` node
+
+`database.rules.json` carries one node the storefront never touches:
+**`stockLedger`**, written by the analytics app. It is your **real, physical
+stock** — what is actually on the shelf.
+
+That is deliberately *not* the `stockCount` on a product. Product stock is a
+*listing* decision: the store lists items you do not hold, and when someone
+orders one you buy it in and send it on. Physical stock is a different fact,
+so it lives in a different place and neither overwrites the other.
+
+The node holds one child per entry — a count, a receipt or a removal, each an
+immutable fact with its own id. It is **owner-only in both directions**: it is
+commercially sensitive and nothing on the storefront reads it. The
+`.validate` rules reject a malformed entry at write time, so a bad record
+cannot sit in the ledger and surface later as a wrong stock figure.
+
+Publishing the rules is what switches this on. Until then the analytics app
+keeps stock on the device it was entered on, and says so.
+
 **Optional — add a second admin:** have them sign in to the live site with Google once, copy their UID from Firebase Console → **Authentication → Users**, replace every **`PASTE_FRIEND_UID_HERE`** in `database.rules.json` with it, and **Publish** again. Leave `PASTE_FRIEND_UID_HERE` as-is if you don't want a second admin — the rules still work.
 
 
