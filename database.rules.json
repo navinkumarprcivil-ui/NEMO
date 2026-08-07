@@ -29,6 +29,11 @@
       ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
     },
 
+    "settingsBank": {
+      ".read":  "auth != null",
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+    },
+
     "stockLedger": {
       ".read":  "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",

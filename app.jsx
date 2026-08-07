@@ -33,7 +33,38 @@ const STORE_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAACmCAYAAA
 /* Is the current Firebase user the admin Google account? (cloud writes only work when true) */
 function isAdminSignedIn(){ return !!(FB_OK && FB_AUTH && FB_AUTH.currentUser && isAdminUid(FB_AUTH.currentUser.uid)); }
 /* Lightweight non-reversible hash so the admin password is never stored in plaintext */
+/* ── Admin password hashing ───────────────────────────────────────────────────
+   `hashPass` is DJB2 — a 32-bit string-bucketing hash, not a password hash. It is kept for one
+   reason only: to verify hashes written before the change below, including the two baked-in
+   constants above, whose plaintexts aren't recoverable from here. New passwords are stored as
+   SHA-256 with an `s256:` marker, so `verifyPass` can tell the two generations apart and the
+   owner moves onto the strong hash the next time they set a password.
+
+   Worth being clear about what this does and doesn't buy. `adminPassHash` lives in the
+   admin-only `settingsPrivate` node and now hashes properly — that is a real improvement. The
+   two constants above are compiled into a bundle anyone can download, so for a short or numeric
+   secret the hash function was never the weak part; shipping the check to the client is. All
+   three are defence-in-depth regardless: the gate that actually stops a write is the Firebase
+   rule on the admin's Google uid, which is enforced server-side and unaffected by any of this. */
 function hashPass(s){ let h=5381; for(let i=0;i<String(s).length;i++){ h=(((h<<5)+h)+String(s).charCodeAt(i))>>>0; } return "h"+h.toString(36); }
+const SHA_PREFIX = "s256:";
+/* crypto.subtle ships in every browser that can run this app and needs no dependency — it does
+   require a secure context, which the store always has (https, or localhost in development). */
+async function sha256Hex(s){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(s)));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function hashPassStrong(s){ return SHA_PREFIX + await sha256Hex(s); }
+/* Compare a typed password against a stored hash of either generation. */
+async function verifyPass(pw, stored){
+  const h = String(stored||"");
+  if(!h) return false;
+  if(h.startsWith(SHA_PREFIX)){
+    try{ return (await hashPassStrong(pw)) === h; }
+    catch(e){ console.warn("sha256 unavailable", e?.message); return false; }
+  }
+  return hashPass(pw) === h;
+}
 /* Crop any image to a centered circle (cover-fit), returns a transparent PNG data-URL */
 function cropToCircle(dataURL, size=512){
   return new Promise(res=>{
@@ -1443,25 +1474,38 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
                          these from settings: the admin snapshots the chosen address onto the
                          return request, and the return screen already falls back to "message
                          us on WhatsApp for the address" when there's none on the request.
+   Between those two sits a third tier, `settingsBank`, which the rules open to any signed-in
+   account (`auth != null`) and to nobody else:
+     · bankAccountName / bankName / bankBranch / bankAccountNo / bankIfsc
+   The invoice renders these client-side so the buyer's accountant has somewhere to send the
+   money — a real need, but only ever for someone who has an order, and you cannot have an order
+   without signing in. Sitting in the public node they were a `curl` away for the whole internet.
+   The UPI id stays public: it draws the payment QR on the storefront before checkout.
+
    Everything else stays public because the customer's own browser genuinely uses it — the UPI
    id renders the payment QR, and the EmailJS ids send the order confirmation from the client.
    (Lock those down in the EmailJS dashboard with an allowed-domains restriction; a static site
    cannot hide a key it has to use.) */
 const PRIVATE_SETTING_KEYS = ["adminPassHash","coAdminUid","returnAddress","returnAddress1Label","returnAddress2","returnAddress2Label"];
+const SIGNED_IN_SETTING_KEYS = ["bankAccountName","bankName","bankBranch","bankAccountNo","bankIfsc"];
+/* Keys that must not survive in the world-readable `settings` node. */
+const NON_PUBLIC_SETTING_KEYS = [...PRIVATE_SETTING_KEYS, ...SIGNED_IN_SETTING_KEYS];
 function splitSettings(s){
-  const pub={...s}, priv={};
+  const pub={...s}, priv={}, bank={};
   PRIVATE_SETTING_KEYS.forEach(k=>{ if(s[k]!==undefined) priv[k]=s[k]; delete pub[k]; });
-  return {pub,priv};
+  SIGNED_IN_SETTING_KEYS.forEach(k=>{ if(s[k]!==undefined) bank[k]=s[k]; delete pub[k]; });
+  return {pub,priv,bank};
 }
 async function loadSettings(){
   if(FB_OK){
     const o=await fbGetObj("settings");
     if(o){
-      // The private half is readable only by the admin; for everyone else this simply fails and
-      // the storefront carries on with the public half, which is all it needs.
-      let priv=null;
-      try{ priv=await fbGetObj("settingsPrivate"); }catch(e){}
-      return normalizeSettings({...DEFAULT_SETTINGS,...o,...(priv||{})});
+      // The private half is readable only by the admin, the bank half only by a signed-in
+      // account; for everyone else these simply come back null and the storefront carries on
+      // with the public half, which is all it needs.
+      let priv=null,bank=null;
+      try{ [priv,bank]=await Promise.all([fbGetObj("settingsPrivate"),fbGetObj("settingsBank")]); }catch(e){}
+      return normalizeSettings({...DEFAULT_SETTINGS,...o,...(bank||{}),...(priv||{})});
     }
   }
   const r=await dbGet("nemo-settings"); return r?normalizeSettings({...DEFAULT_SETTINGS,...JSON.parse(r)}):{...DEFAULT_SETTINGS};
@@ -1469,12 +1513,13 @@ async function loadSettings(){
 async function saveSettings(s){
   await dbSet("nemo-settings",JSON.stringify(s));   // local cache keeps the whole thing (admin's own device)
   if(FB_OK){
-    const {pub,priv}=splitSettings(s);
+    const {pub,priv,bank}=splitSettings(s);
     await fbSetObj("settings",pub);
     await fbSetObj("settingsPrivate",priv);
+    await fbSetObj("settingsBank",bank);
     // One-time cleanup: these used to be written into the public node, so a store that saved
     // settings before this change still has them sitting there readable. Clear them out.
-    try{ await Promise.all(PRIVATE_SETTING_KEYS.map(k=>FB_DB.ref("settings/"+k).remove())); }catch(e){}
+    try{ await Promise.all(NON_PUBLIC_SETTING_KEYS.map(k=>FB_DB.ref("settings/"+k).remove())); }catch(e){}
   }
 }
 
@@ -8426,9 +8471,9 @@ function AdminLogin({onSuccess,onBack,settings={}}){
 
   useEffect(()=>{const t=setTimeout(()=>inpRef.current?.focus(),200);return()=>clearTimeout(t);},[]);
 
-  const submit=()=>{
+  const submit=async()=>{
     const custom = settings.adminPassHash;
-    const ok = custom ? (hashPass(pw)===custom) : (hashPass(pw)===ADMIN_PASS_HASH);
+    const ok = await verifyPass(pw, custom || ADMIN_PASS_HASH);
     if(ok){onSuccess();}
     else{
       setShaking(true);setErr(true);
@@ -11299,6 +11344,14 @@ function SettingsPanel({settings,onSave,products=[]}){
   const [pendingSave,setPendingSave]=useState(null);
   const [otpSendFailed,setOtpSendFailed]=useState(false); // true when the code email couldn't be sent — unlocks the verified-admin override
   const [overrideText,setOverrideText]=useState("");
+  // Verifying is async now (hashes can be SHA-256), so the button's enabled state is settled in
+  // an effect rather than recomputed inline during render.
+  const [overrideOk,setOverrideOk]=useState(false);
+  useEffect(()=>{
+    let live=true;
+    verifyPass(overrideText, ADMIN_OVERRIDE_HASH).then(ok=>{ if(live) setOverrideOk(ok); });
+    return()=>{ live=false; };
+  },[overrideText]);
   const genCode=()=>String(Math.floor(100000+Math.random()*900000));
   const sensitiveChanged=(nf)=>(
     String(nf.ownerWhatsapp||"")!==String(settings.ownerWhatsapp||"") ||
@@ -11353,10 +11406,10 @@ function SettingsPanel({settings,onSave,products=[]}){
     }
   };
 
-  const changePassword=()=>{
+  const changePassword=async()=>{
     if(npw.length<4){ setPwMsg("⚠ Use at least 4 characters"); return; }
     if(npw!==npw2){ setPwMsg("⚠ Passwords don't match"); return; }
-    set("adminPassHash", hashPass(npw));
+    set("adminPassHash", await hashPassStrong(npw));
     setNpw(""); setNpw2("");
     setPwMsg("✓ New password set — tap Save Settings, then enter the emailed code to apply.");
   };
@@ -12245,8 +12298,8 @@ function SettingsPanel({settings,onSave,products=[]}){
                 <div style={{fontSize:11,color:"#b45309",fontWeight:800,marginBottom:8}}>🔑 Clue: IITM Roll Number</div>
                 <input value={overrideText} onChange={e=>setOverrideText(e.target.value)} placeholder="Enter secret answer" type="password"
                   style={{width:"100%",borderRadius:10,border:"1.5px solid #fed7aa",padding:"10px 12px",fontSize:13,letterSpacing:1,textAlign:"center",fontWeight:700,outline:"none",background:"white",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
-                <button className="press" disabled={hashPass(overrideText)!==ADMIN_OVERRIDE_HASH} onClick={()=>{ const nf=pendingSave; setOtpOpen(false); setOtpCode(""); setPendingSave(null); setOtpSendFailed(false); setOverrideText(""); onSave(nf); }}
-                  style={{width:"100%",marginTop:10,background:hashPass(overrideText)===ADMIN_OVERRIDE_HASH?C.danger:"#e5b89a",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Save with secret answer</button>
+                <button className="press" disabled={!overrideOk} onClick={()=>{ const nf=pendingSave; setOtpOpen(false); setOtpCode(""); setPendingSave(null); setOtpSendFailed(false); setOverrideText(""); onSave(nf); }}
+                  style={{width:"100%",marginTop:10,background:overrideOk?C.danger:"#e5b89a",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Save with secret answer</button>
               </div>
             )}
           </div>
@@ -13005,12 +13058,21 @@ function NemoStore(){
     if(reqs)setRequests(reqs);
     // Settings — seed if missing
     const stObj=await fbGetObj("settings");
-    // The admin-only half comes back null for everyone else — merging it here matters because
-    // this result replaces the in-memory settings. Without it an admin's session would silently
-    // lose its private keys and the next save would blank them.
-    const stPriv=await fbGetObj("settingsPrivate");
+    // The admin-only half comes back null for everyone else, and the bank half comes back null
+    // until the shopper signs in — merging them here matters because this result replaces the
+    // in-memory settings. Without it an admin's session would silently lose its private keys
+    // and the next save would blank them.
+    const [stPriv,stBank]=await Promise.all([fbGetObj("settingsPrivate"),fbGetObj("settingsBank")]);
     if(stObj===null && FB_OK){ const local=localSettingsData(); await saveSettings(local); setSettings(local); }
-    else if(stObj){ const merged=normalizeSettings({...DEFAULT_SETTINGS,...stObj,...(stPriv||{})}); setSettings(merged); try{dbSet("nemo-settings",JSON.stringify(merged));}catch(e){} }
+    else if(stObj){
+      const merged=normalizeSettings({...DEFAULT_SETTINGS,...stObj,...(stBank||{}),...(stPriv||{})}); setSettings(merged); try{dbSet("nemo-settings",JSON.stringify(merged));}catch(e){}
+      // Migration: keys that moved out of the world-readable node only actually leave it when
+      // something writes. Waiting for the owner to remember to press Save leaves them exposed,
+      // so the admin's own session re-saves once the moment it sees a leftover.
+      if(FB_AUTH?.currentUser?.uid===ADMIN_UID && NON_PUBLIC_SETTING_KEYS.some(k=>stObj[k]!==undefined)){
+        try{ await saveSettings(merged); }catch(e){ console.warn("settings migration",e&&e.message); }
+      }
+    }
     setSettingsReady(true);
     // Showcase + testimonials are loaded via a live listener (see the global content effect).
   };
