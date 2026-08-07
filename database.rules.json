@@ -29,6 +29,19 @@
       ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
     },
 
+    "stockLedger": {
+      ".read":  "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$entry": {
+        ".validate": "newData.hasChildren(['sku','type','qty','at'])",
+        "sku":  { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120" },
+        "type": { ".validate": "newData.isString() && (newData.val() === 'count' || newData.val() === 'receive' || newData.val() === 'remove')" },
+        "qty":  { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "at":   { ".validate": "newData.isString() && newData.val().length >= 20" },
+        "$other": { ".validate": false }
+      }
+    },
+
     "reviews": {
       ".read": true,
       "$pid": {
