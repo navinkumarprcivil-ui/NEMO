@@ -1,6 +1,12 @@
 /* Nemo Aqua Store — service worker (offline fallback + always-fresh code) */
-const CACHE = 'nemo-v77';
-const ASSETS = ['./index.html', './app.js', './app.jsx', './assets/nemo-logo.webp', './assets/nemo-logo.png', './manifest.webmanifest'];
+const CACHE = 'nemo-v78';
+/* Precached on install — so keep this to what a visit actually uses. The logo is
+   here as WebP only: the splash asks for the WebP, so the PNG beside it is
+   reached only by a browser that cannot read WebP, and precaching 160 KB for a
+   fallback almost nobody takes cost more on a first visit than the whole
+   document does. A browser that does need it fetches it on demand, and the
+   cache-first handler below keeps it from then on. */
+const ASSETS = ['./index.html', './app.js', './app.jsx', './assets/nemo-logo.webp', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
