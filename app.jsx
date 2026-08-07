@@ -118,21 +118,34 @@ function returnWindowOpen(o){
   const base=deliveredAtOf(o); if(!base) return false;
   return (Date.now()-new Date(base).getTime()) <= RETURN_WINDOW_DAYS*86400000;
 }
-/* DOA claims are open for one day after delivery. The Live Arrival Guarantee asks for the
-   unboxing video within 2 hours, which is the evidence deadline; this is the longer window in
-   which the claim itself can still be raised in the app, so a customer who filmed the unboxing
-   on time is not shut out by an evening they spent dealing with the fish rather than the phone. */
+/* When a DOA claim can be raised: from the moment the order is paid, until 24 hours after it
+   was delivered.
+
+   Opening at payment rather than at delivery is deliberate. "Delivered" is a status the store
+   sets by hand, and a parcel routinely arrives before anyone gets round to flipping it — so
+   gating on the status locked out exactly the customer this is for, the one holding a dead fish
+   an hour after the courier came. The evidence rule is unchanged and does the real work: the
+   Live Arrival Guarantee still wants the unboxing video within 2 hours of delivery, so a claim
+   raised before the fish could possibly have arrived has nothing to support it.
+
+   The 24 hours run from the delivery timestamp, so the window only starts closing once there
+   IS one. An order that has shipped but is not yet marked delivered stays open. */
 const DOA_WINDOW_HOURS = 24;
-function doaWindowOpen(o){
+function doaEntryOpen(o){
+  if(!o || o.status==="Cancelled") return false;
+  // Before payment there is no order to claim against.
+  const paid = !!o.paidAt || ["Payment Review","Confirmed","Shipped","Delivered"].includes(o.status);
+  if(!paid) return false;
   const base=deliveredAtOf(o);
-  // No usable delivery timestamp means we cannot show the window has closed. Fail towards the
-  // customer and let the store judge the claim, rather than silently removing their only way
-  // to report a dead fish because a date is missing from the record.
+  // Not delivered yet, or delivered with no usable timestamp: the window cannot be shown to
+  // have closed, so it stays open and the store judges the claim.
   if(!base) return true;
   const t=new Date(base).getTime();
   if(isNaN(t)) return true;
   return (Date.now()-t) <= DOA_WINDOW_HOURS*3600000;
 }
+/* Hours left before the window shuts — 0 until there is a delivery timestamp to count from,
+   which the UI reads as "no deadline running yet". */
 function doaHoursLeft(o){
   const base=deliveredAtOf(o); if(!base) return 0;
   const t=new Date(base).getTime(); if(isNaN(t)) return 0;
@@ -5029,6 +5042,8 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
   if(!open) return(
     <button className="press" onClick={()=>setOpen(true)}
       style={{marginTop:6,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"7px 11px",fontSize:10.5,fontWeight:800,color:"#9a3412",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+      {/* The countdown only appears once delivery has been recorded; before that there is no
+          deadline running and quoting one would be a lie. */}
       🐟 Report this fish as Dead on Arrival{hoursLeft>0?` · ${hoursLeft}h left`:""}
     </button>
   );
@@ -5068,7 +5083,7 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
         ))}
       </div>
       <div style={{fontSize:10,color:"#9a3412",lineHeight:1.5,marginBottom:9}}>
-        Send ONE clear, continuous unboxing video (from the sealed package) on WhatsApp within <b>2 hours</b> of delivery. The final resolution — replacement, store credit or refund of the fish value — is ours to decide, and replacement shipping &amp; packing are arranged at our discretion.
+        Send ONE clear, continuous unboxing video (from the sealed package) on WhatsApp within <b>2 hours</b> of delivery — that video is what the claim is judged on, so film the unboxing before anything else. Claims close {DOA_WINDOW_HOURS} hours after delivery. The final resolution — replacement, store credit or refund of the fish value — is ours to decide, and replacement shipping &amp; packing are arranged at our discretion.
       </div>
       <div style={{display:"flex",gap:7}}>
         <button className="press" disabled={!ready} onClick={()=>{
@@ -5328,11 +5343,11 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     </div>
                     {delivered && prod && already && <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ Reviewed</span>}
                   </div>
-                  {/* Per-item DOA, for live fish on a delivered order still inside the window.
+                  {/* Per-item DOA, for every live line from payment until the window shuts.
                       Sits with the fish it is about rather than in one order-level box. */}
-                  {item.category==="Live Fish" && o.status==="Delivered" && o.liveGuarantee!==false && (
+                  {item.category==="Live Fish" && o.liveGuarantee!==false && (
                     <ItemDoaBlock order={o} item={item} claim={(o.doaItems||{})[item.id]}
-                      windowOpen={doaWindowOpen(o) && !((o.doa&&o.doa.status)&&o.doa.status!=="Requested")}
+                      windowOpen={doaEntryOpen(o) && !((o.doa&&o.doa.status)&&o.doa.status!=="Requested")}
                       hoursLeft={doaHoursLeft(o)} ownerWA={ownerWA} onReportDoa={onReportDoa}/>
                   )}
                   </div>
@@ -5432,23 +5447,27 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               {/* Dead-on-Arrival — the claim itself is now raised per fish, up with the item it
                   concerns (see ItemDoaBlock above). What stays here is the order-level status of
                   whatever has been claimed, plus the two cases where no button appears at all. */}
-              {o.status==="Delivered" && o.items.some(it=>it.category==="Live Fish") && (()=>{
+              {o.items.some(it=>it.category==="Live Fish") && (()=>{
                 const claims=Object.entries(o.doaItems||{});
-                const win=doaWindowOpen(o), left=doaHoursLeft(o);
+                const win=doaEntryOpen(o), left=doaHoursLeft(o);
                 if(o.liveGuarantee===false) return(
                   <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
                     <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>ℹ️ The <b>Live Arrival Guarantee (DOA cover)</b> doesn't apply to this order — a packing option below our recommendation was chosen at checkout. Per our Terms, DOA claims need the recommended (or safer) packing.</div>
                   </div>
                 );
-                if(!claims.length) return(
+                if(!claims.length){
+                  // Nothing to say before the order is paid — the claim isn't open yet.
+                  if(!win && !deliveredAtOf(o)) return null;
+                  return(
                   <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
                     <div style={{fontSize:11,color:C.textSub,lineHeight:1.5}}>
                       {win
-                        ? <>🐟 Fish arrived dead? Use the <b>Report</b> button under that fish above — {left}h left to raise a claim.</>
+                        ? <>🐟 Fish arrived dead? Use the <b>Report</b> button under that fish above{left>0?` — ${left}h left to raise a claim`:""}.</>
                         : <>The {DOA_WINDOW_HOURS}-hour window to raise a Dead-on-Arrival claim for this order has closed.</>}
                     </div>
                   </div>
-                );
+                  );
+                }
                 const st=(o.doa&&o.doa.status)||"Requested";
                 return(
                   <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
@@ -5467,7 +5486,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                         <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${o.orderNo||orderId(o.id)} — here is my unboxing video.`))}
                           style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video on WhatsApp</button>
                       )}
-                      {win&&(st==="Requested")&&<div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>Found another one? You can still report other fish above for {left}h.</div>}
+                      {win&&(st==="Requested")&&<div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>Found another one? You can still report other fish above{left>0?` for ${left}h`:""}.</div>}
                     </div>
                   </div>
                 );
