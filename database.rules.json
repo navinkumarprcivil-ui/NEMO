@@ -34,6 +34,32 @@
       ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
     },
 
+    "purchases": {
+      ".read":  "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$entry": {
+        ".validate": "newData.hasChildren(['supplierName','invoiceNo','invoiceDate'])",
+        "supplierName":   { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120" },
+        "supplierGstin":  { ".validate": "newData.isString() && newData.val().length <= 15" },
+        "invoiceNo":      { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60" },
+        "invoiceDate":    { ".validate": "newData.isString() && newData.val().length === 10" },
+        "purpose":        { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "notes":          { ".validate": "newData.isString() && newData.val().length <= 400" },
+        "hsn":            { ".validate": "newData.isString() && newData.val().length <= 12" },
+        "itcEligibility": { ".validate": "newData.val() === 'eligible' || newData.val() === 'ineligible' || newData.val() === 'capital'" },
+        "createdAt":      { ".validate": "newData.isString() && newData.val().length >= 20" },
+        "gstRate":        { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+        "taxableValue":   { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "cgst":           { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "sgst":           { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "igst":           { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "cess":           { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "totalTax":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "amountPaid":     { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "$other": { ".validate": false }
+      }
+    },
+
     "stockLedger": {
       ".read":  "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
