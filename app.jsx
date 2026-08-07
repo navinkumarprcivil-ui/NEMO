@@ -3399,7 +3399,18 @@ html,body,#root{height:100%;}
 body,#root{background:#ffffff;color:#0f172a;}
 *{-webkit-tap-highlight-color:transparent;}
 button,a,label,.press,.lift{touch-action:manipulation;}
+/* The shell is exactly one viewport tall and the bottom nav is pinned to its
+   bottom edge, so this height has to be the height you can actually see. 100vh
+   is the *large* viewport — the one with the browser toolbar retracted — so
+   whenever the toolbar is showing, the shell runs that much taller than the
+   window and the nav sits below the fold, cropped. 100dvh is meant to track the
+   live value, but on Android Chrome it does not always recompute after the tab
+   has been in the background: come back from the parcel-tracking tab and the
+   nav is half off the screen. So JS publishes the measured height as --app-vh
+   (see index.html) and that wins; the dvh/vh chain stays as the fallback for
+   the first frame and for anything without visualViewport. */
 .nemo-app{height:100vh;}@supports(height:100dvh){.nemo-app{height:100dvh;}}
+.nemo-app{height:var(--app-vh,100dvh);}
 ::-webkit-scrollbar{display:none;}
 *{-ms-overflow-style:none;scrollbar-width:none;}
 input,textarea,select{font-family:'Plus Jakarta Sans',sans-serif;color:#0f172a;background:#f8fafc;}
@@ -4977,7 +4988,15 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 return(
                   <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 0",borderTop:i===0?"none":`1px solid ${C.border}`}}>
                     <div style={{width:44,height:44,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0,overflow:"hidden"}}>
-                      {mediaCache["img-"+item.id]?<img src={mediaCache["img-"+item.id]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
+                      {/* Order lines are snapshots and carry no image, so resolve it
+                          from the live catalogue — the same helper the cart uses.
+                          Reading mediaCache directly only ever worked for legacy
+                          products: a modern one keeps its photo as a URL on
+                          product.media[], which hydrateMedia deliberately does not
+                          copy into the cache, so every order showed the category
+                          emoji instead of what was bought. */}
+                      {(()=>{ const src=getCartLineImg(item,products,mediaCache);
+                        return src?<img src={src} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji; })()}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:700,color:C.text}}>{item.name}</div>
@@ -13247,13 +13266,30 @@ function NemoStore(){
     const unitPrice = v ? variantEffPrice(product, v) : effectivePrice(product);
     const maxAllowed = Math.max(0, Math.min(stock, MAX_PER_ORDER));
     setCart(prev=>{
-      const ex=prev.find(i=>i.key===key);
+      // Taking one off has to target a line that is actually in the cart. The
+      // catalogue card has no option picker, so its "−" calls this with no
+      // variant — and the auto-pick above then chooses an option by
+      // availability, which is a different key from the one the shopper added,
+      // or none at all once that option sells out. Either way the press hit a
+      // line that does not exist, nothing changed, and the cart could not be
+      // emptied. So on the way down, fall back to the line this product really
+      // has (the most recently added, if it has several options in the cart).
+      let k=key;
+      if(qty<0 && !prev.some(i=>i.key===k)){
+        const line=[...prev].reverse().find(i=>i.id===product.id);
+        if(!line) return prev;
+        k=line.key;
+      }
+      const ex=prev.find(i=>i.key===k);
       const curQty=ex?ex.qty:0;
-      const nextQty=Math.min(maxAllowed, curQty+qty);
-      if(nextQty<=0) return prev.filter(i=>i.key!==key);
+      // Stock caps what you can add, never what you can take away — clamping a
+      // decrement to the cap emptied the whole line the moment an option sold
+      // out while it sat in the cart.
+      const nextQty=qty<0?curQty+qty:Math.min(maxAllowed, curQty+qty);
+      if(nextQty<=0) return prev.filter(i=>i.key!==k);
       if(qty>0 && curQty+qty>maxAllowed) setTimeout(()=>showToast(`Only ${maxAllowed} available per order`,"error"),0);
       else if(qty>0){ setTimeout(()=>showToast("Added to cart"),0); trackEvent("addcart",product.id); trackFunnel("addcart"); }
-      if(ex) return prev.map(i=>i.key===key?{...i,qty:nextQty}:i);
+      if(ex) return prev.map(i=>i.key===k?{...i,qty:nextQty}:i);
       // The Product ID travels with the line, so the order records what the item
       // was called when it sold rather than what the catalogue says today.
       const vIdx=v?((productVariants(product)||[]).findIndex(x=>x.id===v.id)):-1;

@@ -150,8 +150,8 @@ try {
   console.log(`\ndesktop     ${total(desktop)} bytes over ${desktop.length} requests`);
   console.log(`mobile      ${total(mobile)} bytes over ${mobile.length} requests`);
 
-  check(sprites(desktop).length > 0, 'desktop fetches the aquarium sprites, which it draws');
-  check(sprites(mobile).length === 0, 'mobile fetches no sprite it will never draw');
+  check(sprites(desktop).length > 0, 'a wide screen fetches the aquarium sprites, which it draws');
+  check(sprites(mobile).length === 0, 'a phone fetches no sprite it will never draw');
   check(
     sprites(desktop).every((r) => r.path.endsWith('.webp')),
     'the sprites come across as WebP, not as the PNG fallback'

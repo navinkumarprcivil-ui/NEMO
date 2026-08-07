@@ -342,6 +342,33 @@
     .catch(function(){ fallbackJSX(); });
 })();
 </script>
+<!-- ── The real viewport height ──────────────────────────────────────────────
+     The app shell is one viewport tall with the bottom nav pinned to its bottom
+     edge. `100vh` is the viewport with the browser toolbar retracted, so with
+     the toolbar showing the shell is taller than the window and the nav is
+     cropped. `100dvh` is supposed to track the live value, and mostly does —
+     but on Android Chrome it is not reliably recomputed after the tab has been
+     backgrounded, which is exactly what happens when you open parcel tracking
+     in a new tab and come back. Publishing the measured height as a custom
+     property fixes it in the one place that is always right: the visual
+     viewport itself. -->
+<script>
+  (function(){
+    var vv = window.visualViewport;
+    function apply(){
+      var h = (vv && vv.height) || window.innerHeight;
+      if (h > 0) document.documentElement.style.setProperty('--app-vh', h + 'px');
+    }
+    apply();
+    window.addEventListener('resize', apply, {passive:true});
+    window.addEventListener('orientationchange', function(){ setTimeout(apply, 250); });
+    // Returning to a backgrounded tab is the case this exists for; pageshow also
+    // covers the back/forward cache, where no resize fires at all.
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(apply, 60); });
+    window.addEventListener('pageshow', apply);
+    if (vv) { vv.addEventListener('resize', apply, {passive:true}); }
+  })();
+</script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
@@ -500,9 +527,16 @@
   function seed(){
     var count=Math.round(Math.min(30,Math.max(12,(W*H)/46000)));
     bubbles=[]; for(var i=0;i<count;i++) bubbles.push(mk(Math.random()*H));
-    /* betta+clownfish: desktop only; mobile keeps snails+bubbles — and now
-       does not download them either. */
-    if(window.innerWidth>=1000){ loadFish(); fish=[mkFish(bettaImg,false,78), mkFish(clownImg,true,72)]; }
+    /* The fish used to be desktop-only, at >=1000px. That was a bytes decision,
+       not a design one: they were 313 KB of base64 inside index.html, so every
+       phone paid for them whether or not it drew them, and the cheapest answer
+       was to draw them on the machines least bothered by the weight. They are
+       37 KB of WebP now, fetched only when this branch is taken, so the reason
+       is gone — and 1000px excluded every tablet, which is where they were most
+       missed. Tablets and large phones sideways get them; a small phone still
+       keeps to bubbles and snails, where the screen is too busy to spare them
+       the room. */
+    if(window.innerWidth>=700){ loadFish(); fish=[mkFish(bettaImg,false,78), mkFish(clownImg,true,72)]; }
     else fish=[];
     snails=[mkSnail('bottom'), mkSnail('left'), mkSnail('right')];
   }
@@ -697,7 +731,7 @@
   if(reduce){ ctx.clearRect(0,0,W,H); bg();
     for(var i=0;i<bubbles.length;i++){ var b=bubbles[i]; drawBubble(b.x,b.y,b.r,b.alpha); }
     drawSnail(W*0.4,H-8,14,1,0.6,0,1);
-    if(window.innerWidth>=1000){
+    if(window.innerWidth>=700){
       loadFish();
       var rdz=function(){ drawFish(bettaImg,W*0.55,H*0.32,78,1,0,0.92,0); drawFish(clownImg,W*0.7,H*0.5,72,-1,0,0.92,0); };
       bettaImg.onload=rdz; clownImg.onload=rdz; rdz();
