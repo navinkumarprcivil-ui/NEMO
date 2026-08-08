@@ -4829,7 +4829,11 @@ function ExperienceReview({order, uk, user, products=[], mediaCache={}, reviewed
       {prodItems.map(({prod,item})=>{
         const m=CAT_META[item.category]||CAT_META["Live Fish"];
         const already=reviewedSet.includes(prod.id);
-        const img=mediaCache["img-"+prod.id];
+        // getCardImg, not a raw mediaCache read: a modern product keeps its photo as a URL on
+        // product.media[], which hydrateMedia deliberately does not copy into the cache, so
+        // "img-<id>" is set only for legacy items. Reading it directly showed the category
+        // emoji for every product listed here.
+        const img=getCardImg(prod,mediaCache);
         return(
           <div key={prod.id} style={{display:"flex",alignItems:"center",gap:10,background:"white",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px",marginBottom:7}}>
             <div style={{width:38,height:38,borderRadius:9,flexShrink:0,overflow:"hidden",background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>
@@ -5216,7 +5220,9 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {toReview.slice(0,4).map(({prod,name,category})=>{
                   const m=CAT_META[category]||CAT_META["Live Fish"];
-                  const img=prod.media?.images?.[0]?.src||mediaCache["img-"+prod.id];
+                  // prod.media is an ARRAY of media entries, so `.images` never existed and this
+                  // always fell through to the legacy cache key — undefined for modern products.
+                  const img=getCardImg(prod,mediaCache);
                   return(
                     <button key={prod.id} className="press" onClick={()=>onWriteReview(prod)}
                       style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,.95)",borderRadius:14,padding:"10px 12px",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
@@ -11603,7 +11609,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 {/* Product header */}
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,paddingBottom:12,borderBottom:`1px solid ${C.border}`}}>
                   <div style={{width:40,height:40,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>
-                    {mediaCache["img-"+p.id]?<img src={mediaCache["img-"+p.id]} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:10}}/>:m.emoji}
+                    {(()=>{ const src=getCardImg(p,mediaCache);
+                      return src?<img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:10}}/>:m.emoji; })()}
                   </div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:700,color:C.text}}>{p.name}</div>
