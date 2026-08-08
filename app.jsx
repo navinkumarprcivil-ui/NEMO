@@ -5765,18 +5765,29 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
   const COMPANY=[{label:"About Us",to:"about"},{label:"Care Guides",to:"guides"},{label:"Request a Product",to:"request"},{label:"Track My Orders",to:"orders"}];
   const POLICIES=[{label:"Live Guarantee",to:"policy-guarantee"},{label:"Returns & Refunds",to:"policy-returns"},{label:"Terms & Conditions",to:"policy-terms"},{label:"Privacy Policy",to:"policy-privacy"},{label:"Contact Us",to:"about"}];
   return(
-    <div aria-hidden={!open} style={{position:"fixed",inset:0,zIndex:300,pointerEvents:open?"auto":"none"}}>
-      {/* Scrim */}
-      <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(7,32,35,.45)",opacity:open?1:0,transition:"opacity .28s ease",backdropFilter:open?"blur(2px)":"none"}}/>
-      {/* Panel */}
-      <div style={{position:"absolute",top:0,bottom:0,left:0,width:"78%",maxWidth:300,background:C.card,boxShadow:"6px 0 30px rgba(0,0,0,.25)",transform:open?"translateX(0)":"translateX(-104%)",transition:"transform .3s cubic-bezier(.4,0,.2,1)",display:"flex",flexDirection:"column",overflowY:"auto"}}>
-        <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"46px 20px 18px",color:"white",position:"relative"}}>
+    /* Portal: the drawer sits inside the page's .slide-up wrapper, whose held identity
+       matrix traps position:fixed — the overlay was being sized to the whole home page
+       (~2000px) instead of the viewport, which is what made the background jump and
+       repaint on open/close. Rendering under <body> makes it truly viewport-fixed.
+       `visibility` then keeps the closed drawer out of the paint tree entirely. */
+    <Portal>
+    <div aria-hidden={!open} style={{position:"fixed",inset:0,zIndex:300,pointerEvents:open?"auto":"none",
+      visibility:open?"visible":"hidden",transition:open?"visibility 0s":"visibility 0s linear .3s"}}>
+      {/* Scrim — plain opacity fade. A toggled backdrop-filter forces the browser to build a
+          blur layer mid-animation, which is what "crashed" the background on the first open. */}
+      <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(7,32,35,.5)",opacity:open?1:0,transition:"opacity .28s ease",willChange:"opacity",touchAction:"none"}}/>
+      {/* Panel — `overflow:hidden` here so the header can stay put and only the list scrolls */}
+      <div style={{position:"absolute",top:0,bottom:0,left:0,width:"78%",maxWidth:300,background:C.card,boxShadow:"6px 0 30px rgba(0,0,0,.25)",transform:open?"translateX(0)":"translateX(-104%)",transition:"transform .3s cubic-bezier(.4,0,.2,1)",willChange:"transform",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        {/* Frozen banner — stays visible while the categories below scroll */}
+        <div style={{flexShrink:0,background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"46px 20px 18px",color:"white",position:"relative",zIndex:1}}>
           <button className="press" onClick={onClose} aria-label="Close menu"
             style={{position:"absolute",top:42,right:14,width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:18,cursor:"pointer",lineHeight:1}}>×</button>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800}}>Browse</div>
           <div style={{fontSize:11.5,color:"rgba(255,255,255,.8)",marginTop:2}}>Shop by category</div>
         </div>
-        <div style={{padding:"12px 12px 18px"}}>
+        {/* Only this part scrolls; `overscroll-behavior:contain` stops the flick from
+            carrying through to the page behind the drawer once the list hits its end. */}
+        <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",padding:"12px 12px 18px"}}>
           <button className="press" onClick={()=>onSelect("All")}
             style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderRadius:13,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
             <span style={{fontSize:22,width:28,textAlign:"center"}}>🌊</span>
@@ -5829,6 +5840,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 
