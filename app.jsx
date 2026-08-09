@@ -5772,7 +5772,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v84";
+const APP_BUILD = "v85";
 async function forceRefresh(){
   try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
@@ -14941,6 +14941,66 @@ function NemoStore(){
       setProducts(prev=>sameCatalog(prev,next)?prev:next);
     },()=>{ /* denied or offline — keep showing what is already on screen */ });
     return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
+  },[fbReady]);
+
+  // GLOBAL: live listener on the CARE GUIDES — same one-shot read, same fix as the catalogue.
+  useEffect(()=>{
+    if(!(FB_OK && FB_DB)) return;
+    let alive=true, last=null;
+    const ref=FB_DB.ref("guides");
+    const cb=ref.on("value",s=>{
+      if(!alive) return;
+      const v=s&&s.val();
+      const list=v?Object.values(v).filter(g=>g&&g.id):[];
+      if(!list.length||sameCatalog(last,list)) return;
+      last=list;
+      try{ dbSet("nemo-guides",JSON.stringify(list)); }catch(e){}
+      hydrateMedia(localProducts()||[], localRequests(), list);
+      setGuides(prev=>sameCatalog(prev,list)?prev:list);
+    },()=>{ /* denied or offline — keep what is on screen */ });
+    return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
+  },[fbReady]);
+
+  // GLOBAL: live listener on SETTINGS — coupons, banners, delivery charges, the store-closed
+  // switch, live-fish zones. All of it was read once per boot, so a change made in admin
+  // reached a shopper only on their next cold start.
+  //
+  // Settings are assembled from three nodes: the world-readable `settings`, plus
+  // `settingsPrivate` and `settingsBank`, which read back null for anyone who is not the
+  // admin (and bank until the shopper signs in). A listener on `settings` alone would drop
+  // an admin's private and bank keys out of the in-memory copy, and their next Save would
+  // write those blanks back over the real ones — so all three are watched, and the merge is
+  // recomputed whenever any of them fires, in the same order cloudSync merges them.
+  //
+  // The one-time key migration in cloudSync is deliberately not repeated here: it writes to
+  // a node this effect is listening to, which would be a feedback loop.
+  useEffect(()=>{
+    if(!(FB_OK && FB_DB)) return;
+    let alive=true, pub=null, priv=null, bank=null, last=null;
+    const apply=()=>{
+      // Nothing public yet — a denial or a slow first read must not wipe the cached
+      // settings the store is already running on.
+      if(!alive||!pub) return;
+      const merged=normalizeSettings({...DEFAULT_SETTINGS,...pub,...(bank||{}),...(priv||{})});
+      const json=stableJSON(merged);
+      if(json===last) return;
+      last=json;
+      setSettings(merged);
+      try{ dbSet("nemo-settings",JSON.stringify(merged)); }catch(e){}
+      setSettingsReady(true);
+    };
+    const offs=[
+      ["settings",      v=>{ pub=v;  }],
+      ["settingsPrivate",v=>{ priv=v; }],
+      ["settingsBank",  v=>{ bank=v; }],
+    ].map(([path,assign])=>{
+      const ref=FB_DB.ref(path);
+      // A read denied by the rules leaves that slot null — exactly what the one-shot
+      // read hands back for a non-admin, so the merge is unchanged for them.
+      const cb=ref.on("value",s=>{ if(!alive) return; assign(s&&s.val()); apply(); },()=>{});
+      return ()=>{ try{ ref.off("value",cb); }catch(e){} };
+    });
+    return ()=>{ alive=false; offs.forEach(f=>f()); };
   },[fbReady]);
 
   // GLOBAL: live listeners on community content (showcase + testimonials) so the admin
