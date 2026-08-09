@@ -343,6 +343,85 @@ function normalizeShippingRates(rates){
     liveFish: fixType(rates.liveFish, DEFAULT_SHIPPING_RATES.liveFish) };
 }
 /* Normalize a whole settings object loaded from storage (currently just shipping rates). */
+/* ═══════════════════ COUPONS ═══════════════════ */
+/* One list drives all three things that used to be configured separately: the coupon codes,
+   the first-order welcome offer, and the seasonal/festival banner. A coupon decides for
+   itself where it appears (`showOnWelcome` / `showAtCheckout`) and who it is for
+   (`firstOrderOnly`), which is what makes "the welcome banner never shows on my own account"
+   a setting rather than a rule baked into the code: an owner who wants everyone to see a
+   festival offer just leaves firstOrderOnly off. */
+function normalizeCoupon(c){
+  if(!c||typeof c!=="object") return null;
+  const type=["flat","percent","coins"].includes(c.type)?c.type:"flat";
+  return {
+    id: c.id||("cp"+Math.random().toString(36).slice(2,9)),
+    code: String(c.code||"").trim().toUpperCase(),
+    name: String(c.name||"").trim(),          // "Welcome Offer", "Diwali Sale", …
+    type,                                     // flat ₹ | percent % | coins (reward, not a discount)
+    value: Number(c.value ?? c.discount ?? 0) || 0,
+    maxDiscount: Number(c.maxDiscount||0)||0, // 0 = uncapped. Only meaningful for percent.
+    minOrder: Number(c.minOrder||0)||0,
+    firstOrderOnly: !!c.firstOrderOnly,
+    active: c.active!==false,
+    secret: !!c.secret,                       // never listed anywhere; must be typed in
+    endsAt: c.endsAt||"",                     // datetime-local; "" = no expiry
+    showAtCheckout: c.showAtCheckout!==false,
+    showOnWelcome: !!c.showOnWelcome,
+    emoji: c.emoji||"🎉",
+    bg: c.bg||"#7c3aed",
+  };
+}
+/* Legacy settings carried the same information in three shapes. Fold them into the one list
+   on read, so an owner who has not touched the new screen keeps exactly what they had. */
+function migrateCoupons(s){
+  const list=(Array.isArray(s.coupons)?s.coupons:[]).map(normalizeCoupon).filter(c=>c&&c.code);
+  const have=code=>list.some(c=>c.code===String(code||"").toUpperCase());
+  if(s.welcomeCouponEnabled!==false && s.welcomeCoupon && !have(s.welcomeCoupon)){
+    list.push(normalizeCoupon({
+      code:s.welcomeCoupon, name:"Welcome Offer", type:"flat",
+      value:Number(s.welcomeCouponAmount||100), minOrder:Number(s.welcomeCouponMinOrder||999),
+      firstOrderOnly:true, active:true, showOnWelcome:true, showAtCheckout:true, emoji:"🎉", bg:"#ff5a40",
+    }));
+  }
+  const fb=s.festivalBanner||{};
+  if(fb.active && fb.text && !list.some(c=>c.name===fb.text)){
+    // The old festival banner was text-only — no code. It survives as an announcement-style
+    // entry: shown on the welcome screen, never offered at checkout, nothing to redeem.
+    list.push(normalizeCoupon({
+      code:"", name:fb.text, type:"flat", value:0, active:true,
+      showOnWelcome:true, showAtCheckout:false, endsAt:fb.endsAt||"", emoji:fb.emoji||"🎉", bg:fb.bg||"#7c3aed",
+    }));
+  }
+  return list;
+}
+function couponExpired(c,now=Date.now()){
+  if(!c||!c.endsAt) return false;
+  const t=new Date(c.endsAt).getTime();
+  return !isNaN(t) && t<now;
+}
+/* Has this shopper already placed an order? Cancelled ones don't count against them. */
+function hasPriorOrder(orders){ return (orders||[]).some(o=>o&&o.status!=="Cancelled"); }
+/* Every coupon the shopper could actually use right now. `where` filters by surface. */
+function usableCoupons(settings,orders,where){
+  const now=Date.now();
+  return migrateCoupons(settings||{}).filter(c=>
+    c.active && !couponExpired(c,now) &&
+    (!c.firstOrderOnly || !hasPriorOrder(orders)) &&
+    // A secret code is never advertised on any surface — the whole point is that it has to
+    // be typed in by someone who was told it.
+    (where==="welcome" ? (c.showOnWelcome && !c.secret) : where==="checkout" ? (c.showAtCheckout && !c.secret && c.code) : true)
+  );
+}
+/* What a coupon is worth on this subtotal: a rupee discount, or reward coins. Percent
+   coupons honour their own ceiling first — the global caps are applied later, over the
+   whole order, in the checkout total. */
+function couponBenefit(c,subtotal){
+  if(!c) return {discount:0,coins:0};
+  if(c.type==="coins") return {discount:0,coins:Math.max(0,Math.round(c.value))};
+  let d = c.type==="percent" ? Math.round((subtotal||0)*c.value/100) : Number(c.value||0);
+  if(c.maxDiscount>0) d=Math.min(d,c.maxDiscount);
+  return {discount:Math.max(0,Math.min(d,subtotal||0)),coins:0};
+}
 function normalizeSettings(s){
   if(!s) return s;
   if(s.shippingRates) return {...s, shippingRates: normalizeShippingRates(s.shippingRates)};
@@ -654,15 +733,32 @@ function trackParcel(o){
 }
 function validateCoupon(code, settings, userOrders, cartTotal){
   if(!code||!code.trim()) return {ok:false, msg:""};
-  const coupons = settings.coupons||[];
-  const c = coupons.find(x=>x.code&&x.code.toLowerCase()===code.trim().toLowerCase()&&x.active!==false);
+  const want=code.trim().toUpperCase();
+  const c = migrateCoupons(settings||{}).find(x=>x.code&&x.code===want&&x.active);
   if(!c) return {ok:false, msg:"Invalid coupon code"};
-  if(c.minOrder && Number(c.minOrder)>0 && (cartTotal||0) < Number(c.minOrder)){
-    return {ok:false, msg:`Minimum cart value ₹${c.minOrder} required for this coupon (add ₹${Number(c.minOrder)-(cartTotal||0)} more)`};
+  if(couponExpired(c)) return {ok:false, msg:"This coupon has expired"};
+  if(c.firstOrderOnly && hasPriorOrder(userOrders)) return {ok:false, msg:"This code is for first orders only"};
+  if(c.minOrder>0 && (cartTotal||0) < c.minOrder){
+    return {ok:false, msg:`Minimum cart value ₹${c.minOrder} required for this coupon (add ₹${c.minOrder-(cartTotal||0)} more)`};
   }
-  const already = (userOrders||[]).some(o=>o.coupon&&o.coupon.toLowerCase()===code.trim().toLowerCase());
+  const already = (userOrders||[]).some(o=>o.coupon&&String(o.coupon).toUpperCase()===want);
   if(already) return {ok:false, msg:"Coupon already used on this account"};
   return {ok:true, coupon:c};
+}
+/* The ceiling on everything combined. Returns the trimmed amounts plus whether a cap bit, so
+   checkout can say so instead of silently handing back less than the codes promised.
+   Loyalty is trimmed first (the shopper keeps unspent coins), then referral, then coupon. */
+function applyDiscountCaps({coupon=0,referral=0,loyalty=0,subtotal=0,settings={},loyaltyVal=1}){
+  const pct=Number(settings.maxDiscountPct||0);
+  const rs=Number(settings.maxDiscountRs||0);
+  const caps=[pct>0?Math.floor(subtotal*pct/100):Infinity, rs>0?rs:Infinity];
+  const cap=Math.min(...caps);
+  let over=(coupon+referral+loyalty)-cap;
+  if(!(over>0)) return {coupon,referral,loyalty,capped:false,coinsUsed:loyalty>0?Math.ceil(loyalty/loyaltyVal):0};
+  const dLoy=Math.min(loyalty,over); loyalty-=dLoy; over-=dLoy;
+  const dRef=Math.min(referral,over); referral-=dRef; over-=dRef;
+  const dCoup=Math.min(coupon,over); coupon-=dCoup; over-=dCoup;
+  return {coupon,referral,loyalty,capped:true,coinsUsed:loyalty>0?Math.ceil(loyalty/loyaltyVal):0};
 }
 /* Zepto-style upsell: the nearest not-yet-unlocked public coupon threshold.
    Returns {need, off, code} — "add ₹need more to get <off>" — or null. */
@@ -1512,14 +1608,21 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   liveGuaranteePriceSouth: 200,   // South India
   liveGuaranteePriceNorth: 250,   // North / rest of India (incl. Central)
   freeDeliveryThreshold: 0,
+  /* One list for coupon codes, the welcome offer and seasonal/festival banners.
+     See normalizeCoupon for the shape of an entry. */
   coupons: [],
   showCouponField: true,   // master switch: show the coupon entry box at checkout
-  /* First-order coupon */
+  /* How discounts may combine. Reward coins always stack; the coupon/referral pair is the
+     owner's call. maxDiscountRs and maxDiscountPct are the ceiling on everything together —
+     whichever bites first wins, and 0 means "no ceiling of that kind". */
+  allowCouponWithReferral: false,
+  maxDiscountRs: 0,
+  /* Legacy — read once by migrateCoupons, then superseded by the list above. Kept so an
+     owner's existing welcome offer and festival banner are not lost on upgrade. */
   welcomeCouponEnabled: true,
   welcomeCoupon: "WELCOME100",
   welcomeCouponAmount: 100,
   welcomeCouponMinOrder: 999,
-  /* Festival/seasonal banner */
   festivalBanner: { text:"", emoji:"🎉", bg:"#7c3aed", active:false, endsAt:"" },
   /* Loyalty points */
   loyaltyEnabled: true,
@@ -4069,43 +4172,52 @@ function MiniCountdown({endsAt,compact=false}){
   );
 }
 
-/* ═══════════════════ WELCOME COUPON BANNER ═══════════════════ */
-function WelcomeBanner({settings,orders=[]}){
-  const code=settings.welcomeCoupon||"WELCOME100";
-  const amt=settings.welcomeCouponAmount||100;
-  const min=settings.welcomeCouponMinOrder||999;
-  const hasRealOrder=orders.some(o=>!["Cancelled"].includes(o.status));
-  if(settings.welcomeCouponEnabled===false)return null;
-  if(hasRealOrder||!code)return null;
+/* ═══════════════════ OFFER BANNERS ═══════════════════ */
+/* One component for what used to be two: the first-order welcome banner and the
+   seasonal/festival banner. Every coupon flagged `showOnWelcome` renders here, so an owner
+   can run as many as they like — a Diwali offer and a first-order offer side by side — and
+   each decides its own audience through `firstOrderOnly` and its own expiry through
+   `endsAt`. A coupon with no code is an announcement: it still shows, with nothing to copy. */
+function OfferBanners({settings,orders=[]}){
+  const list=usableCoupons(settings,orders,"welcome");
+  const [copied,setCopied]=useState("");
+  if(!list.length) return null;
+  const copy=(code)=>{ try{ navigator.clipboard.writeText(code); }catch(e){} setCopied(code); setTimeout(()=>setCopied(""),1600); };
   return(
-    <div className="fade-rise" style={{background:"linear-gradient(135deg,#ff5a40 0%,#ff8c3b 100%)",borderRadius:18,padding:"14px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:12,boxShadow:"0 6px 24px rgba(255,90,64,.25)"}}>
-      <div style={{fontSize:30,flexShrink:0}}>🎉</div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:13,fontWeight:800,color:"white",marginBottom:2}}>First order? Save ₹{amt}!</div>
-        <div style={{fontSize:11.5,color:"rgba(255,255,255,.9)",marginBottom:6}}>On orders above ₹{min} — use code:</div>
-        <div style={{display:"inline-block",background:"rgba(255,255,255,.2)",borderRadius:8,padding:"4px 12px",border:"1px dashed rgba(255,255,255,.6)"}}>
-          <span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{code}</span>
-        </div>
-      </div>
-      <button className="press" onClick={()=>{try{navigator.clipboard.writeText(code);}catch(e){}}}
-        style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 11px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,cursor:"pointer"}}>
-        Copy
-      </button>
-    </div>
-  );
-}
-
-/* ═══════════════════ FESTIVAL / SEASONAL BANNER ═══════════════════ */
-function FestivalBanner({settings}){
-  const fb=settings.festivalBanner||{};
-  if(!fb.active||!fb.text)return null;
-  if(fb.endsAt&&new Date(fb.endsAt).getTime()<Date.now())return null;
-  const bg=fb.bg||"#7c3aed";
-  return(
-    <div className="festival-pulse" style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:16,padding:"13px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:10,boxShadow:`0 6px 20px ${bg}44`}}>
-      {fb.emoji&&<span style={{fontSize:26,flexShrink:0}}>{fb.emoji}</span>}
-      <div style={{fontSize:13,fontWeight:700,color:"white",lineHeight:1.4,flex:1}}>{fb.text}</div>
-    </div>
+    <>
+      {list.map(c=>{
+        const bg=c.bg||"#7c3aed";
+        const worth = c.type==="coins" ? `${c.value} reward coins`
+                    : c.type==="percent" ? `${c.value}% off${c.maxDiscount>0?` (up to ₹${c.maxDiscount})`:""}`
+                    : `₹${c.value} off`;
+        return(
+          <div key={c.id} className="fade-rise" style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:18,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,boxShadow:`0 8px 22px ${bg}33`}}>
+            <div style={{fontSize:30,flexShrink:0}}>{c.emoji||"🎉"}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:800,color:"white",marginBottom:2}}>
+                {c.name||"Special offer"}{c.value>0?` — ${worth}`:""}
+              </div>
+              {(c.minOrder>0||c.firstOrderOnly)&&(
+                <div style={{fontSize:11.5,color:"rgba(255,255,255,.9)",marginBottom:c.code?6:0}}>
+                  {c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}
+                </div>
+              )}
+              {c.code&&(
+                <div style={{display:"inline-block",background:"rgba(255,255,255,.2)",borderRadius:8,padding:"4px 12px",border:"1px dashed rgba(255,255,255,.6)"}}>
+                  <span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{c.code}</span>
+                </div>
+              )}
+            </div>
+            {c.code&&(
+              <button className="press" onClick={()=>copy(c.code)}
+                style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 11px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,cursor:"pointer"}}>
+                {copied===c.code?"✓ Copied":"Copy"}
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -5846,7 +5958,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v89";
+const APP_BUILD = "v90";
 async function forceRefresh(){
   try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
@@ -6521,10 +6633,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
       <div className="home-body" style={{padding:"0 16px 100px"}}>
         {/* Seasonal / festival banner */}
-        <FestivalBanner settings={settings}/>
 
         {/* First-order welcome coupon */}
-        {settingsReady&&<WelcomeBanner settings={settings} orders={orders}/>}
+        {settingsReady&&<OfferBanners settings={settings} orders={orders}/>}
 
         {/* Food re-order reminder */}
         <FoodReorderBanner orders={orders} products={products} addToCart={addToCart} nav={nav}/>
@@ -8123,21 +8234,16 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   // Live Arrival Guarantee is FREE when the customer picks the recommended packing (or a safer/higher-rank one).
   const guaranteeActive=hasLiveFish && selPack.rank >= packingOpt(suggestedPacking).rank;
   const lgPrice=0;
-  let couponDiscount=couponApplied?Math.min(couponApplied.type==="percent"?Math.round(total*couponApplied.discount/100):Number(couponApplied.discount||0),total+lgPrice):0;
+  // A "coins" coupon pays in reward coins rather than money off, so it never touches the total.
+  const couponBen=couponApplied?couponBenefit(couponApplied,total):{discount:0,coins:0};
+  const couponCoins=couponBen.coins;
+  let couponDiscount=Math.min(couponBen.discount,total+lgPrice);
   let refDiscount=refApplied?Math.min(Number(settings.referralDiscount||50),Math.max(0,total+lgPrice-couponDiscount)):0;
-  // ── Anti-stacking cap: coupon + referral + loyalty together can't exceed maxDiscountPct% of subtotal.
-  //    Trim loyalty first (customer keeps their points), then referral, then coupon. ──
-  const maxDiscPct=Number(settings.maxDiscountPct||0);
-  const discountCap=maxDiscPct>0?Math.floor(total*maxDiscPct/100):Infinity;
-  let discountCapped=false;
-  if(couponDiscount+refDiscount+loyaltyDiscount>discountCap){
-    discountCapped=true;
-    let over=(couponDiscount+refDiscount+loyaltyDiscount)-discountCap;
-    const dLoy=Math.min(loyaltyDiscount,over); loyaltyDiscount-=dLoy; over-=dLoy;
-    const dRef=Math.min(refDiscount,over); refDiscount-=dRef; over-=dRef;
-    const dCoup=Math.min(couponDiscount,over); couponDiscount-=dCoup; over-=dCoup;
-    loyaltyCoinsUsed=loyaltyDiscount>0?Math.ceil(loyaltyDiscount/loyaltyVal):0;
-  }
+  // ── Ceiling on everything together: a rupee cap, a % of subtotal cap, or both. ──
+  const capped=applyDiscountCaps({coupon:couponDiscount,referral:refDiscount,loyalty:loyaltyDiscount,subtotal:total,settings,loyaltyVal});
+  couponDiscount=capped.coupon; refDiscount=capped.referral; loyaltyDiscount=capped.loyalty;
+  loyaltyCoinsUsed=capped.coinsUsed;
+  const discountCapped=capped.capped;
   // Live fish geo-restriction (admin-toggleable)
   const liveBlocked = hasLiveFish && liveFishBlockedForZone(zone, settings);
   const fee=shippingFee??0;
@@ -8146,7 +8252,8 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   const fb=(k,v)=>setBilling(a=>({...a,[k]:v}));
   const anySuggestSpecial=cart.some(i=>i.suggestSpecialDelivery);
   const applyCoupon=async()=>{
-    if(refApplied){ setCouponMsg({text:"You can use a coupon or a referral code — not both. Remove the referral code first.",ok:false}); return; }
+    // Whether these two may be held at once is the owner's setting; reward coins always stack.
+    if(refApplied && settings.allowCouponWithReferral!==true){ setCouponMsg({text:"You can use a coupon or a referral code — not both. Remove the referral code first.",ok:false}); return; }
     const r=validateCoupon(couponCode,settings,orders,total);
     if(!r.ok){ setCouponMsg({text:r.msg,ok:false}); setCouponApplied(null); return; }
     if(await promoLimitReached("coupon", settings.couponDailyLimit)){
@@ -8158,7 +8265,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   };
 
   const applyReferral=async()=>{
-    if(couponApplied){ setRefMsg({text:"You can use a coupon or a referral code — not both. Remove the coupon first.",ok:false}); return; }
+    if(couponApplied && settings.allowCouponWithReferral!==true){ setRefMsg({text:"You can use a coupon or a referral code — not both. Remove the coupon first.",ok:false}); return; }
     if(settings.referralEnabled===false){ setRefMsg({text:"Referral program is currently off",ok:false}); return; }
     if(await promoLimitReached("referral", settings.referralDailyLimit)){
       setRefMsg({text:"Today's referral quota is full — please try tomorrow.",ok:false}); setRefApplied(false); return;
@@ -8600,14 +8707,18 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>🎟 Coupon Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             {/* Show available coupon hints — secret coupons are never listed here */}
             {(()=>{
-              const active=(settings.coupons||[]).filter(c=>c.active!==false&&c.code&&!c.secret);
+              // Only codes the owner chose to advertise at checkout, still in date, and
+              // valid for this shopper — a first-order code is not dangled at a repeat customer.
+              const active=usableCoupons(settings,orders,"checkout");
               if(!active.length) return null;
               return(
                 <div style={{marginBottom:8,display:"flex",flexDirection:"column",gap:5}}>
                   {active.map((c,i)=>{
                     const minOk=!c.minOrder||total>=Number(c.minOrder);
                     const needed=c.minOrder?Math.max(0,Number(c.minOrder)-total):0;
-                    const discount=c.type==="percent"?`${c.discount}% off`:`₹${c.discount} off`;
+                    const discount=c.type==="coins"?`${c.value} reward coins`
+                                  :c.type==="percent"?`${c.value}% off${c.maxDiscount>0?` up to ₹${c.maxDiscount}`:""}`
+                                  :`₹${c.value} off`;
                     return(
                       <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:minOk?"#f0fdf4":"#fefce8",border:`1px solid ${minOk?"#86efac":"#fde68a"}`,borderRadius:10,padding:"7px 12px"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -13012,124 +13123,131 @@ function SettingsPanel({settings,onSave,products=[]}){
       {sec==="promos"&&(<>
       {/* Coupon codes */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎟 Coupon Codes</div>
-        {/* Master switch: show/hide the coupon box at checkout */}
-        <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none",background:C.bg,borderRadius:12,padding:"11px 13px",border:`1.5px solid ${C.border}`}}>
-          <input type="checkbox" checked={f.showCouponField!==false} onChange={e=>set("showCouponField",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
-          <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>Show coupon box at checkout</span><br/><span style={{fontSize:11,color:C.textSub}}>Off = no coupon field shown to anyone. Secret codes still work only if you turn this on.</span></span>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎟 Coupons &amp; Offer Banners</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.55}}>
+          One list for every offer — welcome codes, seasonal and festival banners, secret codes.
+          Add as many as you like; each row decides for itself where it shows and who it is for.
+          A row with <b style={{color:C.text}}>no code</b> is a plain announcement banner.
+          Each code is usable once per Google account.
+        </div>
+        <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none",background:C.bg,borderRadius:12,padding:"10px 12px"}}>
+          <input type="checkbox" checked={f.showCouponField!==false} onChange={e=>set("showCouponField",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,marginTop:1,flexShrink:0}}/>
+          <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>Show coupon box at checkout</span><br/><span style={{fontSize:11,color:C.textSub}}>Off = customers cannot type any code.</span></span>
         </label>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Each code is usable once per Google account. Set a <b style={{color:C.text}}>Min ₹</b> to require a minimum cart value (0 = none). Tick <b style={{color:C.text}}>Secret</b> to keep a code hidden from the public list — it still works when a customer types it, perfect for codes you share privately.</div>
-        {(f.coupons||[]).map((c,i)=>(
-          <div key={i} style={{display:"flex",gap:8,alignItems:"center",marginBottom:8,background:C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${C.border}`}}>
-            <div style={{flex:1}}>
-              <input value={c.code} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],code:e.target.value.toUpperCase()};set("coupons",arr);}}
-                placeholder="CODE"
-                style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"7px 10px",fontSize:13,fontWeight:700,fontFamily:"monospace",outline:"none",background:"white",marginBottom:4}}/>
-              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                <select value={c.type||"flat"} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],type:e.target.value};set("coupons",arr);}}
-                  style={{borderRadius:8,border:`1.5px solid ${C.border}`,padding:"5px 8px",fontSize:12,outline:"none",background:"white"}}>
-                  <option value="flat">₹ Flat off</option>
-                  <option value="percent">% Percent off</option>
-                </select>
-                <input type="number" min="0" value={c.discount||""} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],discount:Number(e.target.value)};set("coupons",arr);}}
-                  placeholder="Amount"
-                  style={{width:"70px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"5px 8px",fontSize:12,outline:"none",background:"white"}}/>
-                <div style={{display:"flex",alignItems:"center",gap:3}}>
-                  <span style={{fontSize:10.5,color:C.textSub,fontWeight:600,whiteSpace:"nowrap"}}>Min&nbsp;₹</span>
-                  <input type="number" min="0" value={c.minOrder||""} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],minOrder:Number(e.target.value)||0};set("coupons",arr);}}
-                    placeholder="0"
-                    title="Minimum cart value required (0 = no minimum)"
-                    style={{width:"68px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"5px 8px",fontSize:12,outline:"none",background:"white"}}/>
+
+        {(f.coupons||[]).map((c,i)=>{
+          const upd=(patch)=>{ const arr=[...(f.coupons||[])]; arr[i]={...arr[i],...patch}; set("coupons",arr); };
+          const lbl={fontSize:10.5,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.5,marginBottom:4};
+          const box={width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:12.5,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"};
+          const chk={display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:11.5,fontWeight:600,color:C.text};
+          return(
+            <div key={c.id||i} style={{background:C.bg,borderRadius:13,padding:"12px",border:`1px solid ${C.border}`,marginBottom:10}}>
+              <div style={{display:"flex",gap:8,marginBottom:9}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={lbl}>Coupon code</div>
+                  <input value={c.code||""} onChange={e=>upd({code:e.target.value.toUpperCase().replace(/\s+/g,"")})}
+                    placeholder="WELCOME100" style={{...box,fontFamily:"monospace",fontWeight:800,letterSpacing:1}}/>
                 </div>
-                <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11.5,color:C.text,cursor:"pointer"}}>
-                  <input type="checkbox" checked={c.active!==false} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],active:e.target.checked};set("coupons",arr);}} style={{accentColor:C.primary}}/>
-                  Active
-                </label>
-                <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11.5,color:c.secret?"#b45309":C.text,cursor:"pointer",fontWeight:c.secret?700:400}} title="Hidden from the public coupon list — still works when typed">
-                  <input type="checkbox" checked={!!c.secret} onChange={e=>{const arr=[...(f.coupons||[])];arr[i]={...arr[i],secret:e.target.checked};set("coupons",arr);}} style={{accentColor:"#d97706"}}/>
-                  🤫 Secret
-                </label>
+                <div style={{flex:1.3,minWidth:0}}>
+                  <div style={lbl}>Name shown to customers</div>
+                  <input value={c.name||""} onChange={e=>upd({name:e.target.value})}
+                    placeholder="Welcome Offer / Diwali Sale" style={box}/>
+                </div>
               </div>
+
+              <div style={{display:"flex",gap:8,marginBottom:9}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={lbl}>Reward type</div>
+                  <select value={c.type||"flat"} onChange={e=>upd({type:e.target.value})} style={box}>
+                    <option value="flat">Flat ₹ off</option>
+                    <option value="percent">% off</option>
+                    <option value="coins">Reward coins</option>
+                  </select>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={lbl}>{c.type==="percent"?"Percent":c.type==="coins"?"Coins":"Amount ₹"}</div>
+                  <input type="number" min="0" value={c.value ?? c.discount ?? ""} onChange={e=>upd({value:Number(e.target.value)||0})} style={box}/>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={lbl}>Max cover ₹</div>
+                  <input type="number" min="0" value={c.maxDiscount||""} onChange={e=>upd({maxDiscount:Number(e.target.value)||0})}
+                    placeholder="0 = no cap" style={box} disabled={c.type==="coins"}/>
+                </div>
+              </div>
+
+              <div style={{display:"flex",gap:8,marginBottom:9}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={lbl}>Min order ₹</div>
+                  <input type="number" min="0" value={c.minOrder||""} onChange={e=>upd({minOrder:Number(e.target.value)||0})} placeholder="0" style={box}/>
+                </div>
+                <div style={{flex:1.4,minWidth:0}}>
+                  <div style={lbl}>Expires (date &amp; time)</div>
+                  <input type="datetime-local" value={c.endsAt||""} onChange={e=>upd({endsAt:e.target.value})} style={box}/>
+                </div>
+              </div>
+
+              <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"flex-end"}}>
+                <div style={{width:70}}>
+                  <div style={lbl}>Emoji</div>
+                  <input value={c.emoji||"🎉"} onChange={e=>upd({emoji:e.target.value})} style={{...box,textAlign:"center"}}/>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={lbl}>Banner colour</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {["#7c3aed","#ff5a40","#0ea5e9","#15803d","#b45309","#be123c"].map(col=>(
+                      <button key={col} type="button" onClick={()=>upd({bg:col})}
+                        style={{width:26,height:26,borderRadius:8,background:col,cursor:"pointer",
+                          border:(c.bg||"#7c3aed")===col?"2px solid #111":"2px solid transparent"}}/>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 10px",marginBottom:10}}>
+                <label style={chk}><input type="checkbox" checked={c.active!==false} onChange={e=>upd({active:e.target.checked})} style={{width:16,height:16,accentColor:C.primary}}/> Active</label>
+                <label style={chk}><input type="checkbox" checked={!!c.firstOrderOnly} onChange={e=>upd({firstOrderOnly:e.target.checked})} style={{width:16,height:16,accentColor:C.primary}}/> First order only</label>
+                <label style={chk}><input type="checkbox" checked={!!c.secret} onChange={e=>upd({secret:e.target.checked})} style={{width:16,height:16,accentColor:C.primary}}/> Secret (never listed)</label>
+                <label style={chk}><input type="checkbox" checked={c.showAtCheckout!==false} onChange={e=>upd({showAtCheckout:e.target.checked})} style={{width:16,height:16,accentColor:C.primary}}/> Show at checkout</label>
+                <label style={chk}><input type="checkbox" checked={!!c.showOnWelcome} onChange={e=>upd({showOnWelcome:e.target.checked})} style={{width:16,height:16,accentColor:C.primary}}/> Show as home banner</label>
+              </div>
+
+              <button className="press" onClick={()=>set("coupons",(f.coupons||[]).filter((_,j)=>j!==i))}
+                style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:9,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                Remove this offer
+              </button>
             </div>
-            <button className="press" onClick={()=>{const arr=(f.coupons||[]).filter((_,j)=>j!==i);set("coupons",arr);}}
-              style={{flexShrink:0,width:28,height:28,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
-          </div>
-        ))}
-        <button className="press" onClick={()=>set("coupons",[...(f.coupons||[]),{code:"",type:"flat",discount:0,active:true,secret:false}])}
-          style={{width:"100%",background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:4}}>
-          ＋ Add Coupon Code
+          );
+        })}
+        <button className="press"
+          onClick={()=>set("coupons",[...(f.coupons||[]),{id:"cp"+Math.random().toString(36).slice(2,9),code:"",name:"",type:"flat",value:0,maxDiscount:0,minOrder:0,firstOrderOnly:false,active:true,secret:false,endsAt:"",showAtCheckout:true,showOnWelcome:false,emoji:"🎉",bg:"#7c3aed"}])}
+          style={{width:"100%",background:"white",border:`1.5px dashed ${C.border}`,borderRadius:11,padding:"11px",fontSize:12.5,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+          + Add an offer / banner
         </button>
       </div>
 
-      {/* Welcome coupon */}
+      {/* How discounts combine */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12,display:"flex",alignItems:"center",flexWrap:"wrap"}}>🎉 First-Order Welcome Coupon{usageBadge("coupon",f.couponDailyLimit)}</div>
-        <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
-          <input type="checkbox" checked={f.welcomeCouponEnabled!==false} onChange={e=>set("welcomeCouponEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
-          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Show welcome coupon banner</span>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🧮 How discounts combine</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.55}}>
+          Reward coins can always be spent alongside a code. The caps below apply to everything
+          together — coupon, referral and coins — and whichever cap is lower wins. Leave a cap at
+          0 to switch it off. When a cap bites, coins are trimmed first so the customer keeps them.
+        </div>
+        <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:14,cursor:"pointer",userSelect:"none",background:C.bg,borderRadius:12,padding:"10px 12px"}}>
+          <input type="checkbox" checked={f.allowCouponWithReferral===true} onChange={e=>set("allowCouponWithReferral",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,marginTop:1,flexShrink:0}}/>
+          <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>Allow a coupon and a referral code together</span><br/>
+            <span style={{fontSize:11,color:C.textSub}}>Off = one or the other per order.</span></span>
         </label>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Shown to customers who have never ordered. Turn off to hide it (e.g. when you'd rather run a Festival Banner below).</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Coupon Code</div>
-            <input value={f.welcomeCoupon||"WELCOME100"} onChange={e=>set("welcomeCoupon",e.target.value.toUpperCase())}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,fontFamily:"monospace",fontWeight:700,outline:"none",background:"white"}}/>
+        <div style={{display:"flex",gap:10}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Max total discount ₹</div>
+            <input type="number" min="0" value={f.maxDiscountRs||""} onChange={e=>set("maxDiscountRs",Number(e.target.value)||0)} placeholder="0 = no cap"
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white"}}/>
           </div>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Discount (₹)</div>
-            <input type="number" min="0" value={f.welcomeCouponAmount||100} onChange={e=>set("welcomeCouponAmount",Number(e.target.value))}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-          </div>
-        </div>
-        <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min Order Value (₹)</div>
-            <input type="number" min="0" value={f.welcomeCouponMinOrder||999} onChange={e=>set("welcomeCouponMinOrder",Number(e.target.value))}
-              style={{width:"140px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-          </div>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Daily limit (0 = unlimited)</div>
-            <input type="number" min="0" value={f.couponDailyLimit||0} onChange={e=>set("couponDailyLimit",Number(e.target.value))}
-              style={{width:"140px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-          </div>
-        </div>
-        <div style={{fontSize:10.5,color:C.textSub,marginTop:6}}>Add this code to your coupons above too — so it's actually redeemable at checkout. Daily limit caps how many customers can use coupons each day.</div>
-      </div>
-
-      {/* Festival / seasonal banner */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎊 Seasonal / Festival Banner</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Shown at the top of the home page. Perfect for Diwali, New Year, flash promotions etc.</div>
-        <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer"}}>
-          <input type="checkbox" checked={!!(f.festivalBanner||{}).active} onChange={e=>set("festivalBanner",{...(f.festivalBanner||{}),active:e.target.checked})} style={{width:18,height:18,accentColor:C.primary}}/>
-          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Show banner</span>
-        </label>
-        <div style={{display:"grid",gridTemplateColumns:"60px 1fr",gap:10,marginBottom:10}}>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Emoji</div>
-            <input value={(f.festivalBanner||{}).emoji||"🎉"} onChange={e=>set("festivalBanner",{...(f.festivalBanner||{}),emoji:e.target.value})}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:18,outline:"none",background:"white",textAlign:"center"}}/>
-          </div>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Banner Text</div>
-            <input value={(f.festivalBanner||{}).text||""} onChange={e=>set("festivalBanner",{...(f.festivalBanner||{}),text:e.target.value})} placeholder="e.g. 🎆 Happy Diwali! Extra 10% off all fish today →"
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-          </div>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Background Color</div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {["#7c3aed","#0b6e72","#dc2626","#c2410c","#047857","#1d4ed8","#be185d"].map(col=>(
-                <button key={col} onClick={()=>set("festivalBanner",{...(f.festivalBanner||{}),bg:col})}
-                  style={{width:28,height:28,borderRadius:8,background:col,border:((f.festivalBanner||{}).bg===col)?"2px solid #fff":"2px solid transparent",boxShadow:((f.festivalBanner||{}).bg===col)?"0 0 0 2px "+col:"none",cursor:"pointer"}}/>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Hide after date</div>
-            <input type="date" value={(f.festivalBanner||{}).endsAt||""} onChange={e=>set("festivalBanner",{...(f.festivalBanner||{}),endsAt:e.target.value})}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12,outline:"none",background:"white"}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Max total discount % of subtotal</div>
+            <input type="number" min="0" max="100" value={f.maxDiscountPct||""} onChange={e=>set("maxDiscountPct",Number(e.target.value)||0)} placeholder="0 = no cap"
+              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white"}}/>
           </div>
         </div>
       </div>
