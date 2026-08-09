@@ -33,3 +33,20 @@ new Function(code); // parse check
 
 writeFileSync(join(root, "app.js"), code);
 console.log(`app.js written — ${code.length} bytes`);
+
+/* APP_BUILD in app.jsx is the single source of truth for "which build is this".
+ * Two other files have to agree with it or the auto-update check breaks in opposite
+ * directions: version.json is what a running tab compares itself against, and CACHE in
+ * sw.js is what makes browsers install the new worker at all. Deriving both here means a
+ * bumped APP_BUILD can no longer ship with either one left behind. */
+const build = (src.match(/const APP_BUILD\s*=\s*"([^"]+)"/) || [])[1];
+if (!build) throw new Error("APP_BUILD not found in app.jsx — the auto-update check needs it");
+
+writeFileSync(join(root, "version.json"), JSON.stringify({ build }) + "\n");
+
+const swPath = join(root, "sw.js");
+const sw = readFileSync(swPath, "utf8");
+const swNext = sw.replace(/const CACHE = '[^']*';/, `const CACHE = 'nemo-${build}';`);
+if (swNext === sw && !sw.includes(`'nemo-${build}'`)) throw new Error("could not rewrite CACHE in sw.js");
+if (swNext !== sw) writeFileSync(swPath, swNext);
+console.log(`build ${build} — version.json + sw.js CACHE in sync`);

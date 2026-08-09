@@ -5771,7 +5771,8 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    This button drops everything the app controls and reloads clean. Sign-in, cart,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
-const APP_BUILD = "v82";   // keep in step with CACHE in sw.js
+/* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
+const APP_BUILD = "v83";
 async function forceRefresh(){
   try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
@@ -5789,6 +5790,41 @@ try{
     history.replaceState(null,"",u.pathname+(u.search||"")+u.hash);
   }
 }catch(e){}
+
+/* ═══ AUTOMATIC UPDATE ═══
+   Nobody should have to press Refresh to stop seeing an old build. The service worker
+   serves app code network-first but falls back to the cached copy after 1.5s, so a phone
+   on a weak link can boot the previous ~900 KB bundle indefinitely — the fetch that would
+   have replaced it never wins the race.
+
+   version.json is a few dozen bytes and is excluded from every cache, so it lands even
+   where the bundle would not. If it names a build other than the one running, the code in
+   memory is stale: drop the caches and reload into the new one. The whole check costs one
+   tiny request per load.
+
+   Capped at one automatic reload per tab. If the reload somehow comes back still stale
+   (a CDN mid-purge, say), the visitor keeps browsing the old build rather than being
+   trapped in a reload loop — the manual Refresh button in the menu is the way out. */
+async function checkForUpdate(){
+  try{
+    if(!APP_BUILD) return;
+    if(sessionStorage.getItem("nemo-autoreload")) return;   // already tried once in this tab
+    const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});
+    if(!r.ok) return;
+    const v=await r.json();
+    if(!v||!v.build||v.build===APP_BUILD) return;
+    sessionStorage.setItem("nemo-autoreload",APP_BUILD+"->"+v.build);
+    await forceRefresh();
+  }catch(e){ /* offline, or version.json not deployed yet — keep serving what we have */ }
+}
+if(typeof window!=="undefined"){
+  // After first paint: the check must never delay the store appearing.
+  if(document.readyState==="complete") setTimeout(checkForUpdate,0);
+  else window.addEventListener("load",()=>setTimeout(checkForUpdate,0));
+  // A PWA tab can sit backgrounded for days and is reopened rather than reloaded, so the
+  // load event alone would never fire again. Re-check when it comes back to the front.
+  document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkForUpdate(); });
+}
 
 /* ═══════════════════ CATEGORY DRAWER (left slide-in) ═══════════════════ */
 function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){

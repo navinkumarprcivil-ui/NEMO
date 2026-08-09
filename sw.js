@@ -1,5 +1,5 @@
 /* Nemo Aqua Store — service worker (offline fallback + always-fresh code) */
-const CACHE = 'nemo-v82';
+const CACHE = 'nemo-v83';
 /* Precached on install — so keep this to what a visit actually uses. The logo is
    here as WebP only: the splash asks for the WebP, so the PNG beside it is
    reached only by a browser that cannot read WebP, and precaching 160 KB for a
@@ -32,6 +32,10 @@ self.addEventListener('fetch', (e) => {
   // delisted product could survive.
   if (url.pathname.startsWith('/s/') || url.pathname.startsWith('/api/') ||
       url.pathname === '/p' || url.pathname.startsWith('/p/') || url.pathname === '/sitemap.xml') return;
+  // version.json is how a running tab finds out it is stale. Cache it and it would report
+  // the build it was cached with — the check would agree with itself forever and no device
+  // would ever update. It is a few dozen bytes, so it always goes to the network.
+  if (url.pathname.endsWith('/version.json')) return;
 
   const isCode = /\.(html|jsx|js)$/.test(url.pathname) || e.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('/');
 
