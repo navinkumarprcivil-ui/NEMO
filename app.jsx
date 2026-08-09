@@ -980,6 +980,27 @@ const FIREBASE_CONFIG = {
 };
 let FB_DB=null, FB_AUTH=null, FB_STORAGE=null, FB_OK=false;
 
+/* ═══════════════════ FAST CATALOGUE PREFETCH ═══════════════════ */
+/* Getting the real catalogue on screen used to mean waiting out the whole SDK boot: five
+   compat scripts from gstatic, then up to APPCHECK_GRACE_MS for app-check to catch up, then
+   initializeApp, then a websocket handshake to asia-southeast1 — seconds on a phone, and
+   until it finished the shop had nothing real to show. That is the wait behind "the updates
+   work, but only after a long time".
+
+   `products` is world-readable (see database.rules.json), so a plain REST GET needs none of
+   that machinery. This one starts as the script is evaluated, in parallel with everything
+   above, and normally answers in a few hundred milliseconds. The SDK listener still takes
+   over for live updates the moment it is up — this only closes the opening gap.
+
+   If App Check enforcement refuses the unauthenticated read, it fails quietly and the SDK
+   path carries on exactly as before. */
+const CATALOG_PREFETCH = (typeof fetch!=="undefined" && FIREBASE_CONFIG.databaseURL)
+  ? fetch(FIREBASE_CONFIG.databaseURL+"/products.json",{cache:"no-store"})
+      .then(r=>r.ok?r.json():null)
+      .then(v=>(v&&typeof v==="object")?Object.values(v).filter(p=>p&&p.id):null)
+      .catch(()=>null)
+  : Promise.resolve(null);
+
 /* ── App Check ──
    reCAPTCHA v3 site key. Not a secret: a site key is public by design and is
    bound to the domains registered against it, not to a project.
@@ -1045,7 +1066,10 @@ function tryInitFirebase(){
   }catch(e){ console.warn("Firebase init failed:", e?.message||e); return false; }
 }
 /* The SDK is loaded async; poll briefly until it's available (no-op if it never loads). */
-(function pollFB(n){ if(tryInitFirebase()||n<=0) return; setTimeout(()=>pollFB(n-1), 250); })(40);
+/* Polled every 250ms, so the SDK could sit ready for a quarter of a second before anything
+   noticed — on top of the app-check grace. Check often while it is worth checking often,
+   then back off to the old cadence for the long tail. Same ~10s overall budget as before. */
+(function pollFB(n){ if(tryInitFirebase()||n<=0) return; setTimeout(()=>pollFB(n-1), n>30?60:250); })(70);
 
 /* The Firebase scripts load async, so on a cold cache the app can boot before FB_OK is true.
    Wait a bounded moment for the connection rather than deciding there's no cloud yet — but
@@ -1063,7 +1087,21 @@ function waitForFirebase(ms){
 /* Lift the boot splash. index.html owns the timing — it holds the cinematic minimum and its own
    hard maximum — so this only says "the store has something real to show now". Idempotent, and
    a no-op if the splash markup isn't there (e.g. the app embedded elsewhere). */
-function revealStore(){ try{ if(window.nemoSplashReady) window.nemoSplashReady(); }catch(e){} }
+/* The splash registers its teardown hook (window.nemoSplashReady) from index.html, which can
+   land AFTER the REST prefetch has already answered. A plain `if present` check would silently
+   do nothing in that case, and the store would stay behind the splash until the much later
+   cloud sync happened to call this again — the data was ready, nobody was listening. Retry
+   briefly so an early reveal is never dropped. */
+function revealStore(){
+  try{
+    if(window.nemoSplashReady){ window.nemoSplashReady(); return; }
+    let n=40;   // ~2s of 50ms retries, well inside the splash's own 6s backstop
+    const t=setInterval(()=>{
+      if(window.nemoSplashReady){ clearInterval(t); try{ window.nemoSplashReady(); }catch(e){} }
+      else if(--n<=0){ clearInterval(t); }
+    },50);
+  }catch(e){}
+}
 
 async function fbGetColl(path){
   if(!FB_OK) return null;
@@ -5772,7 +5810,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v85";
+const APP_BUILD = "v87";
 async function forceRefresh(){
   try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
@@ -13972,9 +14010,30 @@ function NemoStore(){
       const u=await loadUser(); if(u){setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));loadFavorites(userKey(u)).then(setFavorites);setInterestedSet(loadIntLocal(userKey(u)));}
       setLoading(false);
       // Safety: never leave skeletons up indefinitely (e.g. Firebase off) — reveal after a short wait
-      setTimeout(()=>setHydrated(true),2500);
-      hydrateMedia(prods,reqs,guideList);      // Seed defaults locally if first run
-      if(!localP)saveProd(prods);
+      // Fast path: the REST prefetch started before this component existed and normally
+      // lands well ahead of the SDK, so the real catalogue replaces the placeholder within a
+      // few hundred ms instead of after the whole Firebase handshake.
+      CATALOG_PREFETCH.then(list=>{
+        if(!list||!list.length) return;
+        const next=list.map(normalizeProduct);
+        setProducts(prev=>sameCatalog(prev,next)?prev:next);
+        try{ dbSet("nemo-products",JSON.stringify(next)); }catch(e){}
+        setHydrated(true);
+        hydrateMedia(next, localRequests(), localGuidesData()||[]);
+        revealStore();          // nothing left worth holding the splash for
+      });
+      // Safety: never leave skeletons up indefinitely (e.g. Firebase off) — but a first-time
+      // visitor has no cache, so revealing on a bare timer is what flashes DEFAULT_PRODUCTS
+      // at them a moment before the real shop arrives. With no cache to fall back on, wait
+      // for the prefetch to settle first, capped so an unreachable database still reveals.
+      if(localP) setTimeout(()=>setHydrated(true),2500);
+      else Promise.race([CATALOG_PREFETCH,new Promise(r=>setTimeout(r,6000))]).then(()=>setHydrated(true));
+      hydrateMedia(prods,reqs,guideList);
+      // Seed defaults into the LOCAL cache only. saveProd also writes the cloud when Firebase
+      // happens to be up by now, which would publish the ten placeholder products over a real
+      // catalogue. Seeding a genuinely empty cloud is cloudSync's job, and it only does so
+      // after actually reading the node and finding it empty.
+      if(!localP){ try{ dbSet("nemo-products",JSON.stringify(prods)); }catch(e){} }
       if(!localGuidesData())saveGuides(guideList);
       // 2) Cloud hydrate. This used to run purely in the background while the splash was torn
       // down the moment the cached paint landed — which is why the store opened in well under a
