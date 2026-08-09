@@ -5772,7 +5772,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v83";
+const APP_BUILD = "v84";
 async function forceRefresh(){
   try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
@@ -14908,6 +14908,40 @@ function NemoStore(){
       loadOrders().then(o=>o&&setOrders(o));
     }
   },[page,fbReady]);
+
+  // GLOBAL: live listener on the CATALOGUE. cloudSync reads products exactly once per boot
+  // (it is guarded by cloudSyncDone), so until now an admin's edit reached a shopper only
+  // when they next cold-started the app — a price change, a restock, a new product or a
+  // delisting could sit unseen on an open storefront indefinitely. This subscribes to the
+  // same node cloudSync reads, so every edit lands on every open screen as it is saved.
+  //
+  // An empty or failed read is deliberately ignored rather than rendered: a permission
+  // denial, a dropped connection or a mid-write moment must never blank the shop or drop
+  // it back to DEFAULT_PRODUCTS. The screen keeps whatever it has until real data arrives.
+  useEffect(()=>{
+    if(!(FB_OK && FB_DB)) return;
+    // `last` lives for the life of the subscription, so the cache write and the media
+    // fetch below run only on a real change — they must stay out of the setProducts
+    // updater, which React is free to call more than once for a single update.
+    let alive=true, last=null;
+    const ref=FB_DB.ref("products");
+    const cb=ref.on("value",s=>{
+      if(!alive) return;
+      const v=s&&s.val();
+      const list=v?Object.values(v).filter(p=>p&&p.id):[];
+      if(!list.length) return;
+      const next=list.map(normalizeProduct);
+      if(sameCatalog(last,next)) return;
+      last=next;
+      try{ dbSet("nemo-products",JSON.stringify(next)); }catch(e){}
+      hydrateMedia(next, localRequests(), localGuidesData()||[]);
+      // sameCatalog again against the live state: the boot read may have already applied
+      // this exact catalogue, and handing back a fresh array would re-render the whole
+      // grid and replay its reveal animation for no reason.
+      setProducts(prev=>sameCatalog(prev,next)?prev:next);
+    },()=>{ /* denied or offline — keep showing what is already on screen */ });
+    return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
+  },[fbReady]);
 
   // GLOBAL: live listeners on community content (showcase + testimonials) so the admin
   // sees new submissions the instant they're posted, and customers see fresh testimonials.
