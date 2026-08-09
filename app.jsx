@@ -5846,7 +5846,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v88";
+const APP_BUILD = "v89";
 async function forceRefresh(){
   try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
@@ -6425,8 +6425,13 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         </div>
 
         {/* Real Nemo logo — secret tap target. marginTop clears the absolute account/wallet chip on mobile so the logo never overlaps Sign in. */}
-        <div onClick={onSecretTap} className="home-hero-logo"
-          style={{display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",WebkitTapHighlightColor:"transparent",marginBottom:16,marginTop:46}}>
+        {/* onPointerDown, not onClick: ten taps in the same spot is exactly the gesture a
+            phone treats as repeated double-taps, and the browser swallows or delays the
+            clicks it thinks are zoom attempts — which is why the admin panel opened on a
+            desktop but was unreachable on a phone. touchAction:manipulation turns off
+            double-tap zoom on the logo so every tap counts. */}
+        <div onPointerDown={onSecretTap} className="home-hero-logo"
+          style={{display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",touchAction:"manipulation",WebkitTapHighlightColor:"transparent",marginBottom:16,marginTop:46}}>
           <div style={{width:"min(248px,70%)",aspectRatio:"600 / 311",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:"100%",height:"100%",objectFit:"contain",filter:"drop-shadow(0 6px 14px rgba(0,0,0,.28))"}}/>
           </div>
@@ -14141,19 +14146,41 @@ function NemoStore(){
   const prevPageRef = useRef("shop");
   const pageRef = useRef("home");
 
-  const nav=(pg,product=null)=>{
+  /* Where the shopper had scrolled to on each page. Going deeper (tapping a product) always
+     opens the new page at the top, but coming BACK should return them to the spot they left —
+     losing a long scroll through the shop on every product they look at is what made browsing
+     feel like starting over. */
+  const scrollMem = useRef({});
+  const saveScroll=()=>{ try{ scrollMem.current[pageRef.current]=scrollRef.current?.scrollTop||0; }catch(e){} };
+  const applyScroll=(y)=>{
+    /* The page keeps growing after it first paints — product images decode, lazy sections
+       fill in — so a single early scrollTo silently clamps to whatever height exists at that
+       instant and drops the shopper part-way up (restoring 900 landed at 385). Re-apply until
+       the target is actually reachable, then stop. Scrolling to 0 needs none of this and
+       exits on the first pass. */
+    let tries=0;
+    const step=()=>{
+      const d=scrollRef.current; if(!d) return;
+      d.scrollTo({top:y,behavior:"auto"});
+      if(y>0 && d.scrollTop < y-2 && ++tries<25) setTimeout(step,60);
+    };
+    requestAnimationFrame(()=>requestAnimationFrame(step));
+  };
+  const nav=(pg,product=null,opts={})=>{
     if(pg!=="detail") setReviewIntent(null);
     // Remember where we came from so DetailPage back button works for any origin
     if(pg==="detail") prevPageRef.current = page;
     // Hardware-back trap: when leaving Home for a deeper page, push a history entry
     // so the phone's Back button returns to Home instead of closing the app.
     if(pageRef.current==="home" && pg!=="home"){ try{ history.pushState({nemo:1},""); }catch(e){} }
+    saveScroll();
     pageRef.current = pg;
     setPage(pg);
     if(product)setSelProduct(product);
-    // Instant jump to top on page change feels snappier than smooth on a full swap
-    requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0,behavior:"auto"}));
+    // Forward = open at the top. Back (opts.restore) = pick up where they left off.
+    applyScroll(opts.restore ? (scrollMem.current[pg]||0) : 0);
   };
+  const navBack=(pg)=>nav(pg,null,{restore:true});
 
   // Phone Back button: from any inner page → go Home; on Home → "press back again to exit".
   const exitArmRef = useRef(0);
@@ -14176,15 +14203,27 @@ function NemoStore(){
         return;
       }
       if(pageRef.current!=="home"){
-        // Any inner page → return to Home instead of exiting
+        /* Back out to wherever this page was opened FROM, not always Home — a product opened
+           from a scrolled Shop list belongs back in that list, at that spot. Restoring the
+           scroll is the other half: landing at the top of the list they had worked down is
+           the same as losing their place. */
         setReviewIntent(null);
-        pageRef.current="home";
-        setPage("home");
+        const to = (pageRef.current==="detail" && prevPageRef.current) ? prevPageRef.current : "home";
+        saveScroll();
+        pageRef.current=to;
+        setPage(to);
         try{ history.pushState({nemo:1},""); }catch(e){}   // re-arm the trap
-        requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0,behavior:"auto"}));
+        applyScroll(scrollMem.current[to]||0);
+      } else if((scrollRef.current?.scrollTop||0) > 8){
+        // On Home, but scrolled down: the first press takes them back to the top. Only a
+        // press from the top of Home is treated as "leaving", which is where the exit
+        // prompt belongs — pressing back mid-page and being asked to quit is jarring.
+        scrollRef.current?.scrollTo({top:0,behavior:"smooth"});
+        scrollMem.current["home"]=0;
+        try{ history.pushState({nemo:1},""); }catch(e){}
       } else {
-        // On Home: classic mobile "press back again to exit" (window.confirm is blocked
-        // inside popstate on most phones, so we use a toast warning instead).
+        // At the top of Home: classic mobile "press back again to exit" (window.confirm is
+        // blocked inside popstate on most phones, so we use a toast warning instead).
         const now=Date.now();
         if(now - exitArmRef.current < 2500){
           window.removeEventListener("popstate",onPop);
@@ -14208,8 +14247,11 @@ function NemoStore(){
       tapCount.current=0;
       nav("admin-login");
     } else {
-      // Normal use: a logo tap just goes home. Only 10 rapid taps (within 2s of each other) opens admin.
-      nav("home");
+      // Normal use: a logo tap just goes home. Only 10 rapid taps (within 2s of each other)
+      // opens admin. Re-navigating to the page already on screen re-runs the page-swap
+      // animation and scrolls the hero out from under the finger, so mid-count taps land on
+      // a moving target — on Home there is nowhere to go anyway.
+      if(pageRef.current!=="home") nav("home");
       tapTimer.current=setTimeout(()=>{tapCount.current=0;},2000);
     }
   };
