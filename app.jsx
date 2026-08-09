@@ -5759,9 +5759,41 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   );
 }
 
+/* ═══════════════════ FORCE REFRESH ═══════════════════ */
+/* Two separate caches can hold a device on old content, and neither clears itself
+   promptly on a slow phone:
+     • sw.js serves app code network-first but gives up after 1.5s and serves the
+       cached copy — on a weak connection the ~900 KB bundle loses that race every
+       time, so the device keeps running the previous build.
+     • the catalogue paints from the "nemo-products" localStorage copy before the
+       cloud answers, and a first run with no cloud reply writes DEFAULT_PRODUCTS
+       there — after which the seed catalogue persists until a cloud read lands.
+   This button drops everything the app controls and reloads clean. Sign-in, cart,
+   orders and favourites are deliberately left alone; only cached copies of data
+   that lives on the server are removed, and those come straight back on boot. */
+const APP_BUILD = "v82";   // keep in step with CACHE in sw.js
+async function forceRefresh(){
+  try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
+  try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
+  // Unregistering means a brand-new worker installs and re-precaches on the next load.
+  try{ if(navigator.serviceWorker){ const regs=await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r=>r.unregister())); } }catch(e){}
+  // Reload past the browser's own HTTP cache too — clearing the SW alone does not cover it.
+  try{ const u=new URL(location.href); u.searchParams.set("fresh",Date.now().toString(36)); location.replace(u.toString()); }
+  catch(e){ location.reload(true); }
+}
+/* Drop the cache-buster from the address bar once it has done its job, so it is not
+   carried into shared links or bookmarks. */
+try{
+  if(typeof location!=="undefined" && /[?&]fresh=/.test(location.search)){
+    const u=new URL(location.href); u.searchParams.delete("fresh");
+    history.replaceState(null,"",u.pathname+(u.search||"")+u.hash);
+  }
+}catch(e){}
+
 /* ═══════════════════ CATEGORY DRAWER (left slide-in) ═══════════════════ */
 function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
   const go=(to)=>{ onClose&&onClose(); nav&&nav(to); };
+  const [refreshing,setRefreshing]=useState(false);
   const COMPANY=[{label:"About Us",to:"about"},{label:"Care Guides",to:"guides"},{label:"Request a Product",to:"request"},{label:"Track My Orders",to:"orders"}];
   const POLICIES=[{label:"Live Guarantee",to:"policy-guarantee"},{label:"Returns & Refunds",to:"policy-returns"},{label:"Terms & Conditions",to:"policy-terms"},{label:"Privacy Policy",to:"policy-privacy"},{label:"Contact Us",to:"about"}];
   return(
@@ -5817,6 +5849,18 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
               </div>
             </div>
           )}
+          {/* Dedicated refresh — for a device stuck on an old build or a stale catalogue */}
+          <div style={{marginTop:16,borderTop:`1px solid ${C.border}`,paddingTop:14}}>
+            <button className="press" onClick={()=>{ if(refreshing)return; setRefreshing(true); forceRefresh(); }} disabled={refreshing}
+              style={{display:"flex",alignItems:"center",gap:11,width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:13,padding:"12px",cursor:refreshing?"default":"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+              <span style={{fontSize:20,width:26,textAlign:"center",flexShrink:0}}>{refreshing?"⏳":"🔄"}</span>
+              <span style={{minWidth:0}}>
+                <span style={{display:"block",fontSize:13.5,fontWeight:800,color:C.text}}>{refreshing?"Refreshing…":"Refresh app"}</span>
+                <span style={{display:"block",fontSize:11,color:C.textSub,marginTop:1,lineHeight:1.35}}>Clear the cache and reload the latest products &amp; prices</span>
+              </span>
+            </button>
+            <div style={{fontSize:10,color:C.textSub,textAlign:"center",marginTop:7,letterSpacing:.4}}>Build {APP_BUILD}</div>
+          </div>
           {nav&&(
             <div style={{marginTop:18,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
               <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",marginBottom:4}}>Company</div>
