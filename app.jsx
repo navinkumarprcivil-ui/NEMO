@@ -2277,8 +2277,12 @@ function requestNotifPerm(cb){
   if(Notification.permission==="granted"){cb&&cb(true);return;}
   Notification.requestPermission().then(p=>cb&&cb(p==="granted"));
 }
-function sendLocalNotif(title, body, icon="assets/nemo-logo.png"){
+/* `channel` lets a caller respect the customer's own switch for that kind of alert, not just
+   the browser permission — "guides" is the care-guide toggle in GuideNotifBtn. Left empty,
+   this behaves exactly as before. */
+function sendLocalNotif(title, body, icon="assets/nemo-logo.png", channel=""){
   if(!("Notification"in window)||Notification.permission!=="granted")return;
+  if(channel==="guides"&&!guideNotifOn())return;
   try{ new Notification(title,{body,icon}); }catch(e){}
 }
 async function googleSignIn(){
@@ -3225,7 +3229,10 @@ table.kv td.v{color:#1f2733;font-weight:700}
 .sigrole{border-top:1px solid #99a7bd;padding-top:5px;font-size:11px;font-weight:700;color:#1f2733}
 .sigauto{font-size:8.5px;color:#7d8a9c;margin-top:2px;letter-spacing:.2px}
 .fitwrap{transform-origin:top left}
-body.fit{overflow-x:hidden}
+/* Only while fitted. "Actual size" keeps the fit class too, so this used to clip the sheet
+   horizontally in exactly the mode whose whole point is scrolling across a full-width bill —
+   which is why the invoice number and date block at the top right could not be reached. */
+body.fit:not(.actual){overflow-x:hidden}
 body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!important}
 .fitbtn{position:fixed;right:12px;bottom:12px;z-index:50;background:#2f4b7c;color:#fff;border:none;border-radius:99px;padding:10px 18px;font-size:12.5px;font-weight:700;box-shadow:0 6px 18px rgba(31,56,100,.35);cursor:pointer;display:none}
 @media(max-width:820px){.fitbtn{display:inline-block}body{padding:0}}
@@ -3318,6 +3325,12 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
        that has not settled after a rotation), and scaling against it leaves the
        right edge of the bill off the screen. */
     var vv=window.visualViewport;
+    /* ...but only at scale 1. Pinch-zooming fires visualViewport resize, and the width it
+       reports SHRINKS as the reader zooms in — so re-fitting here scaled the sheet down by
+       exactly as much as they had just magnified it. The bill fought every pinch and ended
+       up unreadable. While they are zoomed in, leave the sheet exactly as it is; the next
+       fit happens when they zoom back out or rotate. */
+    if(vv && vv.scale > 1.01) return;
     var avail=Math.min(vv&&vv.width?vv.width:Infinity, document.documentElement.clientWidth)||780;
     wrap.style.width="780px";
     var scale=Math.min(1, avail/780);
@@ -4348,19 +4361,42 @@ function RestockBtn({product,user,restockSet,onSubscribe}){
   );
 }
 
-/* ═══════════════════ CARE GUIDE NOTIFICATION BUTTON ═══════════════════ */
+/* ═══════════════════ CARE GUIDE NOTIFICATION TOGGLE ═══════════════════ */
+/* Browser permission is one-way: a page can ask for it, but nothing on the page can hand it
+   back. So keying the UI off Notification.permission alone meant that the moment a customer
+   said yes, the control became the static words "Notifications on" with no way to change
+   their mind — permanently, since clearing it requires digging through browser site settings.
+   The switch the customer actually operates is kept here instead, with the browser permission
+   as a prerequisite for turning it ON. Granted-but-off is then a normal, reversible state. */
+const GUIDE_NOTIF_KEY="nemo-guide-notif";
+function guideNotifOn(){ try{ return localStorage.getItem(GUIDE_NOTIF_KEY)==="1"; }catch(e){ return false; } }
+function setGuideNotifPref(on){ try{ localStorage.setItem(GUIDE_NOTIF_KEY,on?"1":"0"); }catch(e){} }
 function GuideNotifBtn(){
   const [perm,setPerm]=useState(()=>typeof Notification!=="undefined"?Notification.permission:"default");
-  if(perm==="granted")return(
-    <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.success,fontWeight:600}}>
-      <span>🔔</span> Notifications on
+  const [on,setOn]=useState(guideNotifOn);
+  const active = on && perm==="granted";
+  const apply=(v)=>{ setOn(v); setGuideNotifPref(v); };
+  const toggle=()=>{
+    if(active){ apply(false); return; }              // turning OFF never needs permission
+    if(perm==="granted"){ apply(true); return; }     // already allowed — just switch back on
+    requestNotifPerm(ok=>{ setPerm(ok?"granted":"denied"); apply(ok); });
+  };
+  // Blocked at the browser level: say so rather than offering a switch that cannot move.
+  if(perm==="denied") return(
+    <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.textSub,fontWeight:600}}>
+      <span>🔕</span> Notifications blocked in your browser settings
     </div>
   );
-  if(perm==="denied")return null;
   return(
-    <button className="press" onClick={()=>requestNotifPerm(ok=>setPerm(ok?"granted":"denied"))}
-      style={{display:"flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-      🔔 Notify me of new guides
+    <button className="press" onClick={toggle} role="switch" aria-checked={active}
+      aria-label={active?"Turn off new-guide notifications":"Turn on new-guide notifications"}
+      style={{display:"flex",alignItems:"center",gap:8,background:active?"#dcfce7":C.accentLight,border:`1px solid ${active?"#86efac":C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:active?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+      <span>{active?"🔔":"🔕"}</span>
+      <span>{active?"New-guide alerts on":"Notify me of new guides"}</span>
+      {/* A visible track, so it reads as something that can be switched back */}
+      <span style={{width:26,height:15,borderRadius:99,background:active?"#22c55e":"#cbd5e1",position:"relative",flexShrink:0,transition:"background .2s ease"}}>
+        <span style={{position:"absolute",top:2,left:active?13:2,width:11,height:11,borderRadius:"50%",background:"#fff",transition:"left .2s ease"}}/>
+      </span>
     </button>
   );
 }
@@ -5810,7 +5846,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v87";
+const APP_BUILD = "v88";
 async function forceRefresh(){
   try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
@@ -8222,11 +8258,25 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     setPlacing(false);
   };
 
+  /* Two things went wrong with a mistyped mobile number. Nothing stopped an 11th digit being
+     typed in the first place; and once validate() had flagged the field, the message stayed
+     on screen while the customer fixed it — errs was only ever recomputed by validate(), so a
+     corrected number still read "Valid 10-digit number required" until Continue was pressed
+     again, which looks like the form rejecting a number that is now perfectly good.
+     Capping the length stops the bad input, and clearing the field's error as it is edited
+     makes the message track what is actually in the box. */
+  const FIELD_MAX={phone:10,whatsapp:10,pincode:6};
   const inp=(label,key,type="text",ph="",half=false,opt=false)=>(
     <div style={{flex:half?"1":"auto",minWidth:half?"0":"auto",marginBottom:14}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>{label}{opt&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}> (optional)</span>}</div>
       <input ref={el=>{ if(el) fieldRefs.current[key]=el; }} type={type} value={addr[key]}
-        onChange={e=>{ f(key,e.target.value); if(errFocus===key) setErrFocus(""); }} placeholder={ph}
+        inputMode={FIELD_MAX[key]?"numeric":undefined} maxLength={FIELD_MAX[key]}
+        onChange={e=>{
+          const v=FIELD_MAX[key]?e.target.value.replace(/\D/g,"").slice(0,FIELD_MAX[key]):e.target.value;
+          f(key,v);
+          if(errs[key]) setErrs(p=>{ const n={...p}; delete n[key]; return n; });
+          if(errFocus===key) setErrFocus("");
+        }} placeholder={ph}
         style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs[key]?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",
           boxShadow:errFocus===key?"0 0 0 4px rgba(239,68,68,.20)":"none",transition:"box-shadow .2s ease"}}/>
       {errs[key]&&<div style={{fontSize:11,color:C.danger,marginTop:4,fontWeight:600}}>{errs[key]}</div>}
