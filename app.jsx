@@ -2557,6 +2557,99 @@ async function googleSignIn(){
   const u=res.user;
   return { name:u.displayName||"Customer", email:u.email||"", phone:normalizePhone(u.phoneNumber||""), uid:u.uid, photoURL:u.photoURL||"", method:"google", loginAt:new Date().toISOString() };
 }
+/* ═══════════════════ PAYMENT GATEWAY (Razorpay) ═══════════════════
+   The store ships with the manual flow — pay by UPI, send a screenshot, the owner
+   verifies it by hand — and switches itself to the gateway the moment the keys
+   exist in the server environment. Nothing here needs editing to make that happen:
+   /api/pay-create answers whether it is configured, and this asks once per load.
+
+   Everything that matters is decided on the server. This code opens a payment and
+   then waits; it never tells the app an order was paid. That word comes from
+   Razorpay's signed webhook (api/pay-webhook.js), lands on the order in the
+   database, and reaches the customer through the live order listener they already
+   have. So a closed tab, a lost connection or a tampered client changes nothing
+   about whether an order is confirmed. */
+let PAY_GATEWAY = { ready:false, checked:false };
+async function payGatewayStatus(){
+  if(PAY_GATEWAY.checked) return PAY_GATEWAY;
+  PAY_GATEWAY.checked = true;
+  try{
+    const r = await withTimeout(fetch("/api/pay-create",{method:"GET"}), 5000, null);
+    if(r && r.ok){ const j = await r.json(); PAY_GATEWAY.ready = !!j.ready; }
+  }catch(e){ /* no gateway reachable — the manual flow stands */ }
+  return PAY_GATEWAY;
+}
+/* Razorpay's own script, fetched only when a payment is actually opened — an
+   unconfigured store and every non-checkout page pay nothing for it. */
+let RZP_SCRIPT=null;
+function loadRazorpayScript(){
+  if(RZP_SCRIPT) return RZP_SCRIPT;
+  RZP_SCRIPT = new Promise((resolve,reject)=>{
+    if(typeof window!=="undefined" && window.Razorpay) return resolve(true);
+    const s=document.createElement("script");
+    s.src="https://checkout.razorpay.com/v1/checkout.js"; s.async=true;
+    s.onload=()=>resolve(true);
+    s.onerror=()=>{ RZP_SCRIPT=null; reject(new Error("checkout-script-failed")); };
+    document.head.appendChild(s);
+  });
+  return RZP_SCRIPT;
+}
+/**
+ * Open the gateway for an order that is already in the database.
+ *
+ * Resolves "submitted" once the customer has completed Razorpay's flow — NOT
+ * "paid". Confirmation is the webhook's job. Rejects with "dismissed" if they
+ * close the sheet, which leaves the order exactly as it was: still awaiting
+ * payment, still holding its stock until the ten-minute window runs out.
+ */
+async function payWithGateway(order, settings={}){
+  const res = await fetch("/api/pay-create",{
+    method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify({ userUid: order.userUid, orderId: order.id }),
+  });
+  if(!res.ok){
+    const j = await res.json().catch(()=>({}));
+    throw new Error(j.error||"create-failed");
+  }
+  const cfg = await res.json();
+  await loadRazorpayScript();
+  return new Promise((resolve,reject)=>{
+    const rzp = new window.Razorpay({
+      key: cfg.keyId,
+      order_id: cfg.razorpayOrderId,
+      amount: cfg.amount,
+      currency: cfg.currency||"INR",
+      name: settings.legalName || (STORE_NAME+" Aqua Store"),
+      description: "Order "+(cfg.orderNo||""),
+      image: settings.storeLogo || undefined,
+      prefill: { name: cfg.name||"", email: cfg.email||"", contact: cfg.contact||"" },
+      theme: { color: "#0ea5e9" },
+      /* Razorpay hands back a payment id and its own signature here. Both are
+         deliberately ignored: the same values arrive server-side on the webhook,
+         where the signature is checked against a secret this page never holds. */
+      handler: ()=>resolve("submitted"),
+      modal: { ondismiss: ()=>reject(new Error("dismissed")) },
+    });
+    rzp.on("payment.failed", (e)=>reject(new Error(e?.error?.description||"payment-failed")));
+    rzp.open();
+  });
+}
+/** Admin-only: send a refund back through the gateway. Authorised by the admin's
+    Firebase ID token, which the server verifies — the panel password never leaves
+    this device and could not be checked there anyway. */
+async function refundViaGateway(order, amount, reason){
+  if(!FB_OK||!FB_AUTH||!FB_AUTH.currentUser) throw new Error("sign-in-required");
+  const token = await FB_AUTH.currentUser.getIdToken();
+  const r = await fetch("/api/pay-refund",{
+    method:"POST",
+    headers:{ "content-type":"application/json", authorization:"Bearer "+token },
+    body: JSON.stringify({ userUid: order.userUid, orderId: order.id, amount, reason }),
+  });
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||"refund-failed");
+  return j;
+}
+
 function googleUserFromCred(u){
   return { name:u.displayName||"Customer", email:u.email||"", phone:normalizePhone(u.phoneNumber||""), uid:u.uid, photoURL:u.photoURL||"", method:"google", loginAt:new Date().toISOString() };
 }
@@ -8114,6 +8207,29 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
   const [busy,setBusy]=useState(false);
   const [sentWA,setSentWA]=useState(false);
   const [now,setNow]=useState(Date.now());
+  /* Which checkout this order gets. Asked once, of the server — the store flips to
+     the gateway when the keys are in the environment, without a rebuild. */
+  const [gatewayOn,setGatewayOn]=useState(PAY_GATEWAY.ready);
+  const [payBusy,setPayBusy]=useState(false);
+  const [payNote,setPayNote]=useState("");
+  useEffect(()=>{ let live=true; payGatewayStatus().then(s=>{ if(live) setGatewayOn(s.ready); }); return()=>{live=false;}; },[]);
+  const payNow=async()=>{
+    setPayBusy(true); setPayNote("");
+    try{
+      await payWithGateway(order, settings);
+      /* Razorpay has taken the payment; the order is not confirmed until the
+         webhook says so, which is usually a second or two. Say exactly that
+         rather than claiming success this page cannot verify. */
+      setPayNote("✓ Payment received — confirming your order…");
+    }catch(e){
+      const m=String(e?.message||"");
+      if(m==="dismissed") setPayNote("");                       // they closed it; nothing has changed
+      else if(m==="order-not-payable") setPayNote("⚠ This order has already been paid or cancelled.");
+      else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote(""); } // fall back to the manual flow
+      else if(m==="checkout-script-failed") setPayNote("⚠ Couldn't load the payment window — check your connection and try again.");
+      else setPayNote("⚠ Payment didn't go through. Nothing has been charged — please try again.");
+    }finally{ setPayBusy(false); }
+  };
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const deadline=order.paymentDeadline||0;
   const msLeft=Math.max(0,deadline-now);
@@ -8172,7 +8288,25 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
           <div style={{fontSize:11.5,color:C.textSub,marginTop:2}}>Order {order.orderNo}</div>
         </div>
 
-        {settings.upiId?(
+        {/* ── Gateway path ──────────────────────────────────────────────────────
+            Present only once the server holds keys. One button, and then nothing
+            for the customer to do: no reference to copy out of their bank app, no
+            screenshot, no waiting a day or two for someone to look at it. The
+            order confirms itself when Razorpay's webhook lands, which reaches this
+            screen through the live order listener. */}
+        {gatewayOn?(
+          <>
+            <button className="press" onClick={payNow} disabled={payBusy||expired}
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:(payBusy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              <span style={{fontSize:18}}>💳</span>
+              {payBusy?"Opening secure payment…":expired?"Payment window closed":`Pay ₹${grand} securely`}
+            </button>
+            <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:9,lineHeight:1.5}}>
+              UPI · Card · Netbanking · Wallets — your order is confirmed automatically the moment payment succeeds.
+            </div>
+            {payNote&&<div style={{fontSize:12,fontWeight:700,marginTop:10,textAlign:"center",lineHeight:1.5,color:payNote[0]==="⚠"?C.danger:C.success}}>{payNote}</div>}
+          </>
+        ):settings.upiId?(
           <>
             <a className="press" href={`upi://pay?pa=${encodeURIComponent(settings.upiId)}&pn=${encodeURIComponent(settings.upiName||STORE_NAME)}&am=${grand}&cu=INR&tn=${encodeURIComponent(order.orderNo||"")}`}
               style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:C.primary,color:"white",borderRadius:14,padding:"14px",fontSize:14.5,fontWeight:700,textDecoration:"none",marginBottom:10}}>
@@ -8186,14 +8320,16 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
         ):(
           <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:"#9a3412",lineHeight:1.5}}>⚠ Store UPI not set yet. Please contact us on WhatsApp to pay.</div>
         )}
-        {settings.razorpayLink&&(
+        {!gatewayOn&&settings.razorpayLink&&(
           <a className="press" href={settings.razorpayLink} target="_blank" rel="noopener"
             style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#072654",color:"white",borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:700,textDecoration:"none",marginBottom:14}}>
             💳 Pay via Card / Netbanking
           </a>
         )}
 
-        {/* After paying — proof */}
+        {/* After paying — proof. The whole block is the manual flow: it exists to
+            get a human to check a screenshot, and the gateway confirms without one. */}
+        {!gatewayOn&&<>
         <div style={{height:1,background:C.border,margin:"4px 0 14px"}}/>
         <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>After paying, confirm here 👇</div>
         <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Enter your payment reference and attach a screenshot. We verify &amp; confirm your order within 1–2 days.</div>
@@ -8221,6 +8357,7 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
           style={{width:"100%",background:(busy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:6}}>
           {busy?"Submitting…":expired?"Payment window closed":"✓ Submit Payment & Confirm Order"}
         </button>
+        </>}
       </div>
     </div>
   );
@@ -10717,6 +10854,50 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
     }catch(err){ console.error("order update",err); showToast("Couldn't save — check your connection and try again","error"); }
     finally{ setSaving(false); }
   };
+  /* Gateway refund — one tap, money on its way back, no bank app and no typing a
+     UPI reference into the box below. Offered only for orders the gateway actually
+     collected: an order paid by manual UPI has no payment for Razorpay to reverse,
+     and the editor underneath stays for those. */
+  const [refundBusy,setRefundBusy]=useState(false);
+  const gatewayPaid=!!(o.gatewayPaymentId||(o.gateway==="razorpay"&&o.txnId));
+  const alreadyRefunded=o.paymentStatus==="Refunded";
+  const sendGatewayRefund=async()=>{
+    const full=Number(amtDue)||0;
+    const typed=window.prompt(`Refund how much to the customer?\n\nLeave as-is for the full ₹${full}. This goes back to the card or account they paid from — it cannot be undone.`, String(full));
+    if(typed===null) return;                      // cancelled the prompt
+    const amt=Number(typed);
+    if(!(amt>0)){ showToast("Enter an amount greater than zero","error"); return; }
+    setRefundBusy(true);
+    try{
+      const r=await refundViaGateway(o, amt, "Refund for order "+(o.orderNo||""));
+      showToast(`✓ ₹${r.amount} refund sent — the gateway settles it in 5–7 working days`);
+      // Mirror it onto the order the admin is looking at; the server has already
+      // written the authoritative record.
+      await onUpdateOrder({...o, refundId:r.refundId, refundedAmount:r.amount,
+        refundedAt:new Date().toISOString(),
+        ...(r.fullyRefunded?{paymentStatus:"Refunded"}:{}),
+        refund:{...(o.refund||{}), method:"gateway", amount:r.amount, ref:r.refundId, at:new Date().toISOString()},
+        updatedAt:new Date().toISOString()});
+    }catch(err){
+      const m=String(err?.message||"");
+      showToast(
+        m==="already-refunded" ? "This payment has already been refunded in full" :
+        m==="not-admin"        ? "Sign in with the admin Google account to send refunds" :
+        m==="sign-in-required" ? "Sign in with Google first — a refund needs a verified admin" :
+        m==="no-gateway-payment" ? "No gateway payment on this order — record the refund manually below" :
+        m==="gateway-not-configured" ? "Payment gateway isn't configured yet" :
+        "Refund failed — nothing was sent. Check the Razorpay dashboard before retrying","error");
+    }finally{ setRefundBusy(false); }
+  };
+  const gatewayRefundButton=()=>(!gatewayPaid?null:(
+    <div style={{marginBottom:12}}>
+      <button className="press" onClick={sendGatewayRefund} disabled={refundBusy||alreadyRefunded}
+        style={{width:"100%",background:alreadyRefunded?C.bg:"#0f766e",color:alreadyRefunded?C.textSub:"white",border:alreadyRefunded?`1px solid ${C.border}`:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:refundBusy?.7:1}}>
+        {alreadyRefunded?"✓ Refunded via gateway":refundBusy?"Sending refund…":`↩ Refund ₹${amtDue} via payment gateway`}
+      </button>
+      {!alreadyRefunded&&<div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.5,textAlign:"center"}}>Sends the money back to however they paid. Or record a manual refund below instead.</div>}
+    </div>
+  ));
   const refundFld={width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",boxSizing:"border-box"};
   const refundEditor=()=>(
     <div>
@@ -11318,6 +11499,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               {paidish?(
                 <>
                   <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:10}}>Refund of ₹{amtDue} is due to the customer:</div>
+                  {gatewayRefundButton()}
                   {refundEditor()}
                   <button className="press" onClick={saveRefund} disabled={saving}
                     style={{width:"100%",marginTop:12,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:saving?.7:1}}>
@@ -11336,6 +11518,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               {paidish?(
                 <>
                   <div style={{fontSize:12,fontWeight:700,color:"#b91c1c",marginBottom:8}}>₹{amtDue} was collected — record the refund:</div>
+                  {gatewayRefundButton()}
                   {refundEditor()}
                 </>
               ):(
