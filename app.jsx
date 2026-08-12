@@ -2139,14 +2139,33 @@ function redeemPoints(uid, pts, redemptionId){
 const SHOWCASE_TTL = 24*60*60*1000; // photos auto-expire 24h AFTER admin approval (when expiresAt is set)
 function showcaseApproved(x){ return x && x.approved!==false; } // legacy items (no flag) count as approved
 function showcaseExpired(x, now){ const exp=Number(x&&x.expiresAt)||0; return exp>0 && now>exp; }
+/* Drop from the local copy anything the cloud no longer has. Only ids the cache already held are
+   kept, so this never grows into a full mirror of everybody's base64 photos. */
+async function pruneShowcaseCache(live){
+  try{
+    const r=await dbGet("nemo-showcase"); if(!r) return;
+    const arr=JSON.parse(r); if(!Array.isArray(arr)) return;
+    const ids=new Set((live||[]).map(x=>x&&x.id));
+    const kept=arr.filter(x=>x&&ids.has(x.id));
+    if(kept.length!==arr.length) await dbSet("nemo-showcase",JSON.stringify(kept));
+  }catch(e){}
+}
 async function loadShowcase(){
-  let arr=[];
-  if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("showcase").get(),6000); if(s){ const v=s.val(); if(v) arr=Object.values(v).filter(x=>x&&x.id); } }catch(e){} }
-  if(!arr.length){ const r=await dbGet("nemo-showcase"); if(r) arr=JSON.parse(r); }
+  let arr=[], fromCloud=false;
+  if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("showcase").get(),6000); if(s){ fromCloud=true; const v=s.val(); if(v) arr=Object.values(v).filter(x=>x&&x.id); } }catch(e){} }
+  /* The cloud is the authority on what is still posted — including when its answer is "nothing".
+     Falling back to the local copy whenever the cloud came back EMPTY resurrected photos the
+     admin had just deleted: the customer's own device still held their submission, so their home
+     page went on showing "awaiting approval" for a photo that no longer existed anywhere. The
+     local copy stands in only for a cloud read that did not happen (offline / timed out). */
+  if(!fromCloud){ const r=await dbGet("nemo-showcase"); if(r) try{ arr=JSON.parse(r); }catch(e){} }
   const now=Date.now();
   // Best-effort cleanup: delete expired entries from the cloud (rules permit deleting expired ones).
   if(FB_OK){ arr.filter(x=>showcaseExpired(x,now)).forEach(x=>{ try{ FB_DB.ref("showcase/"+x.id).remove(); }catch(e){} }); }
-  return arr.filter(x=>!showcaseExpired(x,now)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+  const live=arr.filter(x=>!showcaseExpired(x,now)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+  // Keep the offline copy honest too, so the next cold start can't revive a deleted photo either.
+  if(fromCloud) await pruneShowcaseCache(live);
+  return live;
 }
 async function addShowcasePhoto(item){
   await dbSet("nemo-showcase",JSON.stringify([item])); // local
@@ -2166,11 +2185,25 @@ async function deleteShowcasePhoto(id){
 }
 
 /* ── Testimonials — any signed-in customer can post one short note; public to all; admin can delete ── */
+/* Same as pruneShowcaseCache — a testimonial the admin deleted must not come back from this
+   browser's own copy of it. */
+async function pruneTestimonialCache(live){
+  try{
+    const r=await dbGet("nemo-testimonials"); if(!r) return;
+    const arr=JSON.parse(r); if(!Array.isArray(arr)) return;
+    const ids=new Set((live||[]).map(x=>x&&x.id));
+    const kept=arr.filter(x=>x&&ids.has(x.id));
+    if(kept.length!==arr.length) await dbSet("nemo-testimonials",JSON.stringify(kept));
+  }catch(e){}
+}
 async function loadTestimonials(){
-  let arr=[];
-  if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("testimonials").get(),6000); if(s){ const v=s.val(); if(v) arr=Object.values(v).filter(x=>x&&x.id); } }catch(e){} }
-  if(!arr.length){ const r=await dbGet("nemo-testimonials"); if(r) try{ arr=JSON.parse(r); }catch(e){} }
-  return arr.sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+  let arr=[], fromCloud=false;
+  if(FB_OK){ try{ const s=await withTimeout(FB_DB.ref("testimonials").get(),6000); if(s){ fromCloud=true; const v=s.val(); if(v) arr=Object.values(v).filter(x=>x&&x.id); } }catch(e){} }
+  // Cloud wins even when it comes back empty — see the note in loadShowcase.
+  if(!fromCloud){ const r=await dbGet("nemo-testimonials"); if(r) try{ arr=JSON.parse(r); }catch(e){} }
+  const live=arr.sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+  if(fromCloud) await pruneTestimonialCache(live);
+  return live;
 }
 /* Testimonials are public text on the storefront, so they wait for the admin the same way tank
    photos do. Anything saved before moderation existed has no flag and stays visible. */
@@ -3120,6 +3153,17 @@ function generateInvoiceHTML(order, settings, opts){
   // up entirely of goods sold without claiming GST is a BILL OF SUPPLY.
   const anyTaxedDoc=orderTaxLines(o,s).anyTaxed;
   const docLabel=cn?"CREDIT NOTE":(gstin?(paidFlag?(anyTaxedDoc?"TAX INVOICE":"BILL OF SUPPLY"):"PROFORMA INVOICE"):"INVOICE");
+  // A proforma is a quote for payment, not a tax document — it must not carry the tax-invoice
+  // certification, and the buyer must not be able to claim input credit against it.
+  const proforma=!cn&&docLabel==="PROFORMA INVOICE";
+  const docWord=cn?"credit note":docLabel.toLowerCase();
+  /* Policy text is typed into a settings textarea, so it arrives with real line breaks and "* "
+     bullets. Escaped straight into one <p> it printed as an unreadable wall; keep the author's
+     lines and turn the asterisks into actual bullets. */
+  const policyHTML=(t)=>String(t||"").replace(/\s\*\s+/g,"\n* ").split(/\r?\n/).map(l=>l.trim()).filter(Boolean)
+    .map(l=>/^[*•-]\s+/.test(l)
+      ? `<span style="display:block;padding-left:14px;text-indent:-9px">• ${E(l.replace(/^[*•-]\s+/,""))}</span>`
+      : `<span style="display:block;margin-top:3px">${E(l)}</span>`).join("");
   // Per-line MRP (pre-discount unit price) and total line discount, for the price/discount columns.
   const unitMrp=(it)=>Math.round(Number(it.mrp||it.origPrice||(Number(it.discountPct)>0?Number(it.price||0)/(1-Number(it.discountPct)/100):it.price||0)));
   const lineDisc=(it)=>Math.max(0,Math.round((unitMrp(it)-Number(it.price||0))*Number(it.qty||0)));
@@ -3232,17 +3276,18 @@ function generateInvoiceHTML(order, settings, opts){
   ].filter(Boolean);
   const bankHtml=bankRows.length?`<div class="infoblk"><div class="ih">${cn?"REFUND / BANK DETAILS":"BANK &amp; PAYMENT DETAILS"}</div><table class="kv">${bankRows.map(([k,v])=>`<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`).join("")}</table></div>`:"";
 
-  /* Authorised signature. Indian tax invoices carry one between "For <firm>" and
-     "Authorised Signatory"; the note underneath says plainly that it was affixed
-     by the system rather than signed by hand, which is what keeps an auto-signed
-     bill honest. Upload it in Admin → Settings; with none set the ruled space is
-     still printed, so the sheet can be signed by hand. */
+  /* Authorised signature. With a signature uploaded in Admin → Settings the sheet carries it
+     between "For <firm>" and "Authorised Signatory", and the note underneath says plainly that
+     the system affixed it rather than a hand — which is what keeps an auto-signed bill honest.
+     With none set there is nothing to sign the sheet BY: printing a ruled pad and the words
+     "Authorized Signatory" over empty space just promises a signature that never arrives, so
+     the space says instead that the document is generated and needs no signature. */
   const sigImg=s.invoiceSignature||"";
   const sigHtml=`<div class="sigbox">
     <div class="sigfor">For ${storeName}</div>
-    ${sigImg?`<img class="sigimg" src="${sigImg}" alt=""/>`:`<div class="sigpad"></div>`}
-    <div class="sigrole">Authorized Signatory</div>
-    <div class="sigauto">This is Auto-Generated</div>
+    ${sigImg
+      ? `<img class="sigimg" src="${sigImg}" alt=""/><div class="sigrole">Authorized Signatory</div><div class="sigauto">This is Auto-Generated</div>`
+      : `<div class="signosig">The ${docWord} is auto generated &amp; does not require sign</div>`}
   </div>`;
 
   const itemRows=items.map((it,i)=>`<tr>
@@ -3318,7 +3363,6 @@ table.kv td{font-size:11.5px;padding:5px 10px;vertical-align:top}
 table.kv td.k{color:#7a8694;font-weight:600;white-space:nowrap;width:44%}
 table.kv td.v{color:#1f2733;font-weight:700}
 .payrow{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-top:16px}
-.sign{font-size:12px;color:#1f2733;text-align:center}.sign .sgap{height:44px}
 .paybox{margin-top:18px;text-align:center}
 .paybox a{display:inline-block;background:#16834a;color:#fff;text-decoration:none;border-radius:6px;padding:11px 26px;font-size:13px;font-weight:800}
 /* On a phone the invoice keeps its A4 proportions and is scaled down to the screen width
@@ -3328,9 +3372,10 @@ table.kv td.v{color:#1f2733;font-weight:700}
 .sigbox{margin-top:22px;margin-left:auto;width:250px;text-align:center;page-break-inside:avoid}
 .sigfor{font-size:11.5px;font-weight:700;color:#1f3864;margin-bottom:2px}
 .sigimg{display:block;margin:0 auto;max-width:190px;max-height:66px;object-fit:contain}
-.sigpad{height:56px}
 .sigrole{border-top:1px solid #99a7bd;padding-top:5px;font-size:11px;font-weight:700;color:#1f2733}
 .sigauto{font-size:8.5px;color:#7d8a9c;margin-top:2px;letter-spacing:.2px}
+/* No signature on file: the space carries the reason instead of a rule nobody signs. */
+.signosig{margin-top:26px;font-size:10px;font-weight:600;line-height:1.45;color:#7a8694}
 .fitwrap{transform-origin:top left}
 /* Only while fitted. "Actual size" keeps the fit class too, so this used to clip the sheet
    horizontally in exactly the mode whose whole point is scrolling across a full-width bill —
@@ -3353,7 +3398,9 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
     </div>
     <div class="title">
       <div class="big">${docLabel}</div>
-      ${cn?"":`<div class="copy">ORIGINAL FOR RECIPIENT</div>`}
+      ${/* "ORIGINAL FOR RECIPIENT" is the Rule 48 copy marking of a tax invoice — a proforma
+             and a credit note have no such triplicate, so neither carries it. */
+        (cn||proforma)?"":`<div class="copy">ORIGINAL FOR RECIPIENT</div>`}
       <table class="meta">
         <tr><td class="k">${cn?"CREDIT NOTE #":"INVOICE #"}</td><td>${invNo}</td></tr>
         <tr><td class="k">${cn?"DATE":"INVOICE DATE"}</td><td>${dateStr}</td></tr>
@@ -3400,18 +3447,23 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
   ${(shipmentHtml||bankHtml)?`<div class="blkrow">${shipmentHtml}${bankHtml}</div>`:""}
   ${(!cn&&!isPaid&&payLink)?`<div class="np paybox"><a href="${E(payLink)}" target="_blank" rel="noopener">💳 Pay ₹${fmt(grand)} securely online →</a></div>`:""}
   <div class="payrow">
+    ${/* The signature lives in sigHtml below — this row used to print a second "For <firm> /
+           Authorised Signatory" of its own, so every sheet carried the block twice. */""}
     <div class="note">${cn?`<span class="pay paid">CREDIT NOTE</span>`:`<span class="pay ${isPaid?"paid":"due"}">${isPaid?"PAID":"PAYMENT DUE"}</span>${o.txnId?` <span style="font-size:11px;color:#7a8694">Txn/Ref: ${E(o.txnId)}</span>`:""}`}</div>
-    <div class="sign">For <b>${storeName}</b><div class="sgap"></div>Authorised Signatory</div>
   </div>
   <div class="thanks">${cn?"Credit note issued against returned goods 🧾":"Thank you for your business! 🐠"}</div>
   <div class="foot">
     ${cn?`<p>This <b>credit note</b> reverses the GST charged on the goods returned against Tax Invoice <b>${E(o.againstInvoice||"—")}</b>. All amounts are in INR and inclusive of GST; the tax shown above is credited back / adjusted against output tax liability under Section 34 of the CGST Act, 2017.</p>`:`<p>${hasGst?"All amounts are in INR and inclusive of GST. Tax is payable on reverse charge basis: No.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this document is issued as a Bill of Supply."}</p>`}
-    ${hasGst?`<p>We certify that our registration under the Goods and Services Tax Act, 2017 is in force and that this ${cn?"credit note relates to a genuine sales return":"tax invoice reflects the goods actually supplied"}. ${pan?"PAN: "+pan+". ":""}GSTIN: ${gstin}.</p>`:""}
+    ${hasGst?`<p>We certify that our registration under the Goods and Services Tax Act, 2017 is in force and that this ${cn?"credit note relates to a genuine sales return":proforma?"document lists the goods offered for supply":"tax invoice reflects the goods actually supplied"}. ${pan?"PAN: "+pan+". ":""}GSTIN: ${gstin}.</p>`:""}
+    ${proforma?`<p><b>This is a proforma invoice, not a tax invoice.</b> It is issued so the order can be paid for; the GST shown above is the tax that will apply. No input tax credit may be claimed against this document — a tax invoice is issued once payment is received.</p>`:""}
     ${o.liveGuarantee?`<p><b>Live Arrival Guarantee</b> applies to this order. Report any Dead-on-Arrival with a continuous unboxing video on WhatsApp ${storeWA} within 2 hours of delivery.</p>`:""}
     ${cn?"":`<p><b>Declaration:</b> We declare that this ${docLabel.toLowerCase()} shows the actual price of the goods described and that all particulars are true and correct. Goods once sold are subject to our published Return &amp; Replacement Policy.</p>`}
-    <p>For any questions about this invoice, contact <b>${storeName}</b> on WhatsApp ${storeWA}${storeEmail?` or ${storeEmail}`:""}${storeSite?` · ${storeSite}`:""}.</p>
+    <p>For any questions about this ${docWord}, contact <b>${storeName}</b> on WhatsApp ${storeWA}${storeEmail?` or ${storeEmail}`:""}${storeSite?` · ${storeSite}`:""}.</p>
     <p style="font-size:10px">E. &amp; O.E. Subject to ${E(s.jurisdiction||"India")} jurisdiction.</p>
-    <p style="font-size:10px"><b>Returns &amp; Refunds:</b> ${s.returnPolicy?E(s.returnPolicy):"Live fish are covered only under our Live Arrival Guarantee (report DOA with a continuous unboxing video within 2 hours of delivery). Being perishable livestock, fish are otherwise non-returnable. Dry goods &amp; accessories may be returned within 7 days if unused and in original packaging; approved refunds are issued to the original payment method or as store credit within 5–7 working days."}</p>
+    ${/* One source of truth for the window. The invoice used to carry its own fallback copy
+           promising 7 days for accessories while the settings default said 3 — a printed
+           promise the store had no intention of honouring if the setting was ever cleared. */""}
+    <p style="font-size:10px"><b>Returns &amp; Refunds:</b> ${policyHTML(s.returnPolicy||DEFAULT_SETTINGS.returnPolicy)}</p>
   </div>
   ${sigHtml}
   <div class="np" style="text-align:right;margin-top:18px"><button onclick="window.print()" style="background:#2f4b7c;color:#fff;border:none;border-radius:6px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save as PDF</button></div>
@@ -11246,6 +11298,24 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [stockSeen,setStockSeen]=useState(()=>{ try{ return JSON.parse(localStorage.getItem("nemo-stock-seen")||"{}"); }catch{ return {}; } });
   const markStockSeen=(p)=>{ setStockSeen(prev=>{ const next={...prev,[p.id]:(p.stockCount??DEFAULT_STOCK)}; try{ localStorage.setItem("nemo-stock-seen",JSON.stringify(next)); }catch(e){} return next; }); };
   const needsStockAttn=(p)=>{ if(p.comingSoon) return false; const s=p.stockCount??DEFAULT_STOCK; return s<=3 && stockSeen[p.id]!==s; };
+  /* Requests badge — the same "seen" idea as low stock. The badge used to count every request
+     that had ever arrived, so it sat on the tab for good: opening Requests changed nothing and
+     the only way to clear it was to delete the requests. A notification badge means "there is
+     something you haven't looked at", so opening the tab clears it and only a genuinely new
+     request brings it back. */
+  const [reqSeen,setReqSeen]=useState(()=>{ try{ const v=JSON.parse(localStorage.getItem("nemo-requests-seen")||"[]"); return Array.isArray(v)?v:[]; }catch{ return []; } });
+  const unseenRequests=requests.filter(r=>r&&r.id&&!reqSeen.includes(r.id));
+  // Opening the tab marks everything currently listed as seen, and forgets ids that are gone so
+  // the stored list can't grow without bound.
+  useEffect(()=>{
+    if(tab!=="requests") return;
+    const ids=requests.map(r=>r&&r.id).filter(Boolean);
+    setReqSeen(prev=>{
+      if(ids.length===prev.length && ids.every(id=>prev.includes(id))) return prev;
+      try{ localStorage.setItem("nemo-requests-seen",JSON.stringify(ids)); }catch(e){}
+      return ids;
+    });
+  },[tab,requests]);
   const openProduct=(p)=>{ const gm=getProductMedia(p,mediaCache); markStockSeen(p); setEditProduct({...p,_mediaImgs:gm.images,_mediaVid:gm.video}); setTab("form"); };
   const openNewProduct=()=>{ setEditProduct(null); setTab("form"); };
   const [viewOrder,setViewOrder]=useState(null);
@@ -11394,6 +11464,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const lowStockCount=products.filter(p=>{const s=p.stockCount??DEFAULT_STOCK; return s>0&&s<=3;}).length; // running low (1–3 left)
   const attnProds=products.filter(needsStockAttn);          // low/out AND not yet acknowledged by admin
   const stockAlertCount=attnProds.length;
+  /* Tank photos and testimonials wait for approval inside Settings, where nothing announced them
+     — a customer could sit on "awaiting approval" for days simply because the admin had no reason
+     to scroll down there. Badge the tab while a moderation queue is non-empty. Unlike Requests
+     this is a real backlog, not an unread count, so it clears by approving/rejecting, not by
+     looking. */
+  const nowMod=Date.now();
+  const pendingModeration=showcase.filter(s=>!showcaseApproved(s)&&!showcaseExpired(s,nowMod)).length
+                         +testimonials.filter(t=>!testimonialApproved(t)).length;
   const totalReviews=Object.values(allReviews).reduce((s,r)=>s+r.length,0);
   const stats=[{l:"Products",v:products.length,i:"📦"},{l:"Orders",v:orders.length,i:"🛒"},{l:"New",v:orders.filter(o=>o.status==="Placed").length,i:"🔔"},{l:"Reviews",v:totalReviews||"—",i:"⭐"}];
 
@@ -11404,7 +11482,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:11,color:"rgba(255,255,255,.65)",fontWeight:600,letterSpacing:1,marginBottom:4}}>ADMIN — {STORE_NAME.toUpperCase()}</div>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{tab==="products"?"Products":tab==="dashboard"?"Dashboard":tab==="reviews"?"Reviews":tab==="requests"?"Requests":"Orders"}</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:"white"}}>{/* Every tab names itself. The old chain listed five and fell through to "Orders", so
+                Wallets, Guides and Settings all sat under an "Orders" heading. */}
+              {({products:"Products",dashboard:"Dashboard",reviews:"Reviews",requests:"Requests",wallets:"Wallets",guides:"Guides",settings:"Settings",form:editProduct?"Edit Product":"New Product",orderDetail:"Order"}[tab])||"Orders"}</div>
           </div>
           <div style={{display:"flex",gap:8,flexShrink:0}}>
             {/* Analytics sits next to Store because it is the same kind of thing:
@@ -11446,7 +11526,8 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               {t==="orders"?"📋 Orders":t==="dashboard"?"📊 Dashboard":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
               {t==="orders"&&newOrderCount>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{newOrderCount}</span>}
               {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":attnProds.some(p=>(p.stockCount??DEFAULT_STOCK)<=0)?"#dc2626":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Products needing restock — tap Products to see which">{stockAlertCount}</span>}
-              {t==="requests"&&requests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{requests.length}</span>}
+              {t==="requests"&&unseenRequests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Product requests you haven't opened yet">{unseenRequests.length}</span>}
+              {t==="settings"&&pendingModeration>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Tank photos / testimonials waiting for your approval">{pendingModeration}</span>}
             </button>
           ))}
         </div>
@@ -15286,12 +15367,14 @@ function NemoStore(){
       let arr=v?Object.values(v).filter(x=>x&&x.id):[];
       arr=arr.filter(x=>!showcaseExpired(x,now)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
       setShowcase(arr);
+      pruneShowcaseCache(arr); // this device's copy must not outlive what the admin deleted
     },()=>{ loadShowcase().then(sc=>{ if(sc&&sc.length) setShowcase(sc); }); });
     const tsRef=FB_DB.ref("testimonials");
     const tsCb=tsRef.on("value",s=>{
       const v=s&&s.val();
       const arr=v?Object.values(v).filter(x=>x&&x.id).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")):[];
       setTestimonials(arr);
+      pruneTestimonialCache(arr);
     },()=>{ loadTestimonials().then(ts=>{ if(ts&&ts.length) setTestimonials(ts); }); });
     return ()=>{ try{scRef.off("value",scCb);}catch(e){} try{tsRef.off("value",tsCb);}catch(e){} };
   },[fbReady]);
