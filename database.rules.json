@@ -219,10 +219,7 @@
       ".read": true,
       "$id": {
         ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
-        ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))",
-        "approved": {
-          ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || newData.val() === false"
-        }
+        ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))"
       }
     },
 

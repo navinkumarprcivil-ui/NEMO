@@ -2205,16 +2205,9 @@ async function loadTestimonials(){
   if(fromCloud) await pruneTestimonialCache(live);
   return live;
 }
-/* Testimonials are public text on the storefront, so they wait for the admin the same way tank
-   photos do. Anything saved before moderation existed has no flag and stays visible. */
-function testimonialApproved(x){ return x && x.approved!==false; }
-async function approveTestimonial(item){
-  const updated={...item, approved:true, approvedAt:new Date().toISOString()};
-  if(FB_OK){ try{ await FB_DB.ref("testimonials/"+item.id).update({approved:true, approvedAt:updated.approvedAt}); }catch(e){} }
-  try{ const r=await dbGet("nemo-testimonials"); const arr=r?JSON.parse(r):[];
-    await dbSet("nemo-testimonials",JSON.stringify(arr.map(x=>x.id===item.id?updated:x))); }catch(e){}
-  return updated;
-}
+/* Testimonials publish the moment they are written — unlike tank photos, they do not wait on the
+   admin. The admin moderates after the fact by deleting anything that shouldn't be there.
+   New ones carry no `approved` field at all; older rows still have one, and it is ignored. */
 async function addTestimonial(t){
   let cloudOk=false;
   if(FB_OK){ try{ await FB_DB.ref("testimonials/"+t.id).set(t); cloudOk=true; }catch(e){ cloudOk=false; } }
@@ -4450,14 +4443,14 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
     setBusy(true); setNote("");
     const t={ id:"ts-"+Date.now()+"-"+Math.random().toString(36).slice(2,6),
       uid:userKey(user)||"", name:(user.name||"Customer").slice(0,40), text:body.slice(0,280),
-      rating:Number(rating)||5, createdAt:new Date().toISOString(), approved:false };
-    try{ await onSubmit(t); setText(""); setNote("🎉 Thanks! We'll publish it once we've had a look."); }
+      rating:Number(rating)||5, createdAt:new Date().toISOString() };
+    try{ await onSubmit(t); setText(""); setNote("🎉 Thanks — your testimonial is live!"); }
     catch(e){ setNote("⚠ Couldn't reach our server — please check your connection and try again."); }
     setBusy(false);
   };
-  // Only approved testimonials are shown publicly; the author still sees their own pending one.
-  const list=(testimonials||[]).filter(testimonialApproved).slice(0,12);
-  const minePending=!!(mine&&mine.approved===false);
+  // Every testimonial is public as soon as it is written. Rows left over from when this waited
+  // for approval are shown too — the store moderates by deleting, not by holding things back.
+  const list=(testimonials||[]).slice(0,12);
   if(!list.length && !user) return null;
   return(
     <div style={{marginBottom:26}}>
@@ -4483,9 +4476,7 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
       )}
       {user?(
         mine?(
-          minePending
-            ? <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#9a3412",fontWeight:700}}>⏳ Thanks, {(user.name||"").split(" ")[0]||"friend"}! Your testimonial is awaiting approval — it goes live once we've read it.</div>
-            : <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}!</div>
+          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}! It's live on our home page.</div>
         ):(
           <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:8}}>Share your experience</div>
@@ -11281,7 +11272,7 @@ function AdminExitConfirm({onStay,onLeave}){
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onApproveTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
@@ -11464,14 +11455,13 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const lowStockCount=products.filter(p=>{const s=p.stockCount??DEFAULT_STOCK; return s>0&&s<=3;}).length; // running low (1–3 left)
   const attnProds=products.filter(needsStockAttn);          // low/out AND not yet acknowledged by admin
   const stockAlertCount=attnProds.length;
-  /* Tank photos and testimonials wait for approval inside Settings, where nothing announced them
-     — a customer could sit on "awaiting approval" for days simply because the admin had no reason
-     to scroll down there. Badge the tab while a moderation queue is non-empty. Unlike Requests
-     this is a real backlog, not an unread count, so it clears by approving/rejecting, not by
-     looking. */
+  /* Tank photos wait for approval inside Settings, where nothing announced them — a customer
+     could sit on "awaiting approval" for days simply because the admin had no reason to scroll
+     down there. Badge the tab while photos are waiting. Unlike Requests this is a real backlog,
+     not an unread count, so it clears by approving/rejecting, not by looking. (Testimonials
+     publish themselves, so they are never in this queue.) */
   const nowMod=Date.now();
-  const pendingModeration=showcase.filter(s=>!showcaseApproved(s)&&!showcaseExpired(s,nowMod)).length
-                         +testimonials.filter(t=>!testimonialApproved(t)).length;
+  const pendingModeration=showcase.filter(s=>!showcaseApproved(s)&&!showcaseExpired(s,nowMod)).length;
   const totalReviews=Object.values(allReviews).reduce((s,r)=>s+r.length,0);
   const stats=[{l:"Products",v:products.length,i:"📦"},{l:"Orders",v:orders.length,i:"🛒"},{l:"New",v:orders.filter(o=>o.status==="Placed").length,i:"🔔"},{l:"Reviews",v:totalReviews||"—",i:"⭐"}];
 
@@ -12383,35 +12373,24 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <div style={{padding:"16px 16px 0"}}>
               <div style={{background:C.card,borderRadius:16,padding:"16px",border:`1px solid ${C.border}`}}>
                 <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:4}}>💬 Testimonials ({testimonials.length})</div>
-                <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Posted by signed-in customers. <b>Nothing goes on the home page until you approve it</b> — pending ones are listed first.</div>
+                <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Posted by signed-in customers and <b>published straight away</b> — newest first. Remove anything you don't want on the home page.</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {[...testimonials].sort((a,b)=>(testimonialApproved(a)?1:0)-(testimonialApproved(b)?1:0)).map(t=>{
-                    const pending=!testimonialApproved(t);
-                    return(
-                    <div key={t.id} style={{display:"flex",alignItems:"flex-start",gap:10,background:pending?"#fff7ed":C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${pending?"#fed7aa":C.border}`}}>
+                  {testimonials.map(t=>(
+                    <div key={t.id} style={{display:"flex",alignItems:"flex-start",gap:10,background:C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${C.border}`}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
                           <span style={{fontSize:12.5,fontWeight:800,color:C.text}}>{t.name||"Customer"}</span>
                           <span style={{fontSize:11,color:"#f59e0b"}}>{"★".repeat(t.rating||5)}</span>
-                          {pending&&<span style={{fontSize:9,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"2px 7px"}}>PENDING</span>}
+                          {t.createdAt&&<span style={{fontSize:10,color:C.textSub}}>{fmtDate(t.createdAt)}</span>}
                         </div>
                         <div style={{fontSize:12,color:C.textSub,lineHeight:1.4}}>{t.text}</div>
                       </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
-                        {pending&&(
-                          <button className="press" onClick={()=>onApproveTestimonial&&onApproveTestimonial(t)}
-                            style={{background:"#dcfce7",color:"#15803d",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                            ✓ Approve
-                          </button>
-                        )}
-                        <button className="press" onClick={()=>{ if(window.confirm(`Remove ${t.name||"this customer"}'s testimonial?\n\n"${(t.text||"").slice(0,120)}${(t.text||"").length>120?"…":""}"\n\nThis permanently deletes it and cannot be undone.`)){ onDeleteTestimonial&&onDeleteTestimonial(t.id); } }}
-                          style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                          Remove
-                        </button>
-                      </div>
+                      <button className="press" onClick={()=>{ if(window.confirm(`Remove ${t.name||"this customer"}'s testimonial?\n\n"${(t.text||"").slice(0,120)}${(t.text||"").length>120?"…":""}"\n\nThis permanently deletes it and cannot be undone.`)){ onDeleteTestimonial&&onDeleteTestimonial(t.id); } }}
+                        style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+                        Remove
+                      </button>
                     </div>
-                    );
-                  })}
+                  ))}
                 </div>
               </div>
             </div>
@@ -14705,11 +14684,6 @@ function NemoStore(){
     setShowcase(s=>s.map(x=>x.id===item.id?updated:x));
     showToast("✓ Tank approved — now live for 24h");
   };
-  const handleApproveTestimonial=async(t)=>{
-    const updated=await approveTestimonial(t);
-    setTestimonials(list=>list.map(x=>x.id===t.id?updated:x));
-    showToast("✓ Testimonial approved — now on the home page");
-  };
   const handleTestimonialSubmit=async(t)=>{
     const cloudOk=await addTestimonial(t);
     setTestimonials(list=>[t,...list.filter(x=>x.uid!==t.uid)]);
@@ -15467,7 +15441,7 @@ function NemoStore(){
         {page==="about"    &&<AboutPage nav={nav} settings={settings}/>}
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
-        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onApproveTestimonial={handleApproveTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
+        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
       </div>
