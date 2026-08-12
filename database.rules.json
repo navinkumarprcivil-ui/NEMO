@@ -8,12 +8,12 @@
       ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       "$id": {
         "stockCount": {
-          ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.val() <= data.val())",
+          ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (newData.val() <= data.val() && newData.val() >= data.val() - 100))",
           ".validate": "newData.isNumber() && newData.val() >= 0"
         },
         "variantStock": {
           "$vid": {
-            ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.val() <= data.val())",
+            ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (newData.val() <= data.val() && newData.val() >= data.val() - 100))",
             ".validate": "newData.isNumber() && newData.val() >= 0"
           }
         }
@@ -79,7 +79,10 @@
       "$pid": {
         "$rid": {
           ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
-          ".validate": "!newData.exists() || (newData.hasChild('rating') && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5)"
+          ".validate": "!newData.exists() || (newData.hasChild('rating') && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5)",
+          "comment": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 1000)" },
+          "name":    { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)" },
+          "photos":  { "$i": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 700000)" } }
         }
       }
     },
@@ -88,7 +91,10 @@
       ".read": true,
       "$id": {
         ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || !data.exists() )",
-        ".validate": "!newData.exists() || (newData.hasChild('service') && newData.hasChild('packing') && newData.child('service').isNumber() && newData.child('packing').isNumber())"
+        ".validate": "!newData.exists() || (newData.hasChild('service') && newData.hasChild('packing') && newData.child('service').isNumber() && newData.child('packing').isNumber())",
+        "improve": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 1000)" },
+        "name":    { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)" },
+        "zone":    { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)" }
       }
     },
 
@@ -157,7 +163,10 @@
     "showcase": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && ( !data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || auth.uid === data.child('userUid').val() || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )"
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && $id === auth.uid && newData.child('userUid').val() === auth.uid) || auth.uid === data.child('userUid').val() || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )",
+        "imgData":   { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 700000)" },
+        "caption":   { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)" },
+        "ownerName": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)" }
       }
     },
 
@@ -219,7 +228,9 @@
       ".read": true,
       "$id": {
         ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
-        ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))"
+        ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))",
+        "text": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 400)" },
+        "name": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)" }
       }
     },
 

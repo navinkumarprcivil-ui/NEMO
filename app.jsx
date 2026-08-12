@@ -964,6 +964,10 @@ function suggestHsnCodes(master, {name, category}){
 function withTimeout(promise, ms, fallback=null){
   return Promise.race([ Promise.resolve(promise).catch(()=>fallback), new Promise(r=>setTimeout(()=>r(fallback), ms)) ]);
 }
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+/* Set while a Google sign-in redirect is in flight, so the trip out to Google and back does
+   not get overtaken by the anonymous sign-in that normally runs for signed-out visitors. */
+const REDIRECT_PENDING="nemo-auth-redirecting";
 /* Local (device) layer — used as cache + offline fallback */
 async function dbGet(k)   { try { const v=localStorage.getItem(k); return v; } catch { return null; } }
 /* Free space by evicting cached media (base64 images/videos). Returns bytes freed.
@@ -1154,7 +1158,18 @@ function tryInitFirebase(){
     // session (which would break their order reads/writes under the security rules).
     firebase.auth().onAuthStateChanged(u=>{
       if(u){ try{ window.dispatchEvent(new Event("nemo-fb-ready")); }catch(e){} }
-      else { firebase.auth().signInAnonymously().catch(()=>{}); }
+      else {
+        /* Coming back from a Google redirect the SDK reports "signed out" for a moment before
+           it has finished consuming the result. Signing in anonymously in that window makes it
+           discard the Google credential, and the customer lands back on the store still logged
+           out — tap, redirect, return, still nothing. Hold off until getRedirectResult() has
+           run (it clears the flag), with a ceiling so a half-finished redirect can never leave
+           a visitor permanently unauthenticated. */
+        let pending=false;
+        try{ pending=sessionStorage.getItem(REDIRECT_PENDING)==="1"; }catch(e){}
+        if(pending) setTimeout(()=>{ if(!firebase.auth().currentUser) firebase.auth().signInAnonymously().catch(()=>{}); }, 4000);
+        else firebase.auth().signInAnonymously().catch(()=>{});
+      }
     });
     console.log("✓ Firebase connected");
     try{ window.dispatchEvent(new Event("nemo-fb-ready")); }catch(e){}
@@ -2345,6 +2360,12 @@ async function purgeUserCloudData(ukey){
     const s=await withTimeout(FB_DB.ref("showcase").get(),6000); const v=s&&s.val();
     if(v){ for(const k of Object.keys(v)){ if(v[k] && v[k].userUid===ukey){ try{ await FB_DB.ref("showcase/"+k).remove(); }catch(e){} } } }
   }catch(e){}
+  /* Their name in the visitor log. The log node itself is admin-read-only, so this deletes
+     by known path rather than by searching: the retained window is short and its day keys
+     are computable, so the user erases their own entries without ever reading the log. */
+  for(let i=0;i<=VISITOR_LOG_DAYS+1;i++){
+    try{ await FB_DB.ref("visitorLog/"+istDayKey(Date.now()-i*86400000)+"/u/"+ukey).remove(); }catch(e){}
+  }
 }
 /* Wipe the same user's locally-cached personal data (their own device only). */
 function purgeUserLocalData(ukey){
@@ -2365,6 +2386,89 @@ async function trackVisit(){
 async function loadAnalytics(){
   if(!FB_OK) return null;
   try{ const s=await withTimeout(FB_DB.ref("analytics").get(),5000); return (s&&s.exists())?s.val():{total:0,daily:{}}; }catch(e){ return null; }
+}
+
+/* ── Visitor log: who came, day by day ───────────────────────────────────────────────
+   trackVisit() above counts anonymous browsers; this names the ones who are signed in,
+   because a Google account is the only place a name exists. Readable by the admin only —
+   it is customer personal data, not analytics.
+
+   Retention is VISITOR_LOG_DAYS and it enforces itself. Each day node carries its own
+   expiry, and the rules let ANY signed-in visitor delete a day once that expiry has
+   passed, so ordinary traffic prunes the log; it does not sit around waiting for the
+   admin to open a screen. The admin sweeps too, as a backstop for a quiet week.
+
+   Days are keyed in IST, so "today" is the store's today rather than UTC's — otherwise
+   every visit before 5:30am would file itself under yesterday. */
+const VISITOR_LOG_DAYS=7;
+const IST_OFFSET_MS=5.5*60*60*1000;
+function istDayKey(ms){ return new Date((ms==null?Date.now():ms)+IST_OFFSET_MS).toISOString().slice(0,10); }
+function istDayEndMs(day){ return Date.parse(day+"T00:00:00Z")-IST_OFFSET_MS+86400000; }
+/* VISITOR_LOG_DAYS counts the day buckets on screen, so a day survives for the rest of the
+   window AFTER the one it occupies — 7 days means today plus the six before it, not today
+   plus seven (which is eight days of names). */
+function visitorDayExpiry(day){ return istDayEndMs(day)+(VISITOR_LOG_DAYS-1)*86400000; }
+/* Days old enough to delete, newest first. Starts at the first offset outside the window. */
+function expiredVisitorDays(span=4){
+  const out=[], now=Date.now();
+  for(let i=VISITOR_LOG_DAYS;i<VISITOR_LOG_DAYS+span;i++){
+    const d=istDayKey(now-i*86400000);
+    if(visitorDayExpiry(d)<now) out.push(d);
+  }
+  return out;
+}
+async function logVisitorName(user){
+  // Demo accounts aren't customers, and the owner doesn't need to read their own name back
+  // every morning — the log is for who came to the shop.
+  if(!FB_OK||!FB_DB||!user||!user.uid||isDemoUser(user)||isAdminUid(user.uid)) return;
+  const day=istDayKey();
+  const stamp="nemo-vlog-"+day;
+  // One write per browser session per day — a customer refreshing all afternoon costs nothing.
+  try{ if(sessionStorage.getItem(stamp)) return; sessionStorage.setItem(stamp,"1"); }catch(e){}
+  try{
+    const now=Date.now();
+    await FB_DB.ref("visitorLog/"+day).update({ expiresAt: visitorDayExpiry(day) });
+    await FB_DB.ref("visitorLog/"+day+"/u/"+user.uid).update({
+      name: String(user.name||"Customer").slice(0,60),
+      email: String(user.email||"").slice(0,120),
+      last: now,
+      visits: firebase.database.ServerValue.increment(1),
+    });
+  }catch(e){ /* logging a visit must never interrupt the visit */ }
+  // Once a day per browser, help retire whatever has aged out.
+  try{
+    const swept="nemo-vlog-swept";
+    if(localStorage.getItem(swept)!==day){
+      localStorage.setItem(swept,day);
+      for(const d of expiredVisitorDays()){ try{ await FB_DB.ref("visitorLog/"+d).remove(); }catch(e){} }
+    }
+  }catch(e){}
+}
+/* Admin view: the retained days, newest first, each with its named visitors. Sweeps anything
+   expired on the way through, so opening the panel also tidies up. */
+async function loadVisitorLog(){
+  if(!FB_OK||!FB_DB) return null;
+  let v=null;
+  try{ const s=await withTimeout(FB_DB.ref("visitorLog").get(),6000); v=s&&s.val(); }catch(e){ return null; }
+  if(!v) return [];
+  const now=Date.now(), keep=[];
+  for(const day of Object.keys(v)){
+    const node=v[day]||{};
+    const exp=Number(node.expiresAt)||visitorDayExpiry(day);
+    if(exp<now){ try{ await FB_DB.ref("visitorLog/"+day).remove(); }catch(e){} continue; }
+    const people=Object.entries(node.u||{}).map(([uid,p])=>({uid,...(p||{})}))
+      .sort((a,b)=>(Number(b.last)||0)-(Number(a.last)||0));
+    keep.push({ day, people });
+  }
+  return keep.sort((a,b)=>b.day.localeCompare(a.day));
+}
+async function clearVisitorLog(){
+  if(!FB_OK||!FB_DB) return false;
+  try{
+    const s=await withTimeout(FB_DB.ref("visitorLog").get(),6000); const v=s&&s.val();
+    if(v) for(const day of Object.keys(v)){ try{ await FB_DB.ref("visitorLog/"+day).remove(); }catch(e){} }
+    return true;
+  }catch(e){ return false; }
 }
 /* Lightweight behaviour analytics — write-only Firebase increments (safe for anon visitors;
    rules permit numeric counters under analytics/events|search|funnel). No reads, never blocks UI. */
@@ -2415,16 +2519,36 @@ function sendLocalNotif(title, body, icon="assets/nemo-logo.png", channel=""){
   try{ new Notification(title,{body,icon}); }catch(e){}
 }
 async function googleSignIn(){
+  /* The Firebase scripts load async and App Check gets a grace period on top, so on a cold
+     cache FB_OK is still false for the first second or two of the visit. Throwing "offline"
+     the moment someone taps Sign in was the whole of the intermittent "I couldn't log in, it
+     was fine later" — the tap simply landed before the SDK did. Wait for it like the rest of
+     the app does, and only give up if it genuinely never arrives. */
+  if(!FB_OK) await waitForFirebase(8000);
   if(!FB_OK) throw new Error("offline");
   const provider=new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt:"select_account" });
+  /* auth/network-request-failed is a transient blip (a flaky mobile connection, a token
+     fetch that timed out), and it used to surface as a flat "Couldn't sign in". One quiet
+     retry turns most of those into a normal sign-in. Nothing else is retried: a closed popup
+     or a rejected account must not silently reopen Google. */
+  const attempt=async()=>FB_AUTH.signInWithPopup(provider);
   let res;
   try{
-    res=await FB_AUTH.signInWithPopup(provider);
+    try{ res=await attempt(); }
+    catch(e){
+      if(String(e?.code||"").includes("network-request-failed")){ await sleep(700); res=await attempt(); }
+      else throw e;
+    }
   }catch(e){
     // Popups are often blocked on mobile / in-app browsers — fall back to redirect
     const code=String(e?.code||"");
     if(code.includes("popup-blocked")||code.includes("popup-closed")||code.includes("cancelled-popup")||code.includes("operation-not-supported")){
+      /* Mark the redirect as in flight BEFORE navigating. On the way back the app must not
+         sign in anonymously before getRedirectResult() has been read — an anonymous session
+         that lands first makes the SDK drop the Google result and the customer arrives back
+         on the site still signed out, which is the mobile half of the same complaint. */
+      try{ sessionStorage.setItem(REDIRECT_PENDING,"1"); }catch(e2){}
       await FB_AUTH.signInWithRedirect(provider);
       throw new Error("redirecting"); // page will navigate away
     }
@@ -4893,13 +5017,27 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
       const code = e?.code||e?.message||"";
       if(String(code).includes("redirecting")) return; // page is navigating to Google
       if(code==="offline" || !FB_OK){
-        // Preview / offline — offer demo accounts so the flow is testable
-        setShowDemo(true);
-        setErr("Google sign-in needs the live (deployed) site. Use a demo account below to preview.");
+        /* googleSignIn already waited out the SDK load, so reaching here on a deployed site
+           means the connection is genuinely down — not that this is a preview build. Telling a
+           real customer to "use a demo account" was nonsense on the live store, so the demo
+           accounts are offered only where they make sense: a local/preview host. */
+        const preview=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)||location.protocol==="file:";
+        setShowDemo(preview);
+        setErr(preview
+          ? "Google sign-in needs the live (deployed) site. Use a demo account below to preview."
+          : "Couldn't reach Google sign-in — check your connection and try again in a moment.");
       } else if(String(code).includes("popup-closed") || String(code).includes("cancelled")){
         setErr("Sign-in cancelled. Please try again.");
       } else if(String(code).includes("unauthorized-domain")){
         setErr("This domain isn't authorized yet. Add it in Firebase → Authentication → Settings → Authorized domains.");
+      } else if(String(code).includes("network-request-failed")){
+        setErr("Network hiccup during sign-in. Please try again.");
+      } else if(String(code).includes("account-exists-with-different-credential")){
+        setErr("That email is already registered with a different sign-in method.");
+      } else if(String(code).includes("user-disabled")){
+        setErr("This account has been disabled. Please contact us on WhatsApp.");
+      } else if(String(code).includes("too-many-requests")){
+        setErr("Too many attempts. Please wait a minute and try again.");
       } else {
         setErr("Couldn't sign in. Please try again.");
       }
@@ -4924,7 +5062,10 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
         <button className="press" onClick={doGoogle} disabled={busy}
           style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:700,color:C.text,boxShadow:"0 2px 10px rgba(0,0,0,.05)",opacity:busy?.7:1}}>
           {busy?<Spinner/>:<svg width="22" height="22" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>}
-          Continue with Google
+          {/* The spinner alone left the label reading "Continue with Google" while the tap was
+              already being handled, which on a slow connection looks like nothing happened and
+              invites a second tap. Say what is going on. */}
+          {busy?"Signing you in…":"Continue with Google"}
         </button>
 
         {err&&<div style={{fontSize:12.5,color:showDemo?C.textSub:C.danger,fontWeight:500,marginTop:14,textAlign:"center",lineHeight:1.5,background:showDemo?C.accentLight:"transparent",borderRadius:12,padding:showDemo?"10px 14px":0}}>{err}</div>}
@@ -11340,6 +11481,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [thumbMsg,setThumbMsg]=useState("");
   const [visitStats,setVisitStats]=useState(null);
   useEffect(()=>{ loadAnalytics().then(setVisitStats); },[]);
+  // Named visitors, last VISITOR_LOG_DAYS days. Only loaded on the Dashboard tab — it is
+  // customer personal data, so it is not held in memory while the admin is elsewhere.
+  const [visitorLog,setVisitorLog]=useState(null);
+  const [openVisitDay,setOpenVisitDay]=useState("");
+  const reloadVisitorLog=()=>loadVisitorLog().then(v=>setVisitorLog(v||[]));
+  useEffect(()=>{ if(tab==="dashboard") reloadVisitorLog(); else { setVisitorLog(null); setOpenVisitDay(""); } },[tab]);
   const [orderFilter,setOrderFilter]=useState("All");
   const [orderSearch,setOrderSearch]=useState("");
   // Orders accumulate forever, and rendering every one on open cost ~0.5s of frozen UI at 500
@@ -11558,6 +11705,66 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               return <div style={{display:"flex",gap:8}}>{cell(d[today]||0,"Today")}{cell(last7,"Last 7 days")}{cell((visitStats&&visitStats.total)||0,"All time")}</div>;
             })()}
             <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {(settings.gaId||(typeof window!=="undefined"&&window.__GA_ACTIVE))?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
+          </div>
+          {/* ── Who visited — named, signed-in customers, kept for VISITOR_LOG_DAYS days ──
+              The Store Visitors card above counts browsers; this says who they were, for the
+              ones signed in with Google. Anonymous browsing stays anonymous — there is no name
+              to show — so the two numbers will not match, and the note says so rather than
+              leaving the admin to wonder. */}
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+              <span style={{fontSize:16}}>👥</span>
+              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Who Visited</span>
+              <span style={{fontSize:10,color:C.textSub,fontWeight:600}}>last {VISITOR_LOG_DAYS} days</span>
+              <button className="press" onClick={reloadVisitorLog} title="Refresh"
+                style={{marginLeft:"auto",background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>↻</button>
+            </div>
+            {visitorLog===null ? (
+              <div style={{fontSize:12,color:C.textSub}}>Loading…</div>
+            ) : !visitorLog.length ? (
+              <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>No signed-in visitors logged yet. Customers browsing without signing in are counted above but have no name to show.</div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {visitorLog.map(({day,people})=>{
+                  const open=openVisitDay===day;
+                  const isToday=day===istDayKey();
+                  return(
+                    <div key={day} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
+                      <button className="press" onClick={()=>setOpenVisitDay(open?"":day)}
+                        style={{display:"flex",alignItems:"center",gap:8,width:"100%",background:open?C.accentLight:C.bg,border:"none",padding:"10px 12px",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                        {/* A day label, not a moment — fmtDate would append a meaningless 12:00 pm. */}
+                        <span style={{fontSize:12.5,fontWeight:800,color:C.text}}>{isToday?"Today":new Date(day+"T12:00:00Z").toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"})}</span>
+                        <span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{people.length} {people.length===1?"person":"people"}</span>
+                        <span style={{marginLeft:"auto",fontSize:12,color:C.textSub}}>{open?"▾":"▸"}</span>
+                      </button>
+                      {open&&(
+                        <div style={{padding:"4px 12px 10px"}}>
+                          {people.length===0
+                            ? <div style={{fontSize:11.5,color:C.textSub,fontStyle:"italic",paddingTop:6}}>Nobody signed in on this day.</div>
+                            : people.map(p=>(
+                              <div key={p.uid} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:`1px solid ${C.border}`}}>
+                                <span style={{width:26,height:26,borderRadius:"50%",background:C.primary,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0}}>{(p.name||"C").charAt(0).toUpperCase()}</span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:12.5,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name||"Customer"}</div>
+                                  {p.email&&<div style={{fontSize:10.5,color:C.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.email}</div>}
+                                </div>
+                                {Number(p.visits)>1&&<span style={{fontSize:10,color:C.textSub,fontWeight:700,flexShrink:0}}>{p.visits}×</span>}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{fontSize:10,color:C.textSub,marginTop:10,lineHeight:1.5}}>
+              Names come from the customer's Google account and are kept for {VISITOR_LOG_DAYS} days, then erased automatically. Days are counted in IST.
+              {visitorLog&&visitorLog.length>0&&(
+                <button className="press" onClick={async()=>{ if(window.confirm(`Erase the whole visitor log now?\n\nIt clears itself after ${VISITOR_LOG_DAYS} days anyway. This cannot be undone.`)){ await clearVisitorLog(); reloadVisitorLog(); showToast("Visitor log cleared"); } }}
+                  style={{marginLeft:6,background:"none",border:"none",padding:0,color:C.danger,fontSize:10,fontWeight:800,textDecoration:"underline",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Erase now</button>
+              )}
+            </div>
           </div>
           {/* Behaviour insights — funnel, most viewed/added, top searches */}
           <AdminInsights stats={visitStats} products={products}/>
@@ -14318,6 +14525,14 @@ function NemoStore(){
     if(FB_OK) trackVisit(); else window.addEventListener("nemo-fb-ready",trackVisit,{once:true});
     return()=>window.removeEventListener("nemo-fb-ready",trackVisit);
   },[]);
+  /* Name today's signed-in visitors for the 7-day log. Runs on sign-in as well as on load,
+     because a customer who signs in mid-visit should still appear under today. */
+  useEffect(()=>{
+    if(!user||!user.uid) return;
+    const go=()=>logVisitorName(user);
+    if(FB_OK) go(); else window.addEventListener("nemo-fb-ready",go,{once:true});
+    return()=>window.removeEventListener("nemo-fb-ready",go);
+  },[user&&user.uid,fbReady]);
   // Optional Google Analytics, if the admin pasted a Measurement ID in Settings
   useEffect(()=>{ if(settings.gaId) injectGA(settings.gaId); },[settings.gaId]);
 
@@ -14622,7 +14837,14 @@ function NemoStore(){
         else{ showToast("Signed in, but this isn't the admin account"); }
         setTimeout(()=>{ loadOrders().then(o=>o&&setOrders(o)); loadInterestCounts().then(setInterestCounts); },400);
       }
-    }catch(e){ if(String(e?.message)!=="redirecting") showToast("Sign-in failed — try again","error"); }
+    }catch(e){
+      const msg=String(e?.message||""), code=String(e?.code||"");
+      if(msg==="redirecting") return;                      // page is navigating to Google
+      if(msg==="offline")      showToast("Can't reach Firebase right now — check your connection","error");
+      else if(code.includes("popup-closed")||code.includes("cancelled")) showToast("Sign-in cancelled","error");
+      else if(code.includes("network-request-failed")) showToast("Network hiccup — try again","error");
+      else showToast("Sign-in failed — try again","error");
+    }
   };
   const markReviewed=(pid)=>{ if(user){ setReviewedSet(addReviewedLocal(userKey(user),pid)); } };
   const startReview=(prod,preset=0)=>{ setReviewIntent(prod.id); setReviewPreset(Number(preset)||0); nav("detail",prod); };
@@ -14723,7 +14945,18 @@ function NemoStore(){
           const u={...googleUserFromCred(res.user),keep:true};
           setUser(u); saveUser(u); showToast(`Welcome, ${u.name?.split(" ")[0]||"there"}!`);
         }
-      }catch(e){ /* no redirect pending */ }
+      }catch(e){
+        /* A redirect that FAILED used to be indistinguishable from no redirect at all: both
+           landed here and said nothing, so the customer came back signed out with no idea why
+           and tried again into the same wall. Only speak up if we know a redirect was in
+           flight — an ordinary page load throws nothing to report. */
+        let pending=false;
+        try{ pending=sessionStorage.getItem(REDIRECT_PENDING)==="1"; }catch(e2){}
+        if(pending) showToast("Google sign-in didn't complete — please try again","error");
+      }finally{
+        // Either way the redirect is over; let anonymous sign-in resume for signed-out visitors.
+        try{ sessionStorage.removeItem(REDIRECT_PENDING); }catch(e2){}
+      }
     };
     onReady();
     window.addEventListener("nemo-fb-ready",onReady);
