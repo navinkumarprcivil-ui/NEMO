@@ -2421,17 +2421,40 @@ function expiredVisitorDays(span=4){
   }
   return out;
 }
+/* Wait for Firebase to finish restoring the signed-in user.
+   FB_OK goes true as soon as database() exists, which is well before auth has resolved, and
+   a returning customer's `user` comes back from localStorage instantly — so anything that
+   writes on "Firebase is ready" can easily run while currentUser is still null. Every rule on
+   this database requires auth != null, so such a write is refused outright. */
+function waitForAuthUser(ms=8000){
+  if(FB_AUTH&&FB_AUTH.currentUser) return Promise.resolve(FB_AUTH.currentUser);
+  return new Promise(resolve=>{
+    let done=false, off=null;
+    const finish=(u)=>{ if(done) return; done=true; try{ off&&off(); }catch(e){} resolve(u||null); };
+    try{ off=FB_AUTH.onAuthStateChanged(u=>{ if(u) finish(u); }); }catch(e){ finish(null); }
+    setTimeout(()=>finish(FB_AUTH&&FB_AUTH.currentUser),ms);
+  });
+}
 async function logVisitorName(user){
   // Demo accounts aren't customers, and the owner doesn't need to read their own name back
   // every morning — the log is for who came to the shop.
   if(!FB_OK||!FB_DB||!user||!user.uid||isDemoUser(user)||isAdminUid(user.uid)) return;
+  /* The entry is keyed by uid and the rules only let a visitor write their own, so this has to
+     be the SAME person Firebase has authenticated. An anonymous session (or a stale localStorage
+     user whose Google session did not survive) would be refused, and there is nothing to log
+     under a name nobody has verified. */
+  const authUser=await waitForAuthUser();
+  if(!authUser||authUser.isAnonymous||authUser.uid!==user.uid){ VISITOR_LOG_WRITE_ERR=authUser?"uid-mismatch":"not-authenticated"; return; }
   const day=istDayKey();
   const stamp="nemo-vlog-"+day;
   // One write per browser session per day — a customer refreshing all afternoon costs nothing.
   try{ if(sessionStorage.getItem(stamp)) return; }catch(e){}
   try{
     const now=Date.now();
-    await FB_DB.ref("visitorLog/"+day).update({ expiresAt: visitorDayExpiry(day) });
+    /* Written at the exact child path the rules grant. A patch one level up is the same write
+       as far as the rules are concerned, but being explicit here means the permission being
+       relied on is the one written down. */
+    await FB_DB.ref("visitorLog/"+day+"/expiresAt").set(visitorDayExpiry(day));
     await FB_DB.ref("visitorLog/"+day+"/u/"+user.uid).update({
       name: String(user.name||"Customer").slice(0,60),
       email: String(user.email||"").slice(0,120),
