@@ -2402,6 +2402,10 @@ async function loadAnalytics(){
    every visit before 5:30am would file itself under yesterday. */
 const VISITOR_LOG_DAYS=7;
 const IST_OFFSET_MS=5.5*60*60*1000;
+/* Last write failure, if any. Writing a visit must never disturb the visit, so failures are
+   swallowed — but swallowed silently they are indistinguishable from nobody having visited,
+   which is exactly the wrong thing to show an owner asking "where is everyone?". */
+let VISITOR_LOG_WRITE_ERR="";
 function istDayKey(ms){ return new Date((ms==null?Date.now():ms)+IST_OFFSET_MS).toISOString().slice(0,10); }
 function istDayEndMs(day){ return Date.parse(day+"T00:00:00Z")-IST_OFFSET_MS+86400000; }
 /* VISITOR_LOG_DAYS counts the day buckets on screen, so a day survives for the rest of the
@@ -2424,7 +2428,7 @@ async function logVisitorName(user){
   const day=istDayKey();
   const stamp="nemo-vlog-"+day;
   // One write per browser session per day — a customer refreshing all afternoon costs nothing.
-  try{ if(sessionStorage.getItem(stamp)) return; sessionStorage.setItem(stamp,"1"); }catch(e){}
+  try{ if(sessionStorage.getItem(stamp)) return; }catch(e){}
   try{
     const now=Date.now();
     await FB_DB.ref("visitorLog/"+day).update({ expiresAt: visitorDayExpiry(day) });
@@ -2434,7 +2438,16 @@ async function logVisitorName(user){
       last: now,
       visits: firebase.database.ServerValue.increment(1),
     });
-  }catch(e){ /* logging a visit must never interrupt the visit */ }
+    /* Only now. Claiming the day BEFORE the write meant one failure — rules not yet
+       published, a dropped connection — silenced this visitor for the rest of their
+       session, and the next load looked like a customer who had simply not come. */
+    try{ sessionStorage.setItem(stamp,"1"); }catch(e){}
+    VISITOR_LOG_WRITE_ERR="";
+  }catch(e){
+    // Never interrupt the visit — but remember why, so the admin panel can say so
+    // instead of showing an empty list and letting the owner guess.
+    VISITOR_LOG_WRITE_ERR=String(e&&(e.code||e.message)||"write-failed");
+  }
   // Once a day per browser, help retire whatever has aged out.
   try{
     const swept="nemo-vlog-swept";
@@ -2446,11 +2459,16 @@ async function logVisitorName(user){
 }
 /* Admin view: the retained days, newest first, each with its named visitors. Sweeps anything
    expired on the way through, so opening the panel also tidies up. */
+/* Returns {days, error}. An empty log and a refused read look the same from the outside —
+   both produce no names — so they are reported apart: only the admin Google account may read
+   this node, and being past the panel password is not the same as being signed in as them. */
 async function loadVisitorLog(){
-  if(!FB_OK||!FB_DB) return null;
+  if(!FB_OK||!FB_DB) return {days:[],error:"offline"};
+  if(!isAdminSignedIn()) return {days:[],error:"not-signed-in"};
   let v=null;
-  try{ const s=await withTimeout(FB_DB.ref("visitorLog").get(),6000); v=s&&s.val(); }catch(e){ return null; }
-  if(!v) return [];
+  try{ const s=await withTimeout(FB_DB.ref("visitorLog").get(),6000,"__fail"); if(s==="__fail") throw new Error("denied"); v=s&&s.val(); }
+  catch(e){ return {days:[],error:String(e&&(e.code||e.message)||"denied")}; }
+  if(!v) return {days:[],error:VISITOR_LOG_WRITE_ERR?("write:"+VISITOR_LOG_WRITE_ERR):""};
   const now=Date.now(), keep=[];
   for(const day of Object.keys(v)){
     const node=v[day]||{};
@@ -2460,7 +2478,7 @@ async function loadVisitorLog(){
       .sort((a,b)=>(Number(b.last)||0)-(Number(a.last)||0));
     keep.push({ day, people });
   }
-  return keep.sort((a,b)=>b.day.localeCompare(a.day));
+  return { days: keep.sort((a,b)=>b.day.localeCompare(a.day)), error:"" };
 }
 async function clearVisitorLog(){
   if(!FB_OK||!FB_DB) return false;
@@ -11667,8 +11685,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   // Named visitors, last VISITOR_LOG_DAYS days. Only loaded on the Dashboard tab — it is
   // customer personal data, so it is not held in memory while the admin is elsewhere.
   const [visitorLog,setVisitorLog]=useState(null);
+  const [visitorLogErr,setVisitorLogErr]=useState("");
   const [openVisitDay,setOpenVisitDay]=useState("");
-  const reloadVisitorLog=()=>loadVisitorLog().then(v=>setVisitorLog(v||[]));
+  const reloadVisitorLog=()=>loadVisitorLog().then(r=>{ setVisitorLog((r&&r.days)||[]); setVisitorLogErr((r&&r.error)||""); });
   useEffect(()=>{ if(tab==="dashboard") reloadVisitorLog(); else { setVisitorLog(null); setOpenVisitDay(""); } },[tab]);
   const [orderFilter,setOrderFilter]=useState("All");
   const [orderSearch,setOrderSearch]=useState("");
@@ -11905,7 +11924,22 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             {visitorLog===null ? (
               <div style={{fontSize:12,color:C.textSub}}>Loading…</div>
             ) : !visitorLog.length ? (
-              <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>No signed-in visitors logged yet. Customers browsing without signing in are counted above but have no name to show.</div>
+              /* An empty list has several very different causes, and "nobody came" is only one
+                 of them. Name the actual one rather than letting the owner wonder. */
+              visitorLogErr==="not-signed-in" ? (
+                <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"11px 13px",fontSize:12,color:"#9a3412",lineHeight:1.55}}>
+                  <b>Sign in with the admin Google account to see this.</b> The panel password unlocks the screen, but visitor names are personal data and only the admin account may read them.
+                </div>
+              ) : visitorLogErr==="offline" ? (
+                <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>Not connected — can't read the log right now.</div>
+              ) : visitorLogErr ? (
+                <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:12,padding:"11px 13px",fontSize:12,color:"#b91c1c",lineHeight:1.55}}>
+                  <b>The log isn't recording.</b> This is almost always the database rules: publish <code>database.rules.json</code> in Firebase Console → Realtime Database → Rules, then reload.
+                  <div style={{fontSize:10.5,opacity:.8,marginTop:5}}>Reported: {visitorLogErr}</div>
+                </div>
+              ) : (
+                <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>No signed-in visitors logged yet today. Customers browsing without signing in are counted above but have no name to show — and your own admin visits are deliberately left out.</div>
+              )
             ) : (
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {visitorLog.map(({day,people})=>{
