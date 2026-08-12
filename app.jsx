@@ -760,14 +760,32 @@ function applyDiscountCaps({coupon=0,referral=0,loyalty=0,subtotal=0,settings={}
   const dCoup=Math.min(coupon,over); coupon-=dCoup; over-=dCoup;
   return {coupon,referral,loyalty,capped:true,coinsUsed:loyalty>0?Math.ceil(loyalty/loyaltyVal):0};
 }
-/* Zepto-style upsell: the nearest not-yet-unlocked public coupon threshold.
-   Returns {need, off, code} — "add ₹need more to get <off>" — or null. */
-function nextDiscountNudge(cartTotal, settings){
+/* The nearest coupon threshold, either just missed or just cleared.
+   Returns {need, off, code, minOrder, unlocked} — "add ₹need more to get <off>", or the
+   unlocked banner once they are over the line — or null when there is nothing to chase.
+
+   Three things were wrong with this before, which is why it was never wired to anything:
+   it read `c.discount` while normalizeCoupon writes `value`, so every nudge said "undefined
+   off"; it read settings.coupons raw, so the Welcome Offer — the one coupon most stores have,
+   synthesised by migrateCoupons from the legacy fields — was invisible to it; and it went
+   silent the moment a threshold was cleared, exactly when telling someone they have earned
+   something is worth most. */
+function nextDiscountNudge(cartTotal, settings, orders){
   const t=Number(cartTotal)||0;
-  const cs=((settings&&settings.coupons)||[]).filter(c=>c&&c.active!==false&&c.code&&!c.secret&&Number(c.minOrder)>0&&t<Number(c.minOrder));
-  if(!cs.length) return null;
-  const c=cs.sort((a,b)=>Number(a.minOrder)-Number(b.minOrder))[0];
-  return { need:Number(c.minOrder)-t, off:(c.type==="percent"?`${c.discount}% off`:`₹${c.discount} off`), code:c.code };
+  /* usableCoupons already knows about expiry, secrecy and whether a first-order coupon still
+     applies to this shopper — so a returning customer is never dangled a welcome offer they
+     cannot have. */
+  const usable=usableCoupons(settings,orders,"checkout")
+    .filter(c=>c.type!=="coins" && c.value>0 && c.minOrder>0);
+  if(!usable.length) return null;
+  const offOf=(c)=>c.type==="percent"
+    ? `${c.value}% off${c.maxDiscount>0?` (up to ₹${c.maxDiscount})`:""}`
+    : `₹${c.value} off`;
+  // Nearest threshold still ahead; failing that, the best one already cleared.
+  const ahead=usable.filter(c=>t<c.minOrder).sort((a,b)=>a.minOrder-b.minOrder)[0];
+  if(ahead) return { need:Math.max(0,Math.ceil(ahead.minOrder-t)), off:offOf(ahead), code:ahead.code, minOrder:ahead.minOrder, unlocked:false };
+  const won=usable.sort((a,b)=>b.minOrder-a.minOrder)[0];
+  return won ? { need:0, off:offOf(won), code:won.code, minOrder:won.minOrder, unlocked:true } : null;
 }
 
 
@@ -4494,28 +4512,33 @@ function OfferBanners({settings,orders=[]}){
                     : c.type==="percent" ? `${c.value}% off${c.maxDiscount>0?` (up to ₹${c.maxDiscount})`:""}`
                     : `₹${c.value} off`;
         return(
-          <div key={c.id} className="fade-rise" style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:18,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,boxShadow:`0 8px 22px ${bg}33`}}>
-            <div style={{fontSize:30,flexShrink:0}}>{c.emoji||"🎉"}</div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:800,color:"white",marginBottom:2}}>
-                {c.name||"Special offer"}{c.value>0?` — ${worth}`:""}
+          /* Centred rather than the old left-aligned row. An offer is a headline, not a
+             list item: the emoji sits above the wording, the amount is the biggest thing
+             on it, and the code and its Copy button sit together underneath instead of
+             the code drifting left while the button hugged the far edge. */
+          <div key={c.id} className="fade-rise" style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:18,padding:"18px 16px",marginBottom:14,textAlign:"center",boxShadow:`0 8px 22px ${bg}33`}}>
+            <div style={{fontSize:30,lineHeight:1}}>{c.emoji||"🎉"}</div>
+            <div style={{fontSize:13,fontWeight:800,color:"rgba(255,255,255,.92)",marginTop:6,letterSpacing:.3}}>
+              {c.name||"Special offer"}
+            </div>
+            {c.value>0&&(
+              <div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"white",lineHeight:1.15,marginTop:2}}>{worth}</div>
+            )}
+            {(c.minOrder>0||c.firstOrderOnly)&&(
+              <div style={{fontSize:11.5,color:"rgba(255,255,255,.85)",marginTop:4}}>
+                {c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}
               </div>
-              {(c.minOrder>0||c.firstOrderOnly)&&(
-                <div style={{fontSize:11.5,color:"rgba(255,255,255,.9)",marginBottom:c.code?6:0}}>
-                  {c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}
-                </div>
-              )}
-              {c.code&&(
-                <div style={{display:"inline-block",background:"rgba(255,255,255,.2)",borderRadius:8,padding:"4px 12px",border:"1px dashed rgba(255,255,255,.6)"}}>
+            )}
+            {c.code&&(
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:11,flexWrap:"wrap"}}>
+                <div style={{background:"rgba(255,255,255,.2)",borderRadius:8,padding:"5px 14px",border:"1px dashed rgba(255,255,255,.6)"}}>
                   <span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{c.code}</span>
                 </div>
-              )}
-            </div>
-            {c.code&&(
-              <button className="press" onClick={()=>copy(c.code)}
-                style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 11px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,cursor:"pointer"}}>
-                {copied===c.code?"✓ Copied":"Copy"}
-              </button>
+                <button className="press" onClick={()=>copy(c.code)}
+                  style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 13px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  {copied===c.code?"✓ Copied":"Copy"}
+                </button>
+              </div>
             )}
           </div>
         );
@@ -8134,7 +8157,7 @@ function MiniCart({open,onClose,cart,total,updateQty,nav,settings={},products=[]
   );
 }
 
-function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={}}){
+function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={},orders=[]}){
   const hasLiveFish=cart.some(i=>i.category==="Live Fish");
   if(!cart.length)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"20px",textAlign:"center"}}>
@@ -8230,6 +8253,33 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
           🚚 Shipping is calculated at checkout based on your location &amp; order weight
           {hasLiveFish&&<span style={{display:"block",fontSize:11,fontWeight:500,marginTop:3,color:C.primary}}>🐠 Live fish shipping rates apply</span>}
         </div>
+        {/* ── How close they are to the next offer ──────────────────────────────
+            Directly above the checkout button, centred, because this is the last
+            thing a shopper reads before deciding whether the cart is finished. A
+            bar makes "₹649 more" a distance rather than a number, and once the
+            line is crossed the same strip turns green and says so — a threshold
+            you met in silence may as well not have existed. */}
+        {(()=>{
+          const n=nextDiscountNudge(total,settings,orders);
+          if(!n) return null;
+          const pct=Math.max(4,Math.min(100,Math.round(((Number(total)||0)/(n.minOrder||1))*100)));
+          const won=n.unlocked;
+          return (
+            <div style={{marginTop:14,textAlign:"center",background:won?"#ecfdf5":"#fff7ed",border:`1px solid ${won?"#a7f3d0":"#fed7aa"}`,borderRadius:14,padding:"13px 16px"}}>
+              <div style={{fontSize:13.5,fontWeight:800,color:won?"#15803d":"#9a3412",lineHeight:1.45,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                {won
+                  ? <>🎉 You've unlocked <span style={{color:C.coral}}>{n.off}</span></>
+                  : <>Add <span style={{fontFamily:PRICE_FONT,fontSize:16,color:C.coral}}>₹{n.need}</span> more to get <span style={{color:C.coral}}>{n.off}</span></>}
+              </div>
+              <div style={{height:7,borderRadius:99,background:won?"#a7f3d0":"#fde3c8",margin:"9px auto 0",overflow:"hidden",maxWidth:260}}>
+                <div style={{height:"100%",width:pct+"%",borderRadius:99,background:won?"#16a34a":C.coral,transition:"width .45s cubic-bezier(.22,1,.36,1)"}}/>
+              </div>
+              <div style={{fontSize:10.5,color:won?"#15803d":"#9a3412",opacity:.85,fontWeight:600,marginTop:6}}>
+                {won?<>Apply code <b>{n.code}</b> at checkout</>:<>on orders above ₹{n.minOrder} · code {n.code}</>}
+              </div>
+            </div>
+          );
+        })()}
         <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={()=>nav("checkout")}
           style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
           Proceed to Checkout →
@@ -15899,7 +15949,7 @@ function NemoStore(){
         {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
         {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
-        {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={products} mediaCache={mediaCache}/>}
+        {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={products} mediaCache={mediaCache} orders={orders}/>}
         {page==="checkout" &&(user
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders} products={products} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
