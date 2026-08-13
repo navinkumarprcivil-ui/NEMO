@@ -3363,8 +3363,14 @@ function orderTaxLines(order, settings){
   // No store-wide HSN and no store-wide rate: a line is taxed only if THAT product is marked
   // "claim GST", and then only at its own HSN and rate. Live fish are sold without claiming GST,
   // so those lines carry no tax at all rather than tax at 0%.
+  /* A seller with no GSTIN charges no GST on anything, whatever the products say. The invoice
+     already guarded on this (hasGst) but the CSV export and orderGST did not, so clearing the
+     GSTIN left the export still printing tax columns the invoices had stopped showing — the one
+     way these two views of the same order could disagree, which is exactly what routing them
+     both through this function was meant to prevent. */
+  const sellerRegistered=!!String(s.gstin||"").trim();
   const goods=(o.items||[]).map(it=>{
-    const taxed = it.gstApplicable===true && Number(it.gstRate)>0;
+    const taxed = sellerRegistered && it.gstApplicable===true && Number(it.gstRate)>0;
     return {
       name:String(it.name||""), variantLabel:it.variantLabel||"", qty:Number(it.qty)||0,
       taxed, hsn:taxed?String(it.hsn||"").trim():"",
@@ -8699,6 +8705,17 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   const couponCoins=couponBen.coins;
   let couponDiscount=Math.min(couponBen.discount,total+lgPrice);
   let refDiscount=refApplied?Math.min(Number(settings.referralDiscount||50),Math.max(0,total+lgPrice-couponDiscount)):0;
+  /* Coins may only pay for what is still left to pay. loyaltyDiscount was bounded by the
+     owner's per-order coin limit but never by the order itself, so a small order — especially
+     one already carrying a coupon — could swallow far more coins than it was worth: redeem 100
+     coins against ₹40 of remaining value and redeemPoints deducted all 100, the customer
+     losing 60 of them for nothing. Clamped to the remainder, on the same goods-only base the
+     coupon and referral already use, and only the coins that remainder consumes are charged. */
+  const payableByCoins=Math.max(0,total+lgPrice-couponDiscount-refDiscount);
+  if(loyaltyDiscount>payableByCoins){
+    loyaltyDiscount=payableByCoins;
+    loyaltyCoinsUsed=loyaltyDiscount>0?Math.ceil(loyaltyDiscount/loyaltyVal):0;
+  }
   // ── Ceiling on everything together: a rupee cap, a % of subtotal cap, or both. ──
   const capped=applyDiscountCaps({coupon:couponDiscount,referral:refDiscount,loyalty:loyaltyDiscount,subtotal:total,settings,loyaltyVal});
   couponDiscount=capped.coupon; refDiscount=capped.referral; loyaltyDiscount=capped.loyalty;
