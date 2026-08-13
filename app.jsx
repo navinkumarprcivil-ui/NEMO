@@ -1664,7 +1664,6 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   /* One list for coupon codes, the welcome offer and seasonal/festival banners.
      See normalizeCoupon for the shape of an entry. */
   coupons: [],
-  showCouponField: true,   // master switch: show the coupon entry box at checkout
   /* How discounts may combine. Reward coins always stack; the coupon/referral pair is the
      owner's call. maxDiscountRs and maxDiscountPct are the ceiling on everything together —
      whichever bites first wins, and 0 means "no ceiling of that kind". */
@@ -6370,7 +6369,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.f78baf53";
+const APP_BUILD = "v90.14561262";
 async function forceRefresh(){
   try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
@@ -8798,8 +8797,12 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
      Rendered from here on BOTH steps: same state, same handlers, so a code applied on either
      is the same code. */
   const renderOffersBox=()=>(<>
-          {/* Coupon code */}
-          {settings.showCouponField!==false && (
+          {/* Coupon code. No longer behind a setting. A switch in Settings → Promotions used to
+              hide this box while leaving the referral box beside it, so checkout showed a
+              6-digit code field and no coupon field — and nothing on any screen explained why.
+              A store that has coupons wants somewhere to type them; a store that has none has
+              nothing to advertise here anyway, and the box costs it one empty row. */}
+          {true && (
           <div style={{marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>🎟 Coupon Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             {/* Show available coupon hints — secret coupons are never listed here */}
@@ -13865,25 +13868,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           A row with <b style={{color:C.text}}>no code</b> is a plain announcement banner.
           Each code is usable once per Google account.
         </div>
-        <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none",background:C.bg,borderRadius:12,padding:"10px 12px"}}>
-          <input type="checkbox" checked={f.showCouponField!==false} onChange={e=>set("showCouponField",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,marginTop:1,flexShrink:0}}/>
-          <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>Show coupon box at checkout</span><br/><span style={{fontSize:11,color:C.textSub}}>Off = customers cannot type any code.</span></span>
-        </label>
 
-        {/* One tick hides every coupon box in the store, and nothing downstream says why: the
-            codes still exist, still validate, still show on the home banner — there is simply
-            nowhere left to type them. An owner who finds "no space for the coupon" at checkout
-            has no reason to suspect a switch three screens away, so it says so here, next to
-            the codes it is silencing. */}
-        {f.showCouponField===false && (f.coupons||[]).some(c=>c&&c.code) && (
-          <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:12,padding:"11px 13px",marginBottom:12,fontSize:12,color:"#b91c1c",lineHeight:1.55}}>
-            <b>Your coupon codes cannot be used right now.</b> The box above is unticked, so checkout shows no place to enter one — the codes below still exist but nobody can type them.
-            <button className="press" onClick={()=>set("showCouponField",true)}
-              style={{display:"block",marginTop:8,background:"#b91c1c",color:"white",border:"none",borderRadius:9,padding:"8px 13px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              Turn the coupon box back on
-            </button>
-          </div>
-        )}
         {(f.coupons||[]).map((c,i)=>{
           const upd=(patch)=>{ const arr=[...(f.coupons||[])]; arr[i]={...arr[i],...patch}; set("coupons",arr); };
           const lbl={fontSize:10.5,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.5,marginBottom:4};
