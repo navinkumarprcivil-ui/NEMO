@@ -6370,7 +6370,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.19039eca";
+const APP_BUILD = "v90.f78baf53";
 async function forceRefresh(){
   try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
@@ -8970,13 +8970,12 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       const ptsUsed=Math.ceil(loyaltyDiscount/loyaltyVal);
       redeemPoints(uid2, ptsUsed, id);
     }
-    /* The owner is NOT emailed here. An order at this point is only "Awaiting Payment" — it may
-       never be paid at all, and the ten-minute window cancels a good number of them. Mailing at
-       placement meant an alert for every abandoned checkout, and then a second one for the same
-       order when payment actually arrived. The owner's copy is sent once, from submitPayment,
-       when there is money to look at. The CUSTOMER still hears from us now: they have an order
-       to pay for and a deadline to do it by. */
-    sendCustomerEmail(order, settings);
+    /* NOBODY is emailed here — not the owner, not the customer. An order at this point is only
+       "Awaiting Payment": the customer may cancel on the very next screen, or simply walk away
+       and let the ten-minute window close it. Mail sent now is mail about an order that in a
+       good number of cases never existed, and the customer is still sitting in front of the
+       payment screen, so it tells them nothing they cannot see. Both copies go from
+       submitPayment, when there is a payment to write about. */
     // Claim the friend's referral code so it can never be reused
     if(refApplied&&refInput.trim()) claimReferral(refInput.trim(), userKey(user), id);
     // Count today's promo usage toward the admin's daily caps
@@ -9178,13 +9177,13 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           )}
           {hasLiveFish&&(
             <>
-            <div style={{background:"#dcfce7",border:`1px solid #86efac`,borderRadius:16,padding:"14px 16px",marginBottom:12}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                <span style={{fontSize:20}}>🛡️</span>
-                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#15803d"}}>Live Arrival Guarantee</span>
-              </div>
+            {/* Information, not a decision — folded so it stops taking a card-height
+               bite out of the address screen. The line that DOES need reading while
+               choosing packing is repeated inside that chooser below. */}
+            <Collapsible icon="🛡️" tone="green" title="Live Arrival Guarantee"
+              subtitle="Free with our recommended packing — tap for the terms">
               <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish arrives dead (DOA), share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery and we'll make it right <b>one time</b> — a replacement, store credit, or refund of the fish's value (our choice). Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
-            </div>
+            </Collapsible>
             </>
           )}
           {/* Saved addresses — tap one to fill the form. Seeded from past orders, so this is
@@ -9285,8 +9284,11 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           {/* Special delivery — recommended parcel that carries the Live Arrival Guarantee for live fish */}
           {/* Live-fish packing chooser (customer picks); falls back to dry-goods special toggle */}
           {hasLiveFish ? (
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>🐠 Choose Live-Fish Packing</div>
+            /* Folded, but never blind: the subtitle carries the packing currently selected
+               and whether the guarantee covers it, so a shopper who does not open it still
+               sees what they are getting and what it costs. */
+            <Collapsible icon="🐠" title="Live-fish packing"
+              subtitle={`${packingLabel(packing)}${guaranteeActive?" · 🛡️ guaranteed":" · not covered by the guarantee"}`}>
               <div style={{fontSize:11.5,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> applies when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer option above it. Whatever you choose, we always pack with the utmost care to keep your fish safe in transit.</div>
               {PACKING_OPTIONS.map(opt=>{
                 const sel=packing===opt.key;
@@ -9311,7 +9313,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               {selPack.rank < packingOpt(suggestedPacking).rank &&(
                 <div style={{fontSize:11,color:"#9a3412",lineHeight:1.45,marginTop:2,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px"}}>⚠ You've chosen a lighter packing than we recommend for these fish — that's okay, but <b>live arrival won't be guaranteed</b>.</div>
               )}
-            </div>
+            </Collapsible>
           ) : anySuggestSpecial ? (
             <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"#eff6ff":"#fff",borderRadius:14,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
               <input type="checkbox" checked={specialDelivery} onChange={e=>setSpecialDelivery(e.target.checked)} style={{width:20,height:20,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
@@ -13868,6 +13870,20 @@ function SettingsPanel({settings,onSave,products=[]}){
           <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>Show coupon box at checkout</span><br/><span style={{fontSize:11,color:C.textSub}}>Off = customers cannot type any code.</span></span>
         </label>
 
+        {/* One tick hides every coupon box in the store, and nothing downstream says why: the
+            codes still exist, still validate, still show on the home banner — there is simply
+            nowhere left to type them. An owner who finds "no space for the coupon" at checkout
+            has no reason to suspect a switch three screens away, so it says so here, next to
+            the codes it is silencing. */}
+        {f.showCouponField===false && (f.coupons||[]).some(c=>c&&c.code) && (
+          <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:12,padding:"11px 13px",marginBottom:12,fontSize:12,color:"#b91c1c",lineHeight:1.55}}>
+            <b>Your coupon codes cannot be used right now.</b> The box above is unticked, so checkout shows no place to enter one — the codes below still exist but nobody can type them.
+            <button className="press" onClick={()=>set("showCouponField",true)}
+              style={{display:"block",marginTop:8,background:"#b91c1c",color:"white",border:"none",borderRadius:9,padding:"8px 13px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              Turn the coupon box back on
+            </button>
+          </div>
+        )}
         {(f.coupons||[]).map((c,i)=>{
           const upd=(patch)=>{ const arr=[...(f.coupons||[])]; arr[i]={...arr[i],...patch}; set("coupons",arr); };
           const lbl={fontSize:10.5,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.5,marginBottom:4};
@@ -15785,8 +15801,10 @@ function NemoStore(){
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
     trackFunnel("paid");
-    // Notify owner (email copy via EmailJS) + WhatsApp handled in the panel optionally
+    /* Both mails go out here, once, now that payment has actually been submitted: the owner's
+       copy to look at, and the customer's receipt for the order they just paid for. */
     sendOrderEmail(updated, settings.orderEmail||BUSINESS_EMAIL, settings);
+    sendCustomerEmail(updated, settings, "placed");
     return updated;
   };
 
