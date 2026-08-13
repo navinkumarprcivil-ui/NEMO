@@ -224,6 +224,23 @@
       }
     },
 
+    "visitorLog": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$day": {
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!newData.exists() && data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )",
+        "expiresAt": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber()"
+        },
+        "u": {
+          "$uid": {
+            ".write": "auth != null && ($uid === auth.uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+            ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length <= 60)"
+          }
+        }
+      }
+    },
+
     "testimonials": {
       ".read": true,
       "$id": {
