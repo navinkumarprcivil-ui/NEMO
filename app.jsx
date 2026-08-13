@@ -6370,7 +6370,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90";
+const APP_BUILD = "v90.19039eca";
 async function forceRefresh(){
   try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
@@ -7806,7 +7806,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           ))}
         </div>
         <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,.3) 0%,transparent 35%)",pointerEvents:"none"}}/>
-        <button className="press" onClick={()=>nav(prevPage)}
+        {/* restore:true — the phone's own Back button already returned the shopper to the spot
+            in the list they came from, but this arrow, which is the one most people actually
+            tap, dropped them at the top. Working down a long shop list and losing the place on
+            every product opened is what made browsing feel like starting over each time. */}
+        <button className="press" onClick={()=>nav(prevPage,null,{restore:true})}
           style={{position:"absolute",top:50,left:16,background:"rgba(255,255,255,.2)",border:"1.5px solid rgba(255,255,255,.35)",borderRadius:12,width:40,height:40,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)"}}>←</button>
         {slides.length>1&&galArrow(-1,"left","Previous photo","‹")}
         {slides.length>1&&galArrow(1,"right","Next photo","›")}

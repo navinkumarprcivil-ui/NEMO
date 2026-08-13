@@ -12,13 +12,41 @@
  * makes the diff on every future rebuild unreadable.
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { transformSync } from "esbuild";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const src = readFileSync(join(root, "app.jsx"), "utf8");
+/* The build id must change whenever the code does, or nothing updates: version.json is what a
+ * running tab compares itself against, and CACHE in sw.js is what makes a browser install the
+ * new worker at all. Both were derived from a hand-typed APP_BUILD — and a hand-typed constant
+ * is a constant somebody forgets. It sat at one value across a run of deploys, so every tab
+ * decided it was already current and every service worker file was byte-identical; on a slow
+ * connection the worker's network-first race then kept serving the cached bundle, and fixes
+ * that had shipped days earlier were simply never seen.
+ *
+ * It is derived from the source now. Same code in, same id out — reproducible — but any change
+ * to app.jsx or index.html produces a new one, and it is written back into app.jsx so the
+ * source, the bundle, version.json and the worker can never disagree. */
+let src = readFileSync(join(root, "app.jsx"), "utf8");
+const shell = readFileSync(join(root, "index.html"), "utf8");
+const BUILD_RE = /const APP_BUILD\s*=\s*"([^"]+)"/;
+const prevBuild = (src.match(BUILD_RE) || [])[1];
+if (!prevBuild) throw new Error("APP_BUILD not found in app.jsx — the auto-update check needs it");
+// Hash everything EXCEPT the id itself, so the id is a function of the code and nothing else.
+const fingerprint = createHash("sha256")
+  .update(src.replace(BUILD_RE, 'const APP_BUILD = ""'))
+  .update(shell)
+  .digest("hex").slice(0, 8);
+const series = (prevBuild.split(".")[0]) || "v90";   // keep the human-readable series
+const build = `${series}.${fingerprint}`;
+if (prevBuild !== build) {
+  src = src.replace(BUILD_RE, `const APP_BUILD = "${build}"`);
+  writeFileSync(join(root, "app.jsx"), src);
+  console.log(`APP_BUILD ${prevBuild} -> ${build}`);
+}
 const { code } = transformSync(src, {
   loader: "jsx",
   jsx: "transform", // classic React.createElement — there is no bundler/import map at runtime
@@ -33,14 +61,6 @@ new Function(code); // parse check
 
 writeFileSync(join(root, "app.js"), code);
 console.log(`app.js written — ${code.length} bytes`);
-
-/* APP_BUILD in app.jsx is the single source of truth for "which build is this".
- * Two other files have to agree with it or the auto-update check breaks in opposite
- * directions: version.json is what a running tab compares itself against, and CACHE in
- * sw.js is what makes browsers install the new worker at all. Deriving both here means a
- * bumped APP_BUILD can no longer ship with either one left behind. */
-const build = (src.match(/const APP_BUILD\s*=\s*"([^"]+)"/) || [])[1];
-if (!build) throw new Error("APP_BUILD not found in app.jsx — the auto-update check needs it");
 
 writeFileSync(join(root, "version.json"), JSON.stringify({ build }) + "\n");
 
