@@ -354,7 +354,12 @@ function normalizeCoupon(c){
   if(!c||typeof c!=="object") return null;
   const type=["flat","percent","coins"].includes(c.type)?c.type:"flat";
   return {
-    id: c.id||("cp"+Math.random().toString(36).slice(2,9)),
+    /* Derived, never random. migrateCoupons runs on every render, so a random fallback handed
+       the same coupon a new id each time — and React, keying the banners on it, threw the card
+       away and built a fresh one every render. That was the blinking welcome banner: not an
+       animation bug, an identity one. Anything without a stored id is identified by what it
+       is instead. */
+    id: c.id||("cp-"+String(c.code||c.name||"offer").trim().toUpperCase().replace(/[^A-Z0-9]+/g,"-").slice(0,32)),
     code: String(c.code||"").trim().toUpperCase(),
     name: String(c.name||"").trim(),          // "Welcome Offer", "Diwali Sale", …
     type,                                     // flat ₹ | percent % | coins (reward, not a discount)
@@ -376,7 +381,13 @@ function normalizeCoupon(c){
 function migrateCoupons(s){
   const list=(Array.isArray(s.coupons)?s.coupons:[]).map(normalizeCoupon).filter(c=>c&&c.code);
   const have=code=>list.some(c=>c.code===String(code||"").toUpperCase());
-  if(s.welcomeCouponEnabled!==false && s.welcomeCoupon && !have(s.welcomeCoupon)){
+  /* The legacy welcome fields describe THE welcome offer. Matching only on code meant an owner
+     who built a new one on the coupons screen — a 10% welcome, say, under a new code — kept the
+     old ₹100 one as well, and the home page showed two welcome banners saying different things.
+     If the list already defines a first-order offer for the welcome screen, that IS the welcome
+     offer and the legacy fields are the same thing in older clothes. */
+  const haveWelcome=list.some(c=>c.firstOrderOnly&&c.showOnWelcome);
+  if(s.welcomeCouponEnabled!==false && s.welcomeCoupon && !have(s.welcomeCoupon) && !haveWelcome){
     list.push(normalizeCoupon({
       code:s.welcomeCoupon, name:"Welcome Offer", type:"flat",
       value:Number(s.welcomeCouponAmount||100), minOrder:Number(s.welcomeCouponMinOrder||999),
@@ -741,7 +752,10 @@ function validateCoupon(code, settings, userOrders, cartTotal){
   if(c.minOrder>0 && (cartTotal||0) < c.minOrder){
     return {ok:false, msg:`Minimum cart value ₹${c.minOrder} required for this coupon (add ₹${c.minOrder-(cartTotal||0)} more)`};
   }
-  const already = (userOrders||[]).some(o=>o.coupon&&String(o.coupon).toUpperCase()===want);
+  /* A cancelled order used nothing. hasPriorOrder above already ignores cancelled orders when
+     deciding whether someone is still a first-time buyer; this check did not, so a customer
+     whose order was cancelled — by them or by the store — could never use that code again. */
+  const already = (userOrders||[]).some(o=>o&&o.status!=="Cancelled"&&o.coupon&&String(o.coupon).toUpperCase()===want);
   if(already) return {ok:false, msg:"Coupon already used on this account"};
   return {ok:true, coupon:c};
 }
@@ -2424,6 +2438,32 @@ const IST_OFFSET_MS=5.5*60*60*1000;
    swallowed — but swallowed silently they are indistinguishable from nobody having visited,
    which is exactly the wrong thing to show an owner asking "where is everyone?". */
 let VISITOR_LOG_WRITE_ERR="";
+/* Firebase errors arrive in several shapes — a `code`, a `message`, or a bare string — and the
+   one that matters most (PERMISSION_DENIED) hides inside the message. Pull out something the
+   owner can act on rather than a word we chose. */
+function fbErrText(e){
+  const raw=String((e&&(e.code||e.message))||e||"unknown");
+  if(/permission[_ ]denied/i.test(raw)) return "PERMISSION_DENIED";
+  if(/timed-out|timeout/i.test(raw))    return "timed-out";
+  if(/network|offline|unavailable/i.test(raw)) return "network";
+  return raw.slice(0,80);
+}
+/* A read and a write, attempted for real, reporting exactly what Firebase said. Guesswork about
+   which half is broken is worse than useless when the two failures look identical on screen. */
+async function diagnoseVisitorLog(){
+  const out={ uid:"", adminClient:false, adminInRules:false, read:"", write:"" };
+  if(!FB_OK||!FB_AUTH||!FB_DB) return {...out, read:"offline", write:"offline"};
+  const u=FB_AUTH.currentUser;
+  out.uid=(u&&u.uid)||"";
+  out.adminClient=isAdminUid(out.uid);
+  // The rules name one admin uid literally; a co-admin added in Settings passes the app's own
+  // check but is a stranger to the database, which looks exactly like unpublished rules.
+  out.adminInRules=(out.uid===ADMIN_UID);
+  try{ await FB_DB.ref("visitorLog").get(); out.read="ok"; }catch(e){ out.read=fbErrText(e); }
+  const probe="visitorLog/"+istDayKey()+"/expiresAt";
+  try{ await FB_DB.ref(probe).set(visitorDayExpiry(istDayKey())); out.write="ok"; }catch(e){ out.write=fbErrText(e); }
+  return out;
+}
 function istDayKey(ms){ return new Date((ms==null?Date.now():ms)+IST_OFFSET_MS).toISOString().slice(0,10); }
 function istDayEndMs(day){ return Date.parse(day+"T00:00:00Z")-IST_OFFSET_MS+86400000; }
 /* VISITOR_LOG_DAYS counts the day buckets on screen, so a day survives for the rest of the
@@ -2507,8 +2547,16 @@ async function loadVisitorLog(){
   if(!FB_OK||!FB_DB) return {days:[],error:"offline"};
   if(!isAdminSignedIn()) return {days:[],error:"not-signed-in"};
   let v=null;
-  try{ const s=await withTimeout(FB_DB.ref("visitorLog").get(),6000,"__fail"); if(s==="__fail") throw new Error("denied"); v=s&&s.val(); }
-  catch(e){ return {days:[],error:String(e&&(e.code||e.message)||"denied")}; }
+  /* Firebase's own error, not a label of ours. withTimeout swallows the rejection and hands
+     back its fallback, so wrapping the read in it turned "PERMISSION_DENIED" and "the network
+     went away" into the same word — a diagnostic that reads precisely and means nothing. Race
+     an explicit timeout instead and let the real error through. */
+  try{
+    const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error("timed-out")),8000));
+    const s=await Promise.race([FB_DB.ref("visitorLog").get(), timeout]);
+    v=s&&s.val();
+  }
+  catch(e){ return {days:[],error:fbErrText(e)}; }
   if(!v) return {days:[],error:VISITOR_LOG_WRITE_ERR?("write:"+VISITOR_LOG_WRITE_ERR):""};
   const now=Date.now(), keep=[];
   for(const day of Object.keys(v)){
@@ -8663,6 +8711,18 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   const f=(k,v)=>setAddr(a=>({...a,[k]:v}));
   const fb=(k,v)=>setBilling(a=>({...a,[k]:v}));
   const anySuggestSpecial=cart.some(i=>i.suggestSpecialDelivery);
+  /* A coupon is checked against the cart when it is applied — and the cart can still be edited
+     from this page afterwards. Apply WELCOME100 at ₹1,000, then take an item out down to ₹400,
+     and the ₹100 came off anyway: the minimum was never looked at again. Re-check it whenever
+     the total moves, and say why it went rather than dropping it silently. */
+  useEffect(()=>{
+    if(!couponApplied) return;
+    const min=Number(couponApplied.minOrder)||0;
+    if(min>0 && total<min){
+      setCouponApplied(null);
+      setCouponMsg({text:`Coupon removed — the cart is now under the ₹${min} minimum for it.`,ok:false});
+    }
+  },[total,couponApplied]);
   const applyCoupon=async()=>{
     // Whether these two may be held at once is the owner's setting; reward coins always stack.
     if(refApplied && settings.allowCouponWithReferral!==true){ setCouponMsg({text:"You can use a coupon or a referral code — not both. Remove the referral code first.",ok:false}); return; }
@@ -8672,8 +8732,15 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       setCouponMsg({text:"Today's coupon quota is full — please try tomorrow.",ok:false}); setCouponApplied(null); return;
     }
     setCouponApplied(r.coupon);
-    const saved=r.coupon.type==="percent"?Math.round(total*r.coupon.discount/100):Number(r.coupon.discount||0);
-    setCouponMsg({text:`✓ Coupon applied — saves ₹${saved}!`,ok:true});
+    /* Was computed here by hand off r.coupon.discount — a field normalizeCoupon does not write;
+       it writes `value`. So a flat coupon confirmed "saves ₹0" and a percent one "saves ₹NaN",
+       while the total quietly came down by the right amount. The discount was never wrong, the
+       sentence telling the customer about it was. couponBenefit is the one place that knows,
+       ceiling included, so ask it. */
+    const ben=couponBenefit(r.coupon,total);
+    setCouponMsg({text: ben.coins>0
+      ? `✓ Coupon applied — earns ${ben.coins} reward coins!`
+      : `✓ Coupon applied — saves ₹${ben.discount}!`, ok:true});
   };
 
   const applyReferral=async()=>{
@@ -11759,6 +11826,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   // customer personal data, so it is not held in memory while the admin is elsewhere.
   const [visitorLog,setVisitorLog]=useState(null);
   const [visitorLogErr,setVisitorLogErr]=useState("");
+  const [visitorDiag,setVisitorDiag]=useState("");
   const [openVisitDay,setOpenVisitDay]=useState("");
   const reloadVisitorLog=()=>loadVisitorLog().then(r=>{ setVisitorLog((r&&r.days)||[]); setVisitorLogErr((r&&r.error)||""); });
   useEffect(()=>{ if(tab==="dashboard") reloadVisitorLog(); else { setVisitorLog(null); setOpenVisitDay(""); } },[tab]);
@@ -12007,8 +12075,17 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>Not connected — can't read the log right now.</div>
               ) : visitorLogErr ? (
                 <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:12,padding:"11px 13px",fontSize:12,color:"#b91c1c",lineHeight:1.55}}>
-                  <b>The log isn't recording.</b> This is almost always the database rules: publish <code>database.rules.json</code> in Firebase Console → Realtime Database → Rules, then reload.
-                  <div style={{fontSize:10.5,opacity:.8,marginTop:5}}>Reported: {visitorLogErr}</div>
+                  <b>The log isn't reading.</b> {visitorLogErr==="PERMISSION_DENIED"
+                    ? <>Firebase refused the read. Either <code>visitorLog</code> is missing from the published rules, or the account you're signed in with isn't the admin uid the rules name.</>
+                    : visitorLogErr==="timed-out" ? <>The database didn't answer in time — usually a slow connection. Try the ↻ button.</>
+                    : <>Reported: {visitorLogErr}</>}
+                  {/* Don't make the owner guess which half is broken — ask Firebase. */}
+                  <button className="press" onClick={async()=>{ setVisitorDiag("checking…"); const d=await diagnoseVisitorLog();
+                      setVisitorDiag(`read: ${d.read} · write: ${d.write} · signed in as ${d.uid?d.uid.slice(0,10)+"…":"nobody"}${d.adminClient&&!d.adminInRules?" · this is a CO-ADMIN uid, which the database rules do not list":""}`); }}
+                    style={{marginTop:9,background:"white",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:9,padding:"7px 12px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                    Run a check
+                  </button>
+                  {visitorDiag&&<div style={{fontSize:10.5,marginTop:7,opacity:.9,wordBreak:"break-word",fontFamily:"monospace"}}>{visitorDiag}</div>}
                 </div>
               ) : (
                 <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>No signed-in visitors logged yet today. Customers browsing without signing in are counted above but have no name to show — and your own admin visits are deliberately left out.</div>
