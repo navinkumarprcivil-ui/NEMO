@@ -398,9 +398,28 @@
 <script>
   (function(){
     var vv = window.visualViewport;
+    var lastGood = 0;
+    function editing(){
+      var el = document.activeElement;
+      if (!el) return false;
+      var t = el.tagName;
+      return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable === true;
+    }
+    /* The on-screen keyboard shrinks the VISUAL viewport, and this property drives the height
+       of the whole app shell — so opening the keyboard shrank the shell and carried the bottom
+       nav up with it, parking it above the keyboard mid-screen. Worse, if the resize that fires
+       when the keyboard closes was missed or arrived while the field was still scrolled, the
+       small value stuck and the nav never came back down.
+
+       A large shrink while a text field has focus is the keyboard, not the window. Ignore it
+       and keep the last real height: the shell stays full height, the nav stays at the bottom
+       where it belongs, and the browser scrolls the focused field into view by itself. */
     function apply(){
       var h = (vv && vv.height) || window.innerHeight;
-      if (h > 0) document.documentElement.style.setProperty('--app-vh', h + 'px');
+      if (!(h > 0)) return;
+      if (editing() && lastGood && h < lastGood * 0.9) return;
+      lastGood = h;
+      document.documentElement.style.setProperty('--app-vh', h + 'px');
     }
     apply();
     window.addEventListener('resize', apply, {passive:true});
@@ -409,6 +428,11 @@
     // covers the back/forward cache, where no resize fires at all.
     document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(apply, 60); });
     window.addEventListener('pageshow', apply);
+    /* Leaving a field is the moment the keyboard starts to go. The resize that follows is not
+       guaranteed to arrive — and never does when the keyboard is dismissed by the system back
+       gesture — so re-measure once the animation has had time to finish, and again in case the
+       device is slow about it. By then nothing is focused, so the guard above lets it through. */
+    document.addEventListener('focusout', function(){ setTimeout(apply, 300); setTimeout(apply, 800); }, true);
     if (vv) { vv.addEventListener('resize', apply, {passive:true}); }
   })();
 </script>
