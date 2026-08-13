@@ -9287,8 +9287,11 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             <button className="press" onClick={()=>setStep(1)}
               style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🚚 Change shipping</button>
           </div>
-          {(()=>{ const dc=nextDiscountNudge(total,settings); if(!dc) return null; return (
-            <button className="press" onClick={()=>nav("shop")} style={{width:"100%",textAlign:"left",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 12px",marginBottom:12,fontSize:11.5,color:"#9a3412",fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+          {/* Centred, to match the same nudge in the cart. Passing `orders` matters as much as
+              the alignment: without it usableCoupons cannot tell a returning customer from a
+              new one, so this offered first-order-only coupons to people who cannot use them. */}
+          {(()=>{ const dc=nextDiscountNudge(total,settings,orders); if(!dc||dc.unlocked) return null; return (
+            <button className="press" onClick={()=>nav("shop")} style={{width:"100%",textAlign:"center",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:11.5,color:"#9a3412",fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",lineHeight:1.5}}>
               🏷️ Add <b>₹{dc.need}</b> more to get <b>{dc.off}</b> — use code <b>{dc.code}</b> · tap to add items
             </button>
           ); })()}
@@ -16049,7 +16052,14 @@ function NemoStore(){
       {!isAdminPage && cart.length>0 && !["cart","checkout","auth","detail"].includes(page) && (()=>{
         const thr=Number(settings.freeDeliveryThreshold||0);
         const left=thr>0?Math.max(0,thr-cartTotal):0;
-        const dc=nextDiscountNudge(cartTotal,settings); // nearest coupon discount to unlock
+        // Nearest coupon discount to unlock. `orders` is what tells usableCoupons whether a
+        // first-order coupon still applies — without it this pill dangled the welcome offer at
+        // customers who had already used it.
+        /* Only a threshold still AHEAD belongs on this pill. nextDiscountNudge also reports a
+           cleared one (need: 0), which the cart uses for its "you've unlocked it" state — left
+           unfiltered here it would read "Add \u20b90 more to get 10% off". */
+        const nudge=nextDiscountNudge(cartTotal,settings,orders);
+        const dc=(nudge&&!nudge.unlocked&&nudge.need>0)?nudge:null;
         // Show whichever reward needs the least extra spend (Zepto-style).
         const showFree=left>0 && (!dc || left<=dc.need);
         return(
