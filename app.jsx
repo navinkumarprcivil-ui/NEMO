@@ -3363,6 +3363,17 @@ function gstPlaceOfSupply(order, settings){
   if(!name) name=(code&&GST_STATES[code])||(derived&&derived.name)||"";
   return { sellerStateCode, code, name, inter: !!(sellerStateCode&&code&&sellerStateCode!==code) };
 }
+/* Reward coins for one order: earned on what the customer ACTUALLY PAID for the goods —
+   product value less every discount applied, never the shipping / parcel / packing cost.
+   One definition, because three places computed it separately and any of them could drift
+   from the credit that is actually granted, promising a customer coins they never receive. */
+function coinsEarnedFor(order, settings){
+  const pph=Number(settings?.loyaltyPointsPerHundred||10);
+  const o=order||{};
+  const goods=Number(o.total)||0;
+  const off=(Number(o.couponDiscount)||0)+(Number(o.referralDiscount)||0)+(Number(o.loyaltyDiscount)||0);
+  return Math.floor(Math.max(0,goods-off)/100*pph);
+}
 function orderTaxLines(order, settings){
   const s=settings||{}, o=order||{};
   const r2=n=>Math.round((Number(n)||0)*100)/100;
@@ -3960,7 +3971,7 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     const ptsRedeemed=loyaltyUsed>0?Math.round(loyaltyUsed/(rupeePerPoint||1)):0;
     // Coins are credited on DELIVERY, so an undelivered or cancelled order has earned none —
     // this column used to fill in a figure for every order and overstated the liability.
-    const ptsEarned=(settings?.loyaltyEnabled!==false && String(o.status||"")==="Delivered")?Math.floor(((Number(o.total)||0)/100)*pph):0; // product value only (excludes shipping)
+    const ptsEarned=(settings?.loyaltyEnabled!==false && String(o.status||"")==="Delivered")?coinsEarnedFor(o,settings):0;
     const wBal=walletBalances[o.userUid]!=null?walletBalances[o.userUid]:"";
     const bd=o.shippingBreakup||{courier:Math.max(0,(o.fee||0)-(o.thermacolFee||0)-(o.specialDeliveryFee||0)),thermacol:o.thermacolFee||0,carton:0,special:o.specialDeliveryFee||0};
     const g=orderGST(o,settings); const delOn=deliveredAtOf(o);
@@ -8349,6 +8360,37 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
   );
 }
 
+/* ═══════════════════ COLLAPSIBLE PANEL ═══════════════════
+   A titled strip that opens on tap. Long explanatory blocks — acclimatization steps, the
+   Live Arrival Guarantee, packing and collection notes — are worth having on the page but
+   are not worth a screenful each: stacked open they push the thing the customer came to do
+   (pay) below three scrolls of prose, and the prose stops being read at all.
+
+   Closed by default unless `open` says otherwise. Purely presentational: nothing inside is
+   unmounted, so anything that was reachable still is, one tap further. */
+function Collapsible({title, icon="", subtitle="", open=false, tone="plain", children}){
+  const [on,setOn]=useState(!!open);
+  const t = tone==="green" ? {bg:"#ecfdf5",bd:"#a7f3d0",fg:"#065f46",sub:"#047857"}
+          : tone==="amber" ? {bg:"#fff7ed",bd:"#fed7aa",fg:"#9a3412",sub:"#9a3412"}
+          :                  {bg:C.card,   bd:C.border,  fg:C.text,   sub:C.textSub};
+  return(
+    <div style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+      <button className="press" type="button" onClick={()=>setOn(v=>!v)} aria-expanded={on}
+        style={{display:"flex",alignItems:"center",gap:9,width:"100%",background:"none",border:"none",
+                padding:"12px 14px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        {icon&&<span style={{fontSize:17,flexShrink:0}}>{icon}</span>}
+        <span style={{flex:1,minWidth:0}}>
+          <span style={{display:"block",fontSize:13,fontWeight:800,color:t.fg,lineHeight:1.35}}>{title}</span>
+          {subtitle&&!on&&<span style={{display:"block",fontSize:11,color:t.sub,opacity:.85,marginTop:2,lineHeight:1.4}}>{subtitle}</span>}
+        </span>
+        <span style={{flexShrink:0,fontSize:13,color:t.sub,transition:"transform .25s cubic-bezier(.22,1,.36,1)",
+                      transform:on?"rotate(180deg)":"none",lineHeight:1}}>▾</span>
+      </button>
+      {on&&<div className="fade-in" style={{padding:"0 14px 13px"}}>{children}</div>}
+    </div>
+  );
+}
+
 /* ═══════════════════ PAYMENT PANEL (prepayment + proof upload) ═══════════════════ */
 function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact=false}){
   const grand = order.amountDue ?? (order.total+order.fee);
@@ -8746,6 +8788,77 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       setCouponMsg({text:`Coupon removed — the cart is now under the ₹${min} minimum for it.`,ok:false});
     }
   },[total,couponApplied]);
+  /* Coupon, referral and wallet all lived only on step 1, below the address form — so the
+     place a customer actually looks for a discount box, the Review screen with the total on
+     it, had none, and plenty simply never scrolled far enough on the address page to find one.
+     Rendered from here on BOTH steps: same state, same handlers, so a code applied on either
+     is the same code. */
+  const renderOffersBox=()=>(<>
+          {/* Coupon code */}
+          {settings.showCouponField!==false && (
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>🎟 Coupon Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+            {/* Show available coupon hints — secret coupons are never listed here */}
+            {(()=>{
+              // Only codes the owner chose to advertise at checkout, still in date, and
+              // valid for this shopper — a first-order code is not dangled at a repeat customer.
+              const active=usableCoupons(settings,orders,"checkout");
+              if(!active.length) return null;
+              return(
+                <div style={{marginBottom:8,display:"flex",flexDirection:"column",gap:5}}>
+                  {active.map((c,i)=>{
+                    const minOk=!c.minOrder||total>=Number(c.minOrder);
+                    const needed=c.minOrder?Math.max(0,Number(c.minOrder)-total):0;
+                    const discount=c.type==="coins"?`${c.value} reward coins`
+                                  :c.type==="percent"?`${c.value}% off${c.maxDiscount>0?` up to ₹${c.maxDiscount}`:""}`
+                                  :`₹${c.value} off`;
+                    return(
+                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:minOk?"#f0fdf4":"#fefce8",border:`1px solid ${minOk?"#86efac":"#fde68a"}`,borderRadius:10,padding:"7px 12px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:12,color:minOk?C.success:"#92400e",background:minOk?"#dcfce7":"#fef3c7",padding:"2px 8px",borderRadius:6}}>{c.code}</span>
+                          <span style={{fontSize:11.5,color:minOk?"#15803d":"#92400e",fontWeight:600}}>{discount}</span>
+                        </div>
+                        {minOk?(
+                          <button className="press" onClick={()=>{setCouponCode(c.code);}}
+                            style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Apply</button>
+                        ):(
+                          <span style={{fontSize:10.5,color:"#92400e",fontWeight:600}}>Add ₹{needed} more</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            <div style={{display:"flex",gap:8}}>
+              <input value={couponCode} onChange={e=>{setCouponCode(e.target.value);setCouponMsg({text:"",ok:false});setCouponApplied(null);}}
+                placeholder="Enter coupon code"
+                style={{flex:1,borderRadius:12,border:`1.5px solid ${couponMsg.ok?"#22c55e":couponMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+              <button className="press" onClick={applyCoupon}
+                style={{background:C.primary,color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+                Apply
+              </button>
+            </div>
+            {couponMsg.text&&<div style={{fontSize:11.5,color:couponMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{couponMsg.text}</div>}
+          </div>
+          )}
+          {/* Referral code — a friend's 6-digit code, one-time use */}
+          {settings.referralEnabled!==false && (
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>💜 Referral Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+            <div style={{display:"flex",gap:8}}>
+              <input value={refInput} onChange={e=>{setRefInput(e.target.value.replace(/\D/g,"").slice(0,6));setRefMsg({text:"",ok:false});setRefApplied(false);}}
+                inputMode="numeric" placeholder="6-digit friend's code"
+                style={{flex:1,borderRadius:12,border:`1.5px solid ${refMsg.ok?"#22c55e":refMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",letterSpacing:2,fontFamily:"monospace"}}/>
+              <button className="press" onClick={applyReferral} disabled={refInput.length!==6}
+                style={{background:refInput.length===6?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+                Apply
+              </button>
+            </div>
+            {refMsg.text&&<div style={{fontSize:11.5,color:refMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{refMsg.text}</div>}
+          </div>
+          )}
+  </>);
   const applyCoupon=async()=>{
     // Whether these two may be held at once is the owner's setting; reward coins always stack.
     if(refApplied && settings.allowCouponWithReferral!==true){ setCouponMsg({text:"You can use a coupon or a referral code — not both. Remove the referral code first.",ok:false}); return; }
@@ -8853,8 +8966,12 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
       const ptsUsed=Math.ceil(loyaltyDiscount/loyaltyVal);
       redeemPoints(uid2, ptsUsed, id);
     }
-    // Email a copy to the owner (via EmailJS) if configured
-    sendOrderEmail(order, settings.orderEmail||BUSINESS_EMAIL, settings);
+    /* The owner is NOT emailed here. An order at this point is only "Awaiting Payment" — it may
+       never be paid at all, and the ten-minute window cancels a good number of them. Mailing at
+       placement meant an alert for every abandoned checkout, and then a second one for the same
+       order when payment actually arrived. The owner's copy is sent once, from submitPayment,
+       when there is money to look at. The CUSTOMER still hears from us now: they have an order
+       to pay for and a deadline to do it by. */
     sendCustomerEmail(order, settings);
     // Claim the friend's referral code so it can never be reused
     if(refApplied&&refInput.trim()) claimReferral(refInput.trim(), userKey(user), id);
@@ -8914,11 +9031,11 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               // Show the acclimatization steps inline right after payment so the customer is ready when the fish arrive.
               const steps=String(settings.acclimatizationTips||DEFAULT_SETTINGS.acclimatizationTips).split("\n").map(s=>s.replace(/^\s*\d+[.)]\s*/,"").trim()).filter(Boolean);
               return(
-                <div style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"15px 16px",marginBottom:16,textAlign:"left"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                    <span style={{fontSize:22}}>🐠</span>
-                    <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14.5,fontWeight:800,color:"#065f46"}}>How to acclimatize your fish</span>
-                  </div>
+                <div style={{width:"100%",maxWidth:340,textAlign:"left"}}>
+                  {/* Collapsed by default: the steps matter when the parcel arrives, not while
+                     the customer is still reading their order confirmation. */}
+                  <Collapsible icon="🐠" tone="green" title="How to acclimatize your fish"
+                    subtitle={`${steps.length} steps — tap to read when your parcel arrives`}>
                   <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5,marginBottom:10}}>Save these steps for when your parcel arrives — they keep your new fish safe and stress-free.</div>
                   <ol style={{margin:0,paddingLeft:18,display:"flex",flexDirection:"column",gap:6}}>
                     {steps.map((st,i)=>(<li key={i} style={{fontSize:12.5,color:"#065f46",lineHeight:1.5}}>{st}</li>))}
@@ -8927,6 +9044,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
                     style={{marginTop:12,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
                     📖 See full care guides →
                   </button>
+                  </Collapsible>
                 </div>
               );
             }
@@ -8944,7 +9062,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           {/* Loyalty points earned */}
           {settings.loyaltyEnabled&&placed&&(()=>{
             const pph=Number(settings.loyaltyPointsPerHundred||10);
-            const pts=Math.floor(((Number(placed.total)||0)/100)*pph); // product value only (excludes shipping)
+            const pts=coinsEarnedFor(placed, settings); // exactly what will be credited on delivery
             return pts>0?(
               <div className="points-pop" style={{background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:16,padding:"12px 20px",marginBottom:14,display:"flex",alignItems:"center",gap:10,width:"100%",maxWidth:340}}>
                 <span style={{fontSize:26}}>👛</span>
@@ -9203,70 +9321,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
           {settings.loyaltyEnabled&&loyaltyPts!=null&&loyaltyPts>0&&(
             <LoyaltyWidget points={loyaltyPts} settings={settings} subtotal={total} redeemApplied={loyaltyRedeemed} onRedeem={()=>setLoyaltyRedeemed(true)}/>
           )}
-          {/* Coupon code */}
-          {settings.showCouponField!==false && (
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>🎟 Coupon Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
-            {/* Show available coupon hints — secret coupons are never listed here */}
-            {(()=>{
-              // Only codes the owner chose to advertise at checkout, still in date, and
-              // valid for this shopper — a first-order code is not dangled at a repeat customer.
-              const active=usableCoupons(settings,orders,"checkout");
-              if(!active.length) return null;
-              return(
-                <div style={{marginBottom:8,display:"flex",flexDirection:"column",gap:5}}>
-                  {active.map((c,i)=>{
-                    const minOk=!c.minOrder||total>=Number(c.minOrder);
-                    const needed=c.minOrder?Math.max(0,Number(c.minOrder)-total):0;
-                    const discount=c.type==="coins"?`${c.value} reward coins`
-                                  :c.type==="percent"?`${c.value}% off${c.maxDiscount>0?` up to ₹${c.maxDiscount}`:""}`
-                                  :`₹${c.value} off`;
-                    return(
-                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:minOk?"#f0fdf4":"#fefce8",border:`1px solid ${minOk?"#86efac":"#fde68a"}`,borderRadius:10,padding:"7px 12px"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:12,color:minOk?C.success:"#92400e",background:minOk?"#dcfce7":"#fef3c7",padding:"2px 8px",borderRadius:6}}>{c.code}</span>
-                          <span style={{fontSize:11.5,color:minOk?"#15803d":"#92400e",fontWeight:600}}>{discount}</span>
-                        </div>
-                        {minOk?(
-                          <button className="press" onClick={()=>{setCouponCode(c.code);}}
-                            style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Apply</button>
-                        ):(
-                          <span style={{fontSize:10.5,color:"#92400e",fontWeight:600}}>Add ₹{needed} more</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-            <div style={{display:"flex",gap:8}}>
-              <input value={couponCode} onChange={e=>{setCouponCode(e.target.value);setCouponMsg({text:"",ok:false});setCouponApplied(null);}}
-                placeholder="Enter coupon code"
-                style={{flex:1,borderRadius:12,border:`1.5px solid ${couponMsg.ok?"#22c55e":couponMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
-              <button className="press" onClick={applyCoupon}
-                style={{background:C.primary,color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
-                Apply
-              </button>
-            </div>
-            {couponMsg.text&&<div style={{fontSize:11.5,color:couponMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{couponMsg.text}</div>}
-          </div>
-          )}
-          {/* Referral code — a friend's 6-digit code, one-time use */}
-          {settings.referralEnabled!==false && (
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>💜 Referral Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
-            <div style={{display:"flex",gap:8}}>
-              <input value={refInput} onChange={e=>{setRefInput(e.target.value.replace(/\D/g,"").slice(0,6));setRefMsg({text:"",ok:false});setRefApplied(false);}}
-                inputMode="numeric" placeholder="6-digit friend's code"
-                style={{flex:1,borderRadius:12,border:`1.5px solid ${refMsg.ok?"#22c55e":refMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",letterSpacing:2,fontFamily:"monospace"}}/>
-              <button className="press" onClick={applyReferral} disabled={refInput.length!==6}
-                style={{background:refInput.length===6?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
-                Apply
-              </button>
-            </div>
-            {refMsg.text&&<div style={{fontSize:11.5,color:refMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{refMsg.text}</div>}
-          </div>
-          )}
+            {renderOffersBox()}
           {/* Billing address */}
           <label style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"11px 14px",marginBottom:12,cursor:"pointer",userSelect:"none",border:`1px solid ${C.border}`}}>
             <input type="checkbox" checked={useSameBilling} onChange={e=>setUseSameBilling(e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
@@ -9484,6 +9539,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
               <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Arrival Guarantee</span>
               <span style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Included</span>
             </div>}
+            {/* The same box again, where a customer actually goes looking for it: beside the
+                total they are about to pay, not buried under the address form a screen back. */}
+            <div style={{margin:"4px 0 12px"}}>{renderOffersBox()}</div>
             {couponApplied&&couponDiscount>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:13,color:C.success}}>🎟 Coupon ({couponCode.toUpperCase()})</span>
               <span style={{fontSize:13,fontWeight:600,color:C.success}}>-₹{couponDiscount}</span>
@@ -9527,16 +9585,15 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
 
           {/* Courier-collection notice — the single biggest cause of a bad delivery is a parcel
               sitting at the courier hub. Said plainly right before the order is placed. */}
-          <div style={{marginTop:12,background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-              <span style={{fontSize:18}}>📦</span>
-              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#92400e"}}>Please track your parcel &amp; collect it fast</span>
-            </div>
+          {/* Advice, not an instruction the customer must act on before paying — so it sits
+             folded above the button instead of taking a screenful between the total and it. */}
+          <Collapsible icon="📦" tone="amber" title="Please track your parcel &amp; collect it fast"
+            subtitle="How door delivery works with the courier — tap to read">
             <div style={{fontSize:12,color:"#78350f",lineHeight:1.6}}>
               Once your order is dispatched we'll share the courier &amp; consignment number — please <b>keep tracking it</b> and <b>collect it from the courier partner as soon as it reaches your area</b>.
               {" "}Door delivery depends entirely on the courier partner and is <b>not in our hands</b>. We request every customer to put in that little effort to get the package the same day it arrives{hasLiveFish?<>, <b>especially for live fish &amp; plants</b> — every extra hour in the box matters</>:null}.
             </div>
-          </div>
+          </Collapsible>
 
           {placeErr&&<div style={{marginTop:14,background:"#fef2f2",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
           <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={handlePlaceOrder} disabled={placing}
@@ -15468,9 +15525,13 @@ function NemoStore(){
     if(updated.status==="Delivered" && prevStatus!=="Delivered"){
       // (a) buyer earns loyalty points on the amount actually paid
       if(settings.loyaltyEnabled!==false && updated.userUid && !updated.pointsEarned){
-        // Reward coins apply to PRODUCT VALUE (subtotal) only — never shipping / parcel / packing cost.
-        const amt=Number(updated.total)||0;
-        const pts=Math.floor((Number(amt)||0)/100*pph);
+        /* Reward coins are earned on what the customer ACTUALLY PAID for the goods: the product
+           value less every discount they used, and never the shipping / parcel / packing cost.
+           This used to run off `total` — the subtotal before any discount — so a ₹1,000 order
+           settled with a ₹300 coupon still earned coins on the full ₹1,000. That compounds:
+           spend a coupon, earn full coins anyway, spend those coins next order, earn full again.
+           The comment here always claimed "the amount actually paid"; now it is true. */
+        const pts=coinsEarnedFor(updated, settings);
         if(pts>0){ adminCreditLoyalty(updated.userUid, pts, "earn:"+updated.id, "Order "+(updated.orderNo||updated.id), settings.walletValidityMonths); updated={...updated,pointsEarned:pts}; }
       }
       // (b) referrer earns their reward, credited straight to their wallet
