@@ -9602,10 +9602,10 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
   );
 }
 
-/* ═══════════════════ "WHY NEMO" WELCOME POPUP (once a day, on the first visit) ═══════════════════
-   A shopper who lands here for the first time that day sees, in one screen, how we differ from the
-   usual aquarium seller. Gated by a date stamp in localStorage so it shows at most ONCE PER DAY —
-   never twice in a session, never on the admin side. */
+/* ═══════════════════ "WHY NEMO" WELCOME POPUP (once a week, on the first visit) ═══════════════════
+   A shopper who lands here sees, in one screen, how we differ from the usual aquarium seller.
+   Gated by a date stamp in localStorage so it shows at most ONCE EVERY SEVEN DAYS — never twice
+   in a session, never on the admin side. */
 const WHY_US_KEY = "nemo-whyus-day";
 let WHY_US_SHOWN = "";   // in-memory mirror of the stamp, for when no storage accepts a write
 function todayStamp(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
@@ -9615,7 +9615,19 @@ function whyUsStamp(){
   try{ const v=sessionStorage.getItem(WHY_US_KEY); if(v) return v; }catch(e){}
   return "";
 }
-function whyUsDueToday(){ return whyUsStamp()!==todayStamp(); }
+/* Weekly, not daily — and a rolling seven days rather than a calendar week, so someone who
+   sees it on a Sunday is not shown it again on the Monday because the week number ticked over.
+   The stamp is still the date it was last shown, so existing stored values keep working: they
+   simply now buy six more days of quiet than they used to. */
+const WHY_US_EVERY_DAYS = 7;
+function whyUsDue(){
+  const last=whyUsStamp();
+  if(!last) return true;
+  const t=Date.parse(last+"T00:00:00");
+  if(isNaN(t)) return true;                       // unreadable stamp — treat as never shown
+  const days=(Date.parse(todayStamp()+"T00:00:00")-t)/86400000;
+  return !(days>=0) || days>=WHY_US_EVERY_DAYS;   // a clock set backwards also re-shows
+}
 /* Written to every store we can reach. Safari private mode (and a full quota) accepts reads but
    THROWS on a localStorage write — with only localStorage the stamp would never persist and the
    popup would reappear on every single reload, so sessionStorage carries it for that session. */
@@ -9631,10 +9643,10 @@ function whyUsClearStamp(){
   try{ sessionStorage.removeItem(WHY_US_KEY); }catch(e){}
 }
 /* Open ?why=1 (or #why) to force the popup on demand — for checking a deploy or showing it to
-   someone. A forced showing does NOT consume the day's stamp, so the normal once-a-day rule is
+   someone. A forced showing does NOT consume the stamp, so the normal weekly rule is
    unaffected. ?why=0 clears the stamp so the next ordinary visit shows it again.
    The parameter is stripped from the address bar as soon as it's read, so it acts once: a reload
-   (or a bookmarked / shared link that still carries it) goes back to the once-a-day rule instead
+   (or a bookmarked / shared link that still carries it) goes back to the weekly rule instead
    of forcing the popup open forever. */
 function whyUsForced(){
   try{
@@ -15800,7 +15812,7 @@ function NemoStore(){
   useEffect(()=>{
     if(loading||isAdminPage||whyArmed.current) return;
     const forced=whyUsForced();
-    if(!forced && !whyUsDueToday()) return;
+    if(!forced && !whyUsDue()) return;
     whyArmed.current=true;   // at most one showing per app session, whatever happens after this
     return whenSplashGone(()=>{ if(!forced) markWhyUsShown(); setWhyOpen(true); });
   },[loading,isAdminPage]);

@@ -148,7 +148,15 @@
   #splash .sub{color:rgba(255,255,255,.88);font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:14px;letter-spacing:.4px;text-align:center;
     animation:subIn 1s ease .8s both;}
   @keyframes subIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-  #splash .spin{width:24px;height:24px;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;margin-top:6px;opacity:0;animation:spin .8s linear infinite,subIn .5s ease 1.1s both;}
+  /* The ring never turned. It carried two animations, and the second — subIn, borrowed from the
+     tagline — animates `transform` as well as opacity. When two animations touch the same
+     property the LAST one wins, and subIn runs `both`, so it pinned transform to `none` for the
+     whole splash and held it there after finishing. spin was overridden from the first frame:
+     what shoppers saw was a ring that faded in and then sat perfectly still while they waited.
+     The fade now animates opacity only, so it has nothing to argue with spin about. */
+  #splash .spin{width:26px;height:26px;border:3px solid rgba(255,255,255,.22);border-top-color:#fff;border-radius:50%;
+    margin-top:10px;opacity:0;animation:spin .75s linear infinite, fadeIn .5s ease 1.1s both;}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
   @media (prefers-reduced-motion:reduce){#splash .bub,#splash .logo,#splash .logo::after,#splash .sub,#splash .spin{animation:none!important;opacity:1;transform:none;}}
   @keyframes spin{to{transform:rotate(360deg)}}
   /* PWA install banner — slides down briefly on each visit */
