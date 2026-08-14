@@ -6801,7 +6801,7 @@ function pairVerdict(aKey,bKey){
   if(Math.max(A.size,B.size)/Math.min(A.size,B.size)>=4) return {v:1,r:"Large size difference — the smaller fish may be stressed or eaten as it grows."};
   return {v:0,r:"Peaceful community fish — compatible in a properly sized tank."};
 }
-function AquaToolsPage({nav}){
+function AquaToolsPage({nav,goBack}){
   const [sel,setSel]=useState([]);
   const toggle=k=>setSel(p=>p.includes(k)?p.filter(x=>x!==k):(p.length>=5?p:[...p,k]));
   // Calculators
@@ -6824,7 +6824,7 @@ function AquaToolsPage({nav}){
     <div className="slide-up">
       <div className="vh-head" style={{background:"linear-gradient(180deg,#f1f9fe 0%,#ffffff 100%)",padding:"52px 16px 18px",borderRadius:"0 0 28px 28px"}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <button className="press" onClick={()=>nav("home")} style={{background:"none",border:"none",fontSize:20,color:C.textSub,cursor:"pointer"}}>←</button>
+          <button className="press" onClick={goBack} style={{background:"none",border:"none",fontSize:20,color:C.textSub,cursor:"pointer"}}>←</button>
           <div>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>🧪 Aqua Tools</div>
             <div style={{fontSize:12,color:C.textSub}}>Plan your tank like a pro — free tools from Nemo</div>
@@ -7711,7 +7711,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
   );
 }
 
-function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,prevPage="shop",user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
+function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
   const [qty,setQty]           = useState(1);
   const [selVarId,setSelVarId] = useState(null);
   const [tab,setTab]           = useState("desc");
@@ -7829,11 +7829,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           ))}
         </div>
         <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,.3) 0%,transparent 35%)",pointerEvents:"none"}}/>
-        {/* restore:true — the phone's own Back button already returned the shopper to the spot
-            in the list they came from, but this arrow, which is the one most people actually
-            tap, dropped them at the top. Working down a long shop list and losing the place on
-            every product opened is what made browsing feel like starting over each time. */}
-        <button className="press" onClick={()=>nav(prevPage,null,{restore:true})}
+        {/* Same goBack the phone's own Back button runs, so this arrow — the one most people
+            actually tap — returns to the spot in the list they came from rather than the top
+            of it. Working down a long shop list and losing the place on every product opened
+            is what made browsing feel like starting over each time. */}
+        <button className="press" onClick={goBack}
           style={{position:"absolute",top:50,left:16,background:"rgba(255,255,255,.2)",border:"1.5px solid rgba(255,255,255,.35)",borderRadius:12,width:40,height:40,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)"}}>←</button>
         {slides.length>1&&galArrow(-1,"left","Previous photo","‹")}
         {slides.length>1&&galArrow(1,"right","Next photo","›")}
@@ -8669,7 +8669,7 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
   );
 }
 
-function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,updateQty,user,settings={},orders=[],products=[],mediaCache={},savedAddresses=[],onSaveAddress,onDeleteAddress}){
+function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCancelled,onCancelPayment,updateQty,user,settings={},orders=[],products=[],mediaCache={},savedAddresses=[],onSaveAddress,onDeleteAddress}){
   const [step,setStep]=useState(1);
   useEffect(()=>{ trackFunnel("checkout"); },[]); // funnel: reached checkout
   const [exitAsk,setExitAsk]=useState(false);
@@ -9152,9 +9152,9 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
             style={{marginTop:16,background:"none",border:"none",color:C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
             I'll pay later — go to Orders
           </button>
-          <button className="press" onClick={()=>{ if(placed){onCancelled&&onCancelled(placed);} nav("home"); }}
+          <button className="press" onClick={()=>{ if(placed) onCancelPayment&&onCancelPayment(placed); else goBack(); }}
             style={{marginTop:6,background:"none",border:"none",color:C.danger,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
-            ✕ Cancel payment &amp; order
+            ✕ Cancel payment — keep items in my cart
           </button>
         </>
       )}
@@ -9163,11 +9163,11 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
 
   return(
     <div className="slide-up">
-      {exitAsk&&<ExitIntentModal savings={savingsTotal} onStay={()=>setExitAsk(false)} onLeave={(fb)=>{ try{const k="nemo_exit_feedback";const a=JSON.parse(localStorage.getItem(k)||"[]");a.push({t:Date.now(),reasons:fb&&fb.reasons,other:fb&&fb.other,cartValue:total});localStorage.setItem(k,JSON.stringify(a));}catch(e){} setExitAsk(false); nav("cart"); }}/>}
+      {exitAsk&&<ExitIntentModal savings={savingsTotal} onStay={()=>setExitAsk(false)} onLeave={(fb)=>{ try{const k="nemo_exit_feedback";const a=JSON.parse(localStorage.getItem(k)||"[]");a.push({t:Date.now(),reasons:fb&&fb.reasons,other:fb&&fb.other,cartValue:total});localStorage.setItem(k,JSON.stringify(a));}catch(e){} setExitAsk(false); goBack(); }}/>}
       {/* Header */}
       <div className="vh-head" style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <button className="press" onClick={()=>{ if(step!==1){ setStep(1); } else if(cart.length){ setExitAsk(true); } else { nav("cart"); } }}
+          <button className="press" onClick={()=>{ if(step!==1){ setStep(1); } else if(cart.length){ setExitAsk(true); } else { goBack(); } }}
             style={{background:"none",border:"none",fontSize:20,color:C.textSub}}>←</button>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>
             {step===1?"Shipping Details":"Review & Place Order"}
@@ -14420,7 +14420,7 @@ function PosterReel({posters=[],start=0,onClose}){
   );
 }
 /* ═══════════════════ CARE GUIDES PAGE ═══════════════════ */
-function CareGuidesPage({nav,guides,mediaCache}){
+function CareGuidesPage({nav,goBack,guides,mediaCache}){
   const [cat,setCat]=useState("All");
   const [openId,setOpenId]=useState(null);
   const [zoom,setZoom]=useState(null); // {src,title,notes}
@@ -14431,7 +14431,7 @@ function CareGuidesPage({nav,guides,mediaCache}){
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 22px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <button className="press" onClick={()=>nav("home")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
+        <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
           <div>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Aquarium Care Guides</div>
@@ -14529,7 +14529,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
 }
 
 /* ═══════════════════ ABOUT & POLICIES PAGE ═══════════════════ */
-function AboutPage({nav,settings={}}){
+function AboutPage({nav,goBack,settings={}}){
   const s={...DEFAULT_SETTINGS,...settings};
   const Section=({icon,title,body,accent})=>(
     <div style={{background:C.card,borderRadius:18,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
@@ -14544,7 +14544,7 @@ function AboutPage({nav,settings={}}){
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <button className="press" onClick={()=>nav("home")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
+        <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>About Us</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>Who we are, how we deliver, and our promises to you.</div>
       </div>
@@ -14608,7 +14608,7 @@ const POLICY_META = {
   privacy:     { icon:"🔒", title:"Privacy Policy",          key:"privacyPolicy",        sub:"How we handle your information." },
   delivery:    { icon:"🚚", title:"Delivery Areas",          key:"deliveryAreas",        sub:"Where and how we deliver." },
 };
-function PolicyPage({nav,settings={},which}){
+function PolicyPage({nav,goBack,settings={},which}){
   const s={...DEFAULT_SETTINGS,...settings};
   const meta=POLICY_META[which]||POLICY_META.terms;
   const others=Object.keys(POLICY_META).filter(k=>k!==which);
@@ -14616,7 +14616,7 @@ function PolicyPage({nav,settings={},which}){
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <button className="press" onClick={()=>nav("about")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
+        <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>{meta.icon} {meta.title}</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>{meta.sub}</div>
       </div>
@@ -14658,7 +14658,7 @@ function PolicyPage({nav,settings={},which}){
 }
 
 /* ═══════════════════ PRODUCT REQUEST PAGE ═══════════════════ */
-function RequestPage({nav,user,onSubmit,myRequests}){
+function RequestPage({nav,goBack,user,onSubmit,myRequests}){
   const [form,setForm]=useState({product:"",brand:"",link:"",qty:"1",notes:"",name:user?.name||"",phone:user?.phone||""});
   const [imgB64,setImgB64]=useState(null);
   const [imgPrev,setImgPrev]=useState(null);
@@ -14713,7 +14713,7 @@ function RequestPage({nav,user,onSubmit,myRequests}){
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.accent},${C.primary})`,padding:"52px 18px 24px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.1)"}}/>
-        <button className="press" onClick={()=>nav("home")} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
+        <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Request a Product</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>Looking for a rare or <b>exotic fish</b>, a specific plant, or gear we don't stock? Tell us what you want — we specialise in sourcing exotic &amp; hard-to-find fish on request and will arrange it for you.</div>
       </div>
@@ -15069,8 +15069,21 @@ function NemoStore(){
   // Optional Google Analytics, if the admin pasted a Measurement ID in Settings
   useEffect(()=>{ if(settings.gaId) injectGA(settings.gaId); },[settings.gaId]);
 
-  const prevPageRef = useRef("shop");
   const pageRef = useRef("home");
+  /* Where Back goes. This used to be a single "previous page" that only the product page
+     ever set, so every other screen sent the shopper to Home however deep they were —
+     leaving Checkout for Home when they had walked in from the Cart. This is the real
+     trail instead: every forward move pushes the screen being left, and Back pops it, so
+     Back always lands where they actually were. Detail entries carry their product,
+     because restoring that page without one renders an empty product screen.
+     selProduct only ever changes inside nav(), so the ref beside it cannot drift. */
+  const navStackRef = useRef([]);
+  const selProductRef = useRef(null);
+  const NAV_STACK_MAX = 25;
+  /* Screens Back must never return INTO. A sign-in is finished the moment it succeeds;
+     dropping someone back onto the screen they just cleared is worse than Home. The admin
+     panel is the same — the store is not a way back into it. */
+  const NO_RETURN_PAGES = ["auth","admin-login","admin"];
 
   /* Where the shopper had scrolled to on each page. Going deeper (tapping a product) always
      opens the new page at the top, but coming BACK should return them to the spot they left —
@@ -15094,21 +15107,47 @@ function NemoStore(){
   };
   const nav=(pg,product=null,opts={})=>{
     if(pg!=="detail") setReviewIntent(null);
-    // Remember where we came from so DetailPage back button works for any origin
-    if(pg==="detail") prevPageRef.current = page;
+    const from = pageRef.current;
+    /* Leave a breadcrumb for Back. Not when going back (that would undo the pop we are
+       serving), and not when re-opening the screen already on show — stacking a page on
+       top of itself makes the first Back press look like it did nothing. */
+    if(!opts.back && pg!==from && !NO_RETURN_PAGES.includes(from)){
+      navStackRef.current.push({page:from, product:selProductRef.current});
+      if(navStackRef.current.length>NAV_STACK_MAX) navStackRef.current.shift();
+    }
     // Hardware-back trap: when leaving Home for a deeper page, push a history entry
     // so the phone's Back button returns to Home instead of closing the app.
-    if(pageRef.current==="home" && pg!=="home"){ try{ history.pushState({nemo:1},""); }catch(e){} }
+    if(from==="home" && pg!=="home"){ try{ history.pushState({nemo:1},""); }catch(e){} }
     saveScroll();
     pageRef.current = pg;
     setPage(pg);
-    if(product)setSelProduct(product);
+    if(product){ setSelProduct(product); selProductRef.current=product; }
     // Forward = open at the top. Back (opts.restore) = pick up where they left off.
     applyScroll(opts.restore ? (scrollMem.current[pg]||0) : 0);
   };
-  const navBack=(pg)=>nav(pg,null,{restore:true});
+  /* One step back up the trail: the screen they came from, at the spot they left it. An
+     empty trail means they arrived here directly — a shared link, a fresh load, a push
+     notification — and Home is the only place Back can honestly go. */
+  const goBack=()=>{
+    const prev = navStackRef.current.pop();
+    nav(prev?prev.page:"home", (prev&&prev.page==="detail")?prev.product:null, {restore:true, back:true});
+  };
+  /* The phone Back button fires through a listener registered once, so it calls this
+     rather than closing over the first render's goBack. */
+  const goBackRef = useRef(goBack);
+  goBackRef.current = goBack;
+  /* Backing out of a flow to a screen that is already behind them — payment cancelled,
+     back to the Cart — rewinds the trail to that screen rather than stacking on top of
+     it. Otherwise Back from the Cart would walk right back into the checkout they just
+     abandoned. If the screen isn't on the trail this is an ordinary move. */
+  const navRewind=(pg)=>{
+    const st=navStackRef.current;
+    const at=st.map(e=>e.page).lastIndexOf(pg);
+    if(at>=0) st.length=at;
+    nav(pg,null,{restore:true, back:true});
+  };
 
-  // Phone Back button: from any inner page → go Home; on Home → "press back again to exit".
+  // Phone Back button: from any inner page → one step back up the trail; on Home → "press back again to exit".
   const exitArmRef = useRef(0);
   // Admin panel: Back must never drop straight out of the panel — a stray back-swipe mid-edit
   // would throw away the work in progress. AdminHub registers a handler here that closes any
@@ -15130,16 +15169,12 @@ function NemoStore(){
       }
       if(pageRef.current!=="home"){
         /* Back out to wherever this page was opened FROM, not always Home — a product opened
-           from a scrolled Shop list belongs back in that list, at that spot. Restoring the
-           scroll is the other half: landing at the top of the list they had worked down is
-           the same as losing their place. */
-        setReviewIntent(null);
-        const to = (pageRef.current==="detail" && prevPageRef.current) ? prevPageRef.current : "home";
-        saveScroll();
-        pageRef.current=to;
-        setPage(to);
+           from a scrolled Shop list belongs back in that list, at that spot, and Checkout
+           belongs back in the Cart it was entered from. Restoring the scroll is the other
+           half: landing at the top of the list they had worked down is the same as losing
+           their place. */
+        goBackRef.current();
         try{ history.pushState({nemo:1},""); }catch(e){}   // re-arm the trap
-        applyScroll(scrollMem.current[to]||0);
       } else if((scrollRef.current?.scrollTop||0) > 8){
         // On Home, but scrolled down: the first press takes them back to the top. Only a
         // press from the top of Home is treated as "leaving", which is where the exit
@@ -15899,6 +15934,37 @@ function NemoStore(){
     restock(order);
   };
 
+  /* Backing out of payment on purpose must not cost the shopper their basket. The order is
+     cancelled and its stock released exactly as before, but the lines it was built from go
+     straight back into the cart and we land them there — rebuilding a whole order by hand
+     is where an abandoned payment turns into an abandoned customer.
+     Only this deliberate press restores the cart. The auto-cancel that fires when a payment
+     window expires runs from a background sweep over every order, on any device, and must
+     not reach in and rewrite whatever is in the cart at the time. */
+  const cancelPaymentAndRestoreCart=async(order)=>{
+    // A second press (or a press on an order that has moved on) must not stack the same
+    // lines into the cart twice — cancelUnpaid is idempotent and so is this.
+    if(!order||order.status!=="Awaiting Payment"){ navRewind("cart"); return; }
+    const lines=order.items||[];
+    await cancelUnpaid(order);
+    if(lines.length){
+      setCart(prev=>{
+        const next=[...prev];
+        lines.forEach(line=>{
+          const at=next.findIndex(i=>i.key===line.key);
+          if(at<0){ next.push({...line}); return; }
+          // Same line already back in the cart (added again while payment was open): keep
+          // one line, and never let the merge push it past what may actually be bought.
+          const max=Math.min(next[at].stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+          next[at]={...next[at],qty:Math.min(max,next[at].qty+line.qty)};
+        });
+        return next;
+      });
+    }
+    navRewind("cart");
+    showToast("Payment cancelled — your items are back in your cart");
+  };
+
   // Auto-close a delivered order once its return window has passed (idempotent).
   const autoCloseOrder=async(order)=>{
     if(!order||order.closed||order.demo) return;
@@ -16197,22 +16263,22 @@ function NemoStore(){
         <div key={page} className="page-swap">
         {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
-        {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} prevPage={prevPageRef.current} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
+        {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} goBack={goBack} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={products} mediaCache={mediaCache} orders={orders}/>}
         {page==="checkout" &&(user
-          ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} updateQty={updateQty} user={user} settings={settings} orders={orders} products={products} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>
-          : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={()=>nav("cart")}/>)}
+          ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} goBack={goBack} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} updateQty={updateQty} user={user} settings={settings} orders={orders} products={products} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>
+          : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={goBack}/>)}
         {page==="orders"   &&(user
           ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} onRateOrderProducts={rateOrderProducts} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
-          : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={()=>nav("home")}/>)}
-        {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={()=>nav("home")}/>}
-        {page==="request"  &&<RequestPage nav={nav} user={user} onSubmit={submitRequest}/>}
-        {page==="guides"   &&<CareGuidesPage nav={nav} guides={guides} mediaCache={mediaCache}/>}
-        {page==="tools"    &&<AquaToolsPage nav={nav}/>}
+          : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={goBack}/>)}
+        {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={goBack}/>}
+        {page==="request"  &&<RequestPage nav={nav} goBack={goBack} user={user} onSubmit={submitRequest}/>}
+        {page==="guides"   &&<CareGuidesPage nav={nav} goBack={goBack} guides={guides} mediaCache={mediaCache}/>}
+        {page==="tools"    &&<AquaToolsPage nav={nav} goBack={goBack}/>}
         {page==="saved"    &&<SavedPage nav={nav} products={products} mediaCache={mediaCache} favorites={favorites} addToCart={addToCart} cartMap={cartMap} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} user={user} restockSet={restockSet} onRestock={handleRestock}/>}
-        {page==="about"    &&<AboutPage nav={nav} settings={settings}/>}
-        {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} settings={settings} which={page.slice(7)}/>}
-        {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={()=>nav("home")} settings={settings}/>}
+        {page==="about"    &&<AboutPage nav={nav} goBack={goBack} settings={settings}/>}
+        {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
+        {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} settings={settings}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
