@@ -11101,7 +11101,7 @@ function AdminInsights({stats, products=[]}){
 }
 
 /* ═══════════════════ ADMIN ORDER DETAIL (Phase 4) ═══════════════════ */
-function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,settings={}}){
+function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,settings={},products=[],mediaCache={}}){
   const [status,setStatus]=useState(o.status);
   const [tracking,setTracking]=useState(o.trackingNumber||"");
   const [etaDays,setEtaDays]=useState(o.etaDays!=null?o.etaDays:"");
@@ -11611,10 +11611,18 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
             return(
               <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-                <div style={{width:36,height:36,borderRadius:8,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{m.emoji}</div>
-                <div style={{flex:1}}>
+                <div style={{width:36,height:36,borderRadius:8,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0,overflow:"hidden"}}>
+                  {/* Order lines are checkout-time snapshots and carry no image, so resolve it
+                      from the live catalogue — the same helper the cart and the customer's
+                      order history use. Without it this tile could only ever show the category
+                      emoji, so the admin packing the box never saw what was actually bought.
+                      Falls back to the emoji for a product since removed, or a demo line. */}
+                  {(()=>{ const src=getCartLineImg(item,products,mediaCache);
+                    return src?<img src={src} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji; })()}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.text}}>{item.name}</div>
-                  <div style={{fontSize:11,color:C.textSub}}>x{item.qty}</div>
+                  <div style={{fontSize:11,color:C.textSub}}>{item.variantLabel?<>{item.variantLabel} · </>:null}x{item.qty}</div>
                 </div>
                 <div style={{fontSize:13,fontWeight:700,color:C.primary}}>₹{item.price*item.qty}</div>
               </div>
@@ -12075,6 +12083,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   );
   if(tab==="orderDetail"&&viewOrder)return(
     <AdminOrderDetail order={viewOrder} showToast={showToast} settings={settings}
+      products={products} mediaCache={mediaCache}
       onBack={()=>setTab("orders")} onDeleteOrder={async(ord)=>{await onDeleteOrder(ord);setViewOrder(null);setTab("orders");showToast("Order deleted");}}
       onUpdateOrder={async(updated)=>{await onUpdateOrder(updated);setViewOrder(updated);}}/>
   );
