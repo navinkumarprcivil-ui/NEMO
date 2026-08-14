@@ -2250,24 +2250,39 @@ function showcaseImgs(x){
   if(many.length) return many;
   return (x&&x.imgData)?[x.imgData]:[];
 }
-/* Votes live in their own node, `totmVotes/<month>/<voterUid> = <entryId>`, not on the entry.
-   One key per voter per month IS the "one vote each" rule — there is no way to hold two, and
-   an entrant cannot inflate a count that is not stored on their own record. `votes` below is
-   always that map for the current month. */
+/* Votes live in their own node, not on the entry — an entrant cannot inflate a count that is
+   not stored on their own record. The path is the rule:
+
+     totmVotes/<month>/<entryId>/<YYYY-MM-DD>/<voterUid> = true
+
+   A voter may back as many tanks as they like each day, but the same tank only once a day,
+   because that is one key and the rules make it create-only. Coming back tomorrow to vote
+   again is the point; stuffing the box today is not possible. */
+function totmDayOf(ms){ return new Date(ms||Date.now()).toISOString().slice(0,10); }
 function voteCount(x,votes){
-  if(!x||!votes) return 0;
-  let n=0; for(const k in votes) if(votes[k]===x.id) n++;
+  const days=x&&votes&&votes[x.id];
+  if(!days) return 0;
+  let n=0;
+  for(const d in days){ const v=days[d]; if(v) for(const u in v) if(v[u]) n++; }
   return n;
 }
-function hasVotedFor(x,uid,votes){ return !!(uid&&x&&votes&&votes[uid]===x.id); }
-function votedEntryId(uid,votes){ return (uid&&votes&&votes[uid])||null; }
-async function castShowcaseVote(month,uid,entryId){
-  if(!FB_OK||!uid||!month) return false;
-  try{
-    const ref=FB_DB.ref("totmVotes/"+month+"/"+uid);
-    if(entryId) await ref.set(entryId); else await ref.remove();
-    return true;
-  }catch(e){ return false; }
+function hasVotedToday(x,uid,votes,day){
+  if(!uid||!x||!votes) return false;
+  const d=(votes[x.id]||{})[day||totmDayOf(Date.now())];
+  return !!(d&&d[uid]);
+}
+/* How many different tanks this customer has backed today — the line under the vote button. */
+function votesCastToday(uid,votes,day){
+  if(!uid||!votes) return 0;
+  const key=day||totmDayOf(Date.now());
+  let n=0;
+  for(const id in votes){ const d=(votes[id]||{})[key]; if(d&&d[uid]) n++; }
+  return n;
+}
+async function castShowcaseVote(month,entryId,uid){
+  if(!FB_OK||!uid||!month||!entryId) return false;
+  try{ await FB_DB.ref("totmVotes/"+month+"/"+entryId+"/"+totmDayOf(Date.now())+"/"+uid).set(true); return true; }
+  catch(e){ return false; }
 }
 /* Standings for a month, most votes first. Ties break towards whoever posted first — the entry
    that has been up longest had the least time advantage, not the most. */
@@ -4838,8 +4853,8 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
   const ranked=contest?totmStandings(liveShowcase,month,votes):liveShowcase;
   const mine=user&&(showcase||[]).find(s=>s.userUid===user.uid&&!showcaseExpired(s,now));
   const minePending=mine&&!showcaseApproved(mine);
-  const myVoteId=contest?votedEntryId(user&&user.uid,votes):null;
-  const myVote=myVoteId?liveShowcase.find(x=>x.id===myVoteId)||null:null;
+  const today=totmDayOf(now);
+  const castToday=contest?votesCastToday(user&&user.uid,votes,today):0;
   const winner=(showcase||[]).find(s=>s&&s.winner&&s.wonMonth===month)||null;
   const votesFor=e=>voteCount(e,votes);
   const showGallery = mode!=="upload";
@@ -4873,8 +4888,9 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
   const vote=async(entry)=>{
     if(!user){ setNote("⚠ Sign in to vote"); return; }
     if(entry.userUid===user.uid){ setNote("⚠ You can't vote for your own tank"); return; }
+    if(hasVotedToday(entry,user.uid,votes,today)){ setNote("⚠ Already voted for this tank today — come back tomorrow"); return; }
     setVoting(entry.id);
-    await onVote(entry, hasVotedFor(entry,user.uid,votes)?"remove":"add");
+    await onVote(entry);
     setVoting("");
   };
 
@@ -4885,7 +4901,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
         <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>{contest?"🏆 Tank of the Month":"🪸 Customer Tanks"}</span>
         {ranked.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{ranked.length} {contest?"entries":"shared · 24h"}</span>}
       </div>
-      {contest&&<div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Vote for your favourite — most votes wins {totmMonthLabel(month)}.</div>}
+      {contest&&<div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Vote once a day for as many tanks as you like. Most votes wins {totmMonthLabel(month)}.</div>}
       {!contest&&<div style={{marginBottom:10}}/>}
 
       {contest&&winner&&(
@@ -4916,7 +4932,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
           {ranked.map((s,idx)=>{
             const imgs=showcaseImgs(s);
             const n=votesFor(s);
-            const voted=hasVotedFor(s,user&&user.uid,votes);
+            const voted=hasVotedToday(s,user&&user.uid,votes,today);
             return(
               <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:142,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${voted?C.primary:C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
                 <div style={{position:"relative",height:104}}>
@@ -4927,7 +4943,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
                 <div style={{padding:"7px 8px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🐠 {s.ownerName}</div>
                   {contest
-                    ? <div style={{fontSize:10.5,color:voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>{voted?"✓ You voted":`${n} vote${n===1?"":"s"}`}</div>
+                    ? <div style={{fontSize:10.5,color:voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>{voted?`✓ Voted today · ${n}`:`${n} vote${n===1?"":"s"}`}</div>
                     : s.caption&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.caption}</div>}
                 </div>
               </div>
@@ -4974,9 +4990,8 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
       {fullImg&&(()=>{
         const imgs=showcaseImgs(fullImg);
         const n=votesFor(fullImg);
-        const voted=hasVotedFor(fullImg,user&&user.uid,votes);
+        const voted=hasVotedToday(fullImg,user&&user.uid,votes,today);
         const own=user&&fullImg.userUid===user.uid;
-        const elsewhere=myVote&&myVote.id!==fullImg.id;
         return(
         <Portal>
         <div onClick={()=>setFullImg(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.88)",zIndex:9999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -4995,16 +5010,16 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
             </div>
             {contest&&(
               <div style={{width:"100%",marginTop:14}}>
-                <button className="press" disabled={!!own||voting===fullImg.id} onClick={()=>vote(fullImg)}
-                  style={{width:"100%",background:own?"rgba(255,255,255,.14)":voted?"#fff":C.primary,color:own?"rgba(255,255,255,.7)":voted?C.primary:"#fff",
-                          border:voted?`2px solid ${C.primary}`:"none",borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:800,
-                          fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:own?"default":"pointer"}}>
+                <button className="press" disabled={!!own||voted||voting===fullImg.id} onClick={()=>vote(fullImg)}
+                  style={{width:"100%",background:own?"rgba(255,255,255,.14)":voted?"rgba(255,255,255,.92)":C.primary,color:own?"rgba(255,255,255,.7)":voted?C.success:"#fff",
+                          border:"none",borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:800,
+                          fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(own||voted)?"default":"pointer"}}>
                   {own?`Your tank · ${n} vote${n===1?"":"s"}`
                      : voting===fullImg.id?"…"
-                     : voted?`✓ Voted · tap to undo`
+                     : voted?`✓ Voted today · ${n} · back tomorrow`
                      : `🗳️ Vote for this tank · ${n}`}
                 </button>
-                {!own&&!voted&&elsewhere&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center",lineHeight:1.45}}>You have already voted for {myVote.ownerName} this month — voting here moves your vote.</div>}
+                {!own&&!voted&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center",lineHeight:1.45}}>You can back as many tanks as you like{castToday>0?` — ${castToday} so far today`:""}, one vote each per day.</div>}
                 {!user&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center"}}>Sign in to vote.</div>}
                 {totmMinVotes(settings)>0&&<div style={{color:"rgba(255,255,255,.6)",fontSize:10.5,marginTop:7,textAlign:"center",lineHeight:1.45}}>A tank needs {totmMinVotes(settings)} votes to be eligible for the reward.</div>}
               </div>
@@ -6612,7 +6627,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.fa934cbc";
+const APP_BUILD = "v90.cb5be838";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7149,11 +7164,110 @@ function loadReport(stock,tank){
   return {level,cm,load,heavy,per};
 }
 
+/* ── Water tests ───────────────────────────────────────────────────────────────
+   The readings are what should drive a water change, not the calendar, so they are stored
+   with the tank and everything downstream reads them: the urgent card, the suggested change
+   amount, and the charts that show whether last week's action worked.
+
+   Kept newest-first and capped — a phone does not need three years of ammonia readings, and
+   the profile lives in localStorage beside a base64 tank photo. */
+const WATER_LOG_MAX=60;
+/* One safe band per parameter. `hi` is the top of "fine"; `crit` is the reading that means act
+   today. Ammonia and nitrite have no safe level above zero — that is the whole point of them. */
+const WATER_PARAMS=[
+  {k:"nh3", n:"Ammonia",  unit:"ppm", hi:0,   crit:0.25, color:"#0ea5e9", max:2,   step:"0.25"},
+  {k:"no2", n:"Nitrite",  unit:"ppm", hi:0,   crit:0.25, color:"#eb6834", max:2,   step:"0.25"},
+  {k:"no3", n:"Nitrate",  unit:"ppm", hi:40,  crit:80,   color:"#1baf7a", max:160, step:"5"},
+  {k:"ph",  n:"pH",       unit:"",    lo:6.5, hi:8.0,    color:"#4a3aa7", max:9,   min:5, step:"0.1"},
+];
+const numOrNull=v=>{ if(v===""||v==null) return null; const n=Number(v); return Number.isFinite(n)?n:null; };
+function waterLog(tank){ return Array.isArray(tank&&tank.tests)?tank.tests:[]; }
+function latestTest(tank){ const l=waterLog(tank); return l.length?l[0]:null; }
+/* What the readings say to do. Deliberately ordered worst-first: detectable ammonia or nitrite
+   is an emergency in a stocked tank and must not wait for the weekly card. */
+function waterVerdict(tank){
+  const t=latestTest(tank);
+  if(!t) return null;
+  const l=Number(tank&&tank.litres)||0;
+  const nh3=numOrNull(t.nh3), no2=numOrNull(t.no2), no3=numOrNull(t.no3), ph=numOrNull(t.ph);
+  const pct=v=>l?`about ${Math.round(l*v/100)} L (${v}%)`:`${v}% of the tank`;
+  if((nh3!=null&&nh3>0)||(no2!=null&&no2>0)){
+    const which=[nh3>0?`ammonia ${nh3} ppm`:null,no2>0?`nitrite ${no2} ppm`:null].filter(Boolean).join(" and ");
+    return {level:"urgent",title:"Act today — "+which,
+      why:"Neither has a safe level above zero. Both burn gills and both are why fish are lost in the first weeks of a tank.",
+      dos:[`Change ${pct(50)} now, dechlorinated and temperature-matched.`,
+           "Stop feeding for 24 hours — uneaten food is where more ammonia comes from.",
+           "Do not add any fish until both read zero.",
+           "Re-test tomorrow. Repeat the change while anything is detectable."]};
+  }
+  if(no3!=null&&no3>=80) return {level:"serious",title:`Nitrate high — ${no3} ppm`,
+    why:"Not acutely toxic, but sustained high nitrate stunts and stresses fish and feeds algae.",
+    dos:[`Change ${pct(40)} now, then again in two or three days.`,
+         "Bring it down in steps rather than one huge change — a sudden swing is its own shock.",
+         "Then look at the cause: feeding, stocking, or a change that is too small or too rare."]};
+  if(no3!=null&&no3>40) return {level:"watch",title:`Nitrate climbing — ${no3} ppm`,
+    why:"Above the comfortable range. The weekly change is not keeping pace with what the tank produces.",
+    dos:[`Change ${pct(35)} this week instead of the usual amount.`,"Re-test after it, and raise the regular change if it does not drop."]};
+  if(ph!=null&&(ph<5.8||ph>8.6)) return {level:"watch",title:`pH is ${ph}`,
+    why:"Outside what most freshwater community fish tolerate. A steady odd pH beats a corrected swinging one.",
+    dos:["Test your tap water too — if it reads the same, this is your water, and stock to suit it.",
+         "Never chase it with pH-adjusting chemicals; the swing does more harm than the number."]};
+  return {level:"good",title:"Readings look healthy",
+    why:no3!=null&&no3>0?"Zero ammonia and nitrite with nitrate present is exactly what a cycled, working tank reads.":"Nothing here needs action today.",
+    dos:[`Carry on with the usual change — ${pct(25)} is a reasonable amount at these readings.`]};
+}
+const WATER_LEVELS={
+  urgent: {icon:"🚨",label:"Urgent",  c:"#b91c1c",bg:"#fef2f2",bd:"#fecaca"},
+  serious:{icon:"⚠️",label:"Action needed",c:"#b45309",bg:"#fffbeb",bd:"#fde68a"},
+  watch:  {icon:"👀",label:"Keep an eye on it",c:"#b45309",bg:"#fffbeb",bd:"#fde68a"},
+  good:   {icon:"✅",label:"Healthy", c:"#15803d",bg:"#ecfdf5",bd:"#a7f3d0"},
+};
+
+/* One parameter, over time. Small multiples rather than one chart with four scales: ammonia
+   at 0.25 ppm and nitrate at 80 ppm cannot share an axis, and a second y-axis is a lie about
+   where the lines cross. Each facet keeps its own scale, its own safe band, and its own name,
+   so there is nothing to look up in a legend. */
+function WaterChart({param,points}){
+  const W=250,H=64,PADL=4,PADR=30,PADT=8,PADB=10;
+  const vals=points.map(p=>p.v);
+  if(!vals.length) return null;
+  const lo=param.min!=null?param.min:0;
+  const hiData=Math.max(...vals, param.k==="ph"?8.2:(param.hi||0)*1.2, 0.001);
+  const top=param.k==="ph"?Math.max(8.6,hiData+0.2):Math.min(param.max,Math.max(hiData*1.15,param.crit*1.2));
+  const x=i=>PADL+(points.length===1?0:(i*(W-PADL-PADR)/(points.length-1)));
+  const y=v=>PADT+(H-PADT-PADB)*(1-(Math.max(lo,Math.min(top,v))-lo)/((top-lo)||1));
+  const line=points.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+  const last=points[points.length-1];
+  // The safe band, drawn behind: reading a number against a shaded "fine" region is faster
+  // than reading it against a gridline and remembering what fine was.
+  const bandTop=y(param.k==="ph"?param.hi:Math.max(param.hi,0.0001));
+  const bandBot=y(param.k==="ph"?param.lo:lo);
+  const over=last.v>(param.hi||0)+(param.k==="ph"?0:0.0001)||(param.k==="ph"&&last.v<param.lo);
+  return(
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img"
+         aria-label={`${param.n} over the last ${points.length} tests, latest ${last.v}${param.unit?" "+param.unit:""}`}
+         style={{display:"block",overflow:"visible"}}>
+      <rect x={PADL} y={Math.min(bandTop,bandBot)} width={W-PADL-PADR} height={Math.abs(bandBot-bandTop)||1}
+            fill="#16a34a" opacity=".07"/>
+      <line x1={PADL} x2={W-PADR} y1={bandTop} y2={bandTop} stroke="#16a34a" strokeOpacity=".35" strokeWidth="1" strokeDasharray="3 3"/>
+      {points.length>1&&<path d={line} fill="none" stroke={param.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>}
+      {points.map((p,i)=>(
+        <circle key={i} cx={x(i)} cy={y(p.v)} r={i===points.length-1?3.5:2.2}
+                fill={i===points.length-1?param.color:"#fff"} stroke={param.color} strokeWidth="1.5"/>
+      ))}
+      {/* Direct label on the latest reading — the contrast of these hues against white is
+          under 3:1, so the number is never carried by colour alone. */}
+      <text x={W-PADR+6} y={y(last.v)+4} fontSize="11" fontWeight="800"
+            fill={over?"#b45309":"#0f172a"} fontFamily="'Plus Jakarta Sans',sans-serif">{last.v}</text>
+    </svg>
+  );
+}
+
 function tankStorageKey(uid){ return "nemo-mytank-"+(uid||"guest"); }
 function loadMyTank(uid){ try{ const r=localStorage.getItem(tankStorageKey(uid)); return r?JSON.parse(r):null; }catch(e){ return null; } }
 function saveMyTank(uid,t){ try{ localStorage.setItem(tankStorageKey(uid),JSON.stringify(t)); }catch(e){} }
 const BLANK_TANK={name:"My Tank",type:"tropical",shape:"rect",unit:"cm",l:"",w:"",h:"",waterH:"",litres:0,lengthCm:0,
-  filter:"",heater:"",tempC:"",cycled:"",setUpOn:"",stock:[],photo:""};
+  filter:"",heater:"",tempC:"",cycled:"",setUpOn:"",stock:[],photo:"",tests:[],remind:false,lastCareAt:""};
 
 /* Volume for the four shapes a shop actually sells, in litres, from centimetres. */
 function shapeLitres(shape,l,w,h){
@@ -7220,6 +7334,23 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
     return {perSpecies,pairs,load,worst,missing,confidence,tankLvl};
   },[stock,tank]);
 
+  /* ── Water tests ── */
+  const [test,setTest]=useState({nh3:"",no2:"",no3:"",ph:""});
+  const [logOpen,setLogOpen]=useState(false);
+  const tests=waterLog(tank);
+  const verdict=waterVerdict(tank);
+  const saveTest=()=>{
+    const row={at:new Date().toISOString()};
+    let any=false;
+    WATER_PARAMS.forEach(pm=>{ const v=numOrNull(test[pm.k]); if(v!=null){ row[pm.k]=v; any=true; } });
+    if(!any) return;
+    persist({...tank,tests:[row,...tests].slice(0,WATER_LOG_MAX)});
+    setTest({nh3:"",no2:"",no3:"",ph:""});
+  };
+  // Oldest-left, newest-right, and only the readings that were actually entered.
+  const seriesFor=pm=>tests.slice(0,12).reverse()
+    .map(t=>({at:t.at,v:numOrNull(t[pm.k])})).filter(p=>p.v!=null);
+
   /* ── Weekly jobs, straight off the profile ── */
   const due=careDue(tank);
   const [perm,setPerm]=useState(()=>typeof Notification!=="undefined"?Notification.permission:"default");
@@ -7232,15 +7363,22 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   const weekly=useMemo(()=>{
     if(!tank.litres) return [];
     const l=Number(tank.litres)||0, out=[];
-    const heavy=(report&&(report.load.level==="full"||report.load.level==="over"));
+    const heavy=(report&&(report.load.level==="full"||report.load.level==="over"))
+      ||(verdict&&(verdict.level==="serious"||verdict.level==="watch"));
+    /* A starting point, not a prescription. How much water a tank needs out depends on its
+       stocking, its species and — above all — what the test kit says this week, so the figure
+       is offered as somewhere to begin and the reading is what moves it. */
     const pct=heavy?35:25;
-    out.push({i:"💧",t:`Change ${Math.round(l*pct/100)} L (${pct}%)`,s:"Match the temperature and dechlorinate before it goes in."});
+    out.push({i:"💧",t:`Change about ${Math.round(l*pct/100)} L (${pct}%) — a starting amount`,
+      s:"Adjust it from your readings: more if nitrate is climbing or the tank is heavily stocked, less for a lightly stocked or planted tank. Match the temperature and dechlorinate before it goes in."});
     if(tank.cycled==="no"||tank.cycled==="cycling") out.push({i:"🧫",t:"Test ammonia & nitrite",s:"Daily while cycling. Both must read zero before any fish go in."});
-    else out.push({i:"🧫",t:"Test nitrate",s:"Rising nitrate means the water change is due more often, not that the tank is broken."});
-    out.push({i:"🌀",t:"Rinse filter media in tank water",s:"Never under the tap — chlorine kills the bacteria doing the work. Monthly is enough."});
+    else out.push({i:"🧫",t:"Test ammonia, nitrite & nitrate",s:"The readings set the water change, not the calendar. Log them below and the advice follows them."});
+    /* Rinsing on a schedule is how people wash their filter's bacteria down the sink. The
+       weekly job is to LOOK at it; cleaning is what you do when the flow tells you to. */
+    out.push({i:"🌀",t:"Check the filter flow",s:"Rinse the media only when flow has dropped or it is visibly clogged — and then only in water taken out of the tank, never under the tap. Cleaning it on a schedule strips the bacteria doing the work."});
     if(tank.tempC) out.push({i:"🌡️",t:`Check the heater holds ${tank.tempC}°C`,s:"A stuck heater is the fastest way to lose a tank."});
     return out;
-  },[tank,report]);
+  },[tank,report,verdict]);
 
   /* ── Heater sizing ── */
   const [roomT,setRoomT]=useState("");
@@ -7403,6 +7541,112 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             </div>
           )}
         </div>
+
+        {/* ══ WHAT THE WATER SAYS ══ */}
+        {/* Above "This week" on purpose: detectable ammonia or nitrite is something to do
+            today, and a card that waits for the weekly slot is a card that arrives too late. */}
+        {verdict&&(()=>{
+          const L=WATER_LEVELS[verdict.level];
+          return(
+            <div style={{...card,background:L.bg,border:`1.5px solid ${L.bd}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <span style={{fontSize:17}}>{L.icon}</span>
+                <span style={{fontSize:10,fontWeight:800,letterSpacing:.6,textTransform:"uppercase",color:L.c}}>{L.label}</span>
+                <span style={{marginLeft:"auto",fontSize:10.5,color:C.textSub}}>{fmtDate(latestTest(tank).at)}</span>
+              </div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:L.c,marginBottom:4}}>{verdict.title}</div>
+              <div style={{fontSize:12,color:C.text,lineHeight:1.55,marginBottom:verdict.dos.length?10:0}}>{verdict.why}</div>
+              {verdict.dos.map((d,i)=>(
+                <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:5}}>
+                  <span style={{fontSize:11,color:L.c,fontWeight:800,flexShrink:0,lineHeight:1.6}}>{i+1}</span>
+                  <div style={{fontSize:12,color:C.text,lineHeight:1.55}}>{d}</div>
+                </div>
+              ))}
+              {verdict.level!=="good"&&(
+                <button className="press" onClick={markCareDone}
+                  style={{width:"100%",marginTop:8,background:L.c,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  ✓ Done — I've made this change
+                </button>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ══ WATER TESTS ══ */}
+        {tank.litres>0&&(
+          <div style={card}>
+            <H>🧫 Water tests</H>
+            <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:12}}>
+              Enter what your kit reads. The advice above follows these numbers, and the charts show whether it worked.
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:7,marginBottom:9}}>
+              {WATER_PARAMS.map(pm=>(
+                <div key={pm.k}>
+                  <div style={{fontSize:9.5,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.4,marginBottom:4,textAlign:"center"}}>{pm.n}</div>
+                  <input type="number" inputMode="decimal" min="0" step={pm.step} value={test[pm.k]}
+                    onChange={e=>setTest(t=>({...t,[pm.k]:e.target.value}))} placeholder="—"
+                    style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 4px",fontSize:13.5,outline:"none",background:"#f8fafc",textAlign:"center"}}/>
+                </div>
+              ))}
+            </div>
+            <button className="press" onClick={saveTest}
+              style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              Save today's readings
+            </button>
+            <div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>Leave any box empty if you didn't test it — nothing is invented from a blank.</div>
+
+            {tests.length>0&&(
+              <div style={{marginTop:16}}>
+                {WATER_PARAMS.map(pm=>{
+                  const pts=seriesFor(pm);
+                  if(!pts.length) return null;
+                  return(
+                    <div key={pm.k} style={{marginBottom:12}}>
+                      <div style={{display:"flex",alignItems:"baseline",gap:7,marginBottom:2}}>
+                        <span style={{width:9,height:9,borderRadius:3,background:pm.color,flexShrink:0}}/>
+                        <span style={{fontSize:12,fontWeight:800,color:C.text}}>{pm.n}</span>
+                        <span style={{fontSize:10.5,color:C.textSub}}>
+                          {pm.k==="ph"?`safe ${pm.lo}–${pm.hi}`:pm.hi>0?`safe under ${pm.hi} ${pm.unit}`:`must read 0 ${pm.unit}`}
+                        </span>
+                      </div>
+                      <WaterChart param={pm} points={pts}/>
+                    </div>
+                  );
+                })}
+                {/* The table view. The chart hues sit under 3:1 against white, so every number
+                    is also readable here in plain text. */}
+                <button className="press" onClick={()=>setLogOpen(v=>!v)}
+                  style={{background:"none",border:"none",color:C.accent,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",padding:0}}>
+                  {logOpen?"▲ Hide the readings":`▾ All ${tests.length} reading${tests.length===1?"":"s"}`}
+                </button>
+                {logOpen&&(
+                  <div style={{marginTop:9,overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+                      <thead>
+                        <tr style={{color:C.textSub}}>
+                          <th style={{textAlign:"left",padding:"5px 6px",fontWeight:700}}>Date</th>
+                          {WATER_PARAMS.map(pm=><th key={pm.k} style={{textAlign:"right",padding:"5px 6px",fontWeight:700,whiteSpace:"nowrap"}}>{pm.n}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tests.map((t,i)=>(
+                          <tr key={i} style={{borderTop:`1px solid ${C.border}`}}>
+                            <td style={{padding:"6px",color:C.textSub,whiteSpace:"nowrap"}}>{fmtDate(t.at)}</td>
+                            {WATER_PARAMS.map(pm=>{
+                              const v=numOrNull(t[pm.k]);
+                              const bad=v!=null&&(pm.k==="ph"?(v<pm.lo||v>pm.hi):v>pm.hi);
+                              return <td key={pm.k} style={{padding:"6px",textAlign:"right",fontWeight:bad?800:600,color:bad?"#b45309":C.text}}>{v==null?"—":v}</td>;
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ══ THIS WEEK ══ */}
         {weekly.length>0&&(
@@ -16284,19 +16528,19 @@ function NemoStore(){
   /* One vote per customer per month, so casting a vote clears whatever they voted for before.
      The screen moves first and the write follows: a vote that fails puts the count back rather
      than leaving a tick the server never agreed to. */
-  const handleShowcaseVote=async(entry,action)=>{
+  const handleShowcaseVote=async(entry)=>{
     const uid=user&&user.uid;
     if(!uid){ showToast("Sign in to vote","error"); return; }
     if(entry.userUid===uid){ showToast("You can't vote for your own tank","error"); return; }
-    const month=totmMonthOf(Date.now());
+    const month=totmMonthOf(Date.now()), day=totmDayOf(Date.now());
+    if(hasVotedToday(entry,uid,totmVotes,day)){ showToast("Already voted for this tank today","error"); return; }
+    // Tick first, write second, and put it back if the write is refused — the rules make the
+    // day key create-only, so a refusal here means it was already counted.
     const before=totmVotes;
-    const prevId=votedEntryId(uid,totmVotes);
-    // Move the tick first, then write. One key per voter means switching tanks is one write,
-    // not an un-vote and a re-vote that could half-fail.
-    setTotmVotes(v=>{ const n={...v}; if(action==="add") n[uid]=entry.id; else delete n[uid]; return n; });
-    const ok=await castShowcaseVote(month,uid,action==="add"?entry.id:null);
+    setTotmVotes(v=>({...v,[entry.id]:{...(v[entry.id]||{}),[day]:{...(((v[entry.id]||{})[day])||{}),[uid]:true}}}));
+    const ok=await castShowcaseVote(month,entry.id,uid);
     if(!ok){ setTotmVotes(before); showToast("Couldn't record that vote — check your connection","error"); return; }
-    if(action==="add") showToast(prevId&&prevId!==entry.id?"Vote moved to "+entry.ownerName:"Voted for "+entry.ownerName);
+    showToast("Voted for "+entry.ownerName+" 🗳️");
   };
   /* The admin has seen the tank and released the coins. adminCreditLoyalty is keyed on the
      entry, so pressing it twice cannot pay twice. */

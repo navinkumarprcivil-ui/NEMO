@@ -376,9 +376,13 @@
     "totmVotes": {
       ".read": true,
       "$month": {
-        "$voter": {
-          ".write": "auth != null && $voter === auth.uid && (!newData.exists() || root.child('showcase').child(newData.val()).child('userUid').val() !== auth.uid)",
-          ".validate": "newData.isString() && newData.val().length <= 64 && root.child('showcase').child(newData.val()).exists()"
+        "$entry": {
+          "$day": {
+            "$voter": {
+              ".write": "auth != null && $voter === auth.uid && !data.exists() && newData.val() === true && root.child('showcase').child($entry).child('userUid').val() !== auth.uid && root.child('showcase').child($entry).exists()",
+              ".validate": "newData.isBoolean()"
+            }
+          }
         }
       }
     }
