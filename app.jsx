@@ -462,10 +462,36 @@ function walletCoinCap(settings){
   if(v===0||v==="0") return Infinity;
   return Number(v)||100;
 }
+/* The terms shipped with a line saying the store is "not registered under GST" and that bills
+   would become Tax Invoices "once we register". That was true when it was written. It stopped
+   being true the moment a GSTIN was saved: checkout charges GST, the invoice is already issued
+   as a Tax Invoice with HSN and a tax split — and the terms still told customers no GST was
+   charged. Terms that contradict the bill are the one kind of stale text worth code to fix.
+
+   It is not simply deleted from the default, because the default is also what a store with no
+   GSTIN shows, and there the sentence is correct and legally useful. So it is rewritten only
+   when a GSTIN is actually configured. The saved copy in Firebase — not the default — is what
+   the live site renders, which is why this runs on the way through normalizeSettings rather
+   than being a one-line edit to the constant: every reader is fed through here, so the stale
+   sentence stops being displayed everywhere at once, without the owner editing anything.
+   Idempotent: once rewritten the pattern no longer matches. */
+const GST_UNREG_RE=/\s*We are currently a small enterprise not registered under GST[^.]*\.(?:[^.]*at which point your bill will be issued as a GST Tax Invoice\.)?/i;
+/* Deliberately not "your bill is a Tax Invoice, prices include GST". GST is claimed per product,
+   so a basket of goods we do not claim GST on carries no tax at all and is billed as a BILL OF
+   SUPPLY — which is most live-fish orders. Wording that promised a Tax Invoice on every order
+   would be a different false statement from the one being removed. */
+const GST_REG_TERM=" We are registered under GST (our GSTIN is shown on your bill). Where GST applies to an item, the price shown is inclusive of it and your bill is issued as a GST Tax Invoice; items we do not charge GST on are billed as a Bill of Supply.";
+function applyGstTerms(text,gstin){
+  const t=String(text||"");
+  if(!String(gstin||"").trim()) return t;          // genuinely unregistered — the notice stands
+  if(!GST_UNREG_RE.test(t)) return t;
+  return t.replace(GST_UNREG_RE,GST_REG_TERM).replace(/\s{2,}/g," ").trim();
+}
 function normalizeSettings(s){
   if(!s) return s;
-  if(s.shippingRates) return {...s, shippingRates: normalizeShippingRates(s.shippingRates)};
-  return s;
+  const fixed = s.termsPolicy ? {...s, termsPolicy: applyGstTerms(s.termsPolicy, s.gstin)} : s;
+  if(fixed.shippingRates) return {...fixed, shippingRates: normalizeShippingRates(fixed.shippingRates)};
+  return fixed;
 }
 const ZONE_LABELS = { TN:"Tamil Nadu", SouthIndia:"South India", CentralIndia:"Central India", NorthIndia:"North India" };
 const ZONE_KEYS   = Object.keys(ZONE_LABELS);
@@ -1337,12 +1363,26 @@ async function saveOneProd(p, list){
   if(!FB_OK) return false;
   return fbWrite(FB_DB.ref("products/"+p.id), p);
 }
+/* Where the admin's every-customer order snapshot is cached. Deliberately NOT "nemo-orders":
+   that key is the signed-in customer's own history, read at boot before anyone is authenticated
+   and handed straight to the UI. Parking every customer's orders — names, phones, addresses —
+   in the shared key leaked them to whoever opened the app next on that device. */
+const ADMIN_ORDER_CACHE = "nemo-orders-admin";
+/* Both order caches, emptied together. They are separate keys for privacy but a single thing
+   to forget, and a reset that cleared only one left the other holding the data it was asked
+   to erase. */
+async function clearOrderCaches(){
+  await dbSet("nemo-orders","[]");
+  await dbSet(ADMIN_ORDER_CACHE,"[]");
+}
 async function loadOrders()  { // admin: ALL orders (flattened from orders/<uid>/<id>)
   if(FB_OK){
     const s=await withTimeout(FB_DB.ref("orders").get(),6000);
     if(s){ const v=s.val(); const all=[]; if(v) Object.values(v).forEach(byUser=>{ if(byUser&&typeof byUser==="object") Object.values(byUser).forEach(o=>{ if(o&&o.id) all.push(o); }); }); if(all.length||v!==null) return all.sort((x,y)=>(y.placedAt||"").localeCompare(x.placedAt||"")); }
   }
-  const r=await dbGet("nemo-orders"); return r?JSON.parse(r):[];
+  // The offline fallback reads the ADMIN's own snapshot key, never the shared customer cache:
+  // every-customer data must not be parked where the next person to open the app would find it.
+  const r=await dbGet(ADMIN_ORDER_CACHE); return r?JSON.parse(r):[];
 }
 async function loadUserOrders(uid){ // a single customer's orders
   if(FB_OK&&uid){
@@ -2080,13 +2120,40 @@ function addrFingerprint(a){
   return [n(a&&a.address),n(a&&a.pincode),n(a&&a.phone)].join("|");
 }
 function addrIsBlank(a){ return !a || !(String(a.address||"").trim() && String(a.pincode||"").trim()); }
+/* One-time repair of address books written before seeding was uid-checked.
+   An admin session holds EVERY customer's orders in `orders`; navigating out of the admin panel
+   re-ran the seed against that array while it was still loaded, filing other people's names,
+   phones and street addresses into the local book — where they then showed up as pickable cards
+   at checkout and on the payment step. The cards are indistinguishable from legitimate ones
+   after the fact, so every book is cleaned once: entries derived from an order are dropped and
+   re-derived from the user's OWN orders on the next seed, while anything the customer typed and
+   saved themselves (fromOrder:false) is kept untouched. */
+function addrBookCleanKey(uid){ return "nemo-addrbook-own-"+(uid||"anon"); }
+function purgeForeignAddrEntries(uid){
+  try{
+    if(localStorage.getItem(addrBookCleanKey(uid))==="1") return;
+    const book=loadAddrBook(uid);
+    const mineOnly=book.filter(a=>!(a&&a.fromOrder));
+    if(mineOnly.length!==book.length) saveAddrBook(uid,mineOnly);
+    localStorage.setItem(addrBookCleanKey(uid),"1");
+  }catch(e){}
+}
 /* Past orders are the cross-device backstop: whatever was shipped before is an address that
-   worked, so a fresh device is seeded from them rather than starting empty. Newest first. */
+   worked, so a fresh device is seeded from them rather than starting empty. Newest first.
+
+   ONLY the signed-in customer's own orders may be read here. The caller cannot be trusted to
+   have passed a clean list — the admin listener puts all customers' orders in the same state,
+   and effect ordering decides which one is in hand when this runs — so ownership is checked
+   against each order rather than assumed. An order that does not name this user as its owner is
+   skipped: at worst a legacy order without a userUid costs a returning customer one tap to
+   retype an address, which is the right way for this to fail. */
 function seedAddressBook(uid, orders){
+  purgeForeignAddrEntries(uid);
   const book=loadAddrBook(uid);
   const seen=new Set(book.map(addrFingerprint));
   const extra=[];
   [...(orders||[])]
+    .filter(o=>o&&String(o.userUid||"")===String(uid||""))
     .sort((a,b)=>String(b.placedAt||"").localeCompare(String(a.placedAt||"")))
     .forEach(o=>{
       const a=o&&o.address;
@@ -2431,7 +2498,7 @@ async function clearAllRequestsCloud(){ return clearAllCloudNode("requests","nem
    session isn't signed in with the admin Google account. */
 async function resetAllOrderData({wipeWallets=true, wipeAnalytics=false}={}){
   const report={orders:0, remaining:0, wallets:0, carts:0, seq:0};
-  if(!FB_OK || !FB_DB){ try{ await dbSet("nemo-orders","[]"); }catch(e){} return report; }
+  if(!FB_OK || !FB_DB){ try{ await clearOrderCaches(); }catch(e){} return report; }
   const uids=new Set();
   // Orders — orders/<uid>/<orderId>
   try{
@@ -2490,8 +2557,9 @@ async function resetAllOrderData({wipeWallets=true, wipeAnalytics=false}={}){
       }
     }catch(e){}
   }
-  // Local caches on this device.
-  try{ await dbSet("nemo-orders","[]"); }catch(e){}
+  // Local caches on this device — including the admin's every-customer snapshot, which would
+  // otherwise survive a reset and keep other people's orders readable on this machine.
+  try{ await clearOrderCaches(); }catch(e){}
   // Re-read to report anything the rules refused to delete.
   try{
     const s=await withTimeout(FB_DB.ref("orders").get(),8000); const v=s&&s.val();
@@ -2933,11 +3001,42 @@ async function saveGuides(l){
   return await fbSetColl("guides",l);
 }
 
-/* Local-only readers — instant, never wait on the network (used for first paint) */
-function localProducts(){ const r=localStorage.getItem("nemo-products"); return r?JSON.parse(r):null; }
-function localOrders(){ const r=localStorage.getItem("nemo-orders"); return r?JSON.parse(r):[]; }
-function localRequests(){ const r=localStorage.getItem("nemo-requests"); return r?JSON.parse(r):[]; }
-function localGuidesData(){ const r=localStorage.getItem("nemo-guides"); return r?JSON.parse(r):null; }
+/* Local-only readers — instant, never wait on the network (used for first paint)
+
+   An EMPTY cached list is not an answer, it is the absence of one. `[]` is truthy, so
+   `localGuidesData()||DEFAULT_GUIDES` used to hand back the empty array and the page rendered
+   "No guides yet" — the care guides vanishing on their own, with nothing ever deleted. Anything
+   that writes an empty list (a wipe, an admin deleting the last guide, a reset that ran while
+   the cloud was unreachable) left that `[]` behind, and because every later fallback is also
+   `|| DEFAULT`, nothing could ever recover it. Same trap for the catalogue: an empty
+   `nemo-products` emptied the shop.
+
+   So an empty list now reads as "no cache" and lets the caller fall back. Parsing is guarded
+   too — these run inside the boot path, where a single corrupt entry threw before the store
+   was ever revealed. */
+function readCachedList(key){
+  try{
+    const r=localStorage.getItem(key);
+    if(!r) return null;
+    const v=JSON.parse(r);
+    return (Array.isArray(v)&&v.length)?v:null;
+  }catch(e){ return null; }
+}
+function localProducts(){ return readCachedList("nemo-products"); }
+/* Orders are per-customer and must never be served across accounts. An admin session holds
+   EVERY customer's orders in memory; if that snapshot ever reached this shared key it would be
+   handed to whoever opens the app next on the device. A cache carrying more than one owner is
+   therefore not this user's — it is discarded rather than shown. (The admin's own snapshot has
+   its own key; see loadOrders.) */
+function localOrders(){
+  const v=readCachedList("nemo-orders");
+  if(!v) return [];
+  const owners=new Set(v.map(o=>String((o&&o.userUid)||"")));
+  if(owners.size>1){ try{ localStorage.removeItem("nemo-orders"); }catch(e){} return []; }
+  return v;
+}
+function localRequests(){ return readCachedList("nemo-requests")||[]; }
+function localGuidesData(){ return readCachedList("nemo-guides"); }
 function localSettingsData(){ const r=localStorage.getItem("nemo-settings"); return r?normalizeSettings({...DEFAULT_SETTINGS,...JSON.parse(r)}):{...DEFAULT_SETTINGS}; }
 const GUIDE_CATEGORIES = ["Fish Care","Water & Tank","Feeding","Equipment","Plants","Health"];
 const DEFAULT_GUIDES = [
@@ -6627,7 +6726,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.cb5be838";
+const APP_BUILD = "v90.797fb97c";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -9738,6 +9837,9 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
   const shipBreak=shippingBreakdown(cart,zone,shipOpts,settings)||{courier:0,thermacol:0,carton:0,special:0,total:0,freeShip:false};
   // Live Arrival Guarantee is FREE when the customer picks the recommended packing (or a safer/higher-rank one).
   const guaranteeActive=hasLiveFish && selPack.rank >= packingOpt(suggestedPacking).rank;
+  // Charge for the packing currently selected — quoted in the folded packing header, so the
+  // fee is on screen without opening it. Null until the pincode names a zone to price against.
+  const packSelFee=zone?calcShipping(cart,zone,{packing},settings):null;
   const lgPrice=0;
   // A "coins" coupon pays in reward coins rather than money off, so it never touches the total.
   const couponBen=couponApplied?couponBenefit(couponApplied,total):{discount:0,coins:0};
@@ -10422,13 +10524,16 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
               whether the Live Arrival Guarantee applies was the hardest thing on the page to
               find. The charge for each option is quoted against the real parcel weight. */}
           {hasLiveFish&&(
-            <div style={{background:"#f0f9ff",borderRadius:14,padding:"14px",marginTop:12,border:"1px solid #bae6fd"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:4}}>
-                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13.5,fontWeight:800,color:"#0c4a6e"}}>🐠 Live-Fish Packing</div>
-                {guaranteeActive
-                  ? <span style={{fontSize:9.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"3px 8px",whiteSpace:"nowrap"}}>🛡️ GUARANTEE ON</span>
-                  : <span style={{fontSize:9.5,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"3px 8px",whiteSpace:"nowrap"}}>⚠ NOT COVERED</span>}
-              </div>
+            /* Folded by default. Four options, each with a fee and a coverage badge, sat open
+               between the basket and the money and pushed the totals and the pay button off the
+               first screen — for a choice the recommendation has already made correctly. The
+               header still carries the selected packing, its charge and whether the guarantee
+               holds, so a shopper who never opens it is not kept in the dark; only the choosing
+               is folded away. The "not covered" warning below stays OUTSIDE the fold: it is the
+               one thing here that must not be closable. */
+            <div style={{marginTop:12}}>
+            <Collapsible icon="🐠" title="Live-Fish Packing" tone={guaranteeActive?"plain":"amber"}
+              subtitle={`${packingLabel(packing)}${packSelFee==null?"":` · ₹${packSelFee}`} · ${guaranteeActive?"🛡️ guarantee applies":"⚠ not covered"} · tap to change`}>
               <div style={{fontSize:11,color:"#0c4a6e",lineHeight:1.5,marginBottom:10}}>
                 The <b>Live Arrival Guarantee</b> applies on <b>{packingLabel(suggestedPacking)}</b> (our recommendation) or any safer option. Changing this changes your shipping charge below.
               </div>
@@ -10455,11 +10560,12 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
                   </label>
                 );
               })}
-              {!guaranteeActive&&(
-                <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",lineHeight:1.5}}>
-                  ⚠ You've picked packing below our recommendation. Your fish still travel with our usual care, but a <b>Dead-on-Arrival claim can't be honoured</b> on this order.
-                </div>
-              )}
+            </Collapsible>
+            {!guaranteeActive&&(
+              <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",lineHeight:1.5,marginTop:-4,marginBottom:12}}>
+                ⚠ You've picked packing below our recommendation. Your fish still travel with our usual care, but a <b>Dead-on-Arrival claim can't be honoured</b> on this order.
+              </div>
+            )}
             </div>
           )}
           <div style={{background:C.card,borderRadius:14,padding:"14px",marginTop:12,border:`1px solid ${C.border}`}}>
@@ -16474,8 +16580,12 @@ function NemoStore(){
   useEffect(()=>{
     const uk=userKey(user);
     if(!uk){ setSavedAddresses([]); return; }
-    // Never seed while the admin panel is open: there `orders` holds EVERY customer's orders,
-    // and seeding from it would file other people's addresses into the admin's own book.
+    // Belt and braces: seedAddressBook now checks the owner of every order it reads, so a
+    // stray all-customers array can no longer contribute an address. This guard stays because
+    // it is also the cheaper answer — while the admin panel is open there is nothing here worth
+    // seeding from anyway. It is no longer what makes the seed safe, which matters: the leak it
+    // was written for happened on the way OUT of the admin panel, when page had already changed
+    // and `orders` had not yet been replaced by the customer listener.
     if(page==="admin") return;
     setSavedAddresses(seedAddressBook(uk, orders));
   },[user,orders.length,page]);
@@ -16757,7 +16867,9 @@ function NemoStore(){
   };
   const deleteOrderHandler=async order=>{
     setOrders(prev=>prev.filter(o=>o.id!==order.id));
-    const r=await dbGet("nemo-orders"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-orders",JSON.stringify(arr.filter(x=>x.id!==order.id)));
+    // Deleting is an admin action, so the admin's own snapshot is the cache to correct — the
+    // shared customer key is written by the customer's own listener and is not this one.
+    const r=await dbGet(ADMIN_ORDER_CACHE); const arr=r?JSON.parse(r):[]; await dbSet(ADMIN_ORDER_CACHE,JSON.stringify(arr.filter(x=>x.id!==order.id)));
     // Removing the order also removes its payment screenshot (stored on the order) — frees Firebase space.
     if(FB_OK&&order.userUid){ try{ await FB_DB.ref("orders/"+order.userUid+"/"+order.id).remove(); }catch(e){} }
   };
@@ -17148,7 +17260,7 @@ function NemoStore(){
         if(v) Object.values(v).forEach(byUser=>{ if(byUser&&typeof byUser==="object") Object.values(byUser).forEach(o=>{ if(o&&o.id) all.push(o); }); });
         all.sort((x,y)=>(y.placedAt||"").localeCompare(x.placedAt||""));
         setOrders(all);
-        try{ localStorage.setItem("nemo-orders",JSON.stringify(all)); }catch(e){}
+        try{ localStorage.setItem(ADMIN_ORDER_CACHE,JSON.stringify(all)); }catch(e){}
       },err=>{ /* permission denied = not signed in as admin; fall back to one-shot */ loadOrders().then(o=>o&&setOrders(o)); });
       return ()=>ref.off("value",cb);
     } else {
