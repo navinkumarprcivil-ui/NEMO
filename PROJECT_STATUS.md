@@ -189,7 +189,7 @@ Audit of security / money / GST / export ahead of the Play production release. *
 
 ⚠ **Two consequences to know:** every existing product defaults to `gstApplicable:false`, so nothing bills GST until the owner ticks it product by product; and reprinting an invoice for an order placed BEFORE this change will now show no GST (its items carry no tax fields), where it previously printed the store default rate.
 
-**Also check:** the default `termsPolicy` still contains "we are currently … not registered under GST, so no GST is charged at present" while the GSTIN is live — if the saved settings still carry that sentence it contradicts the tax invoices.
+~~**Also check:** the default `termsPolicy` still contains "we are currently … not registered under GST, so no GST is charged at present" while the GSTIN is live — if the saved settings still carry that sentence it contradicts the tax invoices.~~ **Fixed — see "Address privacy, vanishing care guides & the GST notice" below.**
 
 ## Checkout, navigation & invoice pass (Aug 2026)
 
@@ -238,6 +238,56 @@ failure `scripts/build.mjs` was written to prevent. Fixed by running `node scrip
 (build `v90.784b1ecc` → `v90.e09b7cd3`), and `HANDBOOK.md` §4 now documents the script instead
 of the raw command.
 
+## Address privacy, vanishing care guides & the GST notice (Aug 2026)
+
+Four things, all in `app.jsx`, plus a regenerated export lib in NEMO-ANALYTICS.
+
+- **Other customers' addresses could reach the checkout address picker.** The database rules were
+  never the hole — they only ever let the admin uid read all of `orders`, and a customer read
+  `orders/<their uid>`. The leak was on the client. The admin panel's listener puts EVERY
+  customer's orders into the same `orders` state a shopper's session uses; the address-book seed
+  was guarded only by `page !== "admin"`, and on the way *out* of the admin panel `page` changes
+  before the customer listener replaces `orders` — so the seed ran once against the all-customers
+  array and filed strangers' names, phones and street addresses into the local book, where they
+  showed as pickable "FROM A PAST ORDER" cards at checkout and on the payment step, permanently.
+  `seedAddressBook` now checks `userUid` on every order it reads instead of trusting its caller,
+  so no stray array can contribute an address whatever the effect ordering. Books already poisoned
+  are repaired once on next load (`purgeForeignAddrEntries`): order-derived rows are dropped and
+  re-derived from the user's own orders, while addresses the customer typed themselves are kept.
+  Two further doors shut: the admin's all-orders snapshot now caches under its own
+  `nemo-orders-admin` key instead of the shared `nemo-orders` one that boot reads before anyone
+  is authenticated, and a shared cache found holding more than one owner is discarded rather than
+  shown. Covered by `test/addressbook.test.mjs`, and verified end-to-end with the two demo
+  accounts: after Rahul orders, Priya's checkout offers no picker and shows none of his details.
+- **Care Guides disappeared on their own.** Nothing was deleted. `[]` is truthy, so once anything
+  left an empty list in `nemo-guides` — a wipe, deleting the last guide, a reset while the cloud
+  was unreachable — `localGuidesData()||DEFAULT_GUIDES` handed back the empty array and the page
+  rendered "No guides yet" forever, because every later fallback is also `|| DEFAULT`. The same
+  trap emptied the shop via `nemo-products`. Cached lists now read as "no cache" when empty, and
+  parsing is guarded (a corrupt entry used to throw inside the boot path, before first paint).
+  Reproduced in Chromium before the fix and confirmed restored after.
+- **"Not registered under GST" removed — but only where it is false.** The sentence is rewritten
+  on the way through `normalizeSettings`, so the copy saved in Firebase stops showing it
+  everywhere at once without the owner editing anything, and **only when a GSTIN is configured** —
+  a store with no GSTIN still shows the notice, where it is correct. The replacement does not
+  promise a Tax Invoice on every order, because GST is claimed per product and a basket we claim
+  no GST on is a Bill of Supply.
+- **Live-Fish Packing is folded at checkout**, reusing the existing `Collapsible`. The header
+  carries the selected packing, its charge and whether the guarantee holds; the "no DOA cover"
+  warning sits outside the fold so it cannot be closed away.
+
+⚠ `src/live/store-export-lib.js` in NEMO-ANALYTICS is generated from `app.jsx` and vendors
+`normalizeSettings`, so it was regenerated (`npm run extract:store -- <path>/app.jsx`); its
+`--check` mode is what catches this drift. 288 analytics tests pass against the new copy.
+
 ## Gotchas
-- Sandbox network blocks fetching the live site + unpkg (can't render the app here) — verify via `esbuild`/`node --check` + code review; user eyeballs the deploy.
+- Sandbox network blocks the live site and the CDNs the page loads (unpkg, gstatic), but the app
+  **can** be rendered here: `npm i react@18.3.1 react-dom@18.3.1 playwright@1.56.0` (1.56 is the
+  version whose Chromium matches `/opt/pw-browsers`), serve the folder, and point a copy of
+  `index.html` at the local React UMD builds. Firebase stays down, so the app runs on
+  `DEFAULT_PRODUCTS`/`DEFAULT_GUIDES` — enough to click through checkout via the demo accounts.
+  Seed `localStorage` from a non-app page (e.g. `/robots.txt`): a live app instance persists its
+  own cart and will overwrite anything written while it is running.
+  (This supersedes the old note that the app could not be rendered in the sandbox at all — it can,
+  and a rendered check caught the care-guides regression that code review alone had missed.)
 - The keystore in the PWABuilder package is the permanent app signing key — user keeps it secret; never commit it.
