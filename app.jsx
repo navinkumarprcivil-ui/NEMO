@@ -1433,6 +1433,12 @@ const IDB = (function(){
     get(k){ return store("readonly").then(s=>s&&new Promise(res=>{ const r=s.get(k); r.onsuccess=()=>res(r.result==null?null:r.result); r.onerror=()=>res(null); })).catch(()=>null); },
     set(k,v){ return store("readwrite").then(s=>s&&new Promise(res=>{ const r=s.put(v,k); r.onsuccess=()=>res(true); r.onerror=()=>res(false); })).catch(()=>false); },
     del(k){ return store("readwrite").then(s=>s&&new Promise(res=>{ const r=s.delete(k); r.onsuccess=()=>res(true); r.onerror=()=>res(true); })).catch(()=>{}); },
+    /* Key names only — never the values. Used to find posters still cached on this device when
+       the record that referenced them is gone; the values are whole images, so reading them all
+       just to learn what exists would pull the entire media cache into memory. */
+    keys(){ return store("readonly").then(s=>s&&new Promise(res=>{
+      try{ const r=s.getAllKeys(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>res([]); }catch(e){ res([]); }
+    })).catch(()=>[]); },
   };
 })();
 async function mediaGet(k){
@@ -1475,7 +1481,20 @@ async function delMedia(id)  { await mediaDel("nemo-img-"+id); await mediaDel("n
    ones, so an ordinary .get() on the node downloads megabytes of image data purely to learn the
    key names. `?shallow=true` returns the keys alone. `media` is world-readable, so this needs no
    auth — though only the admin can act on what it finds. */
-async function listMediaKeys(){
+/* Every place a poster can still be, listed by NAME only — never by value. A poster is written
+   to as many as three places, and losing one does not lose the others:
+
+     Firebase Storage   media/img-<id>.jpg   the uploaded file itself (recent uploads)
+     Realtime Database  media/img-<id>       a Storage URL, or base64 for older uploads
+     this device (IDB)  nemo-img-<id>        the cache written at upload time
+
+   The first attempt at this read the database over plain REST with ?shallow=true. That is the
+   cheapest way to get key names, but under App Check enforcement an unauthenticated REST call is
+   refused — so it returned nothing and looked exactly like "there is nothing to find". It is kept
+   as a bonus source, but the two that go through the SDK carry the App Check token and are the
+   ones to trust. Storage listAll() is the best of them: it returns file names, so it costs
+   nothing to enumerate even when the images are megabytes each. */
+async function listMediaKeysREST(){
   try{
     const base=FIREBASE_CONFIG.databaseURL;
     if(!base) return null;
@@ -1485,19 +1504,55 @@ async function listMediaKeys(){
     return (v&&typeof v==="object")?Object.keys(v):[];
   }catch(e){ return null; }
 }
-/* Poster ids under `media` that nothing in the store refers to any more. Products, requests and
-   guides all key a legacy single image as `img-<their id>`, so every id in play is subtracted
-   rather than guessing which kind an orphan used to be. Returns null when the listing could not
-   be read at all — telling "none orphaned" apart from "could not look" matters here, because one
-   invites the owner to move on and the other does not. */
+async function listStoragePosterIds(){
+  if(!FB_STORAGE) return null;
+  try{
+    const res=await withTimeout(FB_STORAGE.ref("media").listAll(),12000);
+    if(!res||!res.items) return null;
+    return res.items.map(it=>String(it.name||""))
+      .filter(n=>n.indexOf("img-")===0)
+      .map(n=>n.replace(/^img-/,"").replace(/\.(jpg|jpeg|png|webp)$/i,""));
+  }catch(e){ return null; }
+}
+async function listCachedPosterIds(){
+  if(!HAS_IDB) return null;
+  try{
+    const keys=await IDB.keys();
+    return (keys||[]).map(String).filter(k=>k.indexOf("nemo-img-")===0).map(k=>k.slice(9));
+  }catch(e){ return null; }
+}
+/* Poster ids nothing in the store refers to any more, gathered from all three places.
+
+   Products, requests and guides all key a legacy single image as `img-<their id>`, so every id
+   in play is subtracted rather than guessing which kind an orphan used to be. Returns the ids
+   plus which sources could actually be read, because "found none" and "could not look" call for
+   opposite reactions and a silent failure already cost this store one search. */
 async function findOrphanPosters(lists){
-  const keys=await listMediaKeys();
-  if(!keys) return null;
+  const [store,cache,rest]=await Promise.all([
+    listStoragePosterIds(), listCachedPosterIds(), listMediaKeysREST(),
+  ]);
+  const restIds=rest===null?null:rest.filter(k=>k.indexOf("img-")===0).map(k=>k.slice(4));
+  const sources={ storage:store!==null, device:cache!==null, database:restIds!==null };
+  if(!sources.storage && !sources.device && !sources.database) return {ids:null,sources};
   const taken=new Set();
   (lists||[]).forEach(list=>(list||[]).forEach(x=>{ if(x&&x.id!=null) taken.add(String(x.id)); }));
-  return keys.filter(k=>k.indexOf("img-")===0)
-             .map(k=>k.slice(4))
-             .filter(id=>id&&!taken.has(id));
+  const all=new Set([...(store||[]),...(cache||[]),...(restIds||[])]);
+  return { ids:[...all].filter(id=>id&&!taken.has(id)), sources };
+}
+/* A poster can survive in Storage while the database pointer that made it visible is gone. The
+   file is useless to the app in that state — loadImg only looks at the cache and media/<key> —
+   so restoring re-points the database at the file it already has, rather than re-uploading. */
+async function repairPosterPointer(id){
+  if(!FB_OK||!FB_STORAGE) return false;
+  try{
+    const existing=await fbGetObj("media/img-"+id);
+    if(existing) return true;                       // pointer is fine; nothing to repair
+    const url=await withTimeout(FB_STORAGE.ref("media/img-"+id+".jpg").getDownloadURL(),12000);
+    if(!url) return false;
+    await fbWrite(FB_DB.ref("media/img-"+id), url);
+    await mediaSet("nemo-img-"+id,url);
+    return true;
+  }catch(e){ return false; }
 }
 
 /* ── Multi-media (per-product gallery): base64 stored in RTDB `media/<key>` + IndexedDB cache ── */
@@ -3035,6 +3090,33 @@ async function saveGuides(l){
   await dbSet("nemo-guides",JSON.stringify(l));
   if(!FB_OK) return false;
   return await fbSetColl("guides",l);
+}
+/* Write or delete ONE guide, touching only that guide's key.
+ 
+   saveGuides() replaces the whole `guides` node — fbSetColl does ref.set() on the collection —
+   so it destroys every guide that is not in the array it was handed. That made adding a guide a
+   destructive operation: the array comes from the in-memory `guides` state, and whenever that
+   state was short of the truth (the cloud read had not landed yet, a listener had not fired, the
+   app had started offline, or the cache had gone empty) saving a single new guide published that
+   short list over the node and silently deleted the rest. There is no undo, and nothing reports
+   it — the owner sees "Guide saved".
+ 
+   Writing per id removes the hazard structurally rather than by being careful: a save can only
+   ever create or replace its own guide, and a delete can only ever remove its own. This mirrors
+   saveOneProd, which the catalogue already had and guides never got. */
+async function saveOneGuide(g){
+  const list=(localGuidesData()||[]).filter(x=>x&&!x.sample);
+  const next=list.some(x=>x.id===g.id)?list.map(x=>x.id===g.id?g:x):[g,...list];
+  await dbSet("nemo-guides",JSON.stringify(next));
+  if(!FB_OK) return false;
+  return fbWrite(FB_DB.ref("guides/"+g.id), g);
+}
+async function removeOneGuide(id){
+  const next=(localGuidesData()||[]).filter(x=>x&&x.id!==id);
+  await dbSet("nemo-guides",JSON.stringify(next));
+  if(!FB_OK) return false;
+  try{ await withTimeout(FB_DB.ref("guides/"+id).remove(), 8000, false); return true; }
+  catch(e){ return false; }
 }
 
 /* Local-only readers — instant, never wait on the network (used for first paint)
@@ -6777,7 +6859,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.8939cbd2";
+const APP_BUILD = "v90.eb49392a";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -15413,19 +15495,29 @@ function PosterRecovery({products,requests,guides,showcase,onRestore,showToast})
   const [titles,setTitles]=useState({});
   const [cats,setCats]=useState({});
   const [busy,setBusy]=useState("");
+  const [sources,setSources]=useState(null);
   const scan=async()=>{
     setState("scanning");
-    const ids=await findOrphanPosters([products,requests,guides,showcase]);
+    const {ids,sources:src}=await findOrphanPosters([products,requests,guides,showcase]);
+    setSources(src);
     if(ids===null){ setState("failed"); return; }
     setOrphans(ids); setState("done");
-    // Load the previews after the list is on screen, so a slow image never delays the count.
-    ids.forEach(async id=>{ const b=await loadImg(id); if(b) setImgs(m=>({...m,[id]:b})); });
+    /* Previews load after the list is on screen, so one slow image never delays the count. A
+       poster that survives only as a Storage file has no database pointer, so loadImg finds
+       nothing until that is repaired — repair first, then read. */
+    ids.forEach(async id=>{
+      let b=await loadImg(id);
+      if(!b && await repairPosterPointer(id)) b=await loadImg(id);
+      if(b) setImgs(m=>({...m,[id]:b}));
+    });
   };
   const restore=async(id)=>{
     const title=String(titles[id]||"").trim();
     if(!title){ showToast&&showToast("Give the poster a title first","error"); return; }
     setBusy(id);
     try{
+      // Make sure the database points at the image before the guide starts claiming it does.
+      await repairPosterPointer(id);
       await onRestore({ id, title, category:cats[id]||GUIDE_CATEGORIES[0], hasImg:true,
                         content:"", createdAt:new Date().toISOString() });
       setOrphans(o=>o.filter(x=>x!==id));
@@ -15446,8 +15538,19 @@ function PosterRecovery({products,requests,guides,showcase,onRestore,showToast})
       )}
       {state==="failed"&&(
         <div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",marginTop:9,lineHeight:1.5}}>
-          Couldn't read the media list — check the connection and try again. (This is a "couldn't
-          look", not a "nothing there".)
+          <b>Couldn't look</b> — none of the three places could be read, which is not the same as
+          finding nothing. Check the connection, and make sure you're signed in with the admin
+          Google account (Admin → Sign in), then scan again.
+        </div>
+      )}
+      {/* Which places actually answered. Without this a clean "no posters found" is impossible to
+          trust: it looks identical whether all three were searched or all three were unreachable. */}
+      {sources&&state==="done"&&(
+        <div style={{fontSize:10.5,color:C.textSub,margin:"8px 0 4px",lineHeight:1.5}}>
+          Searched: {[["storage","Firebase Storage"],["database","database"],["device","this device"]]
+            .map(([k,label])=>`${sources[k]?"✓":"✕"} ${label}`).join(" · ")}
+          {(!sources.storage||!sources.database||!sources.device)&&
+            <><br/>A ✕ means that place couldn't be read, not that it was empty.</>}
         </div>
       )}
       {state==="done"&&orphans.length===0&&(
@@ -16945,7 +17048,9 @@ function NemoStore(){
     const ex=guides.some(x=>x.id===g.id);
     const next=ex?guides.map(x=>x.id===g.id?g:x):[g,...guides];
     setGuides(next);
-    const confirmed=await saveGuides(next);
+    // Writes only this guide's key. It used to write `next` over the whole collection, which
+    // deleted every guide missing from the in-memory list — see saveOneGuide.
+    const confirmed=await saveOneGuide(g);
     if(!confirmed) showToast(CLOUD_DENIED,"error");
     else if(g.hasImg && FB_OK && !isAdminSignedIn()) showToast("⚠ Sign in with Google so customers can see this poster","error");
     else showToast("Guide saved");
@@ -16953,7 +17058,7 @@ function NemoStore(){
   const deleteGuideHandler=async(id)=>{
     const next=guides.filter(g=>g.id!==id);
     setGuides(next);
-    const confirmed=await saveGuides(next);
+    const confirmed=await removeOneGuide(id);
     await delMedia(id);
     setMediaCache(c=>{const n={...c};delete n["img-"+id];return n;});
     showToast(confirmed?"Guide deleted":"⚠ Deleted on this device only — sign in with the admin Google account and delete it again, or it will come back on the next sync.",confirmed?undefined:"error");
@@ -16967,7 +17072,8 @@ function NemoStore(){
     if(!kill.size) return;
     const next=guides.filter(g=>!kill.has(g.id));
     setGuides(next);
-    const confirmed=await saveGuides(next);
+    let confirmed=true;
+    for(const id of kill){ if(!await removeOneGuide(id)) confirmed=false; }
     for(const id of kill) await delMedia(id);
     setMediaCache(c=>{ const n={...c}; kill.forEach(id=>delete n["img-"+id]); return n; });
     showToast(confirmed?`Removed ${kill.size} guide${kill.size!==1?"s":""}`:"⚠ Removed on this device only — sign in with the admin Google account and try again.",confirmed?undefined:"error");
