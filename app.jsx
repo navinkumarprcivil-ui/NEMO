@@ -6369,9 +6369,16 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.14561262";
+const APP_BUILD = "v90.bc5bbed8";
 async function forceRefresh(){
-  try{ ["nemo-products","nemo-guides","nemo-settings"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
+  /* The cached copies of products, guides and settings are deliberately NOT deleted here.
+     They used to be, on the reasoning that "those come straight back on boot" — which is true
+     only while the cloud still has them. When it does not, this was the last copy in
+     existence, and dropping it turned a quiet cloud-side gap into visible data loss on every
+     device at once, the moment an update rolled out. They are overwritten by the first
+     successful cloud read anyway, so deleting them bought nothing and risked everything.
+     What this function is actually for — a stale BUNDLE — is handled by the cache and worker
+     clearing below. */
   try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
   // Unregistering means a brand-new worker installs and re-precaches on the next load.
   try{ if(navigator.serviceWorker){ const regs=await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r=>r.unregister())); } }catch(e){}
