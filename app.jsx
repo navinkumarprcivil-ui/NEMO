@@ -120,6 +120,20 @@ function isReturnableItem(it){
 }
 function orderHasReturnable(o){ return (((o&&o.items)||[]).some(isReturnableItem)); }
 function deliveredAtOf(o){ return o&&(o.deliveredAt||(o.status==="Delivered"?o.updatedAt:null)||null); }
+/* An order the customer walked away from: cancelled by their own press, or auto-cancelled
+   because the payment window ran out. Nothing shipped, nothing charged, nobody left to act —
+   so it is noise in a list of orders, and it is hidden from the customer's order page and
+   from the admin's order list. A cancellation made by the STORE is a different animal: there
+   may be a refund owed and the customer has to be able to see it, so those stay on show. */
+function cancelledByCustomer(o){
+  if(!o||o.status!=="Cancelled") return false;
+  /* Money still owed back keeps the order on screen wherever it would otherwise be hidden.
+     A customer who paid and then cancelled has a refund to follow, and the store has one to
+     send — hiding that is hiding the only place either of them can see it through. */
+  if(o.refund&&o.refund.due&&o.refund.status!=="refunded") return false;
+  if(o.cancelledBy==="customer") return true;
+  return /auto-cancelled/i.test(String(o.paymentStatus||""));
+}
 function returnWindowOpen(o){
   const base=deliveredAtOf(o); if(!base) return false;
   return (Date.now()-new Date(base).getTime()) <= RETURN_WINDOW_DAYS*86400000;
@@ -5734,9 +5748,11 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
   const [,setDayTick]=useState(0);
   useEffect(()=>{ const id=setInterval(()=>setDayTick(t=>t+1),3600000); return ()=>clearInterval(id); },[]);
   const myOrders = orders.filter(o =>
-    (o.userUid && uk && o.userUid===uk) ||
-    (user.uid && o.userUid===user.uid) ||
-    (user.phone && normalizePhone(o.address?.phone)===normalizePhone(user.phone))
+    !cancelledByCustomer(o) && (
+      (o.userUid && uk && o.userUid===uk) ||
+      (user.uid && o.userUid===user.uid) ||
+      (user.phone && normalizePhone(o.address?.phone)===normalizePhone(user.phone))
+    )
   );
   // Delivered products awaiting a review (deduped)
   const toReview=[];
@@ -8683,8 +8699,26 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
     const base={...BLANK_ADDR,name:user?.name||"",phone:user?.phone||""};
     return draft?{...base,...draft}:base;
   });
-  const [addrPickOpen,setAddrPickOpen]=useState(false);
   const [addrEditId,setAddrEditId]=useState(null);   // which saved card the form is editing, if any
+  /* A customer who has ordered before should not retype an address that already worked. When
+     there is one on file the form starts closed and their addresses are the screen — pick one
+     and carry on. The form opens on request (a new address, or editing one of these), and it
+     is all a first-time customer sees, because they have nothing to pick from. */
+  const [addrFormOpen,setAddrFormOpen]=useState(false);
+  const showAddrForm = !savedAddresses.length || addrFormOpen;
+  /* Fill the most recent one in straight away, so "Use this" is already true and Continue
+     works on the first press. A half-typed draft from an earlier visit outranks it — that is
+     someone mid-way through an address they meant to type. */
+  const addrSeeded=useRef(false);
+  useEffect(()=>{
+    if(addrSeeded.current||!savedAddresses.length) return;
+    addrSeeded.current=true;
+    if(!addrIsBlank(addr)) return;
+    const a=savedAddresses[0];
+    setAddr(cur=>({...cur,name:a.name||cur.name,phone:a.phone||cur.phone,whatsapp:a.whatsapp||"",
+      address:a.address||"",city:a.city||"",pincode:a.pincode||"",state:a.state||"",stateCode:a.stateCode||""}));
+    setAddrEditId(a.id);
+  },[savedAddresses]);
   useEffect(()=>{ saveAddrDraft(addrUk,addr); },[addr,addrUk]);
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const supWA=(settings.supporterWhatsapp||"").replace(/\D/g,"");
@@ -9170,12 +9204,12 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
           <button className="press" onClick={()=>{ if(step!==1){ setStep(1); } else if(cart.length){ setExitAsk(true); } else { goBack(); } }}
             style={{background:"none",border:"none",fontSize:20,color:C.textSub}}>←</button>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>
-            {step===1?"Shipping Details":"Review & Place Order"}
+            {step===1?"Shipping Details":"Payment"}
           </div>
         </div>
         {/* Steps */}
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          {["Address","Review","Done"].map((s,i)=>(
+          {["Address","Payment","Confirm Order"].map((s,i)=>(
             <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
               <div style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,
                 background:i<step?C.primary:"transparent",color:i<step?"white":C.textSub,border:`2px solid ${i<step?C.primary:C.border}`}}>
@@ -9190,11 +9224,6 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
 
       {step===1&&(
         <div className="dt-read" style={{padding:"20px 16px 100px"}}>
-          {/* Add more items — keep shopping; cart is preserved */}
-          <button className="press" onClick={()=>nav("shop")}
-            style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
-            ＋ Add more items to this order
-          </button>
           {/* Shipping rates info */}
           <div style={{background:C.accentLight,borderRadius:14,padding:"12px 14px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{fontSize:13,fontWeight:700,color:C.primaryDark}}>🚚 Shipping rates vary by location &amp; weight</div>
@@ -9225,62 +9254,73 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
             </Collapsible>
             </>
           )}
-          {/* Saved addresses — tap one to fill the form. Seeded from past orders, so this is
-              populated even for a customer who has never pressed "Save" (and on a device they
-              have never checked out from before). */}
+          {/* Deliver to. Seeded from past orders as well as saved cards, so a returning
+              customer sees a real choice even on a device they have never checked out from.
+              This is the whole address step for them: pick one and continue. The form below
+              stays shut until they ask for it — and opens by itself for a first-time
+              customer, who has nothing here to pick. */}
           {savedAddresses.length>0&&(
             <div style={{background:"#fff",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:16}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:addrPickOpen?10:0}}>
-                <div style={{fontSize:12.5,fontWeight:800,color:C.text}}>📒 Your saved addresses <span style={{color:C.textSub,fontWeight:600}}>({savedAddresses.length})</span></div>
-                <button className="press" onClick={()=>setAddrPickOpen(v=>!v)}
-                  style={{background:"none",border:"none",color:C.accent,fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",padding:0}}>
-                  {addrPickOpen?"▲ Hide":"Use one →"}
-                </button>
-              </div>
-              {addrPickOpen&&(
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {savedAddresses.map(a=>{
-                    const active=addrFingerprint(a)===addrFingerprint(addr);
-                    return(
-                      <div key={a.id} style={{border:`1.5px solid ${active?C.primary:C.border}`,background:active?C.accentLight:"#fff",borderRadius:12,padding:"10px 12px"}}>
-                        <div style={{fontSize:12.5,fontWeight:800,color:C.text}}>
-                          {a.name||"Address"}{a.label?<span style={{color:C.textSub,fontWeight:600}}> · {a.label}</span>:null}
-                          {a.fromOrder&&<span style={{fontSize:9,fontWeight:800,color:C.textSub,background:C.bg,borderRadius:20,padding:"2px 7px",marginLeft:6}}>FROM A PAST ORDER</span>}
-                        </div>
-                        <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5,marginTop:3}}>
-                          {a.address}{a.city?`, ${a.city}`:""} — {a.pincode}{a.phone?<><br/>📞 {a.phone}</>:null}
-                        </div>
-                        <div style={{display:"flex",gap:8,marginTop:9,flexWrap:"wrap"}}>
-                          <button className="press" onClick={()=>{
-                              // Only the address fields are taken; the notes/summary and the
-                              // WhatsApp-updates choice belong to THIS order, not to the card.
-                              setAddr(cur=>({...cur,name:a.name||"",phone:a.phone||"",whatsapp:a.whatsapp||"",
-                                address:a.address||"",city:a.city||"",pincode:a.pincode||"",state:a.state||"",stateCode:a.stateCode||""}));
-                              setAddrEditId(a.id); setErrs({}); setErrFocus(""); setAddrPickOpen(false);
-                            }}
-                            style={{background:C.primary,color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-                            {active?"✓ In use":"Use this"}
-                          </button>
-                          <button className="press" onClick={()=>onDeleteAddress&&onDeleteAddress(a.id)}
-                            style={{background:"#fff",color:C.danger,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-                            Delete
-                          </button>
-                        </div>
+              <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:10}}>📍 Deliver to</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {savedAddresses.map(a=>{
+                  const active=addrFingerprint(a)===addrFingerprint(addr);
+                  // Only the address fields are taken; the special requests and the
+                  // WhatsApp-updates choice belong to THIS order, not to the card.
+                  const use=()=>{
+                    setAddr(cur=>({...cur,name:a.name||"",phone:a.phone||"",whatsapp:a.whatsapp||"",
+                      address:a.address||"",city:a.city||"",pincode:a.pincode||"",state:a.state||"",stateCode:a.stateCode||""}));
+                    setAddrEditId(a.id); setErrs({}); setErrFocus("");
+                  };
+                  return(
+                    <div key={a.id} style={{border:`1.5px solid ${active?C.primary:C.border}`,background:active?C.accentLight:"#fff",borderRadius:12,padding:"10px 12px"}}>
+                      <div style={{fontSize:12.5,fontWeight:800,color:C.text}}>
+                        {a.name||"Address"}{a.label?<span style={{color:C.textSub,fontWeight:600}}> · {a.label}</span>:null}
+                        {a.fromOrder&&<span style={{fontSize:9,fontWeight:800,color:C.textSub,background:C.bg,borderRadius:20,padding:"2px 7px",marginLeft:6}}>FROM A PAST ORDER</span>}
                       </div>
-                    );
-                  })}
-                  <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.45}}>Saved on this device. Addresses from past orders reappear automatically when you sign in elsewhere.</div>
-                </div>
-              )}
+                      <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5,marginTop:3}}>
+                        {a.address}{a.city?`, ${a.city}`:""} — {a.pincode}{a.phone?<><br/>📞 {a.phone}</>:null}
+                      </div>
+                      <div style={{display:"flex",gap:8,marginTop:9,flexWrap:"wrap"}}>
+                        <button className="press" onClick={()=>{ use(); setAddrFormOpen(false); }}
+                          style={{background:C.primary,color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          {active?"✓ In use":"Use this"}
+                        </button>
+                        <button className="press" onClick={()=>{ use(); setAddrFormOpen(true); }}
+                          style={{background:"#fff",color:C.primary,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          ✏ Edit
+                        </button>
+                        <button className="press" onClick={()=>onDeleteAddress&&onDeleteAddress(a.id)}
+                          style={{background:"#fff",color:C.danger,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!addrFormOpen&&(
+                  <button className="press" onClick={()=>{
+                      setAddr(cur=>({...BLANK_ADDR,waUpdates:cur.waUpdates,summary:cur.summary}));
+                      setAddrEditId(null); setErrs({}); setErrFocus(""); setAddrFormOpen(true);
+                    }}
+                    style={{background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                    ＋ Deliver to a new address
+                  </button>
+                )}
+                <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.45}}>Saved on this device. Addresses from past orders reappear automatically when you sign in elsewhere.</div>
+              </div>
             </div>
           )}
-          {inp("Full Name","name","text","John Doe")}
-          {inp("Mobile Number","phone","tel","9876543210")}
-          {inp("WhatsApp Number","whatsapp","tel","9876543210 (if different)",false,true)}
+          {/* Order-level, not address-level: it is a choice about THIS order, so it stays on
+              screen whether they picked a saved address or are typing a new one. */}
           <label style={{display:"flex",alignItems:"center",gap:10,background:C.accentLight,borderRadius:12,padding:"12px 14px",marginBottom:14,cursor:"pointer",userSelect:"none"}}>
             <input type="checkbox" checked={addr.waUpdates} onChange={e=>f("waUpdates",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
             <span style={{fontSize:12.5,color:C.primaryDark,fontWeight:500,lineHeight:1.45}}>💬 Notify me about my order (payment confirmed, shipped, delivered)</span>
           </label>
+          {showAddrForm&&(<>
+          {inp("Full Name","name","text","John Doe")}
+          {inp("Mobile Number","phone","tel","9876543210")}
+          {inp("WhatsApp Number","whatsapp","tel","9876543210 (if different)",false,true)}
           {inp("Street Address","address","text","123, Main Street")}
           <div style={{display:"flex",gap:12}}>
             {inp("City","city","text","Chennai",true)}
@@ -9307,12 +9347,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
               </div>
             );
           })()}
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Delivery Notes <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
-            <textarea value={addr.notes} onChange={e=>f("notes",e.target.value)} rows={3}
-              placeholder="Landmark, gate code, special instructions…"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:"white"}}/>
-          </div>
+          </>)}
           <div style={{marginBottom:14}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Order Summary / Special Requests <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <textarea value={addr.summary} onChange={e=>f("summary",e.target.value)} rows={3}
@@ -9366,7 +9401,9 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
           {settings.loyaltyEnabled&&loyaltyPts!=null&&loyaltyPts>0&&(
             <LoyaltyWidget points={loyaltyPts} settings={settings} subtotal={total} redeemApplied={loyaltyRedeemed} onRedeem={()=>setLoyaltyRedeemed(true)}/>
           )}
-            {renderOffersBox()}
+          {/* Coupon and referral live on the payment step only, beside the total they change.
+              Asking for a code here as well meant asking twice for the same thing, a screen
+              before there was any total to judge it against. */}
           {/* Billing address */}
           <label style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"11px 14px",marginBottom:12,cursor:"pointer",userSelect:"none",border:`1px solid ${C.border}`}}>
             <input type="checkbox" checked={useSameBilling} onChange={e=>setUseSameBilling(e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
@@ -9384,13 +9421,13 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
               ))}
             </div>
           )}
-          <button className="press" onClick={()=>{if(validate())setStep(2);}}
+          <button className="press" onClick={()=>{ if(validate()) setStep(2); else setAddrFormOpen(true); }}
             style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            Continue to Review →
+            Continue to Payment →
           </button>
           {/* Explicit save, for a customer who wants this address on file before committing to
               the order. Placing the order saves it anyway — this is just the earlier chance. */}
-          {onSaveAddress&&(
+          {onSaveAddress&&showAddrForm&&(
             <button className="press" onClick={()=>{ if(validate()) onSaveAddress({...addr, id:addrEditId||null}); }}
               style={{width:"100%",marginTop:9,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"12px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
               💾 {addrEditId?"Update this saved address":"Save this address for next time"}
@@ -9405,8 +9442,6 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:12}}>Order Items</div>
           <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,marginTop:-4}}>You can still adjust quantities or remove items below before placing your order.</div>
           <div style={{display:"flex",gap:8,marginBottom:12}}>
-            <button className="press" onClick={()=>nav("shop")}
-              style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>＋ Add more items</button>
             <button className="press" onClick={()=>setStep(1)}
               style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🚚 Change shipping</button>
           </div>
@@ -12065,6 +12100,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   };
 
   const filteredOrders=orders.filter(o=>{
+    /* Orders the customer abandoned stay out of the working list — the admin has nothing to
+       do with them. Still reachable on purpose: pick the Cancelled filter and they appear,
+       so the record is out of the way rather than out of reach. */
+    if(orderFilter!=="Cancelled" && cancelledByCustomer(o)) return false;
     if(orderFilter!=="All" && o.status!==orderFilter) return false;
     const q=orderSearch.trim().toLowerCase();
     if(!q) return true;
