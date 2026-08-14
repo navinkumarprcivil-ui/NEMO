@@ -4931,7 +4931,7 @@ function GuideNotifBtn(){
   // Blocked at the browser level: say so rather than offering a switch that cannot move.
   if(perm==="denied") return(
     <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.textSub,fontWeight:600}}>
-      <span>🔕</span> Notifications blocked in your browser settings
+      <span>🔕</span> Blocked in browser
     </div>
   );
   return(
@@ -4939,7 +4939,10 @@ function GuideNotifBtn(){
       aria-label={active?"Turn off new-guide notifications":"Turn on new-guide notifications"}
       style={{display:"flex",alignItems:"center",gap:8,background:active?"#dcfce7":C.accentLight,border:`1px solid ${active?"#86efac":C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:active?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
       <span>{active?"🔔":"🔕"}</span>
-      <span>{active?"New-guide alerts on":"Notify me of new guides"}</span>
+      {/* One word. The switch beside it is what says on or off — spelling that out again in
+          the label made a control the size of a sentence, and the aria-label still carries
+          the full meaning for anyone who cannot see the track. */}
+      <span>Notification</span>
       {/* A visible track, so it reads as something that can be switched back */}
       <span style={{width:26,height:15,borderRadius:99,background:active?"#22c55e":"#cbd5e1",position:"relative",flexShrink:0,transition:"background .2s ease"}}>
         <span style={{position:"absolute",top:2,left:active?13:2,width:11,height:11,borderRadius:"50%",background:"#fff",transition:"left .2s ease"}}/>
@@ -6412,7 +6415,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.ba34dfcc";
+const APP_BUILD = "v90.b2276385";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -14481,12 +14484,12 @@ function CareGuidesPage({nav,goBack,guides,mediaCache}){
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 22px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
         <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
-        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-          <div>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Aquarium Care Guides</div>
-            <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:310}}>Aquarium care posters and tips, curated by our team.</div>
-          </div>
-          <div style={{flexShrink:0,marginTop:4}}>
+        {/* Title and switch on one line. The old header stacked a two-line heading over a
+            strapline that only restated it, with the switch squeezed alongside — the page
+            says what it is by listing guides. */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800}}>Care Guides</div>
+          <div style={{flexShrink:0}}>
             <GuideNotifBtn/>
           </div>
         </div>
