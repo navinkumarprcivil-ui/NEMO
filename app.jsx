@@ -3638,18 +3638,15 @@ function generateInvoiceHTML(order, settings, opts){
   ].filter(Boolean);
   const bankHtml=bankRows.length?`<div class="infoblk"><div class="ih">${cn?"REFUND / BANK DETAILS":"BANK &amp; PAYMENT DETAILS"}</div><table class="kv">${bankRows.map(([k,v])=>`<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`).join("")}</table></div>`:"";
 
-  /* Authorised signature. With a signature uploaded in Admin → Settings the sheet carries it
-     between "For <firm>" and "Authorised Signatory", and the note underneath says plainly that
-     the system affixed it rather than a hand — which is what keeps an auto-signed bill honest.
-     With none set there is nothing to sign the sheet BY: printing a ruled pad and the words
-     "Authorized Signatory" over empty space just promises a signature that never arrives, so
-     the space says instead that the document is generated and needs no signature. */
+  /* Signature. Nothing here is ever signed by hand, so the block carries exactly one of two
+     things and nothing else: the signature uploaded in Admin → Settings, or — with none set —
+     the line saying the document was generated and needs no signature. No ruled pad, no
+     "Authorized Signatory" caption over an image nobody put a pen to. */
   const sigImg=s.invoiceSignature||"";
   const sigHtml=`<div class="sigbox">
-    <div class="sigfor">For ${storeName}</div>
     ${sigImg
-      ? `<img class="sigimg" src="${sigImg}" alt=""/><div class="sigrole">Authorized Signatory</div><div class="sigauto">This is Auto-Generated</div>`
-      : `<div class="signosig">The ${docWord} is auto generated &amp; does not require sign</div>`}
+      ? `<img class="sigimg" src="${sigImg}" alt=""/>`
+      : `<div class="signosig">This is auto generated &amp; not required signature</div>`}
   </div>`;
 
   const itemRows=items.map((it,i)=>`<tr>
@@ -3732,12 +3729,9 @@ table.kv td.v{color:#1f2733;font-weight:700}
    what the customer sees on the phone is exactly the sheet that comes out of the printer.
    "Actual size" turns the scaling off for pinch-zoom reading. */
 .sigbox{margin-top:22px;margin-left:auto;width:250px;text-align:center;page-break-inside:avoid}
-.sigfor{font-size:11.5px;font-weight:700;color:#1f3864;margin-bottom:2px}
 .sigimg{display:block;margin:0 auto;max-width:190px;max-height:66px;object-fit:contain}
-.sigrole{border-top:1px solid #99a7bd;padding-top:5px;font-size:11px;font-weight:700;color:#1f2733}
-.sigauto{font-size:8.5px;color:#7d8a9c;margin-top:2px;letter-spacing:.2px}
 /* No signature on file: the space carries the reason instead of a rule nobody signs. */
-.signosig{margin-top:26px;font-size:10px;font-weight:600;line-height:1.45;color:#7a8694}
+.signosig{font-size:10px;font-weight:600;line-height:1.45;color:#7a8694}
 .fitwrap{transform-origin:top left}
 /* Only while fitted. "Actual size" keeps the fit class too, so this used to clip the sheet
    horizontally in exactly the mode whose whole point is scrolling across a full-width bill —
@@ -13607,7 +13601,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px",marginTop:12}}>
           <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>✍️ Authorised Signature (printed on invoices)</div>
           <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
-            Signs on a white background, cropped close, PNG or JPG. It prints between <b>For {STORE_NAME.toUpperCase()} AQUA STORE</b> and <b>Authorized Signatory</b>, with <b>This is Auto-Generated</b> underneath. Leave it empty and the invoice prints a ruled space to sign by hand instead.
+            Signs on a white background, cropped close, PNG or JPG. Upload one and the invoice prints that signature and nothing else. Leave it empty and the invoice prints <b>This is auto generated &amp; not required signature</b> in its place — those are the only two things that ever appear there, so no bill goes out waiting for a pen.
           </div>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             <div style={{width:120,height:56,borderRadius:10,background:"white",border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
