@@ -1732,6 +1732,12 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   referralDailyLimit: 0,
   /* Customer tank showcase */
   showcaseEnabled: true,
+  /* Tank of the Month — the showcase becomes a monthly vote. Entries live to the end of the
+     month they were approved in (instead of the usual 24h), customers vote once each, and the
+     admin verifies the winner before any coins move. */
+  totmEnabled: false,
+  totmMinVotes: 5,        // an entry cannot win on fewer votes than this
+  totmRewardCoins: 200,   // coins credited to the winner once the admin verifies
   /* Customer testimonials on the home page */
   testimonialsEnabled: true,
   /* Editable marketing copy (admin can change these from Settings; blank = use the built-in default) */
@@ -2226,6 +2232,54 @@ function redeemPoints(uid, pts, redemptionId){
 
 /* ── Customer Tank Showcase ── */
 const SHOWCASE_TTL = 24*60*60*1000; // photos auto-expire 24h AFTER admin approval (when expiresAt is set)
+/* ── Tank of the Month ─────────────────────────────────────────────────────────
+   A month-long vote laid over the showcase rather than a second gallery beside it: same
+   upload, same approval, same node. Only two things change when it is on — an approved
+   entry lives to the end of its month instead of 24 hours, and it can be voted for. */
+function totmMonthOf(ms){ const d=new Date(ms||Date.now()); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+function totmMonthLabel(ym){
+  if(!ym) return "";
+  const [y,m]=String(ym).split("-").map(Number);
+  return new Date(y,(m||1)-1,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"});
+}
+function totmMonthEnd(ms){ const d=new Date(ms||Date.now()); return new Date(d.getFullYear(),d.getMonth()+1,1,0,0,0,0).getTime()-1; }
+/* One photo or several. Entries posted before multi-image existed carry a single `imgData`,
+   so everything downstream reads through here and never touches either field directly. */
+function showcaseImgs(x){
+  const many=Array.isArray(x&&x.imgs)?x.imgs.filter(Boolean):[];
+  if(many.length) return many;
+  return (x&&x.imgData)?[x.imgData]:[];
+}
+/* Votes live in their own node, `totmVotes/<month>/<voterUid> = <entryId>`, not on the entry.
+   One key per voter per month IS the "one vote each" rule — there is no way to hold two, and
+   an entrant cannot inflate a count that is not stored on their own record. `votes` below is
+   always that map for the current month. */
+function voteCount(x,votes){
+  if(!x||!votes) return 0;
+  let n=0; for(const k in votes) if(votes[k]===x.id) n++;
+  return n;
+}
+function hasVotedFor(x,uid,votes){ return !!(uid&&x&&votes&&votes[uid]===x.id); }
+function votedEntryId(uid,votes){ return (uid&&votes&&votes[uid])||null; }
+async function castShowcaseVote(month,uid,entryId){
+  if(!FB_OK||!uid||!month) return false;
+  try{
+    const ref=FB_DB.ref("totmVotes/"+month+"/"+uid);
+    if(entryId) await ref.set(entryId); else await ref.remove();
+    return true;
+  }catch(e){ return false; }
+}
+/* Standings for a month, most votes first. Ties break towards whoever posted first — the entry
+   that has been up longest had the least time advantage, not the most. */
+function totmStandings(showcase,month,votes){
+  return (showcase||[])
+    .filter(x=>x&&showcaseApproved(x)&&(x.month||totmMonthOf(Date.parse(x.createdAt)||Date.now()))===month)
+    .map(x=>({...x,votes_:voteCount(x,votes)}))
+    .sort((a,b)=>b.votes_-a.votes_||String(a.createdAt||"").localeCompare(String(b.createdAt||"")));
+}
+function totmMinVotes(settings){ const n=Number(settings&&settings.totmMinVotes); return n>0?n:0; }
+function totmEligible(entry,settings,votes){ return voteCount(entry,votes)>=totmMinVotes(settings); }
+
 function showcaseApproved(x){ return x && x.approved!==false; } // legacy items (no flag) count as approved
 function showcaseExpired(x, now){ const exp=Number(x&&x.expiresAt)||0; return exp>0 && now>exp; }
 /* Drop from the local copy anything the cloud no longer has. Only ids the cache already held are
@@ -2261,12 +2315,24 @@ async function addShowcasePhoto(item){
   if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).set(item); return true; }catch(e){ return false; } }
   return false;
 }
-/* Admin approves a pending tank — makes it public and starts its 24h life. */
-async function approveShowcasePhoto(item){
-  const now=Date.now();
-  const updated={...item, approved:true, approvedAt:new Date(now).toISOString(), expiresAt:now+SHOWCASE_TTL};
-  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).update({approved:true, approvedAt:updated.approvedAt, expiresAt:updated.expiresAt}); }catch(e){} }
+/* Admin approves a pending tank. Normally that starts a 24h telecast; with Tank of the Month
+   running it has to survive until the vote closes, so it lives to the end of the month it was
+   approved in — a photo that vanishes overnight cannot collect a month of votes. */
+async function approveShowcasePhoto(item,settings){
+  const now=Date.now(), contest=!!(settings&&settings.totmEnabled);
+  const month=totmMonthOf(now);
+  const updated={...item, approved:true, approvedAt:new Date(now).toISOString(),
+    expiresAt: contest?totmMonthEnd(now):now+SHOWCASE_TTL,
+    ...(contest?{month}:{})};
+  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).update({approved:true, approvedAt:updated.approvedAt, expiresAt:updated.expiresAt, ...(contest?{month}:{})}); }catch(e){} }
   return updated;
+}
+/* The admin has looked at the tank, agreed it won, and released the coins. Recorded ON the
+   entry so a second press cannot pay twice, and so the badge survives the month ending. */
+async function markTotmWinner(item,pts){
+  const patch={winner:true, wonMonth:item.month||totmMonthOf(Date.now()), rewardPts:Number(pts)||0, rewardedAt:new Date().toISOString()};
+  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).update(patch); }catch(e){} }
+  return {...item,...patch};
 }
 async function deleteShowcasePhoto(id){
   if(FB_OK){ try{ await FB_DB.ref("showcase/"+id).remove(); }catch(e){} }
@@ -2667,6 +2733,22 @@ function sendLocalNotif(title, body, icon="assets/nemo-logo.png", channel=""){
   if(channel==="guides"&&!guideNotifOn())return;
   try{ new Notification(title,{body,icon}); }catch(e){}
 }
+/* ── Weekly tank care ──────────────────────────────────────────────────────────
+   A tank needs the same few jobs every week, and the one that matters — the water change —
+   is the one people put off. The reminder is driven by the app rather than by a server: it
+   checks on open and fires at most once a day. That is a real limitation, and an honest one:
+   nothing here can wake a closed phone until a push sender exists (sw.js can already RECEIVE
+   one). A reminder seen a day late still gets the water changed; a reminder that pretends to
+   be scheduled and silently never arrives does not. */
+const CARE_INTERVAL_DAYS=7;
+function careDue(tank){
+  if(!tank||!tank.litres) return {due:false,days:0};
+  const base=Date.parse(tank.lastCareAt||"")||Date.parse(tank.setUpOn||"")||0;
+  if(!base) return {due:true,days:0,never:true};
+  const days=Math.floor((Date.now()-base)/864e5);
+  return {due:days>=CARE_INTERVAL_DAYS,days,never:false,nextAt:base+CARE_INTERVAL_DAYS*864e5};
+}
+function careChangeLitres(tank,heavy){ return Math.round((Number(tank&&tank.litres)||0)*(heavy?35:25)/100); }
 async function googleSignIn(){
   /* The Firebase scripts load async and App Check gets a grace period on top, so on a cold
      cache FB_OK is still false for the first second or two of the visit. Throwing "offline"
@@ -4704,14 +4786,45 @@ function LoyaltyWidget({points,settings,onRedeem,redeemApplied,subtotal=0}){
 }
 
 /* ═══════════════════ CUSTOMER TANK SHOWCASE ═══════════════════ */
-function TankShowcaseSection({showcase,user,settings,onSubmit,mode="full"}){
-  const [preview,setPreview]=useState(null);
+/* A tank's photos, advancing on their own. The point is that the gallery is readable without
+   opening anything: a customer scrolling past sees every photo of every tank, and only taps in
+   when they want to vote. Single-photo entries render as a plain image — no timer, no dots. */
+function TankSlides({imgs,alt,height,rounded=0,ms=3000,paused=false}){
+  const [i,setI]=useState(0);
+  const n=imgs.length;
+  useEffect(()=>{
+    if(n<2||paused) return;
+    const t=setInterval(()=>setI(v=>(v+1)%n),ms);
+    return ()=>clearInterval(t);
+  },[n,ms,paused]);
+  useEffect(()=>{ if(i>=n) setI(0); },[n,i]);
+  if(!n) return null;
+  return(
+    <div style={{position:"relative",width:"100%",height:height||"100%",overflow:"hidden",borderRadius:rounded}}>
+      {imgs.map((src,k)=>(
+        <img key={k} src={src} alt={k===0?alt:""} loading="lazy" decoding="async"
+          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",
+                  opacity:k===i?1:0,transition:"opacity .6s ease"}}/>
+      ))}
+      {n>1&&(
+        <div style={{position:"absolute",bottom:5,left:0,right:0,display:"flex",justifyContent:"center",gap:4}}>
+          {imgs.map((_,k)=>(
+            <span key={k} style={{width:k===i?12:5,height:5,borderRadius:99,background:k===i?"#fff":"rgba(255,255,255,.55)",transition:"width .3s ease",boxShadow:"0 0 3px rgba(0,0,0,.4)"}}/>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mode="full"}){
+  const [preview,setPreview]=useState([]);
   const [ownerName,setOwnerName]=useState(user?.name||"");
   const [caption,setCaption]=useState("");
-  const [imgData,setImgData]=useState(null);
   const [note,setNote]=useState("");
   const [fullImg,setFullImg]=useState(null);
   const [uploading,setUploading]=useState(false);
+  const [voting,setVoting]=useState("");
   // ── Sync name field with the signed-in Google account.
   // Functional updater preserves any name the user has already typed manually.
   useEffect(()=>{
@@ -4719,77 +4832,129 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,mode="full"}){
   },[user?.name]);
   if(!settings.showcaseEnabled)return null;
   const now=Date.now();
+  const contest=!!settings.totmEnabled;
+  const month=totmMonthOf(now);
   const liveShowcase=(showcase||[]).filter(s=>showcaseApproved(s)&&!showcaseExpired(s,now));
+  const ranked=contest?totmStandings(liveShowcase,month,votes):liveShowcase;
   const mine=user&&(showcase||[]).find(s=>s.userUid===user.uid&&!showcaseExpired(s,now));
   const minePending=mine&&!showcaseApproved(mine);
+  const myVoteId=contest?votedEntryId(user&&user.uid,votes):null;
+  const myVote=myVoteId?liveShowcase.find(x=>x.id===myVoteId)||null:null;
+  const winner=(showcase||[]).find(s=>s&&s.winner&&s.wonMonth===month)||null;
+  const votesFor=e=>voteCount(e,votes);
   const showGallery = mode!=="upload";
   const showUpload  = mode!=="gallery" && !!user;
   // Nothing to show: gallery with no live photos & no pending submission, or upload with no signed-in user.
-  if(showGallery && !showUpload && liveShowcase.length===0 && !mine) return null;
+  if(showGallery && !showUpload && ranked.length===0 && !mine) return null;
   if(!showGallery && !showUpload) return null;
-  const handleFile=async file=>{
-    if(!file)return;
+
+  const MAX_IMGS=3;
+  const handleFiles=async files=>{
+    const list=Array.from(files||[]).slice(0,MAX_IMGS-preview.length);
+    if(!list.length) return;
     setNote("Processing…");
-    const b64=await compressImage(file,1200,0.84);
-    setImgData(b64);setPreview(b64);setNote("✓ Photo ready");
+    try{
+      // Smaller than a single-photo entry was: three of these ride in one database record.
+      const out=[];
+      for(const f of list) out.push(await compressImage(f,1000,0.8));
+      setPreview(p=>[...p,...out].slice(0,MAX_IMGS));
+      setNote(`✓ ${Math.min(preview.length+out.length,MAX_IMGS)} photo${preview.length+out.length>1?"s":""} ready`);
+    }catch(e){ setNote("⚠ Couldn't read that image — try a JPG or PNG"); }
   };
   const submit=async()=>{
-    if(!imgData){setNote("⚠ Please select a photo");return;}
+    if(!preview.length){setNote("⚠ Please add at least one photo");return;}
     const finalName=(user?.name||ownerName||"Aquarist").trim();
     setUploading(true);
-    await onSubmit({id:user?.uid||uid("sc"),imgData,ownerName:finalName,caption:caption.trim(),createdAt:new Date().toISOString(),approved:false,userUid:user?.uid||(user?userKey(user):"")});
-    setImgData(null);setPreview(null);setCaption("");setOwnerName(user?.name||"");setNote("📩 Submitted! We'll review it soon.");setUploading(false);
+    await onSubmit({id:user?.uid||uid("sc"),imgData:preview[0],imgs:preview,ownerName:finalName,caption:caption.trim(),
+      createdAt:new Date().toISOString(),approved:false,userUid:user?.uid||(user?userKey(user):""),...(contest?{month}:{})});
+    setPreview([]);setCaption("");setOwnerName(user?.name||"");setNote("📩 Submitted! We'll review it soon.");setUploading(false);
     setTimeout(()=>setNote(""),4000);
   };
+  const vote=async(entry)=>{
+    if(!user){ setNote("⚠ Sign in to vote"); return; }
+    if(entry.userUid===user.uid){ setNote("⚠ You can't vote for your own tank"); return; }
+    setVoting(entry.id);
+    await onVote(entry, hasVotedFor(entry,user.uid,votes)?"remove":"add");
+    setVoting("");
+  };
+
   return(
     <div style={{marginBottom:26}}>
       {showGallery&&<React.Fragment>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>🪸 Customer Tanks</span>
-        {liveShowcase.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{liveShowcase.length} shared · 24h</span>}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>{contest?"🏆 Tank of the Month":"🪸 Customer Tanks"}</span>
+        {ranked.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{ranked.length} {contest?"entries":"shared · 24h"}</span>}
       </div>
+      {contest&&<div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Vote for your favourite — most votes wins {totmMonthLabel(month)}.</div>}
+      {!contest&&<div style={{marginBottom:10}}/>}
+
+      {contest&&winner&&(
+        <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"1px solid #fcd34d",borderRadius:14,padding:"10px 13px",marginBottom:12}}>
+          <img src={showcaseImgs(winner)[0]} alt="" style={{width:42,height:42,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
+          <div style={{fontSize:11.5,color:"#92400e",fontWeight:700,lineHeight:1.45}}>
+            🏆 {winner.ownerName} won {totmMonthLabel(winner.wonMonth)}
+            {winner.rewardPts>0&&<> — {winner.rewardPts} reward coins credited</>}
+          </div>
+        </div>
+      )}
       {minePending&&(
         <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
-          <img src={mine.imgData} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your tank photo is awaiting approval. Once approved it goes live for everyone for 24 hours.</div>
+          <img src={showcaseImgs(mine)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+          <div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your tank is awaiting approval.{contest?" Once approved it joins this month's vote.":" Once approved it goes live for everyone for 24 hours."}</div>
         </div>
       )}
       {mine&&!minePending&&(
         <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
-          <img src={mine.imgData} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#15803d",fontWeight:600,lineHeight:1.45}}>✓ Your tank photo is live in the gallery — thanks for sharing! Upload a new one below anytime to replace it.</div>
+          <img src={showcaseImgs(mine)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+          <div style={{fontSize:11.5,color:"#15803d",fontWeight:600,lineHeight:1.45}}>
+            ✓ Your tank is live{contest?<> with <b>{votesFor(mine)} vote{votesFor(mine)===1?"":"s"}</b>.</>:" in the gallery — thanks for sharing!"} Upload again below to replace it.
+          </div>
         </div>
       )}
-      {liveShowcase.length>0&&(
+      {ranked.length>0&&(
         <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,marginBottom:12}}>
-          {liveShowcase.map(s=>(
-            <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:130,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
-              <div style={{height:100,overflow:"hidden"}}>
-                <img src={s.imgData} alt={s.ownerName} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+          {ranked.map((s,idx)=>{
+            const imgs=showcaseImgs(s);
+            const n=votesFor(s);
+            const voted=hasVotedFor(s,user&&user.uid,votes);
+            return(
+              <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:142,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${voted?C.primary:C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
+                <div style={{position:"relative",height:104}}>
+                  <TankSlides imgs={imgs} alt={s.ownerName} height={104}/>
+                  {contest&&idx===0&&n>0&&<span style={{position:"absolute",top:6,left:6,background:"rgba(251,191,36,.95)",color:"#7c2d12",fontSize:9,fontWeight:800,borderRadius:20,padding:"2px 7px"}}>LEADING</span>}
+                  {imgs.length>1&&<span style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,.55)",color:"#fff",fontSize:9,fontWeight:700,borderRadius:20,padding:"2px 6px"}}>{imgs.length} 📷</span>}
+                </div>
+                <div style={{padding:"7px 8px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🐠 {s.ownerName}</div>
+                  {contest
+                    ? <div style={{fontSize:10.5,color:voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>{voted?"✓ You voted":`${n} vote${n===1?"":"s"}`}</div>
+                    : s.caption&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.caption}</div>}
+                </div>
               </div>
-              <div style={{padding:"7px 8px"}}>
-                <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🐠 {s.ownerName}</div>
-                {s.caption&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.caption}</div>}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       </React.Fragment>}
       {showUpload&&(
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Replace Your Tank Photo":"Upload Your Aquarium to be Telecasted"}</div>
-          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>{mine?"Upload a new photo — it replaces your current one and is telecasted again after we approve it.":"One photo per customer · admin-approved · telecasted in our gallery for 24 hours"}</div>
-          {preview?(
-            <div style={{position:"relative",borderRadius:12,overflow:"hidden",marginBottom:8}}>
-              <img src={preview} alt="preview" style={{width:"100%",height:110,objectFit:"cover"}}/>
-              <button onClick={()=>{setPreview(null);setImgData(null);setNote("");}} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,.6)",color:"white",border:"none",borderRadius:8,padding:"4px 9px",fontSize:11,fontWeight:700}}>Replace</button>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Replace your tank photos":contest?"Enter Tank of the Month":"Share your aquarium"}</div>
+          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>Up to {MAX_IMGS} photos · one entry per customer · admin-approved{contest?" · voting runs to the end of the month":" · shown for 24 hours"}</div>
+          {preview.length>0&&(
+            <div style={{display:"flex",gap:7,marginBottom:8,flexWrap:"wrap"}}>
+              {preview.map((src,i)=>(
+                <div key={i} style={{position:"relative",width:82,height:62,borderRadius:10,overflow:"hidden"}}>
+                  <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                  <button onClick={()=>setPreview(p=>p.filter((_,k)=>k!==i))} style={{position:"absolute",top:3,right:3,background:"rgba(0,0,0,.6)",color:"white",border:"none",borderRadius:7,padding:"1px 6px",fontSize:11,fontWeight:700,cursor:"pointer"}}>×</button>
+                </div>
+              ))}
             </div>
-          ):(
+          )}
+          {preview.length<MAX_IMGS&&(
             <label style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,border:`1.5px dashed ${C.border}`,borderRadius:12,padding:"14px",cursor:"pointer",marginBottom:8,background:C.bg}}>
               <span style={{fontSize:24}}>🐡</span>
-              <span style={{fontSize:12,fontWeight:700,color:C.primary}}>Tap to upload your tank photo</span>
-              <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>handleFile(e.target.files?.[0])}/>
+              <span style={{fontSize:12,fontWeight:700,color:C.primary}}>{preview.length?`Add another (${preview.length}/${MAX_IMGS})`:"Tap to add your tank photos"}</span>
+              <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>handleFiles(e.target.files)}/>
             </label>
           )}
           <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,background:C.bg,marginBottom:6,color:C.text}}>
@@ -4802,22 +4967,54 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,mode="full"}){
           {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:note[0]==="🎉"?C.success:C.primary,fontWeight:600,marginBottom:6}}>{note}</div>}
           <button className="press" onClick={submit} disabled={uploading}
             style={{width:"100%",background:uploading?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            {uploading?"Uploading…":(mine?"Update My Tank 🐠":"Share My Tank 🐠")}
+            {uploading?"Uploading…":(mine?"Update my tank 🐠":"Share my tank 🐠")}
           </button>
         </div>
       )}
-      {fullImg&&(
+      {fullImg&&(()=>{
+        const imgs=showcaseImgs(fullImg);
+        const n=votesFor(fullImg);
+        const voted=hasVotedFor(fullImg,user&&user.uid,votes);
+        const own=user&&fullImg.userUid===user.uid;
+        const elsewhere=myVote&&myVote.id!==fullImg.id;
+        return(
         <Portal>
         <div onClick={()=>setFullImg(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.88)",zIndex:9999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
-          <img src={fullImg.imgData} alt={fullImg.ownerName} style={{maxWidth:"100%",maxHeight:"70vh",borderRadius:16,objectFit:"contain"}}/>
-          <div style={{marginTop:14,textAlign:"center"}}>
-            <div style={{color:"white",fontWeight:700,fontSize:14}}>🐠 {fullImg.ownerName}</div>
-            {fullImg.caption&&<div style={{color:"rgba(255,255,255,.8)",fontSize:12,marginTop:4}}>{fullImg.caption}</div>}
+          <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:420,display:"flex",flexDirection:"column",alignItems:"center"}}>
+            <div style={{width:"100%",height:"46vh",borderRadius:16,overflow:"hidden"}}>
+              <TankSlides imgs={imgs} alt={fullImg.ownerName} height="100%"/>
+            </div>
+            {imgs.length>1&&(
+              <div style={{display:"flex",gap:6,marginTop:10,overflowX:"auto",width:"100%",justifyContent:"center"}}>
+                {imgs.map((src,i)=><img key={i} src={src} alt="" style={{width:52,height:40,objectFit:"cover",borderRadius:8,flexShrink:0,border:"1px solid rgba(255,255,255,.25)"}}/>)}
+              </div>
+            )}
+            <div style={{marginTop:14,textAlign:"center"}}>
+              <div style={{color:"white",fontWeight:700,fontSize:14}}>🐠 {fullImg.ownerName}{fullImg.winner?" 🏆":""}</div>
+              {fullImg.caption&&<div style={{color:"rgba(255,255,255,.8)",fontSize:12,marginTop:4}}>{fullImg.caption}</div>}
+            </div>
+            {contest&&(
+              <div style={{width:"100%",marginTop:14}}>
+                <button className="press" disabled={!!own||voting===fullImg.id} onClick={()=>vote(fullImg)}
+                  style={{width:"100%",background:own?"rgba(255,255,255,.14)":voted?"#fff":C.primary,color:own?"rgba(255,255,255,.7)":voted?C.primary:"#fff",
+                          border:voted?`2px solid ${C.primary}`:"none",borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:800,
+                          fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:own?"default":"pointer"}}>
+                  {own?`Your tank · ${n} vote${n===1?"":"s"}`
+                     : voting===fullImg.id?"…"
+                     : voted?`✓ Voted · tap to undo`
+                     : `🗳️ Vote for this tank · ${n}`}
+                </button>
+                {!own&&!voted&&elsewhere&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center",lineHeight:1.45}}>You have already voted for {myVote.ownerName} this month — voting here moves your vote.</div>}
+                {!user&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center"}}>Sign in to vote.</div>}
+                {totmMinVotes(settings)>0&&<div style={{color:"rgba(255,255,255,.6)",fontSize:10.5,marginTop:7,textAlign:"center",lineHeight:1.45}}>A tank needs {totmMinVotes(settings)} votes to be eligible for the reward.</div>}
+              </div>
+            )}
           </div>
-          <button onClick={()=>setFullImg(null)} style={{marginTop:16,background:"rgba(255,255,255,.18)",border:"1px solid rgba(255,255,255,.3)",borderRadius:12,padding:"10px 24px",color:"white",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Close</button>
+          <button onClick={()=>setFullImg(null)} style={{marginTop:16,background:"rgba(255,255,255,.18)",border:"1px solid rgba(255,255,255,.3)",borderRadius:12,color:"white",padding:"9px 20px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Close</button>
         </div>
         </Portal>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -6415,7 +6612,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.7fa32c29";
+const APP_BUILD = "v90.fa934cbc";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7024,6 +7221,14 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   },[stock,tank]);
 
   /* ── Weekly jobs, straight off the profile ── */
+  const due=careDue(tank);
+  const [perm,setPerm]=useState(()=>typeof Notification!=="undefined"?Notification.permission:"default");
+  const markCareDone=()=>{ persist({...tank,lastCareAt:new Date().toISOString()}); };
+  const toggleRemind=()=>{
+    if(tank.remind){ persist({...tank,remind:false}); return; }
+    if(perm==="granted"){ persist({...tank,remind:true}); return; }
+    requestNotifPerm(ok=>{ setPerm(ok?"granted":"denied"); persist({...tank,remind:ok}); });
+  };
   const weekly=useMemo(()=>{
     if(!tank.litres) return [];
     const l=Number(tank.litres)||0, out=[];
@@ -7202,7 +7407,31 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
         {/* ══ THIS WEEK ══ */}
         {weekly.length>0&&(
           <div style={card}>
-            <H>🗓️ This week</H>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>🗓️ This week</div>
+              {perm!=="denied"&&(
+                <button className="press" onClick={toggleRemind} role="switch" aria-checked={!!tank.remind}
+                  aria-label={tank.remind?"Turn off weekly tank reminders":"Turn on weekly tank reminders"}
+                  style={{display:"flex",alignItems:"center",gap:7,background:tank.remind?"#dcfce7":C.accentLight,border:`1px solid ${tank.remind?"#86efac":C.border}`,borderRadius:10,padding:"6px 11px",fontSize:11,fontWeight:700,color:tank.remind?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  <span>{tank.remind?"🔔":"🔕"}</span><span>Remind me</span>
+                  <span style={{width:24,height:14,borderRadius:99,background:tank.remind?"#22c55e":"#cbd5e1",position:"relative",flexShrink:0,transition:"background .2s ease"}}>
+                    <span style={{position:"absolute",top:2,left:tank.remind?12:2,width:10,height:10,borderRadius:"50%",background:"#fff",transition:"left .2s ease"}}/>
+                  </span>
+                </button>
+              )}
+            </div>
+            <div style={{background:due.due?"#fff7ed":"#ecfdf5",border:`1px solid ${due.due?"#fed7aa":"#a7f3d0"}`,borderRadius:12,padding:"10px 12px",marginBottom:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:150,fontSize:12,fontWeight:700,color:due.due?"#9a3412":"#15803d",lineHeight:1.45}}>
+                {due.never?"No care logged yet — start the clock when you next do the jobs below."
+                 :due.due?`Due now — ${due.days} day${due.days===1?"":"s"} since the last one.`
+                 :`Done ${due.days===0?"today":due.days===1?"yesterday":`${due.days} days ago`} · next in ${CARE_INTERVAL_DAYS-due.days} day${CARE_INTERVAL_DAYS-due.days===1?"":"s"}.`}
+              </div>
+              <button className="press" onClick={markCareDone}
+                style={{background:due.due?C.primary:"#fff",color:due.due?"#fff":C.primary,border:due.due?"none":`1.5px solid ${C.primary}`,borderRadius:10,padding:"8px 13px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",flexShrink:0}}>
+                ✓ Done today
+              </button>
+            </div>
+            {tank.remind&&<div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.45}}>You'll be reminded when you open the app and the week is up — we can't wake a closed phone yet.</div>}
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {weekly.map((w,i)=>(
                 <div key={i} style={{display:"flex",gap:10,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px"}}>
@@ -7381,7 +7610,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   );
 }
 
-function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true}){
+function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,onShowcaseVote,totmVotes={},restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true}){
   const featured=[...products].sort(byAvailabilityThen()).slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
   const [walletOpen,setWalletOpen]=useState(false);
@@ -7548,7 +7777,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Food re-order reminder */}
         <FoodReorderBanner orders={orders} products={products} addToCart={addToCart} nav={nav}/>
 
-        <TankShowcaseSection mode="gallery" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
+        <TankShowcaseSection mode="gallery" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit} onVote={onShowcaseVote} votes={totmVotes}/>
 
         {/* Arrived Alive — verified-buyer unboxing photos */}
         <ArrivedAliveGallery products={products}/>
@@ -7673,7 +7902,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
         {/* Share your tank (upload form) + Testimonials — moved to the bottom of the home page */}
         <div style={{marginTop:28}}>
-          <TankShowcaseSection mode="upload" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit}/>
+          <TankShowcaseSection mode="upload" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit} onVote={onShowcaseVote} votes={totmVotes}/>
         </div>
         {settings.testimonialsEnabled!==false&&<TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>}
 
@@ -12394,7 +12623,7 @@ function AdminExitConfirm({onStay,onLeave}){
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTotmAward,totmVotes={},testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
@@ -13549,7 +13778,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             const live=showcase.filter(s=>showcaseApproved(s)&&!showcaseExpired(s,now));
             const row=(s,isPending)=>(
               <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"8px 10px",border:`1px solid ${isPending?"#fed7aa":C.border}`}}>
-                <img src={s.imgData} alt={s.ownerName} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+                <img src={showcaseImgs(s)[0]} alt={s.ownerName} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.ownerName}</div>
                   {s.caption&&<div style={{fontSize:11,color:C.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.caption}</div>}
@@ -13571,6 +13800,42 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <div style={{padding:"16px 16px 0"}}>
               <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:0,border:`1px solid ${C.border}`}}>
                 <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase</div>
+                {settings.totmEnabled&&(()=>{
+                  /* Standings, and the one button that moves money. Nothing is credited by the
+                     vote count on its own — the admin looks at the tank first, which is the whole
+                     point of "after admin's verification". */
+                  const month=totmMonthOf(now);
+                  const board=totmStandings(live,month,totmVotes);
+                  const need=totmMinVotes(settings);
+                  const pts=Math.max(0,Number(settings.totmRewardCoins)||0);
+                  const won=board.find(x=>x.winner&&x.wonMonth===month);
+                  return(
+                    <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"12px 13px",marginBottom:14}}>
+                      <div style={{fontSize:12.5,fontWeight:800,color:"#92400e",marginBottom:2}}>🏆 Tank of the Month — {totmMonthLabel(month)}</div>
+                      <div style={{fontSize:11,color:"#92400e",opacity:.85,marginBottom:10,lineHeight:1.5}}>{need>0?`${need} votes needed to be eligible`:"No minimum vote requirement set"} · reward {pts} coin{pts===1?"":"s"}</div>
+                      {board.length===0&&<div style={{fontSize:11.5,color:"#92400e",fontStyle:"italic"}}>No approved entries this month yet.</div>}
+                      {board.map((e,i)=>{
+                        const v=voteCount(e,totmVotes), ok=totmEligible(e,settings,totmVotes);
+                        return(
+                          <div key={e.id} style={{display:"flex",alignItems:"center",gap:9,background:"#fff",borderRadius:10,padding:"7px 9px",marginBottom:6,border:`1px solid ${e.winner?"#fcd34d":C.border}`}}>
+                            <span style={{fontSize:12,fontWeight:800,color:C.textSub,width:16,flexShrink:0}}>{i+1}</span>
+                            <img src={showcaseImgs(e)[0]} alt="" style={{width:36,height:36,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:11.5,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.ownerName}{e.winner?" 🏆":""}</div>
+                              <div style={{fontSize:10.5,color:ok?C.success:C.textSub,fontWeight:600}}>{v} vote{v===1?"":"s"}{ok?"":need>0?` · ${need-v} short`:""}{showcaseImgs(e).length>1?` · ${showcaseImgs(e).length} photos`:""}</div>
+                            </div>
+                            {e.winner
+                              ? <span style={{fontSize:10,fontWeight:800,color:"#92400e",background:"#fef3c7",borderRadius:20,padding:"4px 9px",flexShrink:0}}>{e.rewardPts>0?`${e.rewardPts} coins paid`:"Declared"}</span>
+                              : <button className="press" disabled={!ok||!!won} onClick={()=>onTotmAward&&onTotmAward(e)}
+                                  style={{background:(ok&&!won)?C.primary:"#e2e8f0",color:(ok&&!won)?"#fff":C.textSub,border:"none",borderRadius:8,padding:"6px 11px",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(ok&&!won)?"pointer":"default",flexShrink:0}}>
+                                  {won?"Winner picked":ok?"Verify & award":"Not eligible"}
+                                </button>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 {pending.length>0&&(
                   <div style={{marginBottom:14}}>
                     <div style={{fontSize:11.5,fontWeight:800,color:"#9a3412",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>⏳ Pending approval ({pending.length})</div>
@@ -14642,6 +14907,31 @@ function SettingsPanel({settings,onSave,products=[]}){
         </label>
       </div>
 
+      {/* Tank of the Month */}
+      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🏆 Tank of the Month</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Turns the tank showcase into a monthly vote. Entries stay up until the month ends instead of 24 hours, each customer gets one vote, and you pick the winner yourself from Orders → tank showcase — <b>no coins move until you verify it</b>.</div>
+        <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:12}}>
+          <input type="checkbox" checked={!!f.totmEnabled} onChange={e=>set("totmEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
+          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Run Tank of the Month</span>
+        </label>
+        {!f.showcaseEnabled&&f.totmEnabled&&<div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",marginBottom:12,lineHeight:1.5}}>⚠ The tank showcase is switched off above, so nothing will appear. Turn it on for this to run.</div>}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5}}>Minimum votes</div>
+            <input type="number" min="0" value={f.totmMinVotes??5} onChange={e=>set("totmMinVotes",e.target.value===""?"":Number(e.target.value))}
+              style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"#f8fafc"}}/>
+            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>To be eligible for the reward. 0 = no minimum</div>
+          </div>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5}}>Reward coins</div>
+            <input type="number" min="0" value={f.totmRewardCoins??200} onChange={e=>set("totmRewardCoins",e.target.value===""?"":Number(e.target.value))}
+              style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"#f8fafc"}}/>
+            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>≈ ₹{Math.floor((Number(f.totmRewardCoins)||0)*(f.loyaltyRedeemValue||1))} of store credit</div>
+          </div>
+        </div>
+      </div>
+
       </>)}
       <button className="press" onClick={()=>startSave(f)}
         style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
@@ -15306,6 +15596,7 @@ function NemoStore(){
   const [mediaCache,setMediaCache] = useState({});
   const [loading,setLoading]       = useState(true);
   const [showcase,setShowcase]     = useState([]);
+  const [totmVotes,setTotmVotes]  = useState({});   // totmVotes/<month> — voterUid -> entryId
   const [testimonials,setTestimonials] = useState([]);
   const [restockSet,setRestockSet] = useState(()=>loadRestockLocal().map(x=>x.pid));
   const [selProduct,setSelProduct] = useState(null);
@@ -15696,6 +15987,26 @@ function NemoStore(){
     return()=>window.removeEventListener("popstate",onPop);
   },[]);
 
+  /* Weekly tank care reminder. Checked when the app opens rather than pushed, because there is
+     no sender yet — see careDue(). Stamped per day so opening the app five times in an evening
+     does not nag five times. */
+  useEffect(()=>{
+    const uk=userKey(user);
+    const t=loadMyTank(uk);
+    if(!t||!t.remind) return;
+    const d=careDue(t);
+    if(!d.due) return;
+    const key="nemo-carenotif-"+(uk||"guest"), today=new Date().toISOString().slice(0,10);
+    try{
+      if(localStorage.getItem(key)===today) return;
+      localStorage.setItem(key,today);
+    }catch(e){}
+    const litres=careChangeLitres(t,false);
+    sendLocalNotif(`${t.name||"Your tank"} — weekly care due`,
+      litres>0?`Time for a ~${litres} L water change, and a look at the filter and heater.`:"Time for this week's water change.",
+      undefined,"care");
+  },[user]);
+
   // Secret admin tap handler
   const handleSecretTap=()=>{
     clearTimeout(tapTimer.current);
@@ -15966,9 +16277,37 @@ function NemoStore(){
     else showToast("⚠ Saved on this device, but it couldn't reach our server — please check your connection and try again.");
   };
   const handleApproveShowcase=async(item)=>{
-    const updated=await approveShowcasePhoto(item);
+    const updated=await approveShowcasePhoto(item,settings);
     setShowcase(s=>s.map(x=>x.id===item.id?updated:x));
-    showToast("✓ Tank approved — now live for 24h");
+    showToast(settings.totmEnabled?"✓ Tank approved — in this month's vote":"✓ Tank approved — now live for 24h");
+  };
+  /* One vote per customer per month, so casting a vote clears whatever they voted for before.
+     The screen moves first and the write follows: a vote that fails puts the count back rather
+     than leaving a tick the server never agreed to. */
+  const handleShowcaseVote=async(entry,action)=>{
+    const uid=user&&user.uid;
+    if(!uid){ showToast("Sign in to vote","error"); return; }
+    if(entry.userUid===uid){ showToast("You can't vote for your own tank","error"); return; }
+    const month=totmMonthOf(Date.now());
+    const before=totmVotes;
+    const prevId=votedEntryId(uid,totmVotes);
+    // Move the tick first, then write. One key per voter means switching tanks is one write,
+    // not an un-vote and a re-vote that could half-fail.
+    setTotmVotes(v=>{ const n={...v}; if(action==="add") n[uid]=entry.id; else delete n[uid]; return n; });
+    const ok=await castShowcaseVote(month,uid,action==="add"?entry.id:null);
+    if(!ok){ setTotmVotes(before); showToast("Couldn't record that vote — check your connection","error"); return; }
+    if(action==="add") showToast(prevId&&prevId!==entry.id?"Vote moved to "+entry.ownerName:"Voted for "+entry.ownerName);
+  };
+  /* The admin has seen the tank and released the coins. adminCreditLoyalty is keyed on the
+     entry, so pressing it twice cannot pay twice. */
+  const handleTotmAward=async(entry)=>{
+    const pts=Math.max(0,Number(settings.totmRewardCoins)||0);
+    const uid=entry.userUid;
+    if(!uid){ showToast("This entry has no customer account attached","error"); return; }
+    if(pts>0) await adminCreditLoyalty(uid,pts,"totm:"+(entry.wonMonth||entry.month||totmMonthOf(Date.now()))+":"+entry.id,"Tank of the Month",settings.walletValidityMonths);
+    const updated=await markTotmWinner(entry,pts);
+    setShowcase(s=>s.map(x=>x.id===entry.id?updated:x));
+    showToast(pts>0?`🏆 ${entry.ownerName} declared winner — ${pts} coins credited`:`🏆 ${entry.ownerName} declared winner`);
   };
   const handleTestimonialSubmit=async(t)=>{
     const cloudOk=await addTestimonial(t);
@@ -16607,6 +16946,19 @@ function NemoStore(){
     return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
   },[fbReady]);
 
+  /* GLOBAL: live listener on this month's Tank-of-the-Month votes. Counts have to move for
+     everyone as they are cast — a vote total that only refreshes on a cold start is a vote
+     total nobody trusts. Scoped to the current month, so last month's ballots are not carried
+     around forever. */
+  useEffect(()=>{
+    if(!(FB_OK && FB_DB) || !settings.totmEnabled) return;
+    const month=totmMonthOf(Date.now());
+    const ref=FB_DB.ref("totmVotes/"+month);
+    let alive=true;
+    const cb=ref.on("value",s=>{ if(alive) setTotmVotes((s&&s.val())||{}); },()=>{});
+    return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
+  },[fbReady,settings.totmEnabled]);
+
   // GLOBAL: live listener on the CARE GUIDES — same one-shot read, same fix as the catalogue.
   useEffect(()=>{
     if(!(FB_OK && FB_DB)) return;
@@ -16763,7 +17115,7 @@ function NemoStore(){
           chaining out to the document and dragging the pinned bottom nav with it. */}
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
         <div key={page} className="page-swap">
-        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
+        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
         {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} goBack={goBack} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={products} mediaCache={mediaCache} orders={orders}/>}
@@ -16781,7 +17133,7 @@ function NemoStore(){
         {page==="about"    &&<AboutPage nav={nav} goBack={goBack} settings={settings}/>}
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} settings={settings}/>}
-        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
+        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} onTotmAward={handleTotmAward} totmVotes={totmVotes} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
       </div>

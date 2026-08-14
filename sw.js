@@ -1,5 +1,5 @@
 /* Nemo Aqua Store — service worker (offline fallback + always-fresh code) */
-const CACHE = 'nemo-v90.7fa32c29';
+const CACHE = 'nemo-v90.fa934cbc';
 /* Precached on install — so keep this to what a visit actually uses. The logo is
    here as WebP only: the splash asks for the WebP, so the PNG beside it is
    reached only by a browser that cannot read WebP, and precaching 160 KB for a
@@ -73,4 +73,43 @@ self.addEventListener('fetch', (e) => {
       })
     );
   }
+});
+
+/* ── Push ──────────────────────────────────────────────────────────────────────
+ * Nothing sends these yet. The weekly tank-care reminder is fired by the app when it is
+ * opened (see careDue() in app.jsx), because a static site on Vercel has no sender and a
+ * closed phone cannot be woken without one. This half is here so that when a sender is added
+ * — FCM credentials plus a scheduled function posting to the customer's token — the app
+ * already receives and opens the notification correctly, with no service-worker change and
+ * so no waiting for every installed client to pick up a new worker.
+ *
+ * The payload is expected as JSON: {title, body, url}. A push with no readable body still
+ * shows something rather than failing silently, because a notification the browser has
+ * already committed to showing will display "This site has been updated in the background"
+ * if the handler does not show one of its own.
+ */
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { try { d = { body: e.data.text() }; } catch (e2) { d = {}; } }
+  const title = d.title || 'Nemo Aqua Store';
+  e.waitUntil(self.registration.showNotification(title, {
+    body: d.body || '',
+    icon: d.icon || './assets/nemo-logo.png',
+    badge: './assets/nemo-logo.png',
+    tag: d.tag || 'nemo',
+    data: { url: d.url || './' },
+  }));
+});
+
+/* Focus a tab the store is already open in rather than stacking another one. */
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || './';
+  e.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of all) {
+      if ('focus' in c) { try { await c.navigate(url); } catch (err) {} return c.focus(); }
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(url);
+  })());
 });
