@@ -1464,6 +1464,42 @@ async function loadVid(id)   { return mediaGet("nemo-vid-"+id); }
 async function saveVid(id,b) { return mediaSet("nemo-vid-"+id,b); }
 async function delMedia(id)  { await mediaDel("nemo-img-"+id); await mediaDel("nemo-vid-"+id); if(FB_OK){ try{ await FB_DB.ref("media/img-"+id).remove(); }catch(e){} } }
 
+/* ── Orphaned posters ────────────────────────────────────────────────────────────────
+   A poster and the guide that shows it are stored apart: the image at `media/img-<id>`, the
+   title and category in the `guides` node. So losing the guides node does NOT lose the posters
+   — it only loses the thing that pointed at them. They sit in `media` with nothing referencing
+   their ids, invisible and un-deletable through the UI, which is exactly what happened when a
+   store's guides went missing and three sample guides were published over the gap.
+
+   Read SHALLOW. Values under `media` are Storage URLs for recent uploads but base64 for older
+   ones, so an ordinary .get() on the node downloads megabytes of image data purely to learn the
+   key names. `?shallow=true` returns the keys alone. `media` is world-readable, so this needs no
+   auth — though only the admin can act on what it finds. */
+async function listMediaKeys(){
+  try{
+    const base=FIREBASE_CONFIG.databaseURL;
+    if(!base) return null;
+    const r=await withTimeout(fetch(base+"/media.json?shallow=true",{cache:"no-store"}),8000);
+    if(!r||!r.ok) return null;
+    const v=await r.json();
+    return (v&&typeof v==="object")?Object.keys(v):[];
+  }catch(e){ return null; }
+}
+/* Poster ids under `media` that nothing in the store refers to any more. Products, requests and
+   guides all key a legacy single image as `img-<their id>`, so every id in play is subtracted
+   rather than guessing which kind an orphan used to be. Returns null when the listing could not
+   be read at all — telling "none orphaned" apart from "could not look" matters here, because one
+   invites the owner to move on and the other does not. */
+async function findOrphanPosters(lists){
+  const keys=await listMediaKeys();
+  if(!keys) return null;
+  const taken=new Set();
+  (lists||[]).forEach(list=>(list||[]).forEach(x=>{ if(x&&x.id!=null) taken.add(String(x.id)); }));
+  return keys.filter(k=>k.indexOf("img-")===0)
+             .map(k=>k.slice(4))
+             .filter(id=>id&&!taken.has(id));
+}
+
 /* ── Multi-media (per-product gallery): base64 stored in RTDB `media/<key>` + IndexedDB cache ── */
 /* Upload a compressed image (JPEG data-URL) to Firebase Storage and return its public URL.
    Returns null if Storage isn't available/enabled or the upload fails — callers then fall
@@ -3039,12 +3075,27 @@ function localRequests(){ return readCachedList("nemo-requests")||[]; }
 function localGuidesData(){ return readCachedList("nemo-guides"); }
 function localSettingsData(){ const r=localStorage.getItem("nemo-settings"); return r?normalizeSettings({...DEFAULT_SETTINGS,...JSON.parse(r)}):{...DEFAULT_SETTINGS}; }
 const GUIDE_CATEGORIES = ["Fish Care","Water & Tank","Feeding","Equipment","Plants","Health"];
+/* True for a built-in sample, whether it still carries the `sample` tag or is a copy that was
+   published into the cloud before the tag existed — which is the case that matters, because
+   those copies are the ones sitting in a real store pretending to be its content. Matched on id
+   AND title together so a store that legitimately renamed g1 to its own guide is left alone. */
+function isSampleGuide(g){
+  if(!g) return false;
+  if(g.sample) return true;
+  const d=DEFAULT_GUIDES.find(x=>x.id===g.id);
+  return !!(d && String(g.title||"").trim()===d.title);
+}
+/* Sample content, not the store's content. Every entry is tagged `sample:true` and that tag is
+   what stops it being written to Firebase: seeding a live store's `guides` node with these
+   replaces a missing library with three generic articles that carry no posters, which reads to
+   the owner as "my guides came back, but all my uploads are gone". They are a placeholder on
+   screen and nothing more. */
 const DEFAULT_GUIDES = [
-  { id:"g1", title:"Betta Fish Care Basics", category:"Fish Care", hasImg:false,
+  { id:"g1", title:"Betta Fish Care Basics", category:"Fish Care", hasImg:false, sample:true,
     content:"• Keep one male betta per tank — they're territorial.\n• Minimum 5 litres, ideally 10L+, with a gentle filter.\n• Maintain water at 24–28°C with a heater.\n• Feed 2–3 pellets twice a day; fast one day a week.\n• Change 25% of water weekly. Avoid sudden temperature swings.", createdAt:new Date().toISOString() },
-  { id:"g2", title:"Cycling a New Tank", category:"Water & Tank", hasImg:false,
+  { id:"g2", title:"Cycling a New Tank", category:"Water & Tank", hasImg:false, sample:true,
     content:"Before adding fish, cycle your tank for 2–4 weeks:\n1. Set up filter, heater, substrate.\n2. Add a source of ammonia (fish food or pure ammonia).\n3. Test for ammonia, nitrite, nitrate.\n4. Wait until ammonia & nitrite read 0 and nitrate appears.\nThis grows beneficial bacteria that keep fish safe.", createdAt:new Date().toISOString() },
-  { id:"g3", title:"How to Operate Your HOB Filter", category:"Equipment", hasImg:false,
+  { id:"g3", title:"How to Operate Your HOB Filter", category:"Equipment", hasImg:false, sample:true,
     content:"• Rinse the media in old tank water (never tap — chlorine kills bacteria).\n• Fill the chamber with water before powering on to self-prime.\n• Adjust flow so bettas/fancy fish aren't pushed around.\n• Replace mechanical floss monthly; keep the biological media.", createdAt:new Date().toISOString() },
 ];
 
@@ -6726,7 +6777,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.797fb97c";
+const APP_BUILD = "v90.8939cbd2";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -12973,7 +13024,7 @@ function AdminExitConfirm({onStay,onLeave}){
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTotmAward,totmVotes={},testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onDeleteGuides,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTotmAward,totmVotes={},testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
@@ -13990,6 +14041,23 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:16}}>
               + Add Care Guide / Poster
             </button>
+            {/* Says plainly that the page is showing built-in samples rather than the store's
+                own guides. Without this the owner sees three tidy articles and concludes their
+                library is fine — while every poster they ever uploaded is missing. */}
+            {guides.length>0&&guides.every(isSampleGuide)&&(
+              <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"11px 13px",marginBottom:14,fontSize:11.5,color:"#9a3412",lineHeight:1.55}}>
+                ⚠ <b>These are sample guides, not yours.</b> Your own guides aren't loading, so what
+                the page is showing is the app's built-in examples. They carry no posters, which is
+                why your uploads look missing. Your posters are stored separately from the guides
+                that show them — scan below, they are very likely still there.
+                <button className="press" onClick={()=>onDeleteGuides(guides.filter(isSampleGuide).map(g=>g.id))}
+                  style={{display:"block",marginTop:9,background:"#fff",color:"#9a3412",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  Remove the {guides.filter(isSampleGuide).length} sample guide{guides.filter(isSampleGuide).length!==1?"s":""} from my store
+                </button>
+              </div>
+            )}
+            <PosterRecovery products={products} requests={requests} guides={guides} showcase={showcase}
+              onRestore={onSaveGuide} showToast={showToast}/>
             {guides.length===0?(
               <div style={{textAlign:"center",padding:"40px 0",color:C.textSub}}>
                 <div style={{fontSize:48,marginBottom:14}}>📖</div>
@@ -15331,6 +15399,96 @@ function SettingsPanel({settings,onSave,products=[]}){
     </div>
   );
 }
+/* ═══════════════════ POSTER RECOVERY (admin → Guides) ═══════════════════
+   Puts uploaded posters back when the guide records that referenced them are gone. The images
+   were never lost — see findOrphanPosters — so this lists what is still in `media`, shows each
+   one, and lets the owner give it a title again. Deliberately manual: only the owner knows what
+   a poster was called, and inventing titles would bury the real ones under "Recovered poster 3".
+   Restoring reuses the poster's existing id, so the new guide points at the same image with
+   nothing re-uploaded. */
+function PosterRecovery({products,requests,guides,showcase,onRestore,showToast}){
+  const [state,setState]=useState("idle");     // idle | scanning | done | failed
+  const [orphans,setOrphans]=useState([]);
+  const [imgs,setImgs]=useState({});
+  const [titles,setTitles]=useState({});
+  const [cats,setCats]=useState({});
+  const [busy,setBusy]=useState("");
+  const scan=async()=>{
+    setState("scanning");
+    const ids=await findOrphanPosters([products,requests,guides,showcase]);
+    if(ids===null){ setState("failed"); return; }
+    setOrphans(ids); setState("done");
+    // Load the previews after the list is on screen, so a slow image never delays the count.
+    ids.forEach(async id=>{ const b=await loadImg(id); if(b) setImgs(m=>({...m,[id]:b})); });
+  };
+  const restore=async(id)=>{
+    const title=String(titles[id]||"").trim();
+    if(!title){ showToast&&showToast("Give the poster a title first","error"); return; }
+    setBusy(id);
+    try{
+      await onRestore({ id, title, category:cats[id]||GUIDE_CATEGORIES[0], hasImg:true,
+                        content:"", createdAt:new Date().toISOString() });
+      setOrphans(o=>o.filter(x=>x!==id));
+    } finally { setBusy(""); }
+  };
+  return(
+    <div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:14,padding:"13px 14px",marginBottom:16}}>
+      <div style={{fontSize:13,fontWeight:800,color:"#0c4a6e",marginBottom:4}}>🖼️ Recover uploaded posters</div>
+      <div style={{fontSize:11.5,color:"#0c4a6e",lineHeight:1.55,marginBottom:10}}>
+        Posters are stored separately from the guides that show them, so a guide that disappeared
+        did not take its poster with it. This finds posters nothing points at any more.
+      </div>
+      {state!=="done"&&(
+        <button className="press" onClick={scan} disabled={state==="scanning"}
+          style={{background:state==="scanning"?"#7dd3fc":"#0284c7",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:state==="scanning"?"default":"pointer"}}>
+          {state==="scanning"?"Scanning…":"Scan for lost posters"}
+        </button>
+      )}
+      {state==="failed"&&(
+        <div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",marginTop:9,lineHeight:1.5}}>
+          Couldn't read the media list — check the connection and try again. (This is a "couldn't
+          look", not a "nothing there".)
+        </div>
+      )}
+      {state==="done"&&orphans.length===0&&(
+        <div style={{fontSize:11.5,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:9,padding:"9px 11px",lineHeight:1.5}}>
+          ✓ No lost posters — every poster in storage still belongs to a guide, product or request.
+        </div>
+      )}
+      {state==="done"&&orphans.length>0&&(
+        <>
+          <div style={{fontSize:12,fontWeight:800,color:"#0c4a6e",margin:"4px 0 9px"}}>
+            Found {orphans.length} poster{orphans.length!==1?"s":""} with no guide. Name one to put it back.
+          </div>
+          {orphans.map(id=>(
+            <div key={id} style={{display:"flex",gap:11,background:"#fff",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px",marginBottom:9}}>
+              <div style={{width:62,height:62,borderRadius:10,flexShrink:0,overflow:"hidden",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
+                {imgs[id]?<img src={imgs[id]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:"⏳"}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <input value={titles[id]||""} onChange={e=>setTitles(t=>({...t,[id]:e.target.value}))}
+                  placeholder="Guide title"
+                  style={{width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:12.5,outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:6}}/>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  <select value={cats[id]||GUIDE_CATEGORIES[0]} onChange={e=>setCats(c=>({...c,[id]:e.target.value}))}
+                    style={{borderRadius:9,border:`1.5px solid ${C.border}`,padding:"7px 9px",fontSize:11.5,fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#fff"}}>
+                    {GUIDE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <button className="press" onClick={()=>restore(id)} disabled={busy===id}
+                    style={{background:C.primary,color:"#fff",border:"none",borderRadius:9,padding:"8px 13px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:busy===id?"default":"pointer"}}>
+                    {busy===id?"Restoring…":"Restore"}
+                  </button>
+                </div>
+                <div style={{fontSize:9.5,color:C.textSub,marginTop:5,wordBreak:"break-all"}}>id: {id}</div>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
 function GuideForm({guide,imgSrc,onSave,onCancel}){
   const isEdit=!!guide;
   const [form,setForm]=useState({title:guide?.title||"",category:guide?.category||GUIDE_CATEGORIES[0],content:guide?.content||""});
@@ -16065,9 +16223,17 @@ function NemoStore(){
     // already opened. Keep the existing array when the data is identical.
     if(finalProds) setProducts(prev=>sameCatalog(prev,finalProds)?prev:finalProds);
     setHydrated(true);
-    // Guides — seed if empty
+    /* Guides — seed the cloud ONLY from real content this device still holds, never from the
+       built-in samples. Writing DEFAULT_GUIDES into a live store's empty `guides` node is worse
+       than leaving it empty: the three samples carry no posters, so the owner sees a full-looking
+       Care Guides page with every uploaded poster missing, and the samples then look like the
+       store's own content on every future sync. The samples stay a local placeholder; only the
+       admin's own saves put anything in the cloud. */
     let gds=await fbGetColl("guides");
-    if(gds!==null && gds.length===0){ const seed=localGuidesData()||DEFAULT_GUIDES; await saveGuides(seed); gds=seed; }
+    if(gds!==null && gds.length===0){
+      const local=(localGuidesData()||[]).filter(g=>g&&!g.sample);
+      if(local.length){ await saveGuides(local); gds=local; }
+    }
     const finalGds=(gds&&gds.length)?gds:null;
     if(finalGds) setGuides(finalGds);
     // ONE hydrateMedia call with all cloud data (was called twice: once for prods, once for guides)
@@ -16144,7 +16310,13 @@ function NemoStore(){
       // catalogue. Seeding a genuinely empty cloud is cloudSync's job, and it only does so
       // after actually reading the node and finding it empty.
       if(!localP){ try{ dbSet("nemo-products",JSON.stringify(prods)); }catch(e){} }
-      if(!localGuidesData())saveGuides(guideList);
+      // Guides get the same treatment, and for the same reason — but this line used to call
+      // saveGuides(), which writes the CLOUD as well as the cache. That is how three sample
+      // guides ended up published over a store whose own guides were missing: the samples have
+      // no posters, so the page looked full while every uploaded poster was gone. Local cache
+      // only; publishing an empty cloud is cloudSync's job, and it now refuses to publish
+      // samples at all.
+      if(!localGuidesData()){ try{ dbSet("nemo-guides",JSON.stringify(guideList.filter(g=>g&&!g.sample))); }catch(e){} }
       // 2) Cloud hydrate. This used to run purely in the background while the splash was torn
       // down the moment the cached paint landed — which is why the store opened in well under a
       // second and then visibly rewrote itself as real stock counts and Coming Soon badges
@@ -16785,6 +16957,20 @@ function NemoStore(){
     await delMedia(id);
     setMediaCache(c=>{const n={...c};delete n["img-"+id];return n;});
     showToast(confirmed?"Guide deleted":"⚠ Deleted on this device only — sign in with the admin Google account and delete it again, or it will come back on the next sync.",confirmed?undefined:"error");
+  };
+  /* Removing several guides needs its own handler rather than a loop over the one above: that
+     one rebuilds the list from the `guides` it captured at render, so awaiting it once per id
+     writes the same near-complete list back each time and only the final removal survives. One
+     filter, one write. */
+  const deleteGuidesHandler=async(ids)=>{
+    const kill=new Set(ids||[]);
+    if(!kill.size) return;
+    const next=guides.filter(g=>!kill.has(g.id));
+    setGuides(next);
+    const confirmed=await saveGuides(next);
+    for(const id of kill) await delMedia(id);
+    setMediaCache(c=>{ const n={...c}; kill.forEach(id=>delete n["img-"+id]); return n; });
+    showToast(confirmed?`Removed ${kill.size} guide${kill.size!==1?"s":""}`:"⚠ Removed on this device only — sign in with the admin Google account and try again.",confirmed?undefined:"error");
   };
 
   const saveProdHandler=async(saved,cachePatch)=>{
@@ -17490,7 +17676,7 @@ function NemoStore(){
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} settings={settings}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} onTotmAward={handleTotmAward} totmVotes={totmVotes} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
-          onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
+          onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onDeleteGuides={deleteGuidesHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
       </div>
       {/* Floating cart bar — Zepto-style: free-delivery nudge + cart chip, opens the mini-cart */}
