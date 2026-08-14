@@ -439,6 +439,15 @@ function couponBenefit(c,subtotal){
   if(c.maxDiscount>0) d=Math.min(d,c.maxDiscount);
   return {discount:Math.max(0,Math.min(d,subtotal||0)),coins:0};
 }
+/* How many coins one order may absorb. 0 means no cap — matching the discount-cap field
+   beside it in Settings — which `walletMaxCoins||100` could never express, since 0 fell
+   through to the default and quietly reimposed a 100-coin ceiling on a store that had
+   deliberately removed it. An unset value still defaults to 100. */
+function walletCoinCap(settings){
+  const v=settings&&settings.walletMaxCoins;
+  if(v===0||v==="0") return Infinity;
+  return Number(v)||100;
+}
 function normalizeSettings(s){
   if(!s) return s;
   if(s.shippingRates) return {...s, shippingRates: normalizeShippingRates(s.shippingRates)};
@@ -4636,7 +4645,7 @@ function LoyaltyWidget({points,settings,onRedeem,redeemApplied,subtotal=0}){
   const enabled=settings.loyaltyEnabled;
   const min=Number(settings.loyaltyRedeemMin||100);
   const val=Number(settings.loyaltyRedeemValue||1);
-  const maxCoins=Number(settings.walletMaxCoins||100);
+  const maxCoins=walletCoinCap(settings);
   const minOrder=Number(settings.walletMinOrder||0);
   if(!enabled||points==null)return null;
   const orderOk=subtotal>=minOrder;
@@ -6383,7 +6392,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.86955e02";
+const APP_BUILD = "v90.784b1ecc";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -8760,7 +8769,7 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
   },[]);
   const loyaltyVal=Number(settings.loyaltyRedeemValue||1);
   const loyaltyMin=Number(settings.loyaltyRedeemMin||100);
-  const walletMaxCoins=Number(settings.walletMaxCoins||100);
+  const walletMaxCoins=walletCoinCap(settings);
   const walletMinOrder=Number(settings.walletMinOrder||0);
   let loyaltyDiscount=(loyaltyRedeemed&&loyaltyPts>=loyaltyMin&&total>=walletMinOrder)?Math.floor(Math.min(loyaltyPts,walletMaxCoins)*loyaltyVal):0;
   let loyaltyCoinsUsed=loyaltyDiscount>0?Math.min(loyaltyPts,walletMaxCoins):0;
@@ -14045,6 +14054,27 @@ function SettingsPanel({settings,onSave,products=[]}){
           </div>
         </div>
         <div style={{fontSize:10.5,color:C.textSub,marginTop:8}}>Example: spend ₹1000 → earn {(f.loyaltyPointsPerHundred||10)*10} pts → worth ₹{Math.floor((f.loyaltyPointsPerHundred||10)*10*(f.loyaltyRedeemValue||1))} in the wallet.</div>
+        {/* walletMaxCoins has always governed how many coins a single order may absorb — the
+            checkout reads it, the wallet widget reads it — but there was nowhere to set it, so
+            it sat on its 100 default unless somebody edited the database by hand. The two
+            numbers beside it are the other half of the same decision, so they belong together. */}
+        <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Max coins per order</div>
+              <input type="number" min="0" value={f.walletMaxCoins??100} onChange={e=>set("walletMaxCoins",Number(e.target.value))}
+                style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min order to spend coins ₹</div>
+              <input type="number" min="0" value={f.walletMinOrder??0} onChange={e=>set("walletMinOrder",Number(e.target.value))}
+                style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+            </div>
+          </div>
+          <div style={{fontSize:10.5,color:C.textSub,marginTop:8,lineHeight:1.5}}>
+            A customer can put at most <b>{walletCoinCap(f)===Infinity?"unlimited":walletCoinCap(f)+" coins"}</b>{walletCoinCap(f)===Infinity?null:<> (≈ ₹{Math.floor(walletCoinCap(f)*(f.loyaltyRedeemValue||1))})</>} toward one order{(f.walletMinOrder??0)>0?<>, and only on orders of ₹{f.walletMinOrder} or more</>:null}. Coins never pay for shipping, and never more than the order still owes after a coupon. <b>0 = no cap.</b>
+          </div>
+        </div>
         <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Max total discount per order (% of subtotal)</div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
