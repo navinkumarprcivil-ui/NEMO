@@ -2733,6 +2733,22 @@ function sendLocalNotif(title, body, icon="assets/nemo-logo.png", channel=""){
   if(channel==="guides"&&!guideNotifOn())return;
   try{ new Notification(title,{body,icon}); }catch(e){}
 }
+/* ── Weekly tank care ──────────────────────────────────────────────────────────
+   A tank needs the same few jobs every week, and the one that matters — the water change —
+   is the one people put off. The reminder is driven by the app rather than by a server: it
+   checks on open and fires at most once a day. That is a real limitation, and an honest one:
+   nothing here can wake a closed phone until a push sender exists (sw.js can already RECEIVE
+   one). A reminder seen a day late still gets the water changed; a reminder that pretends to
+   be scheduled and silently never arrives does not. */
+const CARE_INTERVAL_DAYS=7;
+function careDue(tank){
+  if(!tank||!tank.litres) return {due:false,days:0};
+  const base=Date.parse(tank.lastCareAt||"")||Date.parse(tank.setUpOn||"")||0;
+  if(!base) return {due:true,days:0,never:true};
+  const days=Math.floor((Date.now()-base)/864e5);
+  return {due:days>=CARE_INTERVAL_DAYS,days,never:false,nextAt:base+CARE_INTERVAL_DAYS*864e5};
+}
+function careChangeLitres(tank,heavy){ return Math.round((Number(tank&&tank.litres)||0)*(heavy?35:25)/100); }
 async function googleSignIn(){
   /* The Firebase scripts load async and App Check gets a grace period on top, so on a cold
      cache FB_OK is still false for the first second or two of the visit. Throwing "offline"
@@ -6596,7 +6612,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.6c65b4c9";
+const APP_BUILD = "v90.fa934cbc";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7205,6 +7221,14 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   },[stock,tank]);
 
   /* ── Weekly jobs, straight off the profile ── */
+  const due=careDue(tank);
+  const [perm,setPerm]=useState(()=>typeof Notification!=="undefined"?Notification.permission:"default");
+  const markCareDone=()=>{ persist({...tank,lastCareAt:new Date().toISOString()}); };
+  const toggleRemind=()=>{
+    if(tank.remind){ persist({...tank,remind:false}); return; }
+    if(perm==="granted"){ persist({...tank,remind:true}); return; }
+    requestNotifPerm(ok=>{ setPerm(ok?"granted":"denied"); persist({...tank,remind:ok}); });
+  };
   const weekly=useMemo(()=>{
     if(!tank.litres) return [];
     const l=Number(tank.litres)||0, out=[];
@@ -7383,7 +7407,31 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
         {/* ══ THIS WEEK ══ */}
         {weekly.length>0&&(
           <div style={card}>
-            <H>🗓️ This week</H>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>🗓️ This week</div>
+              {perm!=="denied"&&(
+                <button className="press" onClick={toggleRemind} role="switch" aria-checked={!!tank.remind}
+                  aria-label={tank.remind?"Turn off weekly tank reminders":"Turn on weekly tank reminders"}
+                  style={{display:"flex",alignItems:"center",gap:7,background:tank.remind?"#dcfce7":C.accentLight,border:`1px solid ${tank.remind?"#86efac":C.border}`,borderRadius:10,padding:"6px 11px",fontSize:11,fontWeight:700,color:tank.remind?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  <span>{tank.remind?"🔔":"🔕"}</span><span>Remind me</span>
+                  <span style={{width:24,height:14,borderRadius:99,background:tank.remind?"#22c55e":"#cbd5e1",position:"relative",flexShrink:0,transition:"background .2s ease"}}>
+                    <span style={{position:"absolute",top:2,left:tank.remind?12:2,width:10,height:10,borderRadius:"50%",background:"#fff",transition:"left .2s ease"}}/>
+                  </span>
+                </button>
+              )}
+            </div>
+            <div style={{background:due.due?"#fff7ed":"#ecfdf5",border:`1px solid ${due.due?"#fed7aa":"#a7f3d0"}`,borderRadius:12,padding:"10px 12px",marginBottom:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:150,fontSize:12,fontWeight:700,color:due.due?"#9a3412":"#15803d",lineHeight:1.45}}>
+                {due.never?"No care logged yet — start the clock when you next do the jobs below."
+                 :due.due?`Due now — ${due.days} day${due.days===1?"":"s"} since the last one.`
+                 :`Done ${due.days===0?"today":due.days===1?"yesterday":`${due.days} days ago`} · next in ${CARE_INTERVAL_DAYS-due.days} day${CARE_INTERVAL_DAYS-due.days===1?"":"s"}.`}
+              </div>
+              <button className="press" onClick={markCareDone}
+                style={{background:due.due?C.primary:"#fff",color:due.due?"#fff":C.primary,border:due.due?"none":`1.5px solid ${C.primary}`,borderRadius:10,padding:"8px 13px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",flexShrink:0}}>
+                ✓ Done today
+              </button>
+            </div>
+            {tank.remind&&<div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.45}}>You'll be reminded when you open the app and the week is up — we can't wake a closed phone yet.</div>}
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {weekly.map((w,i)=>(
                 <div key={i} style={{display:"flex",gap:10,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px"}}>
@@ -15938,6 +15986,26 @@ function NemoStore(){
     window.addEventListener("popstate",onPop);
     return()=>window.removeEventListener("popstate",onPop);
   },[]);
+
+  /* Weekly tank care reminder. Checked when the app opens rather than pushed, because there is
+     no sender yet — see careDue(). Stamped per day so opening the app five times in an evening
+     does not nag five times. */
+  useEffect(()=>{
+    const uk=userKey(user);
+    const t=loadMyTank(uk);
+    if(!t||!t.remind) return;
+    const d=careDue(t);
+    if(!d.due) return;
+    const key="nemo-carenotif-"+(uk||"guest"), today=new Date().toISOString().slice(0,10);
+    try{
+      if(localStorage.getItem(key)===today) return;
+      localStorage.setItem(key,today);
+    }catch(e){}
+    const litres=careChangeLitres(t,false);
+    sendLocalNotif(`${t.name||"Your tank"} — weekly care due`,
+      litres>0?`Time for a ~${litres} L water change, and a look at the filter and heater.`:"Time for this week's water change.",
+      undefined,"care");
+  },[user]);
 
   // Secret admin tap handler
   const handleSecretTap=()=>{

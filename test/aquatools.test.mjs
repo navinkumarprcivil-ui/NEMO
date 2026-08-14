@@ -139,3 +139,40 @@ test("volume maths covers all four shapes", () => {
   assert.ok(shapeLitres("bow", 60, 30, 36) > shapeLitres("rect", 60, 30, 36));
   assert.equal(shapeLitres("rect", 60, 30, 0), 0);              // incomplete -> no guess
 });
+
+/* ── Weekly care reminder ── */
+const CARE = new Function(
+  src.slice(src.indexOf("const CARE_INTERVAL_DAYS="), src.indexOf("async function googleSignIn(")) +
+  "return {CARE_INTERVAL_DAYS,careDue,careChangeLitres};")();
+
+const daysAgo = n => new Date(Date.now() - n*864e5).toISOString();
+
+test("care is due a week after the last one, and not before", () => {
+  const { careDue, CARE_INTERVAL_DAYS } = CARE;
+  assert.equal(CARE_INTERVAL_DAYS, 7);
+  assert.equal(careDue({litres:100, lastCareAt:daysAgo(0)}).due, false);
+  assert.equal(careDue({litres:100, lastCareAt:daysAgo(6)}).due, false);
+  assert.equal(careDue({litres:100, lastCareAt:daysAgo(7)}).due, true);
+  assert.equal(careDue({litres:100, lastCareAt:daysAgo(30)}).days, 30);
+});
+
+test("a tank with no care logged falls back to its set-up date, then to due", () => {
+  const { careDue } = CARE;
+  assert.equal(careDue({litres:100, setUpOn:daysAgo(2)}).due, false);   // set up two days ago
+  assert.equal(careDue({litres:100, setUpOn:daysAgo(9)}).due, true);
+  const fresh = careDue({litres:100});
+  assert.equal(fresh.due, true);
+  assert.equal(fresh.never, true);                                      // asks rather than counts
+});
+
+test("no tank volume means no reminder to give", () => {
+  assert.equal(CARE.careDue({}).due, false);
+  assert.equal(CARE.careDue(null).due, false);
+});
+
+test("the change volume follows the stocking level", () => {
+  const { careChangeLitres } = CARE;
+  assert.equal(careChangeLitres({litres:100}, false), 25);
+  assert.equal(careChangeLitres({litres:100}, true), 35);               // heavily stocked
+  assert.equal(careChangeLitres({}, false), 0);
+});
