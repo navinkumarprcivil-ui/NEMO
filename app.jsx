@@ -1328,6 +1328,20 @@ async function loadUserOrders(uid){ // a single customer's orders
   }
   const r=await dbGet("nemo-orders"); const arr=r?JSON.parse(r):[]; return uid?arr.filter(o=>o.userUid===uid):arr;
 }
+/* The customer's order history straight from the cloud, or null when it could not be read.
+   Telling those two apart is the whole point: an empty history and an unreadable one look
+   identical in the list the page is already holding, and one of them means "this code has
+   never been used" while the other means "we do not know yet". loadUserOrders above falls
+   back to the local cache and so can never say the second. */
+async function cloudUserOrders(uid){
+  if(!FB_OK||!uid) return null;
+  try{
+    const s=await withTimeout(FB_DB.ref("orders/"+uid).get(),6000,"__fail");
+    if(s==="__fail"||!s) return null;
+    const v=s.val();
+    return v?Object.values(v).filter(o=>o&&o.id):[];
+  }catch(e){ return null; }
+}
 async function saveOneOrder(o){ // write one order to local cache + cloud (per-user node)
   const r=await dbGet("nemo-orders"); let arr=r?JSON.parse(r):[]; arr=[o,...arr.filter(x=>x.id!==o.id)]; await dbSet("nemo-orders",JSON.stringify(arr));
   if(FB_OK&&o.userUid&&!o.demo){ await fbWrite(FB_DB.ref("orders/"+o.userUid+"/"+o.id), o); }
@@ -6369,7 +6383,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.bc5bbed8";
+const APP_BUILD = "v90.86955e02";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -8878,6 +8892,18 @@ function CheckoutPage({cart,total,nav,onOrderPlaced,onSubmitPayment,onCancelled,
     if(refApplied && settings.allowCouponWithReferral!==true){ setCouponMsg({text:"You can use a coupon or a referral code — not both. Remove the referral code first.",ok:false}); return; }
     const r=validateCoupon(couponCode,settings,orders,total);
     if(!r.ok){ setCouponMsg({text:r.msg,ok:false}); setCouponApplied(null); return; }
+    /* Once per customer means once per customer, not "once per customer whose history this
+       browser happens to have finished loading". The list above is whatever is in memory —
+       empty on a fresh device, and empty for a second or two on a slow connection — and an
+       empty history is exactly what makes an already-spent code look unused. Re-check against
+       the cloud, which is the record. If it cannot be read we keep the first answer rather
+       than refusing a genuine first-time customer for being offline. */
+    const uk=userKey(user);
+    const history=await cloudUserOrders(uk);
+    if(history){
+      const r2=validateCoupon(couponCode,settings,history,total);
+      if(!r2.ok){ setCouponMsg({text:r2.msg,ok:false}); setCouponApplied(null); return; }
+    }
     if(await promoLimitReached("coupon", settings.couponDailyLimit)){
       setCouponMsg({text:"Today's coupon quota is full — please try tomorrow.",ok:false}); setCouponApplied(null); return;
     }
