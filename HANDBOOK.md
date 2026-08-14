@@ -98,14 +98,24 @@ If you lose them, some things become very hard or impossible to recover. **Never
 ## 4. How to make a change (the standard workflow)
 
 1. Edit **`app.jsx`** (the source).
-2. **Rebuild** `app.js`:
+2. **Rebuild** with the project's build script — not a raw `esbuild` command:
    ```
-   npx esbuild app.jsx --loader:.jsx=jsx --jsx=transform --bundle=false --minify --outfile=app.js
+   npm install esbuild@0.25 --no-save     # once per machine
+   node scripts/build.mjs
    node --check app.js
    ```
-3. **Bump the cache** in `sw.js` (`nemo-vNN` → next number).
-4. Commit both files (and `sw.js`) and push to GitHub `main`.
-5. Vercel auto-deploys in ~1–2 minutes → live.
+   The script writes **four** files that must move together: it stamps a new
+   `APP_BUILD` into `app.jsx`, compiles `app.js`, writes `version.json`, and rewrites
+   `CACHE` in `sw.js` — all from one hash of the source, so they can never disagree.
+3. Commit **all four** (`app.jsx`, `app.js`, `version.json`, `sw.js`) and push to GitHub `main`.
+4. Vercel auto-deploys in ~1–2 minutes → live.
+
+> ⚠️ **Do not rebuild with the bare `npx esbuild …` line.** It updates `app.js` only.
+> `version.json` is what an open tab compares itself against and `CACHE` is what makes a
+> browser install the new service worker at all — leave those unchanged and every tab
+> decides it is already current, so the fix ships to Vercel and is never seen. Step 3's
+> old "bump `nemo-vNN` by hand" is gone for the same reason: a hand-typed constant is a
+> constant somebody forgets.
 
 (If you're working with Claude Code, it does all of this for you.)
 

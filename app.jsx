@@ -2824,7 +2824,17 @@ async function loadGuides(){
   if(FB_OK){ const a=await fbGetColl("guides"); if(a&&a.length) return a; }
   const r=await dbGet("nemo-guides"); return r?JSON.parse(r):null;
 }
-async function saveGuides(l){ await dbSet("nemo-guides",JSON.stringify(l)); if(FB_OK) await fbSetColl("guides",l); }
+/* Returns true only when the CLOUD confirmed the write. It used to return nothing, so a write
+   denied by the rules — anyone not signed in as the admin Google account — was indistinguishable
+   from a successful one, and the toast said "Guide saved" either way. The guide then lived in
+   that one browser's localStorage until the live `guides` listener next fired with the cloud's
+   copy, which overwrites both the screen and the local cache: the guide disappeared, on the
+   device that wrote it, with nothing ever having reported a failure. */
+async function saveGuides(l){
+  await dbSet("nemo-guides",JSON.stringify(l));
+  if(!FB_OK) return false;
+  return await fbSetColl("guides",l);
+}
 
 /* Local-only readers — instant, never wait on the network (used for first paint) */
 function localProducts(){ const r=localStorage.getItem("nemo-products"); return r?JSON.parse(r):null; }
@@ -6402,7 +6412,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.784b1ecc";
+const APP_BUILD = "v90.ba34dfcc";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -15614,21 +15624,27 @@ function NemoStore(){
   };
 
   // Guides
+  /* The write is awaited and its result reported. A guide that only reached this device is
+     a guide that is going to vanish the next time the store syncs, so say so at the moment
+     it happens rather than letting the owner find out weeks later that their work is gone. */
+  const CLOUD_DENIED="⚠ Saved on THIS DEVICE ONLY — the store was not signed in with the admin Google account, so this will disappear when the app next syncs. Sign in (Admin → Sign in with Google) and save it again.";
   const saveGuideHandler=async(g,imgB64)=>{
     if(imgB64){const ok=await saveImg(g.id,imgB64);g.hasImg=ok;if(ok)setMediaCache(c=>({...c,["img-"+g.id]:imgB64}));}
-    setGuides(prev=>{
-      const ex=prev.some(x=>x.id===g.id);
-      const next=ex?prev.map(x=>x.id===g.id?g:x):[g,...prev];
-      saveGuides(next);return next;
-    });
-    if(g.hasImg && FB_OK && !isAdminSignedIn()) showToast("⚠ Sign in with Google so customers can see this poster","error");
+    const ex=guides.some(x=>x.id===g.id);
+    const next=ex?guides.map(x=>x.id===g.id?g:x):[g,...guides];
+    setGuides(next);
+    const confirmed=await saveGuides(next);
+    if(!confirmed) showToast(CLOUD_DENIED,"error");
+    else if(g.hasImg && FB_OK && !isAdminSignedIn()) showToast("⚠ Sign in with Google so customers can see this poster","error");
     else showToast("Guide saved");
   };
   const deleteGuideHandler=async(id)=>{
-    setGuides(prev=>{const next=prev.filter(g=>g.id!==id);saveGuides(next);return next;});
+    const next=guides.filter(g=>g.id!==id);
+    setGuides(next);
+    const confirmed=await saveGuides(next);
     await delMedia(id);
     setMediaCache(c=>{const n={...c};delete n["img-"+id];return n;});
-    showToast("Guide deleted");
+    showToast(confirmed?"Guide deleted":"⚠ Deleted on this device only — sign in with the admin Google account and delete it again, or it will come back on the next sync.",confirmed?undefined:"error");
   };
 
   const saveProdHandler=async(saved,cachePatch)=>{

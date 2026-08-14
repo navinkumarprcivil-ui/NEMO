@@ -191,6 +191,53 @@ Audit of security / money / GST / export ahead of the Play production release. *
 
 **Also check:** the default `termsPolicy` still contains "we are currently … not registered under GST, so no GST is charged at present" while the GSTIN is live — if the saved settings still carry that sentence it contradicts the tax invoices.
 
+## Checkout, navigation & invoice pass (Aug 2026)
+
+Six changes, all in `app.jsx`. Merged as PRs #69 and #70.
+
+- **Invoice signature.** The block printed captions describing a signing that never happens —
+  `For <firm>` above the area, plus `Authorized Signatory` and a small `This is Auto-Generated`
+  under an uploaded image. It now carries exactly one of two things: the signature uploaded in
+  Settings, or the line `This is auto generated & not required signature`. Applies to every
+  document `generateInvoiceHTML` produces — tax invoice, credit note, proforma.
+- **Admin order page shows the product photo.** `AdminOrderDetail` was never handed `products`
+  or `mediaCache`, so its Order Items tile could only draw the category emoji — order lines are
+  checkout-time snapshots carrying no image. It now resolves the photo from the live catalogue
+  with `getCartLineImg()`, the helper the cart and order history already use, and names the
+  variant on the line.
+- **Back returns where you were.** There was one `prevPageRef` and only the product page set it,
+  so every other screen hard-coded `nav("home")` — Checkout went Home from a Cart entry. Replaced
+  with a real trail: `nav()` pushes the screen being left, `goBack()` pops it and restores that
+  screen's scroll. The phone Back button and every in-app back arrow now run the same `goBack`.
+  Sign-in screens and the admin panel stay off the trail (`NO_RETURN_PAGES`); depth capped at 25.
+  `navRewind(page)` rewinds to a screen already behind them instead of stacking on it.
+- **Cancelled payment keeps the cart.** `placeOrder` empties the cart, so "Cancel payment" left a
+  cancelled order and nothing to buy. `cancelPaymentAndRestoreCart()` returns the order's lines to
+  the cart and lands the shopper there. The auto-cancel on payment-window expiry is deliberately
+  NOT wired to this — it runs from a background sweep over every order, on any device, and must
+  not rewrite whatever is in the cart at the time.
+- **Checkout trimmed.** "Delivery Notes" removed (Order Summary / Special Requests stays);
+  "Add more items" removed from both steps; the coupon/referral box now renders once, on the
+  payment step beside the total, instead of on both. Steps read **Address → Payment → Confirm
+  Order** and step 2 is headed "Payment".
+- **Address step reversed for returning customers.** Saved and past-order addresses are the step
+  now — "Use this" and continue — with the most recent filled in on arrival so Continue works on
+  the first press. The form stays shut behind "Deliver to a new address" (`addrFormOpen`) and
+  opens by itself for a first-time customer. The WhatsApp-updates checkbox moved out of the form:
+  it belongs to the order, not the address card.
+- **Customer-cancelled orders hidden.** `cancelledByCustomer()` (module level, beside
+  `deliveredAtOf`) drops them from the customer's order page and from the admin's working list.
+  Two exceptions on purpose: an order with a refund still owed stays visible to both sides, and
+  the admin's **Cancelled** filter still lists them. Store-made cancellations are untouched.
+
+⚠️ **Build lesson from this session.** These commits were first rebuilt with the bare
+`npx esbuild …` line from the handbook, which updates `app.js` and nothing else. `APP_BUILD`,
+`version.json` and `sw.js`'s `CACHE` stayed put, so every open tab would have decided it was
+already current and the service worker would have kept serving the old bundle — the exact
+failure `scripts/build.mjs` was written to prevent. Fixed by running `node scripts/build.mjs`
+(build `v90.784b1ecc` → `v90.e09b7cd3`), and `HANDBOOK.md` §4 now documents the script instead
+of the raw command.
+
 ## Gotchas
 - Sandbox network blocks fetching the live site + unpkg (can't render the app here) — verify via `esbuild`/`node --check` + code review; user eyeballs the deploy.
 - The keystore in the PWABuilder package is the permanent app signing key — user keeps it secret; never commit it.
