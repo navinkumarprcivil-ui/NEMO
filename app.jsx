@@ -6415,7 +6415,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.b2276385";
+const APP_BUILD = "v90.7fa32c29";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -6786,69 +6786,308 @@ function ArrivedAliveGallery({products=[]}){
   );
 }
 
-/* ═══════════════════ AQUA TOOLS — compatibility checker & calculators ═══════════════════ */
-/* Species traits: t=temper(0 peaceful,1 semi,2 aggressive), w=water temp band, fin=long-finned,
-   nip=fin-nipper, size cm, min tank L, eats=preys on. Data reflects common fishkeeping guidance. */
+/* ═══════════════════ AQUA TOOLS — My Tank, community planner & calculators ═══════════════════ */
+/* Species traits, from common fishkeeping guidance (OATA care sheets, adult sizes as sold-on
+   grown-out, not shop size). Every field the planner reads is here, so adding a fish is a data
+   change and never a code change:
+     sci   scientific name — "shark" and "molly" name a dozen fish between them in a shop
+     grp   tropical | coldwater | pond | invert  (pond fish are NOT aquarium fish)
+     size  ADULT length cm · minL minimum litres · minLen minimum tank length cm
+     t/ph/gh  liveable ranges — two fish with no overlap cannot share water
+     temper 0 peaceful · 1 semi-aggressive · 2 aggressive     terr territorial
+     fin   long-finned (a nipping target)   nip  fin-nipper
+     school minimum group size (1 = keep alone/pairs)   max  hard cap per tank
+     lvl   top | mid | bottom | all — where it lives, so a tank is not all one level
+     eats  longest tankmate it will swallow, cm (0 = none)
+     shr   risk to shrimp/snails: 0 safe · 1 takes babies · 2 hunts adults
+     bio   waste load per fish, relative (1 light · 3 heavy)
+     big   flag it loudly — these are the fish sold at 5 cm that end up at 40 */
 const SPECIES={
-  betta:     {n:"Betta (Male)",e:"🐟",t:2,w:"tropical",fin:true, size:6, min:20, eats:["shrimp"]},
-  guppy:     {n:"Guppy",       e:"🐠",t:0,w:"tropical",fin:true, size:4, min:40},
-  molly:     {n:"Molly",       e:"🐠",t:0,w:"tropical",size:8,  min:60},
-  platy:     {n:"Platy",       e:"🐠",t:0,w:"tropical",size:5,  min:40},
-  swordtail: {n:"Swordtail",   e:"🐠",t:0,w:"tropical",size:10, min:80},
-  neon:      {n:"Neon Tetra",  e:"✨",t:0,w:"tropical",size:3,  min:40},
-  danio:     {n:"Zebra Danio", e:"🦓",t:1,w:"tropical",nip:true,size:5,  min:40},
-  angelfish: {n:"Angelfish",   e:"👼",t:1,w:"tropical",fin:true,size:15, min:120,eats:["tinyfish","shrimp"]},
-  gourami:   {n:"Dwarf Gourami",e:"🐟",t:1,w:"tropical",fin:true,size:8, min:60},
-  barb:      {n:"Tiger Barb",  e:"🐯",t:1,w:"tropical",nip:true,size:7,  min:80},
-  goldfish:  {n:"Goldfish",    e:"🧡",t:0,w:"cold",    size:20, min:100,eats:["shrimp"]},
-  koi:       {n:"Koi",         e:"🎏",t:0,w:"cold",    size:60, min:1000,eats:["shrimp","tinyfish"]},
-  oscar:     {n:"Oscar",       e:"😾",t:2,w:"tropical",size:30, min:300,eats:["tinyfish","smallfish","shrimp"]},
-  cory:      {n:"Corydoras",   e:"🐡",t:0,w:"tropical",size:6,  min:60},
-  shrimp:    {n:"Cherry Shrimp",e:"🦐",t:0,w:"tropical",size:2, min:20, prey:true},
-  snail:     {n:"Snail",       e:"🐌",t:0,w:"tropical",size:3,  min:10},
+  /* ── Tropical community ── */
+  betta:      {n:"Betta (Male)",       sci:"Betta splendens",         e:"🐟",grp:"tropical",size:6, minL:20, minLen:30, t:[24,28],ph:[6.0,7.5],gh:[5,20], temper:2,fin:true,terr:true,school:1,max:1,lvl:"top",   eats:2, shr:2,bio:1},
+  guppy:      {n:"Guppy",              sci:"Poecilia reticulata",     e:"🐠",grp:"tropical",size:5, minL:40, minLen:45, t:[22,28],ph:[7.0,8.5],gh:[8,25], temper:0,fin:true,school:3,lvl:"top",   eats:0, shr:1,bio:1},
+  endler:     {n:"Endler's Livebearer",sci:"Poecilia wingei",         e:"🐠",grp:"tropical",size:4, minL:30, minLen:40, t:[22,28],ph:[7.0,8.5],gh:[8,25], temper:0,school:3,lvl:"top",            eats:0, shr:1,bio:1},
+  molly:      {n:"Molly",              sci:"Poecilia sphenops",       e:"🐠",grp:"tropical",size:10,minL:75, minLen:60, t:[24,28],ph:[7.5,8.5],gh:[15,30],temper:0,school:3,lvl:"mid",            eats:0, shr:1,bio:2},
+  platy:      {n:"Platy",              sci:"Xiphophorus maculatus",   e:"🐠",grp:"tropical",size:5, minL:45, minLen:45, t:[20,26],ph:[7.0,8.2],gh:[10,25],temper:0,school:3,lvl:"mid",            eats:0, shr:1,bio:1},
+  swordtail:  {n:"Swordtail",          sci:"Xiphophorus hellerii",    e:"🗡️",grp:"tropical",size:12,minL:80, minLen:75, t:[22,28],ph:[7.0,8.4],gh:[10,25],temper:1,school:3,lvl:"mid",            eats:0, shr:1,bio:2},
+  neon:       {n:"Neon Tetra",         sci:"Paracheirodon innesi",    e:"✨",grp:"tropical",size:3, minL:45, minLen:45, t:[21,27],ph:[5.5,7.5],gh:[1,10], temper:0,school:6,lvl:"mid",            eats:0, shr:1,bio:1},
+  cardinal:   {n:"Cardinal Tetra",     sci:"Paracheirodon axelrodi",  e:"✨",grp:"tropical",size:4, minL:60, minLen:60, t:[24,29],ph:[4.5,6.8],gh:[1,8],  temper:0,school:6,lvl:"mid",            eats:0, shr:1,bio:1},
+  ember:      {n:"Ember Tetra",        sci:"Hyphessobrycon amandae",  e:"🔥",grp:"tropical",size:2, minL:40, minLen:45, t:[23,29],ph:[5.5,7.0],gh:[1,10], temper:0,school:8,lvl:"mid",            eats:0, shr:1,bio:1},
+  rummynose:  {n:"Rummy-nose Tetra",   sci:"Hemigrammus rhodostomus", e:"👃",grp:"tropical",size:5, minL:80, minLen:75, t:[24,28],ph:[5.5,7.0],gh:[2,12], temper:0,school:6,lvl:"mid",            eats:0, shr:1,bio:1},
+  danio:      {n:"Zebra Danio",        sci:"Danio rerio",             e:"🦓",grp:"tropical",size:5, minL:60, minLen:60, t:[18,25],ph:[6.5,8.0],gh:[5,19], temper:1,nip:true,school:6,lvl:"top",   eats:0, shr:1,bio:1},
+  harlequin:  {n:"Harlequin Rasbora",  sci:"Trigonostigma heteromorpha",e:"🔶",grp:"tropical",size:5,minL:60,minLen:60, t:[22,28],ph:[6.0,7.5],gh:[2,15], temper:0,school:8,lvl:"mid",            eats:0, shr:1,bio:1},
+  cory:       {n:"Corydoras",          sci:"Corydoras aeneus / paleatus",e:"🐡",grp:"tropical",size:6,minL:60,minLen:60,t:[22,26],ph:[6.0,7.8],gh:[2,15], temper:0,school:6,lvl:"bottom",         eats:0, shr:0,bio:1},
+  oto:        {n:"Otocinclus",         sci:"Otocinclus vittatus",     e:"🌿",grp:"tropical",size:4, minL:60, minLen:60, t:[22,27],ph:[6.0,7.5],gh:[2,15], temper:0,school:6,lvl:"bottom",         eats:0, shr:0,bio:1,note:"Only for a mature, algae-grown tank — starves in a new one."},
+  bristlenose:{n:"Bristlenose Pleco",  sci:"Ancistrus cirrhosus",     e:"🪵",grp:"tropical",size:13,minL:110,minLen:80, t:[23,27],ph:[6.0,7.8],gh:[2,20], temper:0,school:1,lvl:"bottom",         eats:0, shr:0,bio:3},
+  commonpleco:{n:"Common Pleco",       sci:"Pterygoplichthys pardalis",e:"🪨",grp:"tropical",size:45,minL:450,minLen:150,t:[23,28],ph:[6.5,7.8],gh:[2,20],temper:0,school:1,lvl:"bottom",         eats:0, shr:0,bio:3,big:true,note:"Sold at 6 cm, reaches 45 cm. Needs a very large tank — not a clean-up crew for a small one."},
+  dgourami:   {n:"Dwarf Gourami",      sci:"Trichogaster lalius",     e:"🐟",grp:"tropical",size:9, minL:60, minLen:60, t:[24,28],ph:[6.0,7.5],gh:[4,15], temper:1,fin:true,terr:true,school:1,lvl:"top",eats:0,shr:1,bio:2},
+  pgourami:   {n:"Pearl Gourami",      sci:"Trichopodus leerii",      e:"🤍",grp:"tropical",size:12,minL:110,minLen:80, t:[24,28],ph:[6.0,7.5],gh:[4,15], temper:1,fin:true,school:1,lvl:"top",   eats:0, shr:1,bio:2},
+  angelfish:  {n:"Angelfish",          sci:"Pterophyllum scalare",    e:"👼",grp:"tropical",size:15,minL:130,minLen:90, t:[24,29],ph:[6.0,7.5],gh:[3,13], temper:1,fin:true,terr:true,school:1,lvl:"mid",eats:3,shr:2,bio:2,note:"Grows tall — a 45 cm-high tank is the practical minimum."},
+  tigerbarb:  {n:"Tiger Barb",         sci:"Puntigrus tetrazona",     e:"🐯",grp:"tropical",size:7, minL:80, minLen:75, t:[22,27],ph:[6.0,7.5],gh:[4,15], temper:1,nip:true,school:8,lvl:"mid",   eats:0, shr:1,bio:2,note:"Nips less in a group of 8+ — a small group turns on its tankmates instead."},
+  cherrybarb: {n:"Cherry Barb",        sci:"Puntius titteya",         e:"🍒",grp:"tropical",size:5, minL:60, minLen:60, t:[23,27],ph:[6.0,7.5],gh:[2,15], temper:0,school:6,lvl:"mid",            eats:0, shr:1,bio:1},
+  rosybarb:   {n:"Rosy Barb",          sci:"Pethia conchonius",       e:"🌸",grp:"tropical",size:14,minL:110,minLen:90, t:[18,24],ph:[6.0,8.0],gh:[5,19], temper:1,nip:true,school:6,lvl:"mid",   eats:0, shr:1,bio:2,note:"Prefers the cool end of tropical — often kept unheated indoors."},
+  ram:        {n:"German Blue Ram",    sci:"Mikrogeophagus ramirezi", e:"💙",grp:"tropical",size:5, minL:60, minLen:60, t:[26,30],ph:[5.5,7.0],gh:[1,8],  temper:1,terr:true,school:1,lvl:"bottom",eats:0,shr:2,bio:1,note:"Needs warm, mature, soft water — a poor first cichlid."},
+  kribensis:  {n:"Kribensis",          sci:"Pelvicachromis pulcher",  e:"🌈",grp:"tropical",size:10,minL:80, minLen:75, t:[24,28],ph:[6.0,7.5],gh:[5,19], temper:1,terr:true,school:1,lvl:"bottom",eats:2,shr:2,bio:2,note:"Peaceful until it spawns, then it owns the bottom of the tank."},
+  oscar:      {n:"Oscar",              sci:"Astronotus ocellatus",    e:"😾",grp:"tropical",size:40,minL:450,minLen:120,t:[24,28],ph:[6.0,7.5],gh:[5,19], temper:2,terr:true,school:1,lvl:"all",  eats:12,shr:2,bio:3,big:true,note:"Reaches about 40 cm and eats anything it can fit in its mouth. OATA advises a much larger aquarium than most shops suggest."},
+  redtailshark:{n:"Red-tail Shark",    sci:"Epalzeorhynchos bicolor", e:"🦈",grp:"tropical",size:15,minL:130,minLen:100,t:[22,27],ph:[6.5,7.5],gh:[5,15], temper:2,terr:true,school:1,max:1,lvl:"bottom",eats:0,shr:1,bio:2,note:"One per tank — it will hunt down a second."},
+  balashark:  {n:"Bala Shark",         sci:"Balantiocheilos melanopterus",e:"🐋",grp:"tropical",size:35,minL:500,minLen:180,t:[22,28],ph:[6.5,7.5],gh:[5,15],temper:0,school:4,lvl:"mid",eats:4,shr:2,bio:3,big:true,note:"A 35 cm schooling fish — the tank most shops sell it for is a tenth of what it needs."},
+  sae:        {n:"Siamese Algae Eater",sci:"Crossocheilus oblongus",  e:"🌱",grp:"tropical",size:15,minL:110,minLen:90, t:[24,28],ph:[6.0,7.5],gh:[5,20], temper:0,school:4,lvl:"bottom",         eats:0, shr:1,bio:2},
+  discus:     {n:"Discus",             sci:"Symphysodon aequifasciatus",e:"🛸",grp:"tropical",size:20,minL:250,minLen:120,t:[28,31],ph:[5.5,7.0],gh:[1,8],temper:0,school:5,lvl:"mid",eats:2,shr:2,bio:3,note:"Expert-level: very warm, very clean, very soft water."},
+  /* ── Coldwater ── */
+  goldfancy:  {n:"Fancy Goldfish",     sci:"Carassius auratus (fancy)",e:"🧡",grp:"coldwater",size:20,minL:110,minLen:75,t:[18,23],ph:[7.0,8.4],gh:[8,25],temper:0,school:2,lvl:"all",eats:3,shr:2,bio:3,note:"Round-bodied varieties (Oranda, Ryukin, Fantail) — slow swimmers, not pond fish."},
+  goldcomet:  {n:"Common / Comet Goldfish",sci:"Carassius auratus (common)",e:"🟠",grp:"pond",size:30,minL:450,minLen:150,t:[10,24],ph:[7.0,8.4],gh:[8,25],temper:0,school:2,lvl:"all",eats:4,shr:2,bio:3,big:true,note:"A pond fish sold as a tank fish. Single-tailed goldfish reach 30 cm+ and swim fast and far."},
+  wcmm:       {n:"White Cloud Minnow", sci:"Tanichthys albonubes",    e:"⛅",grp:"coldwater",size:4,minL:45,minLen:60,t:[16,22],ph:[6.0,8.0],gh:[5,19],temper:0,school:6,lvl:"mid",eats:0,shr:1,bio:1,note:"The genuinely unheated small fish — happier cool than warm."},
+  /* ── Pond ── */
+  koi:        {n:"Koi",                sci:"Cyprinus rubrofuscus",    e:"🎏",grp:"pond",size:75,minL:4000,minLen:300,t:[8,26],ph:[7.0,8.5],gh:[8,25],temper:0,school:3,lvl:"all",eats:6,shr:2,bio:3,big:true,note:"Pond only. Reaches 60–90 cm and OATA advises a substantially deep pond — never an indoor aquarium."},
+  /* ── Shrimp & snails ── */
+  cherryshrimp:{n:"Cherry Shrimp",     sci:"Neocaridina davidi",      e:"🦐",grp:"invert",size:3, minL:20, minLen:30, t:[18,28],ph:[6.5,8.0],gh:[6,20], temper:0,school:6,lvl:"bottom",prey:true,eats:0,bio:1},
+  amano:      {n:"Amano Shrimp",       sci:"Caridina multidentata",   e:"🍤",grp:"invert",size:5, minL:40, minLen:45, t:[18,28],ph:[6.5,7.8],gh:[6,20], temper:0,school:3,lvl:"bottom",prey:true,eats:0,bio:1},
+  nerite:     {n:"Nerite Snail",       sci:"Neritina natalensis",     e:"🐚",grp:"invert",size:3, minL:20, minLen:30, t:[22,28],ph:[7.0,8.5],gh:[6,20], temper:0,school:1,lvl:"bottom",prey:true,eats:0,bio:1,note:"Lays white eggs that will not hatch in fresh water — it cannot overrun a tank."},
+  mystery:    {n:"Mystery Snail",      sci:"Pomacea bridgesii",       e:"🐌",grp:"invert",size:5, minL:40, minLen:45, t:[20,28],ph:[7.0,8.5],gh:[8,20], temper:0,school:1,lvl:"all",   prey:true,eats:0,bio:2},
+  ramshorn:   {n:"Ramshorn Snail",     sci:"Planorbella duryi",       e:"🍥",grp:"invert",size:2, minL:20, minLen:30, t:[20,28],ph:[7.0,8.5],gh:[6,20], temper:0,school:1,lvl:"all",   prey:true,eats:0,bio:1,note:"Breeds to match the food available — overfeed and you get a population."},
+  trumpet:    {n:"Malaysian Trumpet Snail",sci:"Melanoides tuberculata",e:"🍦",grp:"invert",size:3,minL:20,minLen:30,t:[22,28],ph:[7.0,8.5],gh:[8,20],temper:0,school:1,lvl:"bottom",prey:true,eats:0,bio:1},
 };
-function pairVerdict(aKey,bKey){
-  const A=SPECIES[aKey], B=SPECIES[bKey];
-  const pair=(x,y)=>(aKey===x&&bKey===y)||(aKey===y&&bKey===x);
-  if(aKey===bKey){
-    if(aKey==="betta") return {v:2,r:"Two male bettas will fight — keep only one male per tank."};
-    return {v:0,r:"A group of the same species is fine — shoaling species prefer 6+."};
+const SPECIES_GROUPS=[
+  {k:"tropical", label:"Tropical freshwater"},
+  {k:"coldwater",label:"Coldwater"},
+  {k:"pond",     label:"Pond fish"},
+  {k:"invert",   label:"Shrimp & snails"},
+];
+/* Four outcomes, worst-first when they are combined. "More information required" outranks a
+   conditional warning on purpose: a condition you can read and act on is a smaller problem than
+   a question nobody has answered. */
+const V_OK=0, V_COND=1, V_INFO=2, V_BAD=3;
+const VERDICT=[
+  {icon:"✅",t:"Good match",              c:"#16a34a",bg:"#ecfdf5",bd:"#a7f3d0"},
+  {icon:"⚠️",t:"Possible with conditions",c:"#b45309",bg:"#fffbeb",bd:"#fde68a"},
+  {icon:"❓",t:"More information required",c:"#4f46e5",bg:"#eef2ff",bd:"#c7d2fe"},
+  {icon:"❌",t:"Not recommended",          c:"#dc2626",bg:"#fef2f2",bd:"#fecaca"},
+];
+const overlap=(a,b)=>{ const lo=Math.max(a[0],b[0]), hi=Math.min(a[1],b[1]); return hi>=lo?[lo,hi]:null; };
+const shrimpWord=s=>s.size<=3?"shrimp and small snails":"shrimp";
+
+/* Every reason a PAIR of species might not work. Returns a list so the planner can show all of
+   them — a mix can be wrong for three separate reasons and fixing one does not fix the others. */
+function pairIssues(ka,kb){
+  const A=SPECIES[ka], B=SPECIES[kb], out=[];
+  const add=(v,r)=>out.push({v,r});
+  if(ka===kb) return out;                       // same-species rules are per-species, below
+  if(A.grp==="pond"||B.grp==="pond"){
+    const p=A.grp==="pond"?A:B, o=A.grp==="pond"?B:A;
+    add(V_BAD,`${p.n} is a pond fish, not an aquarium fish — it cannot share a tank with ${o.n}.`);
+    return out;
   }
-  if(A.w!==B.w) return {v:2,r:`${A.n} and ${B.n} need different water temperatures (cold-water vs tropical).`};
-  if(pair("betta","guppy")) return {v:2,r:"Bettas often attack colourful, long-finned guppies — risky mix."};
-  if(pair("betta","gourami")) return {v:2,r:"Bettas and gouramis are related and territorial toward each other."};
-  if(pair("betta","angelfish")) return {v:2,r:"Both are territorial; angelfish and bettas commonly clash."};
-  // Fin-nippers vs long-finned fish
-  if((A.nip&&B.fin)||(B.nip&&A.fin)){ const nip=A.nip?A:B, fin=A.nip?B:A; return {v:2,r:`${nip.n} nips the long fins of ${fin.n}.`}; }
-  // Predation: big eaters vs tiny tankmates / shrimp
-  const eats=(X,Y)=>(X.eats||[]).some(k=>(k==="shrimp"&&Y.prey)||(k==="tinyfish"&&Y.size<=4)||(k==="smallfish"&&Y.size<=10));
-  if(eats(A,B)||eats(B,A)){ const pred=eats(A,B)?A:B, prey=eats(A,B)?B:A;
-    if(pred.n==="Betta (Male)"&&prey.prey) return {v:1,r:"Bettas may hunt shrimp — provide dense plants & hiding spots."};
-    return {v:2,r:`${pred.n} will likely eat ${prey.n}.`}; }
-  if(A.t===2||B.t===2){ const ag=A.t===2?A:B, other=A.t===2?B:A; return {v:2,r:`${ag.n} is aggressive and will bully ${other.n}.`}; }
-  if(A.t===1||B.t===1) return {v:1,r:"Generally works in a spacious tank with hiding places — watch for chasing."};
-  if(Math.max(A.size,B.size)/Math.min(A.size,B.size)>=4) return {v:1,r:"Large size difference — the smaller fish may be stressed or eaten as it grows."};
-  return {v:0,r:"Peaceful community fish — compatible in a properly sized tank."};
+  const t=overlap(A.t,B.t);
+  if(!t) add(V_BAD,`No shared temperature: ${A.n} needs ${A.t[0]}–${A.t[1]}°C and ${B.n} needs ${B.t[0]}–${B.t[1]}°C.`);
+  else if(t[1]-t[0]<2) add(V_COND,`Their temperature ranges barely overlap (${t[0]}–${t[1]}°C) — hold it steady in that narrow band.`);
+  if(!overlap(A.ph,B.ph)) add(V_COND,`Different pH preferences (${A.n} ${A.ph[0]}–${A.ph[1]}, ${B.n} ${B.ph[0]}–${B.ph[1]}). Both may adapt to steady water in between, but neither will be at its best.`);
+  if(!overlap(A.gh,B.gh)) add(V_COND,`Different water hardness (${A.n} ${A.gh[0]}–${A.gh[1]} dGH, ${B.n} ${B.gh[0]}–${B.gh[1]} dGH). Test your tap water before mixing them.`);
+  // Predation — the bigger mouth decides, and inverts are judged separately from fish.
+  [[A,B],[B,A]].forEach(([x,y])=>{
+    if(y.prey){
+      if(x.shr===2) add(V_BAD,`${x.n} hunts ${shrimpWord(y)} — ${y.n} will be eaten, not merely bothered.`);
+      else if(x.shr===1) add(V_COND,`${x.n} will eat baby ${y.n}. Adults usually survive in a densely planted tank, but the colony will not grow.`);
+    } else if(x.eats>=y.size){
+      add(V_BAD,`${x.n} reaches ${x.size} cm and will swallow ${y.n} at ${y.size} cm.`);
+    }
+  });
+  if(!out.some(i=>i.v===V_BAD)){
+    if((A.nip&&B.fin)||(B.nip&&A.fin)){
+      const nip=A.nip?A:B, fin=A.nip?B:A;
+      add(V_COND,`${nip.n} nips long fins, and ${fin.n} has them. Keep ${nip.n} in its full group of ${nip.school}+ and give the tank open swimming space.`);
+    }
+    const ag=A.temper===2?A:B.temper===2?B:null;
+    if(ag){ const o=ag===A?B:A; if(o.temper<2) add(V_BAD,`${ag.n} is aggressive and will bully ${o.n}.`); }
+    else if(A.temper===1||B.temper===1) add(V_COND,"Semi-aggressive mix — workable in a longer tank with plants and sightline breaks, but watch for chasing in the first weeks.");
+    if(A.terr&&B.terr&&A.lvl===B.lvl) add(V_COND,`${A.n} and ${B.n} both claim territory at the ${A.lvl==="bottom"?"bottom":A.lvl==="top"?"surface":"middle"} of the tank — expect disputes unless it is long enough to hold two territories.`);
+    const big=Math.max(A.size,B.size), small=Math.min(A.size,B.size);
+    if(big/small>=4) add(V_COND,`Large size difference (${big} cm against ${small} cm). It may be peaceful today and predatory once fully grown.`);
+  }
+  return out;
 }
-function AquaToolsPage({nav,goBack}){
-  const [sel,setSel]=useState([]);
-  const toggle=k=>setSel(p=>p.includes(k)?p.filter(x=>x!==k):(p.length>=5?p:[...p,k]));
-  // Calculators
-  const [dim,setDim]=useState({l:"",w:"",h:""});
-  const liters=useMemo(()=>{ const l=+dim.l,w=+dim.w,h=+dim.h; return (l>0&&w>0&&h>0)?Math.round(l*w*h/1000):0; },[dim]);
-  const [tankL,setTankL]=useState("");
-  const tl=Math.max(0,+tankL||0);
-  const pairs=useMemo(()=>{ const out=[]; for(let i=0;i<sel.length;i++) for(let j=i;j<sel.length;j++){ if(i===j&&sel.length>1) continue; out.push({a:sel[i],b:sel[j],...pairVerdict(sel[i],sel[j])}); } return out.sort((x,y)=>y.v-x.v); },[sel]);
-  const worst=pairs.length?Math.max(...pairs.map(p=>p.v)):-1;
-  const minTank=sel.length?Math.max(...sel.map(k=>SPECIES[k].min)):0;
-  const VER=[{c:"#16a34a",bg:"#ecfdf5",bd:"#a7f3d0",t:"✅ Compatible"},{c:"#b45309",bg:"#fffbeb",bd:"#fde68a",t:"⚠️ Use caution"},{c:"#dc2626",bg:"#fef2f2",bd:"#fecaca",t:"❌ Not recommended"}];
-  const card={background:C.card,borderRadius:20,padding:"18px 16px",marginBottom:20,border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.06)"};
-  const H=({children})=><div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:4}}>{children}</div>;
-  const Sub=({children})=><div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:12}}>{children}</div>;
-  const numIn=(val,set,ph)=>(
-    <input type="number" inputMode="decimal" min="0" value={val} placeholder={ph} onChange={e=>set(e.target.value)}
-      style={{width:"100%",boxSizing:"border-box",borderRadius:16,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"#f8fafc",textAlign:"center"}}/>
-  );
+
+/* Per-species checks against the tank and the planned quantity. */
+function speciesIssues(k,qty,tank){
+  const S=SPECIES[k], out=[], add=(v,r)=>out.push({v,r});
+  const litres=Number(tank.litres)||0, len=Number(tank.lengthCm)||0, temp=Number(tank.tempC)||0;
+  if(S.grp==="pond" && tank.type!=="pond") add(V_BAD,`${S.n} is a pond fish. ${S.note||""}`.trim());
+  if(S.grp==="tropical" && tank.type==="pond") add(V_COND,`${S.n} is a tropical aquarium fish — an outdoor pond will be too cold for it for most of the year.`);
+  if(litres<S.minL && litres) add(V_BAD,`${S.n} needs at least ${S.minL} L and your tank is ${litres} L.`);
+  else if(litres<S.minL*1.25) add(V_COND,`${litres} L only just meets the ${S.minL} L minimum for ${S.n} — it leaves no room for a mistake.`);
+  if(len && S.minLen && len<S.minLen) add(V_COND,`${S.n} wants at least ${S.minLen} cm of swimming length; your tank is ${len} cm.`);
+  if(S.max && qty>S.max) add(V_BAD,`Keep only ${S.max} ${S.n} per tank — ${qty} will fight.`);
+  else if(S.school>1 && qty>0 && qty<S.school) add(V_COND,`${S.n} is a group fish: keep ${S.school} or more, not ${qty}. A short group is a stressed, nippy group.`);
+  if(temp && (temp<S.t[0]||temp>S.t[1])) add(V_COND,`Your target of ${temp}°C sits outside the ${S.t[0]}–${S.t[1]}°C ${S.n} wants.`);
+  if(S.big) add(V_COND,`⚠ ${S.n} is a large fish — adult size about ${S.size} cm. ${S.note||""}`.trim());
+  else if(S.note) add(V_INFO,S.note);
+  return out;
+}
+/* Anything true of the TANK rather than of one fish. Kept apart so a missing volume is said
+   once, not once per species — four identical warnings is how a real one gets skimmed past. */
+function tankIssues(tank,stock){
+  const out=[], add=(v,r)=>out.push({v,r});
+  if(tank.type==="marine") add(V_INFO,"This planner covers freshwater only — message us about marine stocking.");
+  if(!Number(tank.litres)) add(V_INFO,"Tank volume not set — it is what most of these checks are measured against.");
+  if(!Number(tank.tempC)) add(V_INFO,"Target temperature not set, so temperature fit cannot be checked.");
+  if(tank.cycled==="no") add(V_COND,"Your tank is not cycled. Add fish only once ammonia and nitrite both read zero, or they will be poisoned by their own waste.");
+  else if(tank.cycled==="cycling") add(V_COND,"Still cycling — hold off on the full stocking list and add a few fish at a time once it finishes.");
+  else if(!tank.cycled) add(V_INFO,"Cycling status unknown — an uncycled tank cannot hold fish safely.");
+  return out;
+}
+
+/* Bioload against volume and filtration. Deliberately a range, never a "maximum number of fish":
+   stocking depends on species, adult size, behaviour and filtration, and a single number invites
+   people to fill to it. */
+function loadReport(stock,tank){
+  const litres=Number(tank.litres)||0;
+  let cm=0, load=0, heavy=[];
+  stock.forEach(({key,qty})=>{
+    const S=SPECIES[key]; if(!S||S.grp==="invert") return;
+    cm+=S.size*qty; load+=S.size*S.bio*qty;
+    if(S.bio>=3) heavy.push(S.n);
+  });
+  if(!litres) return {level:"unknown",cm,load,heavy};
+  const per=load/litres;                      // ~ adult cm × waste factor per litre
+  const level = per<=0.6?"light" : per<=1.0?"comfortable" : per<=1.4?"full" : "over";
+  return {level,cm,load,heavy,per};
+}
+
+function tankStorageKey(uid){ return "nemo-mytank-"+(uid||"guest"); }
+function loadMyTank(uid){ try{ const r=localStorage.getItem(tankStorageKey(uid)); return r?JSON.parse(r):null; }catch(e){ return null; } }
+function saveMyTank(uid,t){ try{ localStorage.setItem(tankStorageKey(uid),JSON.stringify(t)); }catch(e){} }
+const BLANK_TANK={name:"My Tank",type:"tropical",shape:"rect",unit:"cm",l:"",w:"",h:"",waterH:"",litres:0,lengthCm:0,
+  filter:"",heater:"",tempC:"",cycled:"",setUpOn:"",stock:[],photo:""};
+
+/* Volume for the four shapes a shop actually sells, in litres, from centimetres. */
+function shapeLitres(shape,l,w,h){
+  if(!(h>0)) return 0;
+  if(shape==="cyl"){ const r=(l||0)/2; return r>0?Math.round(Math.PI*r*r*h/1000):0; }
+  if(!(l>0&&w>0)) return 0;
+  // A bow front adds roughly 6% over the rectangle its footprint sits in.
+  const k = shape==="bow" ? 1.06 : 1;
+  return Math.round(l*w*h*k/1000);
+}
+
+function AquaToolsPage({nav,goBack,user,settings={}}){
+  const uid=userKey(user);
+  const [tank,setTank]=useState(()=>({...BLANK_TANK,...(loadMyTank(userKey(user))||{})}));
+  const [editing,setEditing]=useState(()=>!loadMyTank(userKey(user)));
+  const [savedNote,setSavedNote]=useState("");
+  const saved=!!tank.litres;
+  const persist=(next)=>{ setTank(next); saveMyTank(uid,next); };
+  const setF=(k,v)=>persist({...tank,[k]:v});
+
+  /* ── Volume, from the shape and units on the profile ── */
+  const toCm=(v)=>{ const n=Number(v)||0; return tank.unit==="in"?n*2.54:n; };
+  const dimsCm={l:toCm(tank.l),w:toCm(tank.w),h:toCm(tank.h),waterH:toCm(tank.waterH)};
+  const fullL=shapeLitres(tank.shape,dimsCm.l,dimsCm.w,dimsCm.h);
+  // Water height beats tank height: nobody fills to the rim, and the gap is real litres.
+  const waterL=shapeLitres(tank.shape,dimsCm.l,dimsCm.w,dimsCm.waterH||dimsCm.h);
+  const usableL=Math.round(waterL*0.85);      // after substrate and décor
+  const usGal=(l)=>Math.round(l/3.78541*10)/10, ukGal=(l)=>Math.round(l/4.54609*10)/10;
+
+  /* ── Planned stock ── */
+  const stock=tank.stock||[];
+  const stockOf=k=>(stock.find(s=>s.key===k)||{qty:0}).qty;
+  const setQty=(k,q)=>{
+    const n=Math.max(0,Math.min(99,q));
+    const next=stock.filter(s=>s.key!==k);
+    if(n>0) next.push({key:k,qty:n});
+    persist({...tank,stock:next});
+  };
+  const [pickOpen,setPickOpen]=useState(false);
+
+  /* ── The verdict ── */
+  const report=useMemo(()=>{
+    if(!stock.length) return null;
+    const perSpecies=stock.map(({key,qty})=>({key,qty,issues:speciesIssues(key,qty,tank)}));
+    const pairs=[];
+    for(let i=0;i<stock.length;i++) for(let j=i+1;j<stock.length;j++){
+      const issues=pairIssues(stock[i].key,stock[j].key);
+      if(issues.length) pairs.push({a:stock[i].key,b:stock[j].key,issues});
+    }
+    const load=loadReport(stock,tank);
+    const tankLvl=tankIssues(tank,stock);
+    const all=[...tankLvl,...perSpecies.flatMap(s=>s.issues),...pairs.flatMap(p=>p.issues)];
+    if(load.level==="over") all.push({v:V_BAD,r:"Too much fish for this volume once everything is fully grown."});
+    else if(load.level==="full") all.push({v:V_COND,r:"This fills the tank to its comfortable limit — strong filtration and steady water changes required."});
+    else if(load.level==="unknown") all.push({v:V_INFO,r:"Tank volume unknown, so the waste load cannot be judged."});
+    const worst=all.length?Math.max(...all.map(i=>i.v)):V_OK;
+    const missing=[];
+    if(!tank.litres) missing.push("tank volume");
+    if(!tank.lengthCm) missing.push("tank length");
+    if(!tank.tempC) missing.push("target temperature");
+    if(!tank.cycled) missing.push("cycling status");
+    if(!tank.filter) missing.push("filter");
+    const confidence = missing.length===0?"High" : missing.length<=2?"Medium":"Low";
+    return {perSpecies,pairs,load,worst,missing,confidence,tankLvl};
+  },[stock,tank]);
+
+  /* ── Weekly jobs, straight off the profile ── */
+  const weekly=useMemo(()=>{
+    if(!tank.litres) return [];
+    const l=Number(tank.litres)||0, out=[];
+    const heavy=(report&&(report.load.level==="full"||report.load.level==="over"));
+    const pct=heavy?35:25;
+    out.push({i:"💧",t:`Change ${Math.round(l*pct/100)} L (${pct}%)`,s:"Match the temperature and dechlorinate before it goes in."});
+    if(tank.cycled==="no"||tank.cycled==="cycling") out.push({i:"🧫",t:"Test ammonia & nitrite",s:"Daily while cycling. Both must read zero before any fish go in."});
+    else out.push({i:"🧫",t:"Test nitrate",s:"Rising nitrate means the water change is due more often, not that the tank is broken."});
+    out.push({i:"🌀",t:"Rinse filter media in tank water",s:"Never under the tap — chlorine kills the bacteria doing the work. Monthly is enough."});
+    if(tank.tempC) out.push({i:"🌡️",t:`Check the heater holds ${tank.tempC}°C`,s:"A stuck heater is the fastest way to lose a tank."});
+    return out;
+  },[tank,report]);
+
+  /* ── Heater sizing ── */
+  const [roomT,setRoomT]=useState("");
+  const heater=useMemo(()=>{
+    const target=Number(tank.tempC)||0, room=Number(roomT)||0, l=Number(tank.litres)||0;
+    if(!(target&&room&&l)) return null;
+    const lift=target-room;
+    if(lift<=0) return {none:true,lift};
+    // ~1 W per litre per 5 °C of lift, floored at a sane smallest heater.
+    const w=Math.max(25,Math.ceil(l*(lift/5)/25)*25);
+    return {w,lift,split:l>200,hot:room>=target-1};
+  },[tank.tempC,tank.litres,roomT]);
+
+  /* ── Filter sizing ── */
+  const filterRec=useMemo(()=>{
+    const l=Number(tank.litres)||0; if(!l) return null;
+    const lvl=report?report.load.level:"unknown";
+    const mult = lvl==="over"?[6,8] : lvl==="full"?[5,7] : lvl==="comfortable"?[4,6] : [4,5];
+    const heavy=report?report.load.heavy:[];
+    return {lo:Math.round(l*mult[0]),hi:Math.round(l*mult[1]),heavy,lvl};
+  },[tank.litres,report]);
+
+  /* ── Ask Nemo ── */
+  const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
+  const askNemo=()=>{
+    const lines=[`Hi Nemo — please check my tank plan.`,``];
+    lines.push(`Tank: ${tank.name||"My Tank"} · ${tank.type} · ${tank.litres||"?"} L${tank.lengthCm?` · ${tank.lengthCm} cm long`:""}`);
+    if(tank.tempC) lines.push(`Target temperature: ${tank.tempC}°C`);
+    if(tank.filter) lines.push(`Filter: ${tank.filter}`);
+    lines.push(`Cycled: ${tank.cycled||"not sure"}`);
+    lines.push(``,`Fish I am planning:`);
+    stock.forEach(({key,qty})=>lines.push(`• ${qty} × ${SPECIES[key].n} (${SPECIES[key].sci})`));
+    const warn=report?[...report.tankLvl,...report.perSpecies.flatMap(s=>s.issues),...report.pairs.flatMap(p=>p.issues)].filter(i=>i.v===V_BAD||i.v===V_COND):[];
+    if(warn.length){ lines.push(``,`Warnings the planner gave me:`); warn.slice(0,8).forEach(w=>lines.push(`- ${w.r}`)); }
+    lines.push(``,`Can you tell me if this works?`);
+    openWA(ownerWA,encodeURIComponent(lines.join("\n")));
+  };
+
+  /* ── shared styles ── */
+  const card={background:C.card,borderRadius:20,padding:"18px 16px",marginBottom:16,border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.06)"};
+  const H=({children})=><div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>{children}</div>;
+  const lbl={fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5};
+  const fld={width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"#f8fafc"};
+  const numIn=(val,set,ph)=>(<input type="number" inputMode="decimal" min="0" value={val} placeholder={ph} onChange={e=>set(e.target.value)} style={{...fld,textAlign:"center"}}/>);
+  const chip=(on)=>({flexShrink:0,padding:"8px 13px",borderRadius:20,border:`1.5px solid ${on?C.primary:C.border}`,background:on?C.primary:"transparent",color:on?"#fff":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"});
+
+  const applyVolume=()=>{
+    persist({...tank,litres:usableL||waterL,lengthCm:Math.round(dimsCm.l)});
+    setSavedNote("✓ Saved to My Tank");
+    setTimeout(()=>setSavedNote(""),2500);
+  };
+
   return(
     <div className="slide-up">
       <div className="vh-head" style={{background:"linear-gradient(180deg,#f1f9fe 0%,#ffffff 100%)",padding:"52px 16px 18px",borderRadius:"0 0 28px 28px"}}>
@@ -6856,78 +7095,283 @@ function AquaToolsPage({nav,goBack}){
           <button className="press" onClick={goBack} style={{background:"none",border:"none",fontSize:20,color:C.textSub,cursor:"pointer"}}>←</button>
           <div>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>🧪 Aqua Tools</div>
-            <div style={{fontSize:12,color:C.textSub}}>Plan your tank like a pro — free tools from Nemo</div>
+            <div style={{fontSize:12,color:C.textSub}}>Plan it. Cycle it. Keep it healthy.</div>
           </div>
         </div>
       </div>
       <div className="dt-read" style={{padding:"18px 16px 110px"}}>
-        {/* ── Fish Compatibility Checker ── */}
+
+        {/* ══ MY TANK ══ */}
         <div style={card}>
-          <H>🐠 Fish Compatibility Checker</H>
-          <Sub>Select 2–5 species you'd like to keep together (tap again to unselect).</Sub>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
-            {Object.entries(SPECIES).map(([k,s])=>{
-              const on=sel.includes(k);
-              return(
-                <button key={k} className="press" onClick={()=>toggle(k)}
-                  style={{background:on?"#ffffff":"#f8fafc",color:on?C.text:C.textSub,border:`2px solid ${on?C.accent:"transparent"}`,borderRadius:99,padding:"8px 13px",fontSize:12.5,fontWeight:on?700:600,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",boxShadow:on?"0 6px 18px rgba(14,165,233,.16)":"none"}}>
-                  {s.e} {s.n}
-                </button>
-              );
-            })}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>🏠 {saved?(tank.name||"My Tank"):"Create your tank"}</div>
+            {saved&&<button className="press" onClick={()=>setEditing(v=>!v)} style={{background:"none",border:"none",color:C.accent,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{editing?"▲ Done":"✏ Edit"}</button>}
           </div>
-          {sel.length===1&&(()=>{ const solo=pairVerdict(sel[0],sel[0]); return(
-            <div style={{background:VER[solo.v].bg,border:`1px solid ${VER[solo.v].bd}`,borderRadius:14,padding:"11px 13px",fontSize:12.5,color:VER[solo.v].c,fontWeight:600,lineHeight:1.55}}>{VER[solo.v].t.split(" ")[0]} <b>{SPECIES[sel[0]].n} × {SPECIES[sel[0]].n}:</b> {solo.r}</div>
-          );})()}
-          {sel.length>=2&&(
+          {!saved&&!editing&&<div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:10}}>Save it once — every tool below then uses it instead of asking again.</div>}
+
+          {(editing||!saved)&&(
             <>
-              <div style={{background:VER[worst].bg,border:`1.5px solid ${VER[worst].bd}`,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
-                <div style={{fontSize:14,fontWeight:800,color:VER[worst].c,marginBottom:2}}>{VER[worst].t}</div>
-                <div style={{fontSize:11.5,color:C.textSub}}>Minimum recommended tank for this mix: <b style={{color:C.text}}>{minTank} L</b></div>
+              <div style={{marginBottom:12}}>
+                <div style={lbl}>Tank name</div>
+                <input value={tank.name} onChange={e=>setF("name",e.target.value)} placeholder="Living room tank" style={fld}/>
               </div>
-              <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                {pairs.map((p,i)=>(
-                  <div key={i} style={{display:"flex",gap:9,alignItems:"flex-start",background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px"}}>
-                    <span style={{fontSize:14,flexShrink:0}}>{["✅","⚠️","❌"][p.v]}</span>
-                    <div style={{fontSize:12,lineHeight:1.5,color:C.text}}><b>{SPECIES[p.a].n} × {SPECIES[p.b].n}:</b> <span style={{color:C.textSub}}>{p.r}</span></div>
+              <div style={{marginBottom:12}}>
+                <div style={lbl}>Type</div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  {[["tropical","Tropical"],["coldwater","Coldwater"],["pond","Pond"],["marine","Marine"]].map(([k,l])=>(
+                    <button key={k} className="press" onClick={()=>setF("type",k)} style={chip(tank.type===k)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{marginBottom:12}}>
+                <div style={lbl}>Shape</div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  {[["rect","Rectangular"],["cube","Cube"],["cyl","Cylinder"],["bow","Bow-front"]].map(([k,l])=>(
+                    <button key={k} className="press" onClick={()=>setF("shape",k)} style={chip(tank.shape===k)}>{l}</button>
+                  ))}
+                  <button className="press" onClick={()=>setF("unit",tank.unit==="cm"?"in":"cm")} style={{...chip(false),marginLeft:"auto"}}>{tank.unit==="cm"?"cm ⇄ inches":"inches ⇄ cm"}</button>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:tank.shape==="cyl"?"1fr 1fr":"1fr 1fr 1fr",gap:8,marginBottom:8}}>
+                {tank.shape==="cyl"
+                  ? <>{numIn(tank.l,v=>setF("l",v),`Diameter ${tank.unit}`)}{numIn(tank.h,v=>setF("h",v),`Height ${tank.unit}`)}</>
+                  : <>{numIn(tank.l,v=>setF("l",v),`Length ${tank.unit}`)}{numIn(tank.w,v=>setF("w",v),`Width ${tank.unit}`)}{numIn(tank.h,v=>setF("h",v),`Height ${tank.unit}`)}</>}
+              </div>
+              <div style={{marginBottom:12}}>
+                <div style={lbl}>Actual water height ({tank.unit}) — optional</div>
+                {numIn(tank.waterH,v=>setF("waterH",v),`Water line, not the rim`)}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                <div><div style={lbl}>Filter</div><input value={tank.filter} onChange={e=>setF("filter",e.target.value)} placeholder="Sponge / HOB 500 L-h" style={fld}/></div>
+                <div><div style={lbl}>Heater</div><input value={tank.heater} onChange={e=>setF("heater",e.target.value)} placeholder="100 W" style={fld}/></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                <div><div style={lbl}>Target temp °C</div>{numIn(tank.tempC,v=>setF("tempC",v),"26")}</div>
+                <div><div style={lbl}>Set up on</div><input type="date" value={tank.setUpOn} onChange={e=>setF("setUpOn",e.target.value)} style={fld}/></div>
+              </div>
+              <div style={{marginBottom:12}}>
+                <div style={lbl}>Cycled?</div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  {[["yes","Yes — 0 ammonia & nitrite"],["cycling","Still cycling"],["no","Not started"]].map(([k,l])=>(
+                    <button key={k} className="press" onClick={()=>setF("cycled",k)} style={chip(tank.cycled===k)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{marginBottom:4}}>
+                <div style={lbl}>Tank photo — optional</div>
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:64,height:48,borderRadius:10,background:"#f1f5f9",border:`1px solid ${C.border}`,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:C.textSub}}>
+                    {tank.photo?<img src={tank.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:"none"}
                   </div>
-                ))}
+                  <label className="press" style={{display:"inline-block",background:C.accentLight,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:10,padding:"8px 13px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                    Choose photo
+                    <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                      const f=e.target.files&&e.target.files[0]; if(!f) return;
+                      try{ setF("photo",await compressImage(f,700,0.8)); }catch(err){}
+                    }}/>
+                  </label>
+                  {tank.photo&&<button className="press" onClick={()=>setF("photo","")} style={{background:"none",border:"none",color:C.danger,fontSize:12,fontWeight:700,cursor:"pointer"}}>Remove</button>}
+                </div>
               </div>
+              {waterL>0&&(
+                <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginTop:12,fontSize:12.5,lineHeight:1.6,color:C.text}}>
+                  💧 <b>{waterL} L</b> of water ({usGal(waterL)} US gal · {ukGal(waterL)} UK gal){fullL!==waterL?` — the tank itself holds ${fullL} L`:""}.<br/>
+                  Usable after substrate &amp; décor: <b style={{color:C.primary}}>~{usableL} L</b> — plan stocking on that figure.
+                  <button className="press" onClick={applyVolume} style={{display:"block",marginTop:9,background:C.primary,color:"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Save to My Tank</button>
+                  {savedNote&&<div style={{fontSize:11,color:C.success,fontWeight:700,marginTop:6}}>{savedNote}</div>}
+                </div>
+              )}
             </>
           )}
-          {sel.length>0&&<button className="press" onClick={()=>setSel([])} style={{marginTop:12,background:"none",border:"none",color:C.textSub,fontSize:12,fontWeight:700,textDecoration:"underline",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Clear selection</button>}
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:12,lineHeight:1.5}}>General guidance — individual fish temperaments vary. Message us on WhatsApp for advice on your exact setup.</div>
-        </div>
-        {/* ── Water Volume ── */}
-        <div style={card}>
-          <H>📏 Tank Volume Calculator</H>
-          <Sub>Enter your tank's inside dimensions in centimetres.</Sub>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
-            {numIn(dim.l,v=>setDim(d=>({...d,l:v})),"Length cm")}
-            {numIn(dim.w,v=>setDim(d=>({...d,w:v})),"Width cm")}
-            {numIn(dim.h,v=>setDim(d=>({...d,h:v})),"Height cm")}
-          </div>
-          {liters>0&&(
-            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px",fontSize:13,color:C.text,lineHeight:1.6}}>
-              💧 Your tank holds about <b style={{color:C.primary,fontFamily:PRICE_FONT}}>{liters} litres</b> (~{Math.round(liters/3.785)} US gallons). Actual water volume will be ~10–15% less after substrate &amp; décor.
+
+          {saved&&!editing&&(
+            <div style={{display:"flex",gap:12,alignItems:"center"}}>
+              {tank.photo&&<img src={tank.photo} alt="" style={{width:74,height:56,objectFit:"cover",borderRadius:10,flexShrink:0,border:`1px solid ${C.border}`}}/>}
+              <div style={{fontSize:12.5,color:C.text,lineHeight:1.7}}>
+                <b>{tank.litres} L</b> usable{tank.lengthCm?` · ${tank.lengthCm} cm long`:""}<br/>
+                <span style={{color:C.textSub}}>
+                  {({tropical:"Tropical",coldwater:"Coldwater",pond:"Pond",marine:"Marine"})[tank.type]}
+                  {tank.tempC?` · ${tank.tempC}°C`:""}
+                  {tank.cycled?` · ${({yes:"cycled",cycling:"cycling",no:"not cycled"})[tank.cycled]}`:""}
+                </span>
+              </div>
             </div>
           )}
         </div>
-        {/* ── Stocking + Heater + Filter ── */}
-        <div style={card}>
-          <H>⚖️ Stocking, Heater &amp; Filter Guide</H>
-          <Sub>Enter your tank volume in litres (use the calculator above if unsure).</Sub>
-          <div style={{maxWidth:200,marginBottom:12}}>{numIn(tankL,setTankL,"Tank litres")}</div>
-          {tl>0&&(
+
+        {/* ══ THIS WEEK ══ */}
+        {weekly.length>0&&(
+          <div style={card}>
+            <H>🗓️ This week</H>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:12.5,lineHeight:1.6,color:C.text}}>🐟 <b>Stocking:</b> roughly <b>{Math.max(1,Math.round(tl/2))} cm of adult fish</b> total (1 cm per 2 L rule) — e.g. about <b>{Math.max(1,Math.floor(tl/8))} guppy-sized fish</b>. Stock slowly, over weeks.</div>
-              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:12.5,lineHeight:1.6,color:C.text}}>🌡️ <b>Heater:</b> ~<b>{Math.max(25,Math.round(tl))} W</b> (1 W per litre; split into 2 heaters above 200 L).</div>
-              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:12.5,lineHeight:1.6,color:C.text}}>🌀 <b>Filter:</b> flow rate of <b>{tl*4}–{tl*5} L/h</b> (4–5× tank volume per hour).</div>
-              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:12.5,lineHeight:1.6,color:C.text}}>💦 <b>Water changes:</b> ~<b>{Math.max(1,Math.round(tl*0.25))} L weekly</b> (25%).</div>
+              {weekly.map((w,i)=>(
+                <div key={i} style={{display:"flex",gap:10,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px"}}>
+                  <span style={{fontSize:16,flexShrink:0}}>{w.i}</span>
+                  <div><div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{w.t}</div><div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:2}}>{w.s}</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══ FISH COMMUNITY PLANNER ══ */}
+        <div style={card}>
+          <H>🐠 Fish Community Planner</H>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:12}}>
+            Say how many of each fish you want. Compatibility depends on the numbers, not just the species.
+          </div>
+
+          {stock.length>0&&(
+            <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:12}}>
+              {stock.map(({key,qty})=>{
+                const S=SPECIES[key];
+                return(
+                  <div key={key} style={{display:"flex",alignItems:"center",gap:10,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px"}}>
+                    <span style={{fontSize:17,flexShrink:0}}>{S.e}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{S.n} {S.big&&<span style={{fontSize:9,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"2px 7px",marginLeft:4}}>LARGE — {S.size} CM</span>}</div>
+                      <div style={{fontSize:10.5,color:C.textSub,fontStyle:"italic"}}>{S.sci} · adult {S.size} cm</div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:9,background:"#fff",borderRadius:10,padding:"3px 9px",border:`1.5px solid ${C.border}`,flexShrink:0}}>
+                      <button className="press" onClick={()=>setQty(key,qty-1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>−</button>
+                      <span style={{fontSize:13,fontWeight:700,minWidth:16,textAlign:"center"}}>{qty}</span>
+                      <button className="press" onClick={()=>setQty(key,qty+1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>+</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <button className="press" onClick={()=>setPickOpen(v=>!v)} style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",marginBottom:pickOpen?12:0}}>
+            {pickOpen?"▲ Close the fish list":"＋ Add fish"}
+          </button>
+
+          {pickOpen&&SPECIES_GROUPS.map(g=>{
+            const keys=Object.keys(SPECIES).filter(k=>SPECIES[k].grp===g.k);
+            if(!keys.length) return null;
+            return(
+              <div key={g.k} style={{marginBottom:12}}>
+                <div style={{...lbl,marginTop:4}}>{g.label}</div>
+                {g.k==="pond"&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:8,lineHeight:1.5}}>Pond fish, not aquarium fish. Koi need a large, deep pond — OATA advises substantially more depth than a tank can offer.</div>}
+                {g.k==="invert"&&<div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Judged separately from fish: "can live together" is not the same as "will not be eaten".</div>}
+                <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                  {keys.map(k=>{
+                    const S=SPECIES[k], on=stockOf(k)>0;
+                    return(
+                      <button key={k} className="press" onClick={()=>setQty(k,on?0:Math.max(1,S.school))} style={chip(on)} title={S.sci}>
+                        {S.e} {S.n}{S.big?" ⚠":""}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {report&&(
+            <div style={{marginTop:14}}>
+              <div style={{background:VERDICT[report.worst].bg,border:`1.5px solid ${VERDICT[report.worst].bd}`,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+                <div style={{fontSize:14,fontWeight:800,color:VERDICT[report.worst].c}}>{VERDICT[report.worst].icon} {VERDICT[report.worst].t}</div>
+                <div style={{fontSize:11.5,color:C.textSub,marginTop:4,lineHeight:1.55}}>
+                  Confidence: <b style={{color:C.text}}>{report.confidence}</b>
+                  {report.missing.length>0&&<> — still missing {report.missing.join(", ")}.</>}
+                </div>
+              </div>
+
+              {report.tankLvl.length>0&&(
+                <div style={{marginBottom:9}}>
+                  <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>🏠 {tank.name||"This tank"}</div>
+                  {report.tankLvl.map((it,i)=>(
+                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                      <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
+                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {report.perSpecies.map(({key,qty,issues})=>issues.length>0&&(
+                <div key={key} style={{marginBottom:9}}>
+                  <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>{SPECIES[key].e} {qty} × {SPECIES[key].n}</div>
+                  {issues.map((it,i)=>(
+                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                      <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
+                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+
+              {report.pairs.map((p,i)=>(
+                <div key={i} style={{marginBottom:9}}>
+                  <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>{SPECIES[p.a].n} × {SPECIES[p.b].n}</div>
+                  {p.issues.map((it,j)=>(
+                    <div key={j} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                      <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
+                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+
+              {report.worst===V_OK&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>Nothing in this mix conflicts. Add fish a few at a time so the filter can keep up.</div>}
+
+              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:11.5,lineHeight:1.6,color:C.text,marginTop:6}}>
+                🪣 <b>Waste load:</b> {({light:"light — room to add more later",comfortable:"comfortable for this volume",full:"at the comfortable limit",over:"beyond what this volume supports",unknown:"needs the tank volume to judge"})[report.load.level]}
+                {report.load.heavy.length>0&&<> · heavy-waste species here: {report.load.heavy.join(", ")}.</>}
+              </div>
+
+              <button className="press" onClick={askNemo} style={{width:"100%",marginTop:12,background:"#25D366",color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                💬 Ask Nemo about this plan
+              </button>
+              <button className="press" onClick={()=>persist({...tank,stock:[]})} style={{marginTop:8,background:"none",border:"none",color:C.textSub,fontSize:12,fontWeight:700,textDecoration:"underline",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Clear the plan</button>
+            </div>
+          )}
+          <div style={{fontSize:10.5,color:C.textSub,marginTop:12,lineHeight:1.5}}>General guidance — individual fish vary, and a tank that suits one shop's stock may not suit another's. Ask us about your exact setup.</div>
+        </div>
+
+        {/* ══ HEATER ══ */}
+        <div style={card}>
+          <H>🌡️ Heater Guide</H>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:10}}>
+            Wattage depends on how far the heater has to lift the water above the room, not on volume alone.
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+            <div><div style={lbl}>Room temp °C</div>{numIn(roomT,setRoomT,"28")}</div>
+            <div><div style={lbl}>Target water °C</div>{numIn(tank.tempC,v=>setF("tempC",v),"26")}</div>
+          </div>
+          {!tank.litres&&<div style={{fontSize:11.5,color:C.textSub}}>Set your tank volume above to size a heater.</div>}
+          {heater&&heater.none&&(
+            <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:"#92400e"}}>
+              🔥 Your room already sits at or above the target. A heater would rarely switch on — and in a hot spell the risk is <b>overheating</b>, not cold. Watch for water above {Number(tank.tempC)+2}°C, keep the surface moving, and consider a fan across the surface rather than a heater.
+            </div>
+          )}
+          {heater&&!heater.none&&(
+            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:C.text}}>
+              🌡️ About <b style={{color:C.primary}}>{heater.w} W</b> to hold {tank.tempC}°C in a {roomT}°C room ({heater.lift}°C lift).
+              {heater.split&&<> Over 200 L, two smaller heaters at opposite ends beat one large one — and a single failure cannot cook or chill the tank.</>}
+              {heater.hot&&<> Your room is close to the target, so it will rarely run.</>}
             </div>
           )}
         </div>
-        {/* Shop nudge */}
+
+        {/* ══ FILTER ══ */}
+        <div style={card}>
+          <H>🌀 Filter Guide</H>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:10}}>
+            A recommended range, not a guaranteed safe figure — what the filter holds matters more than the number on the box.
+          </div>
+          {!filterRec&&<div style={{fontSize:11.5,color:C.textSub}}>Set your tank volume above to size a filter.</div>}
+          {filterRec&&(
+            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:C.text}}>
+              🌀 Aim for <b style={{color:C.primary}}>{filterRec.lo}–{filterRec.hi} L/h</b> on a {tank.litres} L tank
+              {filterRec.lvl!=="unknown"&&<> at your planned stocking ({filterRec.lvl}).</>}
+              {filterRec.heavy.length>0&&<> Heavy-waste species in the plan ({filterRec.heavy.join(", ")}) push you to the top of that range.</>}
+              <div style={{fontSize:11,color:C.textSub,marginTop:6}}>Planted tanks tolerate the lower end; bare tanks with big fish need the upper. Rated flow is measured with an empty filter — assume 30% less once it holds media.</div>
+            </div>
+          )}
+        </div>
+
         <button className="cta" onClick={()=>nav("shop")}
           style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textTransform:"uppercase",letterSpacing:".05em",cursor:"pointer"}}>
           Shop fish, tanks &amp; gear →
@@ -16332,7 +16776,7 @@ function NemoStore(){
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={goBack}/>}
         {page==="request"  &&<RequestPage nav={nav} goBack={goBack} user={user} onSubmit={submitRequest}/>}
         {page==="guides"   &&<CareGuidesPage nav={nav} goBack={goBack} guides={guides} mediaCache={mediaCache}/>}
-        {page==="tools"    &&<AquaToolsPage nav={nav} goBack={goBack}/>}
+        {page==="tools"    &&<AquaToolsPage nav={nav} goBack={goBack} user={user} settings={settings}/>}
         {page==="saved"    &&<SavedPage nav={nav} products={products} mediaCache={mediaCache} favorites={favorites} addToCart={addToCart} cartMap={cartMap} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} user={user} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="about"    &&<AboutPage nav={nav} goBack={goBack} settings={settings}/>}
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
