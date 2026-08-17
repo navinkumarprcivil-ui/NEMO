@@ -28,7 +28,8 @@ var FOLDER_NAME  = 'Nemo Backups';
 var BACKUP_FILE  = 'nemo-full-backup.json';
 var TZ           = 'Asia/Kolkata';
 var NODES = ['orders','products','settings','guides','showcase','reviews','media',
-             'requests','loyalty','userrefs','favorites','experienceReviews'];
+             'requests','loyalty','userrefs','favorites','experienceReviews','referrals',
+             'totmVotes','tankUploadStreaks'];
 var KEEP_DATED_COPIES = 2;      // extra dated JSON safety copies (0 = only the single overwriting file)
 var BASE_PACK_KG = 0.5;         // base packing weight added per parcel (matches the app)
 // ───────────────────────────────────────────────────────────────────
