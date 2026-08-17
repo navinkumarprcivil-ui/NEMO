@@ -252,7 +252,7 @@
     "showcase": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && $id === auth.uid && newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists()) || (data.exists() && auth.uid === data.child('userUid').val() && $id === auth.uid && (!newData.exists() || (newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists() && newData.child('winner').val() === data.child('winner').val() && newData.child('rewardPts').val() === data.child('rewardPts').val() && newData.child('wonMonth').val() === data.child('wonMonth').val()))) || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now && !newData.exists()) )",
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('id').val() === $id && newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists()) || (data.exists() && auth.uid === data.child('userUid').val() && data.child('approved').val() === false && (!newData.exists() || (newData.child('id').val() === $id && newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists()))) || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now && !newData.exists()) )",
         "imgData": {
           ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 700000)"
         },
@@ -270,6 +270,22 @@
         },
         "month": {
           ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 7)"
+        }
+      }
+    },
+    "tankMonthlyEntries": {
+      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+      ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'"
+    },
+    "tankMonthlyWinners": {
+      ".read": true,
+      ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'"
+    },
+    "tankApprovedDays": {
+      "$month": {
+        "$uid": {
+          ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+          ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'"
         }
       }
     },
@@ -389,7 +405,7 @@
         "$entry": {
           "$day": {
             "$voter": {
-              ".write": "auth != null && $voter === auth.uid && !data.exists() && newData.val() === true && root.child('showcase').child($entry).child('userUid').val() !== auth.uid && root.child('showcase').child($entry).exists() && (root.child('showcase').child($entry).child('approved').val() === true || !root.child('showcase').child($entry).child('approved').exists()) && (!root.child('showcase').child($entry).child('expiresAt').exists() || root.child('showcase').child($entry).child('expiresAt').val() > now)",
+              ".write": "auth != null && $day === '_once' && $voter === auth.uid && !data.exists() && newData.val() === true && root.child('showcase').child($entry).child('userUid').val() !== auth.uid && root.child('showcase').child($entry).exists() && (root.child('showcase').child($entry).child('approved').val() === true || !root.child('showcase').child($entry).child('approved').exists()) && (!root.child('showcase').child($entry).child('expiresAt').exists() || root.child('showcase').child($entry).child('expiresAt').val() > now)",
               ".validate": "newData.isBoolean()"
             }
           }
