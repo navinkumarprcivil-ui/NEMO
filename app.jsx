@@ -5328,6 +5328,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
   const [caption,setCaption]=useState("");
   const [note,setNote]=useState("");
   const [fullImg,setFullImg]=useState(null);
+  const swipeStartX=useRef(null);
   const [uploading,setUploading]=useState(false);
   const [voting,setVoting]=useState("");
   const [clock,setClock]=useState(Date.now());
@@ -5358,6 +5359,11 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
   const month=totmMonthOf(now);
   const liveShowcase=(showcase||[]).filter(s=>showcaseApproved(s)&&!showcaseExpired(s,now));
   const ranked=contest?totmStandings(liveShowcase,month,votes):liveShowcase;
+  const moveFullTank=dir=>{
+    if(!fullImg||ranked.length<2) return;
+    const idx=ranked.findIndex(entry=>entry.id===fullImg.id);
+    if(idx>=0) setFullImg(ranked[(idx+dir+ranked.length)%ranked.length]);
+  };
   const mine=user&&(showcase||[]).find(s=>s.userUid===user.uid&&!showcaseExpired(s,now));
   const minePending=mine&&!showcaseApproved(mine);
   const today=totmDayOf(now);
@@ -5409,7 +5415,6 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
         <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>{contest?"🏆 Tank of the Month":"🪸 Customer Tanks"}</span>
         {ranked.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{ranked.length} live</span>}
       </div>
-      <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Vote once a day for other customers' tanks. Each approved upload disappears automatically 24 hours after approval.{contest?` Votes also count toward ${totmMonthLabel(month)}.`:""}</div>
 
       {contest&&winner&&(
         <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"1px solid #fcd34d",borderRadius:14,padding:"10px 13px",marginBottom:12}}>
@@ -5461,7 +5466,6 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
       {showUpload&&(
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Replace your tank photos":contest?"Enter Tank of the Month":"Share your aquarium"}</div>
-          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>Up to {MAX_IMGS} photos · one entry per customer · admin-approved · voting is public · auto-deletes 24 hours after approval</div>
           {streak&&(
             <div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>
               🔥 Upload streak: <b>{Number(streak.current)||0} day{Number(streak.current)===1?"":"s"}</b> · best {Number(streak.best)||0}{Number(settings.tankUploadStreakTarget)>0?` · target ${Number(settings.tankUploadStreakTarget)} days`:""}. Each upload day is logged for the store to review before awarding points.
@@ -5487,7 +5491,6 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
           <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,background:C.bg,marginBottom:6,color:C.text}}>
             <span style={{fontSize:14}}>🐠</span>
             <span style={{fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user.name||"Aquarist"}</span>
-            <span style={{marginLeft:"auto",fontSize:10,color:C.textSub,fontWeight:600,flexShrink:0}}>from your Google account</span>
           </div>
           <input value={caption} onChange={e=>setCaption(e.target.value.slice(0,100))} placeholder="Describe your tank… (optional)"
             style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6}}/>
@@ -5506,9 +5509,17 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
         return(
         <Portal>
         <div onClick={()=>setFullImg(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.88)",zIndex:9999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:420,display:"flex",flexDirection:"column",alignItems:"center"}}>
+          <div onClick={e=>e.stopPropagation()}
+            onTouchStart={e=>{ swipeStartX.current=e.touches[0]?.clientX??null; }}
+            onTouchEnd={e=>{
+              if(swipeStartX.current==null) return;
+              const dx=(e.changedTouches[0]?.clientX??swipeStartX.current)-swipeStartX.current;
+              swipeStartX.current=null;
+              if(Math.abs(dx)>45) moveFullTank(dx<0?1:-1);
+            }}
+            style={{width:"100%",maxWidth:420,display:"flex",flexDirection:"column",alignItems:"center",touchAction:"pan-y"}}>
             <div style={{width:"100%",height:"46vh",borderRadius:16,overflow:"hidden"}}>
-              <TankSlides imgs={imgs} alt={fullImg.ownerName} height="100%"/>
+              <TankSlides key={fullImg.id} imgs={imgs} alt={fullImg.ownerName} height="100%"/>
             </div>
             {imgs.length>1&&(
               <div style={{display:"flex",gap:6,marginTop:10,overflowX:"auto",width:"100%",justifyContent:"center"}}>
@@ -5530,9 +5541,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
                      : voted?`✓ Voted today · ${n} · back tomorrow`
                      : `🗳️ Vote for this tank · ${n}`}
                 </button>
-                {!own&&!voted&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center",lineHeight:1.45}}>You can back as many tanks as you like{castToday>0?` — ${castToday} so far today`:""}, one vote each per day.</div>}
                 {!user&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center"}}>Sign in to vote.</div>}
-                {contest&&totmMinVotes(settings)>0&&<div style={{color:"rgba(255,255,255,.6)",fontSize:10.5,marginTop:7,textAlign:"center",lineHeight:1.45}}>A tank needs {totmMinVotes(settings)} votes to be eligible for the reward.</div>}
               </div>
             }
           </div>
