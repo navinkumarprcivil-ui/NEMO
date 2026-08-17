@@ -134,6 +134,24 @@ function cancelledByCustomer(o){
   if(o.cancelledBy==="customer") return true;
   return /auto-cancelled/i.test(String(o.paymentStatus||""));
 }
+/* One definition of a successful payment. A proof upload / `paidAt` timestamp is only a
+   request for verification and must never unlock referral codes or reward coins by itself. */
+function paymentSucceeded(o){
+  if(!o || o.status==="Cancelled") return false;
+  const payment=String(o.paymentStatus||"");
+  if(["Verified","Paid"].includes(payment)) return true;
+  // Modern orders always carry a payment status. Submitted proof, awaiting payment, rejection,
+  // underpayment or refund must not be overridden merely by moving the fulfilment dropdown.
+  if(payment) return false;
+  // Legacy orders predate paymentStatus; their post-payment fulfilment state is the only signal.
+  return ["Confirmed","Shipped","Delivered"].includes(String(o.status||""));
+}
+function successfulSpend(orders){
+  return (orders||[]).filter(paymentSucceeded).reduce((sum,o)=>{
+    const amount=o.amountDue!=null?o.amountDue:(Number(o.total)||0)+(Number(o.fee)||0);
+    return sum+Math.max(0,Number(amount)||0);
+  },0);
+}
 function returnWindowOpen(o){
   const base=deliveredAtOf(o); if(!base) return false;
   return (Date.now()-new Date(base).getTime()) <= RETURN_WINDOW_DAYS*86400000;
@@ -1182,8 +1200,8 @@ let FB_DB=null, FB_AUTH=null, FB_STORAGE=null, FB_OK=false;
    If App Check enforcement refuses the unauthenticated read, it fails quietly and the SDK
    path carries on exactly as before. */
 const CATALOG_PREFETCH = (typeof fetch!=="undefined" && FIREBASE_CONFIG.databaseURL)
-  ? fetch(FIREBASE_CONFIG.databaseURL+"/products.json",{cache:"no-store"})
-      .then(r=>r.ok?r.json():null)
+  ? withTimeout(fetch(FIREBASE_CONFIG.databaseURL+"/products.json",{cache:"no-store"}),2200,null)
+      .then(r=>r&&r.ok?r.json():null)
       .then(v=>(v&&typeof v==="object")?Object.values(v).filter(p=>p&&p.id):null)
       .catch(()=>null)
   : Promise.resolve(null);
@@ -1293,7 +1311,7 @@ function waitForFirebase(ms){
 function revealStore(){
   try{
     if(window.nemoSplashReady){ window.nemoSplashReady(); return; }
-    let n=40;   // ~2s of 50ms retries, well inside the splash's own 6s backstop
+    let n=30;   // ~1.5s of 50ms retries, inside the splash's own short backstop
     const t=setInterval(()=>{
       if(window.nemoSplashReady){ clearInterval(t); try{ window.nemoSplashReady(); }catch(e){} }
       else if(--n<=0){ clearInterval(t); }
@@ -1774,34 +1792,17 @@ async function deleteReview(pid,rid){
   return next;
 }
 
-/* ─── Service & packing experience reviews (one per delivered order, keyed by order id) ─── */
-async function loadExperienceReviews(){
-  if(FB_OK){ const a=await fbGetColl("experienceReviews"); if(a) return a.sort((x,y)=>(y.date||"").localeCompare(x.date||"")); }
-  try{ const r=localStorage.getItem("nemo-exp-reviews"); return r?JSON.parse(r):[]; }catch{ return []; }
-}
-async function saveExperienceReview(rev){
-  if(FB_OK){ await fbWrite(FB_DB.ref("experienceReviews/"+rev.id), rev); }
-  try{ const r=localStorage.getItem("nemo-exp-reviews"); const list=r?JSON.parse(r):[];
-    const next=list.some(x=>x.id===rev.id)?list.map(x=>x.id===rev.id?rev:x):[rev,...list];
-    localStorage.setItem("nemo-exp-reviews",JSON.stringify(next)); }catch{}
-}
-async function deleteExperienceReview(id){
-  if(FB_OK){ try{ await FB_DB.ref("experienceReviews/"+id).remove(); }catch(e){} }
-  try{ const r=localStorage.getItem("nemo-exp-reviews"); const list=r?JSON.parse(r):[];
-    localStorage.setItem("nemo-exp-reviews",JSON.stringify(list.filter(x=>x.id!==id))); }catch{}
-}
-
 /* Tracking & collection clause — one string, used both in the default Terms & Conditions text
    below and as the standing clause on the Terms page (for stores whose saved terms predate it).
    Checkout shows the same substance in short form right before the order is placed. */
-const COURIER_COLLECT_TERM = "Tracking & collection: once your order is dispatched we share the courier partner and consignment number. Please keep tracking your parcel and collect it from the courier partner as soon as it reaches your area. Door delivery depends entirely on the courier partner and is not in our hands, so we request every customer to put in that effort and take delivery of the package at the earliest — especially when ordering live fish or plants, where every extra hour the parcel spends in transit or lying at the hub affects the livestock. Loss or deterioration caused by a parcel left uncollected, collected late, refused, or returned undelivered is not covered by the Live Arrival Guarantee or by any refund or replacement.";
+const COURIER_COLLECT_TERM = "Tracking & collection: once your order is dispatched we share the courier partner and consignment number. Please keep tracking your parcel and collect it from the courier partner as soon as it reaches your area. Door delivery depends entirely on the courier partner and is not in our hands, so we request every customer to put in that effort and take delivery of the package at the earliest — especially when ordering live fish or plants, where every extra hour the parcel spends in transit or lying at the hub affects the livestock. Loss or deterioration caused by a parcel left uncollected, collected late, refused, or returned undelivered is not covered by the Live Arrival Guarantee or by any refund or reward coins.";
 
 /* Store settings (WhatsApp numbers, payment) — shared via Firebase */
 const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"", website:"", bankAccountName:"", bankName:"", bankBranch:"", bankAccountNo:"", bankIfsc:"", invoiceSignature:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
-  liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video, and if approved we resolve it ONE time by a replacement fish, store credit equal to the fish's value, or a refund of the fish amount; the form of resolution is decided by us. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nThe replacement shipping will be taken care & the packaging solely based on store's decision. Replacement shipments carry no further guarantee. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
-  returnPolicy:"NO RETURNS & NO REPLACEMENTS once live fish or plants have been received in good condition — all livestock sales are final on safe delivery. The only cover for transit loss is the Live Arrival Guarantee (DOA) above, which is one-time and limited to the cost of the fish. Live fish & plants are non-returnable and non-refundable once delivered safely. Approved DOA refunds are processed within 5–7 working days of our approval of your unboxing video — no item needs to be returned. Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect, and refunds for returned dry goods are issued within 5–7 working days after we receive and inspect the item. Refunds (where applicable) are issued as store credit or to the original payment method. Orders cannot be cancelled once payment is confirmed.",
+  liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video and, if the claim is approved, you choose either a refund of the affected fish value or the same value as reward coins. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nApproved reward coins are added to your Nemo wallet. Approved refunds are returned through the applicable payment method. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
+  returnPolicy:"NO RETURNS & NO REPLACEMENTS once live fish or plants have been received in good condition — all livestock sales are final on safe delivery. The only cover for transit loss is the Live Arrival Guarantee (DOA) above, which is one-time and limited to the cost of the fish. Live fish & plants are non-returnable and non-refundable once delivered safely. For an approved DOA claim, the customer chooses either a refund of the affected fish value or the same value as reward coins; no item needs to be returned. Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect, and refunds for returned dry goods are issued within 5–7 working days after we receive and inspect the item. Orders cannot be cancelled once payment is confirmed.",
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   returnAddress:"", returnAddress1Label:"", returnAddress2:"", returnAddress2Label:"",
   returnCloseDays: 3,          // days after delivery to auto-close an order (return window)
@@ -1856,19 +1857,21 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   /* Referral */
   referralEnabled: true,
   referralDiscount: 50,
-  referralCoins: 50,      // wallet points credited to the code-giver when a friend uses it
-  referralMinOrder: 0,    // min order value before a referral code is issued (0 = always)
+  referralCoins: 0,       // legacy field; the retired refer-a-friend payout is no longer used
+  referralLifetimeSpendMin: 1000, // snapshotted when a new customer first signs in
+  orderReferralMinOrder: 1000,    // qualifying paid order earns one single-use code
+  referralMinOrder: 0,    // legacy fallback retained so old saved settings continue to load
   /* Daily promo caps — limit how many customers can redeem each offer per day (0 = unlimited) */
   couponDailyLimit: 0,
   referralDailyLimit: 0,
   /* Customer tank showcase */
   showcaseEnabled: true,
-  /* Tank of the Month — the showcase becomes a monthly vote. Entries live to the end of the
-     month they were approved in (instead of the usual 24h), customers vote once each, and the
-     admin verifies the winner before any coins move. */
+  /* Tank voting. Every approved upload still expires 24 hours after approval. The optional
+     monthly board ranks the votes collected while each entry is live. */
   totmEnabled: false,
   totmMinVotes: 5,        // an entry cannot win on fewer votes than this
   totmRewardCoins: 200,   // coins credited to the winner once the admin verifies
+  tankUploadStreakTarget: 7, // admin-visible target; rewards remain a manual admin decision
   /* Customer testimonials on the home page */
   testimonialsEnabled: true,
   /* Editable marketing copy (admin can change these from Settings; blank = use the built-in default) */
@@ -1946,7 +1949,17 @@ async function saveSettings(s){
   }
 }
 
-/* ── Referral codes (10-char alphanumeric, one-time-use, tracked in Firebase) ── */
+/* ── Referral codes ────────────────────────────────────────────────────────────
+   There are two deliberately separate benefits:
+   1) A customer's permanent code, shown in the left drawer after their successful lifetime
+      spend reaches the threshold snapshotted when that account first joins.
+   2) A single-use code earned by each successfully-paid order over the per-order limit.
+
+   The retired model (one six-digit code + a payout to the giver) is not reused. New codes are
+   10-character letter/number combinations. A code is reserved while its user's payment is
+   pending and is consumed only after payment is verified. */
+const REF_CODE_RE=/^[A-Z0-9]{8,12}$/;
+function cleanRefCode(code){ return String(code||"").trim().toUpperCase().replace(/[^A-Z0-9]/g,""); }
 function genRefCode(){
   // Unambiguous set (no 0/O/1/I/L) — guaranteed mix of letters & digits, 10 chars
   const L="ABCDEFGHJKMNPQRSTUVWXYZ", D="23456789", ALL=L+D;
@@ -1956,31 +1969,119 @@ function genRefCode(){
   for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } // shuffle
   return arr.join("");
 }
-/* Get this customer's stable referral code, creating it once if needed. */
-async function getMyReferralCode(uid){
-  if(!uid) return null;
-  if(FB_OK){
-    try{
-      const ref=FB_DB.ref("userrefs/"+uid);
-      const snap=await ref.get();
-      if(snap&&snap.exists()) return snap.val();
-      // create a fresh, unused code
-      let code=genRefCode();
-      await ref.set(code);
-      await FB_DB.ref("referrals/"+code).set({owner:uid,used:false,createdAt:Date.now()});
-      return code;
-    }catch(e){ return null; }
-  }
-  // offline fallback — local only
-  let code=localStorage.getItem("nemo-myref-"+uid);
-  if(!code){ code=genRefCode(); localStorage.setItem("nemo-myref-"+uid,code); }
-  return code;
-}
-/* Validate a referral code at checkout. Returns {ok, msg}. */
 const REF_TIMEOUT={};   // sentinel: a read that timed out, distinct from "no such code"
+function lifetimeReferralLimit(settings){
+  const n=Number(settings&&settings.referralLifetimeSpendMin);
+  return Math.max(0,Number.isFinite(n)?n:Number(settings&&settings.referralMinOrder)||0);
+}
+function orderReferralLimit(settings){
+  const n=Number(settings&&settings.orderReferralMinOrder);
+  return Math.max(0,Number.isFinite(n)?n:Number(settings&&settings.referralMinOrder)||0);
+}
+function localReferralProfile(uid,settings){
+  const key="nemo-ref-profile-"+uid;
+  try{
+    const saved=JSON.parse(localStorage.getItem(key)||"null");
+    if(saved&&saved.code) return saved;
+    const fresh={code:genRefCode(),threshold:lifetimeReferralLimit(settings),createdAt:Date.now(),unlocked:false};
+    localStorage.setItem(key,JSON.stringify(fresh)); return fresh;
+  }catch(e){ return {code:genRefCode(),threshold:lifetimeReferralLimit(settings),createdAt:Date.now(),unlocked:false}; }
+}
+/* Threshold is captured once. Later admin changes therefore apply to upcoming customers only. */
+async function ensureReferralProfile(uid,settings){
+  if(!uid) return null;
+  if(!FB_OK) return localReferralProfile(uid,settings);
+  try{
+    const ref=FB_DB.ref("userrefs/"+uid);
+    const current=await withTimeout(ref.get(),5000,null);
+    if(current&&current.exists()){
+      const value=current.val();
+      if(value&&typeof value==="object"&&value.code) return value;
+    }
+    const result=await ref.transaction(cur=>{
+      if(cur&&typeof cur==="object"&&cur.code) return;
+      // A legacy six-digit/string code belongs to the retired model; replace the profile only.
+      return {code:genRefCode(),threshold:lifetimeReferralLimit(settings),createdAt:Date.now(),unlocked:false};
+    });
+    return result&&result.snapshot&&result.snapshot.val();
+  }catch(e){ return localReferralProfile(uid,settings); }
+}
+async function createReferralRecord(code,record){
+  if(!FB_OK) return true;
+  try{
+    const tx=await FB_DB.ref("referrals/"+code).transaction(cur=>cur?undefined:record);
+    return !!(tx&&tx.committed);
+  }catch(e){ return false; }
+}
+async function customerReferralStatus(uid,settings,orders){
+  const profile=await ensureReferralProfile(uid,settings);
+  if(!profile) return null;
+  const spent=successfulSpend(orders), threshold=Math.max(0,Number(profile.threshold)||0);
+  let code=cleanRefCode(profile.code), unlocked=profile.unlocked===true;
+  /* Unlocking is server-authoritative: the endpoint re-reads this customer's paid orders and
+     creates the active code with service credentials. A customer cannot turn on their own
+     profile or manufacture an active permanent code through the Firebase console/API. */
+  if(FB_OK&&FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid===uid){
+    try{
+      const token=await FB_AUTH.currentUser.getIdToken();
+      const response=await withTimeout(fetch("/api/referral-status",{method:"POST",headers:{authorization:"Bearer "+token}}),7000,null);
+      if(response&&response.ok){
+        const live=await response.json();
+        return {code:cleanRefCode(live.code),threshold:Number(live.threshold)||0,spent:Number(live.spent)||0,
+          remaining:Math.max(0,Number(live.remaining)||0),unlocked:live.unlocked===true};
+      }
+    }catch(e){}
+  }
+  if(!FB_OK&&(profile.unlocked===true||spent>=threshold)){
+    unlocked=true;
+    const p={...profile,code,threshold,unlocked:true,unlockedAt:profile.unlockedAt||Date.now(),spendAtUnlock:spent};
+    try{ localStorage.setItem("nemo-ref-profile-"+uid,JSON.stringify(p)); }catch(e){}
+  }
+  return {code,threshold,spent,remaining:Math.max(0,threshold-spent),unlocked};
+}
+/* Before the owner changes the unlock limit, freeze the previous limit for every customer
+   already represented in the order book. Profiles that already exist are left untouched;
+   customers who join after the save receive the new limit. */
+async function snapshotExistingReferralProfiles(orders,settings){
+  if(!FB_OK) return;
+  const uids=[...new Set((orders||[]).map(o=>o&&o.userUid).filter(Boolean))];
+  await Promise.allSettled(uids.map(uid=>ensureReferralProfile(uid,settings)));
+}
+/* Create a pending order-earned code. It is activated only after this source order's payment
+   succeeds, so an unpaid/cancelled order never hands out a usable discount. */
+async function createOrderReferralCode(ownerUid,orderId,orderTotal,settings){
+  const min=orderReferralLimit(settings);
+  if(!ownerUid||!orderId||Number(orderTotal)<min) return "";
+  for(let i=0;i<6;i++){
+    const code=genRefCode();
+    const record={owner:ownerUid,kind:"order",active:false,used:false,sourceOrderId:orderId,sourceOrderUid:ownerUid,
+      sourceAmount:Number(orderTotal)||0,qualifyingLimit:min,discount:Number(settings&&settings.referralDiscount)||0,createdAt:Date.now()};
+    if(await createReferralRecord(code,record)) return code;
+  }
+  return "";
+}
+async function activateEarnedReferral(code,sourceOrderId){
+  const c=cleanRefCode(code); if(!FB_OK||!REF_CODE_RE.test(c)) return;
+  try{
+    await FB_DB.ref("referrals/"+c).transaction(r=>{
+      if(!r||r.kind!=="order"||r.used||r.sourceOrderId!==sourceOrderId) return;
+      return {...r,active:true,activatedAt:r.activatedAt||Date.now()};
+    });
+  }catch(e){}
+}
+async function deactivateEarnedReferral(code,sourceOrderId){
+  const c=cleanRefCode(code); if(!FB_OK||!REF_CODE_RE.test(c)) return;
+  try{
+    await FB_DB.ref("referrals/"+c).transaction(r=>{
+      if(!r||r.kind!=="order"||r.sourceOrderId!==sourceOrderId||r.used) return r;
+      return {...r,active:false,cancelled:true,cancelledAt:Date.now()};
+    });
+  }catch(e){}
+}
+/* Validate without consuming. Consumption happens only after verified payment. */
 async function validateReferral(code, uid){
-  const c=(code||"").trim();
-  if(!/^\d{6}$/.test(c)) return {ok:false, msg:"Referral codes are 6 digits"};
+  const c=cleanRefCode(code);
+  if(!REF_CODE_RE.test(c)) return {ok:false, msg:"Enter the 10-character referral code"};
   if(!FB_OK) return {ok:false, msg:"Referral check unavailable right now"};
   try{
     // Bounded: an unbounded read here left the Apply button spinning on a stalled connection.
@@ -1989,54 +2090,87 @@ async function validateReferral(code, uid){
     if(!snap||!snap.exists()) return {ok:false, msg:"Invalid referral code"};
     const r=snap.val();
     if(r.owner===uid) return {ok:false, msg:"You can't use your own referral code"};
-    if(r.used) return {ok:false, msg:"This referral code has already been used"};
-    return {ok:true};
+    if(r.active!==true) return {ok:false, msg:"This referral code is not active yet"};
+    if(r.kind==="order"){
+      if(r.used) return {ok:false, msg:"This referral code has already been used"};
+      if(r.pendingOrderId&&Number(r.reservedUntil)>Date.now()) return {ok:false,msg:"This code is currently being used"};
+    }else if(r.kind==="customer"){
+      if(r.redemptions&&r.redemptions[uid]) return {ok:false,msg:"You've already used this customer's referral code"};
+      if(r.pendingBy&&r.pendingBy[uid]&&Number(r.pendingBy[uid].until)>Date.now()) return {ok:false,msg:"This code is already attached to your pending order"};
+    }else return {ok:false,msg:"This referral code is no longer supported"};
+    return {ok:true,record:r,code:c};
   }catch(e){ return {ok:false, msg:"Couldn't verify code — try again"}; }
 }
-/* Mark a referral code as claimed at order placement so it can't be reused. The giver's
-   wallet reward is NOT granted yet — it's written onto the node only when the friend's
-   order is delivered (see creditReferralOnDelivery). */
-async function claimReferral(code, uid, orderId){
-  const c=(code||"").trim();
-  if(!FB_OK || !/^\d{6}$/.test(c)) return;
-  try{ await FB_DB.ref("referrals/"+c).update({used:true, claimedBy:uid||"", claimedAt:Date.now(), pendingOrderId:orderId||"", delivered:false}); }catch(e){}
-}
-/* Called when a friend's order (that used a referral code) is marked Delivered — grants the
-   code-giver their wallet coins. Idempotent: only writes once per code. */
-async function creditReferralOnDelivery(code, settings, deliveredOrderId){
-  const c=(code||"").trim();
-  if(!FB_OK || !/^\d{6}$/.test(c)) return;
-  const coins=Number((settings&&settings.referralCoins)!=null?settings.referralCoins:50)||0;
+async function reserveReferral(code,uid,orderId){
+  const c=cleanRefCode(code); if(!FB_OK||!REF_CODE_RE.test(c)||!uid||!orderId) return false;
   try{
-    const snap=await withTimeout(FB_DB.ref("referrals/"+c).get(), 6000, REF_TIMEOUT);
-    if(snap===REF_TIMEOUT) return;      // couldn't read it — leave the payout for a later attempt
-    const r=snap&&snap.val();
-    if(!r || r.delivered===true) return; // already credited
-    await FB_DB.ref("referrals/"+c).update({delivered:true, rewardCoins:coins, deliveredOrderId:deliveredOrderId||"", deliveredAt:Date.now()});
-    // Credit the referrer's wallet DIRECTLY (admin context — rules allow admin to write any loyalty node).
-    if(coins>0 && r.owner) await adminCreditLoyalty(r.owner, coins, "ref:"+c+":"+(deliveredOrderId||"d"), "Referral reward", settings&&settings.walletValidityMonths);
-  }catch(e){}
+    const tx=await FB_DB.ref("referrals/"+c).transaction(r=>{
+      if(!r||r.active!==true||r.owner===uid) return;
+      const until=Date.now()+PAY_WINDOW_MIN*60*1000;
+      if(r.kind==="order"){
+        // A single-use code belongs to the first pending order, even when the same shopper
+        // opens a second checkout. Only an idempotent retry for that exact order may refresh it.
+        if(r.used||(r.pendingOrderId&&r.pendingOrderId!==orderId&&Number(r.reservedUntil)>Date.now())) return;
+        return {...r,reservedBy:uid,pendingOrderId:orderId,reservedUntil:until};
+      }
+      if(r.kind==="customer"){
+        if(r.redemptions&&r.redemptions[uid]) return;
+        const existing=r.pendingBy&&r.pendingBy[uid];
+        if(existing&&existing.orderId!==orderId&&Number(existing.until)>Date.now()) return;
+        return {...r,pendingBy:{...(r.pendingBy||{}),[uid]:{orderId,until}}};
+      }
+    });
+    return !!(tx&&tx.committed);
+  }catch(e){ return false; }
 }
-/* Cancel/return reversal: undo a referrer's credit (if it was paid out) and free the code for reuse. */
-async function reverseReferralOnCancel(code){
-  const c=(code||"").trim();
-  if(!FB_OK || !/^\d{6}$/.test(c)) return;
+async function finalizeReferralOnPayment(code,uid,orderId){
+  const c=cleanRefCode(code); if(!FB_OK||!REF_CODE_RE.test(c)||!uid||!orderId) return false;
+  let consumed=false;
   try{
-    const snap=await withTimeout(FB_DB.ref("referrals/"+c).get(), 6000, REF_TIMEOUT);
-    if(snap===REF_TIMEOUT) return;      // don't reverse a payout we couldn't confirm
-    const r=snap&&snap.val();
-    if(r && r.delivered===true && (Number(r.rewardCoins)||0)>0 && r.owner){
-      await adminCreditLoyalty(r.owner, -(Number(r.rewardCoins)||0), "refrev:"+c+":"+(r.deliveredOrderId||"d"), "Referral reversed (order cancelled)");
-    }
-    // Free the code so a fresh referral can be used again — keep owner intact (rules require it).
-    await FB_DB.ref("referrals/"+c).update({used:false, claimedBy:"", pendingOrderId:"", delivered:false, rewardCoins:0, deliveredOrderId:"", canceledAt:Date.now()});
+    const tx=await FB_DB.ref("referrals/"+c).transaction(r=>{
+      consumed=false;
+      if(!r||r.active!==true) return;
+      if(r.kind==="order"){
+        if(r.used||r.pendingOrderId!==orderId||r.reservedBy!==uid) return;
+        consumed=true;
+        return {...r,used:true,active:false,usedBy:uid,paidOrderId:orderId,usedAt:Date.now(),reservedBy:null,pendingOrderId:null,reservedUntil:null};
+      }
+      if(r.kind==="customer"){
+        if(r.redemptions&&r.redemptions[uid]) return;
+        if(!r.pendingBy||!r.pendingBy[uid]||r.pendingBy[uid].orderId!==orderId) return;
+        const pending={...(r.pendingBy||{})}; delete pending[uid];
+        consumed=true;
+        return {...r,pendingBy:pending,redemptions:{...(r.redemptions||{}),[uid]:{orderId,usedAt:Date.now()}}};
+      }
+    });
+    return !!(consumed&&tx&&tx.committed);
+  }catch(e){ return false; }
+}
+/* Cancellation releases a reservation. There is no referral-wallet payout to reverse and
+   therefore no cancellation line is added to the customer's wallet history. */
+async function releaseReferralReservation(code,uid,orderId){
+  const c=cleanRefCode(code); if(!FB_OK||!REF_CODE_RE.test(c)) return;
+  try{
+    await FB_DB.ref("referrals/"+c).transaction(r=>{
+      if(!r) return r;
+      if(r.kind==="order"){
+        if(r.used||r.pendingOrderId!==orderId) return r;
+        return {...r,reservedBy:null,pendingOrderId:null,reservedUntil:null};
+      }
+      if(r.kind==="customer"){
+        const pending={...(r.pendingBy||{})};
+        if(pending[uid]&&pending[uid].orderId===orderId) delete pending[uid];
+        return {...r,pendingBy:pending};
+      }
+      return r;
+    });
   }catch(e){}
 }
 /* Admin-only: directly credit (or, with a negative value, deduct) a customer's loyalty wallet.
    Runs in the admin context where rules permit writing any user's loyalty node. Idempotent per entryId.
    `validityMonths` (for credits) freezes this batch's expiry at earn time — pass settings.walletValidityMonths. */
 async function adminCreditLoyalty(uid, pts, entryId, note, validityMonths){
-  if(!FB_OK || !uid || !pts) return;
+  if(!FB_OK || !uid || !pts) return false;
   try{
     await FB_DB.ref("loyalty/"+uid).transaction(cur=>{
       const d = ensureLots(cur || {points:0, history:[]});
@@ -2047,9 +2181,81 @@ async function adminCreditLoyalty(uid, pts, entryId, note, validityMonths){
       else lots = consumeLots(lots, -pts);
       const points = lots.reduce((s,l)=>s+(Number(l.pts)||0),0);
       const entry={id:entryId||("adm-"+Date.now()), pts, type: pts>=0?"credit":"reverse", note:note||"", date:new Date().toISOString()};
-      return {points, lots, history:[entry, ...hist].slice(0,80)};
+      const silentReversals={...((d&&d.silentReversals)||{})};
+      if(entryId) delete silentReversals[entryId]; // a legitimately reopened order may earn again
+      return {...d,points,lots,history:[entry, ...hist].slice(0,80),silentReversals};
     });
-  }catch(e){}
+    return true;
+  }catch(e){ return false; }
+}
+/* Remove coins granted by one cancelled order without adding a confusing negative activity
+   row. Prefer removing that order's exact lot; if some of it was already spent, take the
+   remainder from the live balance so a cancelled purchase never leaves reward value behind. */
+async function silentlyRemoveLoyaltyCredit(uid,creditId,pts){
+  if(!uid||!(Number(pts)>0)) return false;
+  let acted=false;
+  const remove=cur=>{
+    const d=ensureLots(cur||{points:0,history:[]});
+    const silentReversals={...((d&&d.silentReversals)||{})};
+    if(silentReversals[creditId]){ acted=true; return d; }
+    const oldHistory=Array.isArray(d.history)?d.history:[];
+    const credited=(d.lots||[]).some(l=>l&&l.id===creditId)
+      || oldHistory.some(h=>h&&h.id===creditId&&Number(h.pts)>0);
+    // If the original credit never reached the wallet, do not take the same amount out of
+    // unrelated lots. Leave the order marker intact so a later reconciliation can retry.
+    if(!credited){ acted=false; return; }
+    let removed=0;
+    let lots=(d.lots||[]).filter(l=>{
+      if(l&&l.id===creditId){ removed+=Number(l.pts)||0; return false; }
+      return true;
+    });
+    const still=Math.max(0,Number(pts)-removed);
+    if(still>0) lots=consumeLots(lots,still);
+    const points=lots.reduce((s,l)=>s+(Number(l.pts)||0),0);
+    const history=oldHistory.filter(h=>h&&h.id!==creditId&&!String(h.id||"").startsWith("earnrev:"));
+    silentReversals[creditId]=true;
+    acted=true;
+    return {...d,points,lots,history,silentReversals};
+  };
+  if(!FB_OK){
+    const next=remove(loadLoyaltyLocal(uid));
+    if(acted&&next){ try{ localStorage.setItem(loyaltyKey(uid),JSON.stringify(next)); }catch(e){} }
+    return acted;
+  }
+  try{
+    await FB_DB.ref("loyalty/"+uid).transaction(remove);
+    return acted;
+  }catch(e){ return false; }
+}
+
+/* Put redeemed coins back when an order is cancelled, while removing the original spend row.
+   The balance is restored, but cancellation bookkeeping stays out of the customer wallet log. */
+async function silentlyRestoreRedeemedPoints(uid,redemptionId,pts,validityMonths){
+  if(!uid||!(Number(pts)>0)) return false;
+  const restore=d=>{
+    const cur=ensureLots(d||{points:0,history:[]});
+    const history=(Array.isArray(cur.history)?cur.history:[]).filter(h=>h&&h.id!==redemptionId&&!String(h.id||"").startsWith("redeemrefund:"));
+    const restoreId="restore:"+redemptionId;
+    const lots=(cur.lots||[]).some(l=>l&&l.id===restoreId)
+      ? [...cur.lots]
+      : [...(cur.lots||[]),{id:restoreId,pts:Number(pts),exp:computeLotExp(validityMonths,Date.now())}];
+    return {...cur,points:lots.reduce((s,l)=>s+(Number(l.pts)||0),0),lots,history};
+  };
+  if(FB_OK&&FB_DB&&!isAdminSignedIn()){
+    try{
+      const current=FB_AUTH&&FB_AUTH.currentUser;
+      if(!current||current.uid!==uid) return false;
+      const token=await current.getIdToken();
+      const response=await fetch("/api/loyalty-restore",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token},body:JSON.stringify({orderId:redemptionId})});
+      return response.ok;
+    }catch(e){ return false; }
+  }
+  if(FB_OK&&FB_DB){
+    try{ await FB_DB.ref("loyalty/"+uid).transaction(restore); return true; }catch(e){ return false; }
+  }
+  const next=restore(loadLoyaltyLocal(uid));
+  try{ localStorage.setItem(loyaltyKey(uid),JSON.stringify(next)); }catch(e){}
+  return true;
 }
 
 /* Auth — Google (Firebase) with demo fallback. User is {name,email,phone,uid,method,loginAt} */
@@ -2061,11 +2267,6 @@ async function clearUser(){ await dbDel("nemo-user"); if(FB_OK){ try{ await FB_A
 function reviewedKey(key){ return "nemo-reviewed-"+(key||"anon"); }
 function loadReviewedSet(key){ try{ const r=localStorage.getItem(reviewedKey(key)); return r?JSON.parse(r):[]; }catch{ return []; } }
 function addReviewedLocal(key,pid){ const s=loadReviewedSet(key); if(!s.includes(pid)){ s.push(pid); try{ localStorage.setItem(reviewedKey(key),JSON.stringify(s)); }catch{} } return s; }
-
-/* Track which delivered orders a customer has already rated for service & packing */
-function expReviewedKey(key){ return "nemo-exp-reviewed-"+(key||"anon"); }
-function loadExpReviewedSet(key){ try{ const r=localStorage.getItem(expReviewedKey(key)); return r?JSON.parse(r):[]; }catch{ return []; } }
-function addExpReviewedLocal(key,oid){ const s=loadExpReviewedSet(key); if(!s.includes(oid)){ s.push(oid); try{ localStorage.setItem(expReviewedKey(key),JSON.stringify(s)); }catch{} } return s; }
 
 /* Stable per-user key (Google uid, else phone) */
 function userKey(u){ return u ? (u.uid || ("ph-"+normalizePhone(u.phone||""))) : null; }
@@ -2353,7 +2554,8 @@ async function loadLoyalty(uid){
 }
 async function saveLoyalty(uid,data){
   try{localStorage.setItem(loyaltyKey(uid),JSON.stringify(data));}catch(e){}
-  if(FB_OK&&uid){ try{ await FB_DB.ref("loyalty/"+uid).set(data); }catch(e){} }
+  if(FB_OK&&uid){ try{ await FB_DB.ref("loyalty/"+uid).set(data); return true; }catch(e){ return false; } }
+  return true;
 }
 /* Daily promo caps — limit how many customers redeem a coupon / referral each day. */
 function promoDateKey(){ return new Date().toISOString().slice(0,10); }
@@ -2370,13 +2572,13 @@ async function promoLimitReached(type, limit){
   if(lim<=0) return false;
   return (await promoUsageCount(type))>=lim;
 }
-function redeemPoints(uid, pts, redemptionId){
-  if(!uid||pts<=0)return;
+async function redeemPoints(uid, pts, redemptionId){
+  if(!uid||pts<=0)return false;
   const cur=ensureLots(loadLoyaltyLocal(uid));
   const lots=consumeLots(cur.lots, pts);
   const points=lots.reduce((s,l)=>s+(Number(l.pts)||0),0);
   const next={...cur, points, lots, history:[{id:redemptionId,pts:-pts,type:"redeem",date:new Date().toISOString()},...(cur.history||[]).slice(0,49)]};
-  saveLoyalty(uid,next).catch(()=>{});
+  return saveLoyalty(uid,next);
 }
 
 /* ── Unified Wallet ──────────────────────────────────────────────────────────
@@ -2390,10 +2592,11 @@ function redeemPoints(uid, pts, redemptionId){
 
 /* ── Customer Tank Showcase ── */
 const SHOWCASE_TTL = 24*60*60*1000; // photos auto-expire 24h AFTER admin approval (when expiresAt is set)
+const IST_OFFSET_MS=5.5*60*60*1000;
+function istDayKey(ms){ return new Date((ms==null?Date.now():ms)+IST_OFFSET_MS).toISOString().slice(0,10); }
 /* ── Tank of the Month ─────────────────────────────────────────────────────────
-   A month-long vote laid over the showcase rather than a second gallery beside it: same
-   upload, same approval, same node. Only two things change when it is on — an approved
-   entry lives to the end of its month instead of 24 hours, and it can be voted for. */
+   A monthly scoreboard laid over the same public showcase. Every approved upload keeps the
+   same 24-hour retention window; votes collected while it is live count toward its month. */
 function totmMonthOf(ms){ const d=new Date(ms||Date.now()); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
 function totmMonthLabel(ym){
   if(!ym) return "";
@@ -2416,7 +2619,10 @@ function showcaseImgs(x){
    A voter may back as many tanks as they like each day, but the same tank only once a day,
    because that is one key and the rules make it create-only. Coming back tomorrow to vote
    again is the point; stuffing the box today is not possible. */
-function totmDayOf(ms){ return new Date(ms||Date.now()).toISOString().slice(0,10); }
+/* Voting and upload streaks follow the store's Indian calendar. Using UTC made every action
+   before 5:30am IST count toward the previous day, breaking genuine consecutive-day streaks
+   and reopening yesterday's vote window at the wrong local time. */
+function totmDayOf(ms){ return istDayKey(ms==null?Date.now():ms); }
 function voteCount(x,votes){
   const days=x&&votes&&votes[x.id];
   if(!days) return 0;
@@ -2454,7 +2660,60 @@ function totmMinVotes(settings){ const n=Number(settings&&settings.totmMinVotes)
 function totmEligible(entry,settings,votes){ return voteCount(entry,votes)>=totmMinVotes(settings); }
 
 function showcaseApproved(x){ return x && x.approved!==false; } // legacy items (no flag) count as approved
-function showcaseExpired(x, now){ const exp=Number(x&&x.expiresAt)||0; return exp>0 && now>exp; }
+/* Entries approved before `expiresAt` was introduced still follow the same retention promise.
+   Their approval time is the best anchor; `createdAt` is the safe legacy fallback. */
+function showcaseExpiry(x){
+  const explicit=Number(x&&x.expiresAt)||0;
+  if(explicit>0) return explicit;
+  if(!showcaseApproved(x)) return 0;
+  const legacy=Date.parse((x&&x.approvedAt)||(x&&x.createdAt)||"");
+  return Number.isFinite(legacy)?legacy+SHOWCASE_TTL:0;
+}
+function showcaseExpired(x, now){ const exp=showcaseExpiry(x); return exp>0 && now>=exp; }
+function showcaseHoursLeft(x,now){
+  const exp=showcaseExpiry(x);
+  return exp>0?Math.max(0,Math.ceil((exp-(now||Date.now()))/3600000)):0;
+}
+function tankStreakKey(uid){ return "nemo-tank-streak-"+uid; }
+function computeTankUploadStreak(dates,nowMs){
+  const keys=Object.keys(dates||{}).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  if(!keys.length) return {current:0,best:0,lastDay:""};
+  let run=1,best=1;
+  for(let i=1;i<keys.length;i++){
+    const a=new Date(keys[i-1]+"T00:00:00Z").getTime(), b=new Date(keys[i]+"T00:00:00Z").getTime();
+    run=(b-a===86400000)?run+1:1; best=Math.max(best,run);
+  }
+  const last=keys[keys.length-1], today=totmDayOf(nowMs||Date.now());
+  const gap=(new Date(today+"T00:00:00Z")-new Date(last+"T00:00:00Z"))/86400000;
+  return {current:gap<=1?run:0,best,lastDay:last};
+}
+function loadTankStreakLocal(uid){
+  try{ return JSON.parse(localStorage.getItem(tankStreakKey(uid))||"null"); }catch(e){ return null; }
+}
+async function loadTankUploadStreak(uid){
+  if(FB_OK&&uid){
+    try{ const s=await withTimeout(FB_DB.ref("tankUploadStreaks/"+uid).get(),5000); const v=s&&s.val(); if(v){ try{localStorage.setItem(tankStreakKey(uid),JSON.stringify(v));}catch(e){} return v; } }catch(e){}
+  }
+  return loadTankStreakLocal(uid)||{dates:{},current:0,best:0,lastDay:""};
+}
+async function recordTankUploadStreak(uid,entryId,uploadedAt){
+  if(!uid) return null;
+  const at=Number(uploadedAt)||Date.now(), day=totmDayOf(at), updatedAt=Date.now();
+  /* The server re-reads showcase/<uid> and derives the day from its createdAt. This keeps the
+     streak log auditable: the browser cannot invent upload days before asking for points. */
+  if(FB_OK&&FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid===uid){
+    try{
+      const token=await FB_AUTH.currentUser.getIdToken();
+      const response=await withTimeout(fetch("/api/tank-streak",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token},body:JSON.stringify({entryId:entryId||""})}),7000,null);
+      if(response&&response.ok){ const v=await response.json(); try{localStorage.setItem(tankStreakKey(uid),JSON.stringify(v));}catch(e){} return v; }
+    }catch(e){}
+  }
+  const cur=loadTankStreakLocal(uid)||{dates:{},best:0};
+  const dates={...(cur.dates||{}),[day]:{at,entryId:entryId||""}}, st=computeTankUploadStreak(dates,updatedAt);
+  const next={uid,dates,current:st.current,best:Math.max(Number(cur.best)||0,st.best),lastDay:st.lastDay,updatedAt};
+  try{localStorage.setItem(tankStreakKey(uid),JSON.stringify(next));}catch(e){}
+  return next;
+}
 /* Drop from the local copy anything the cloud no longer has. Only ids the cache already held are
    kept, so this never grows into a full mirror of everybody's base64 photos. */
 async function pruneShowcaseCache(live){
@@ -2485,17 +2744,18 @@ async function loadShowcase(){
 }
 async function addShowcasePhoto(item){
   await dbSet("nemo-showcase",JSON.stringify([item])); // local
-  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).set(item); return true; }catch(e){ return false; } }
+  const uploadedAt=Date.parse(item.createdAt)||Date.now();
+  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).set(item); await recordTankUploadStreak(item.userUid,item.id,uploadedAt); return true; }catch(e){ return false; } }
+  await recordTankUploadStreak(item.userUid,item.id,uploadedAt);
   return false;
 }
-/* Admin approves a pending tank. Normally that starts a 24h telecast; with Tank of the Month
-   running it has to survive until the vote closes, so it lives to the end of the month it was
-   approved in — a photo that vanishes overnight cannot collect a month of votes. */
+/* Approval always starts one 24-hour window. Voting and the optional monthly board never extend
+   a customer's photo beyond that privacy/retention promise. */
 async function approveShowcasePhoto(item,settings){
   const now=Date.now(), contest=!!(settings&&settings.totmEnabled);
   const month=totmMonthOf(now);
   const updated={...item, approved:true, approvedAt:new Date(now).toISOString(),
-    expiresAt: contest?totmMonthEnd(now):now+SHOWCASE_TTL,
+    expiresAt: now+SHOWCASE_TTL,
     ...(contest?{month}:{})};
   if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).update({approved:true, approvedAt:updated.approvedAt, expiresAt:updated.expiresAt, ...(contest?{month}:{})}); }catch(e){} }
   return updated;
@@ -2715,7 +2975,6 @@ async function loadAnalytics(){
    Days are keyed in IST, so "today" is the store's today rather than UTC's — otherwise
    every visit before 5:30am would file itself under yesterday. */
 const VISITOR_LOG_DAYS=7;
-const IST_OFFSET_MS=5.5*60*60*1000;
 /* Last write failure, if any. Writing a visit must never disturb the visit, so failures are
    swallowed — but swallowed silently they are indistinguishable from nobody having visited,
    which is exactly the wrong thing to show an owner asking "where is everyone?". */
@@ -2746,7 +3005,6 @@ async function diagnoseVisitorLog(){
   try{ await FB_DB.ref(probe).set(visitorDayExpiry(istDayKey())); out.write="ok"; }catch(e){ out.write=fbErrText(e); }
   return out;
 }
-function istDayKey(ms){ return new Date((ms==null?Date.now():ms)+IST_OFFSET_MS).toISOString().slice(0,10); }
 function istDayEndMs(day){ return Date.parse(day+"T00:00:00Z")-IST_OFFSET_MS+86400000; }
 /* VISITOR_LOG_DAYS counts the day buckets on screen, so a day survives for the rest of the
    window AFTER the one it occupies — 7 days means today plus the six before it, not today
@@ -3679,7 +3937,7 @@ function generateBillHTML(order, settings){
   </table>
   <div style="text-align:right;margin-top:14px"><button class="np" onclick="window.print()" style="background:#0b6e72;color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save PDF</button></div>
   <div class="footer">
-    ${o.liveGuarantee?`<p>🛡️ <b>Live Arrival Guarantee</b> applies (included with your Premium Delivery parcel). Send a continuous unboxing video within 2 hours of delivery to WhatsApp ${storeWA} if any fish arrives Dead on Arrival. One approved claim is resolved by replacement, store credit, or refund of the fish amount.</p>`:""}
+    ${o.liveGuarantee?`<p>🛡️ <b>Live Arrival Guarantee</b> applies. Send a continuous unboxing video within 2 hours of delivery to WhatsApp ${storeWA} if any fish arrives Dead on Arrival. For an approved claim, the customer chooses either a refund or reward coins for the affected fish value.</p>`:""}
     <p>${gstin?"Prices are inclusive of GST.":"Prices are inclusive of applicable taxes. Seller is not GST-registered; this is a Bill of Supply."}</p>
     <p>Thank you for shopping at <b>${storeName}</b> 🐠</p>
     <p>Support: WhatsApp ${storeWA}</p>
@@ -4338,9 +4596,9 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     const grand=o.amountDue??(o.total+o.fee);
     const loyaltyUsed=Number(o.loyaltyDiscount||0);
     const ptsRedeemed=loyaltyUsed>0?Math.round(loyaltyUsed/(rupeePerPoint||1)):0;
-    // Coins are credited on DELIVERY, so an undelivered or cancelled order has earned none —
+    // Coins are credited after successful payment and DELIVERY, so an unpaid/cancelled order has earned none —
     // this column used to fill in a figure for every order and overstated the liability.
-    const ptsEarned=(settings?.loyaltyEnabled!==false && String(o.status||"")==="Delivered")?coinsEarnedFor(o,settings):0;
+    const ptsEarned=(settings?.loyaltyEnabled!==false && String(o.status||"")==="Delivered" && paymentSucceeded(o))?coinsEarnedFor(o,settings):0;
     const wBal=walletBalances[o.userUid]!=null?walletBalances[o.userUid]:"";
     const bd=o.shippingBreakup||{courier:Math.max(0,(o.fee||0)-(o.thermacolFee||0)-(o.specialDeliveryFee||0)),thermacol:o.thermacolFee||0,carton:0,special:o.specialDeliveryFee||0};
     const g=orderGST(o,settings); const delOn=deliveredAtOf(o);
@@ -4523,7 +4781,7 @@ async function downloadFullBackup(){
      signed-in admin can't read is skipped by the try/catch below rather than failing the export. */
   const nodes=["products","guides","settings","showcase","reviews","media","orders","requests",
     "abandonedCarts","analytics","experienceReviews","favorites","interest","loyalty","orderSeq",
-    "promoUsage","referrals","restock","testimonials","userrefs"];
+    "promoUsage","referrals","restock","testimonials","userrefs","totmVotes","tankUploadStreaks"];
   if(FB_OK){
     for(const n of nodes){
       // Generous bound — a full export is legitimately big, but it still must not hang forever
@@ -5072,13 +5330,30 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
   const [fullImg,setFullImg]=useState(null);
   const [uploading,setUploading]=useState(false);
   const [voting,setVoting]=useState("");
+  const [clock,setClock]=useState(Date.now());
+  const [streak,setStreak]=useState(()=>user?loadTankStreakLocal(user.uid):null);
+  const streakEntry=user?.uid?(showcase||[]).find(s=>s&&s.userUid===user.uid):null;
+  const streakEntryId=streakEntry?.id||"";
+  const streakEntryCreatedAt=streakEntry?.createdAt||"";
+  useEffect(()=>{ const id=setInterval(()=>setClock(Date.now()),60000); return ()=>clearInterval(id); },[]);
+  useEffect(()=>{
+    let alive=true;
+    if(!user?.uid){ setStreak(null); return ()=>{alive=false;}; }
+    // Reconcile the visible upload too: if its first streak write lost connection, the next
+    // live read restores the original upload day (the transaction is day-key idempotent).
+    const task=streakEntryId
+      ? recordTankUploadStreak(user.uid,streakEntryId,Date.parse(streakEntryCreatedAt)||Date.now())
+      : loadTankUploadStreak(user.uid);
+    task.then(v=>{if(alive)setStreak(v);});
+    return ()=>{alive=false;};
+  },[user?.uid,streakEntryId,streakEntryCreatedAt]);
   // ── Sync name field with the signed-in Google account.
   // Functional updater preserves any name the user has already typed manually.
   useEffect(()=>{
     if(user?.name) setOwnerName(n=>n||user.name);
   },[user?.name]);
   if(!settings.showcaseEnabled)return null;
-  const now=Date.now();
+  const now=clock;
   const contest=!!settings.totmEnabled;
   const month=totmMonthOf(now);
   const liveShowcase=(showcase||[]).filter(s=>showcaseApproved(s)&&!showcaseExpired(s,now));
@@ -5086,7 +5361,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
   const mine=user&&(showcase||[]).find(s=>s.userUid===user.uid&&!showcaseExpired(s,now));
   const minePending=mine&&!showcaseApproved(mine);
   const today=totmDayOf(now);
-  const castToday=contest?votesCastToday(user&&user.uid,votes,today):0;
+  const castToday=votesCastToday(user&&user.uid,votes,today);
   const winner=(showcase||[]).find(s=>s&&s.winner&&s.wonMonth===month)||null;
   const votesFor=e=>voteCount(e,votes);
   const showGallery = mode!=="upload";
@@ -5114,6 +5389,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
     setUploading(true);
     await onSubmit({id:user?.uid||uid("sc"),imgData:preview[0],imgs:preview,ownerName:finalName,caption:caption.trim(),
       createdAt:new Date().toISOString(),approved:false,userUid:user?.uid||(user?userKey(user):""),...(contest?{month}:{})});
+    if(user?.uid) loadTankUploadStreak(user.uid).then(setStreak);
     setPreview([]);setCaption("");setOwnerName(user?.name||"");setNote("📩 Submitted! We'll review it soon.");setUploading(false);
     setTimeout(()=>setNote(""),4000);
   };
@@ -5131,10 +5407,9 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
       {showGallery&&<React.Fragment>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
         <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>{contest?"🏆 Tank of the Month":"🪸 Customer Tanks"}</span>
-        {ranked.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{ranked.length} {contest?"entries":"shared · 24h"}</span>}
+        {ranked.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{ranked.length} live</span>}
       </div>
-      {contest&&<div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Vote once a day for as many tanks as you like. Most votes wins {totmMonthLabel(month)}.</div>}
-      {!contest&&<div style={{marginBottom:10}}/>}
+      <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Vote once a day for other customers' tanks. Each approved upload disappears automatically 24 hours after approval.{contest?` Votes also count toward ${totmMonthLabel(month)}.`:""}</div>
 
       {contest&&winner&&(
         <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"1px solid #fcd34d",borderRadius:14,padding:"10px 13px",marginBottom:12}}>
@@ -5148,14 +5423,14 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
       {minePending&&(
         <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={showcaseImgs(mine)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your tank is awaiting approval.{contest?" Once approved it joins this month's vote.":" Once approved it goes live for everyone for 24 hours."}</div>
+          <div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your tank is awaiting approval. Once approved it goes live for voting for 24 hours{contest?" and joins this month's board":""}.</div>
         </div>
       )}
       {mine&&!minePending&&(
         <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={showcaseImgs(mine)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
           <div style={{fontSize:11.5,color:"#15803d",fontWeight:600,lineHeight:1.45}}>
-            ✓ Your tank is live{contest?<> with <b>{votesFor(mine)} vote{votesFor(mine)===1?"":"s"}</b>.</>:" in the gallery — thanks for sharing!"} Upload again below to replace it.
+            ✓ Your tank is live with <b>{votesFor(mine)} vote{votesFor(mine)===1?"":"s"}</b>{showcaseHoursLeft(mine,now)>0?<> · <b>{showcaseHoursLeft(mine,now)}h left</b></>:null}. Upload again below to replace it.
           </div>
         </div>
       )}
@@ -5174,9 +5449,8 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
                 </div>
                 <div style={{padding:"7px 8px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🐠 {s.ownerName}</div>
-                  {contest
-                    ? <div style={{fontSize:10.5,color:voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>{voted?`✓ Voted today · ${n}`:`${n} vote${n===1?"":"s"}`}</div>
-                    : s.caption&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.caption}</div>}
+                  <div style={{fontSize:10.5,color:voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>{voted?`✓ Voted today · ${n}`:`🗳️ ${n} vote${n===1?"":"s"}`} · {showcaseHoursLeft(s,now)}h left</div>
+                  {s.caption&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.caption}</div>}
                 </div>
               </div>
             );
@@ -5187,7 +5461,12 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
       {showUpload&&(
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Replace your tank photos":contest?"Enter Tank of the Month":"Share your aquarium"}</div>
-          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>Up to {MAX_IMGS} photos · one entry per customer · admin-approved{contest?" · voting runs to the end of the month":" · shown for 24 hours"}</div>
+          <div style={{fontSize:10.5,color:C.textSub,marginBottom:10}}>Up to {MAX_IMGS} photos · one entry per customer · admin-approved · voting is public · auto-deletes 24 hours after approval</div>
+          {streak&&(
+            <div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>
+              🔥 Upload streak: <b>{Number(streak.current)||0} day{Number(streak.current)===1?"":"s"}</b> · best {Number(streak.best)||0}{Number(settings.tankUploadStreakTarget)>0?` · target ${Number(settings.tankUploadStreakTarget)} days`:""}. Each upload day is logged for the store to review before awarding points.
+            </div>
+          )}
           {preview.length>0&&(
             <div style={{display:"flex",gap:7,marginBottom:8,flexWrap:"wrap"}}>
               {preview.map((src,i)=>(
@@ -5240,7 +5519,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
               <div style={{color:"white",fontWeight:700,fontSize:14}}>🐠 {fullImg.ownerName}{fullImg.winner?" 🏆":""}</div>
               {fullImg.caption&&<div style={{color:"rgba(255,255,255,.8)",fontSize:12,marginTop:4}}>{fullImg.caption}</div>}
             </div>
-            {contest&&(
+            {
               <div style={{width:"100%",marginTop:14}}>
                 <button className="press" disabled={!!own||voted||voting===fullImg.id} onClick={()=>vote(fullImg)}
                   style={{width:"100%",background:own?"rgba(255,255,255,.14)":voted?"rgba(255,255,255,.92)":C.primary,color:own?"rgba(255,255,255,.7)":voted?C.success:"#fff",
@@ -5253,9 +5532,9 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
                 </button>
                 {!own&&!voted&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center",lineHeight:1.45}}>You can back as many tanks as you like{castToday>0?` — ${castToday} so far today`:""}, one vote each per day.</div>}
                 {!user&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center"}}>Sign in to vote.</div>}
-                {totmMinVotes(settings)>0&&<div style={{color:"rgba(255,255,255,.6)",fontSize:10.5,marginTop:7,textAlign:"center",lineHeight:1.45}}>A tank needs {totmMinVotes(settings)} votes to be eligible for the reward.</div>}
+                {contest&&totmMinVotes(settings)>0&&<div style={{color:"rgba(255,255,255,.6)",fontSize:10.5,marginTop:7,textAlign:"center",lineHeight:1.45}}>A tank needs {totmMinVotes(settings)} votes to be eligible for the reward.</div>}
               </div>
-            )}
+            }
           </div>
           <button onClick={()=>setFullImg(null)} style={{marginTop:16,background:"rgba(255,255,255,.18)",border:"1px solid rgba(255,255,255,.3)",borderRadius:12,color:"white",padding:"9px 20px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Close</button>
         </div>
@@ -5872,98 +6151,61 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
   );
 }
 
-/* Unified "Write a review" for a delivered order: a collapsed button that expands to
-   multi-aspect stars (Product, Packing, Shipping, Overall) + a "where to improve" note.
-   The Product rating is applied to every product in the order (reflects on product pages).
-   Saves to the experienceReviews node; per-order "already reviewed" flag kept locally. */
-function ExperienceReview({order, uk, user, products=[], mediaCache={}, reviewedSet=[], onWriteReview}){
-  const [done,setDone]=useState(()=>loadExpReviewedSet(uk).includes(order.id));
-  const [open,setOpen]=useState(false);
-  const [packing,setPacking]=useState(0);
-  const [shipping,setShipping]=useState(0);
-  const [overall,setOverall]=useState(0);
-  const [improve,setImprove]=useState("");
-  const [saving,setSaving]=useState(false);
-  // Unique ordered products (for the separate "review each product" list).
+/* Order history asks for product reviews only. Opening an item takes the customer to its
+   public product page, where the existing review form collects the product, packing and
+   shipping aspects together and publishes the result with that product. */
+function ProductReviewPrompt({order, products=[], mediaCache={}, reviewedSet=[], onWriteReview}){
   const prodItems=[]; const seenP={};
   (order.items||[]).forEach(it=>{ if(seenP[it.id]) return; const prod=products.find(p=>p.id===it.id); if(prod){ seenP[it.id]=1; prodItems.push({prod,item:it}); } });
-  const ready=packing>0&&shipping>0&&overall>0;
-  const submit=async()=>{
-    if(!ready||saving) return;
-    setSaving(true);
-    const rev={ id:order.id, orderNo:order.orderNo||orderId(order.id),
-      packing, shipping, overall, service:overall, // keep legacy 'service' for older admin views
-      improve:improve.trim(),
-      name:(user&&user.name)||order.address?.name||"Customer",
-      uid:uk||"", zone:order.shippingZoneLabel||"", date:new Date().toISOString() };
-    try{ await saveExperienceReview(rev); }catch(e){}
-    addExpReviewedLocal(uk, order.id);
-    setSaving(false); setDone(true);
-  };
-  const ta={width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:12.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",boxSizing:"border-box",marginBottom:9,fontFamily:"'Plus Jakarta Sans',sans-serif"};
-  const row=(label,val,set)=>(
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
-      <span style={{fontSize:12.5,color:C.text,fontWeight:600}}>{label}</span>
-      <ReviewStars value={val} onChange={set} size={22}/>
-    </div>
-  );
-  // The per-product "write a review" list — opens each product page to rate + add photos.
-  const productList=prodItems.length>0&&(
-    <div style={{marginTop:10}}>
+  if(!prodItems.length) return null;
+  return(
+    <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
       <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:6}}>✍️ Review your product{prodItems.length>1?"s":""}</div>
       {prodItems.map(({prod,item})=>{
         const m=CAT_META[item.category]||CAT_META["Live Fish"];
         const already=reviewedSet.includes(prod.id);
-        // getCardImg, not a raw mediaCache read: a modern product keeps its photo as a URL on
-        // product.media[], which hydrateMedia deliberately does not copy into the cache, so
-        // "img-<id>" is set only for legacy items. Reading it directly showed the category
-        // emoji for every product listed here.
         const img=getCardImg(prod,mediaCache);
         return(
-          <div key={prod.id} style={{display:"flex",alignItems:"center",gap:10,background:"white",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px",marginBottom:7}}>
+          <button key={prod.id} className="press" onClick={()=>onWriteReview&&onWriteReview(prod)}
+            style={{width:"100%",display:"flex",alignItems:"center",gap:10,background:"white",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px",marginBottom:7,textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
             <div style={{width:38,height:38,borderRadius:9,flexShrink:0,overflow:"hidden",background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>
               {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
             </div>
             <div style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
             {already
-              ? <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ Reviewed</span>
-              : <button className="press" onClick={()=>onWriteReview&&onWriteReview(prod)}
-                  style={{flexShrink:0,background:C.accentLight,color:C.primaryDark,border:`1.5px solid ${C.accent}`,borderRadius:9,padding:"7px 11px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Write a review →</button>}
-          </div>
+              ? <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ View review →</span>
+              : <span style={{fontSize:11.5,fontWeight:800,color:C.primary,flexShrink:0}}>Review →</span>}
+          </button>
         );
       })}
-      <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.4}}>Rate each product & add photos on its page — your rating shows on that product.</div>
+      <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.4}}>Tap a product to review it on its public product page.</div>
     </div>
   );
-  if(done) return(
-    <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-      <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",fontSize:12,color:"#15803d",fontWeight:700}}>✓ Thanks for rating your order!</div>
-      {productList}
-    </div>
-  );
-  if(!open) return(
-    <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-      <button className="press" onClick={()=>setOpen(true)}
-        style={{width:"100%",background:C.accentLight,color:C.primaryDark,border:`1.5px solid ${C.accent}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>⭐ Rate this order</button>
-      {productList}
-    </div>
-  );
+}
+
+/* A qualifying order's code is displayed only while the server says it is active and unused.
+   The live listener removes the card immediately after the referred order's payment succeeds. */
+function OrderReferralCode({order}){
+  const code=cleanRefCode(order&&order.earnedReferralCode);
+  const [visible,setVisible]=useState(false);
+  const [copied,setCopied]=useState(false);
+  useEffect(()=>{
+    if(!code||!paymentSucceeded(order)){ setVisible(false); return; }
+    if(!(FB_OK&&FB_DB)){ setVisible(true); return; }
+    const ref=FB_DB.ref("referrals/"+code);
+    const cb=ref.on("value",s=>{ const r=s&&s.val(); setVisible(!!(r&&r.kind==="order"&&r.active===true&&!r.used)); },()=>setVisible(false));
+    return ()=>{ try{ref.off("value",cb);}catch(e){} };
+  },[code,order&&order.status,order&&order.paymentStatus]);
+  if(!visible) return null;
   return(
-    <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-      <div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px"}}>
-        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:2}}>⭐ How was this order?</div>
-        <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.45}}>About packing, shipping &amp; your overall experience. (Rate the products themselves below.)</div>
-        {row("Packing",packing,setPacking)}
-        {row("Shipping",shipping,setShipping)}
-        {row("Overall satisfaction",overall,setOverall)}
-        <div style={{fontSize:11,fontWeight:700,color:C.textSub,margin:"6px 0 5px"}}>Where can we improve? <span style={{fontWeight:400}}>(optional)</span></div>
-        <textarea value={improve} onChange={e=>setImprove(e.target.value)} rows={2} placeholder="Tell us what we could do better…" style={ta}/>
-        <button className="press" onClick={submit} disabled={!ready||saving}
-          style={{width:"100%",background:ready?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:ready?"pointer":"default"}}>
-          {saving?<><Spinner/>Submitting…</>:"Submit order rating"}
-        </button>
+    <div style={{marginTop:10,background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:12,padding:"12px",color:"white"}}>
+      <div style={{fontSize:12.5,fontWeight:800,marginBottom:3}}>🎟️ Single-use referral code</div>
+      <div style={{fontSize:10.8,opacity:.9,lineHeight:1.45,marginBottom:8}}>Anyone can use this once at checkout. It disappears after that order's payment succeeds.</div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.55)",borderRadius:9,padding:"8px 10px",fontFamily:"monospace",fontSize:14,fontWeight:800,letterSpacing:1.5,textAlign:"center"}}>{code}</div>
+        <button className="press" onClick={()=>{ try{navigator.clipboard.writeText(code);}catch(e){} setCopied(true);setTimeout(()=>setCopied(false),1800); }}
+          style={{background:copied?"white":"rgba(255,255,255,.24)",border:"1px solid rgba(255,255,255,.4)",borderRadius:9,padding:"9px 12px",color:copied?"#6d28d9":"white",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied?"✓ Copied":"Copy"}</button>
       </div>
-      {productList}
     </div>
   );
 }
@@ -6115,7 +6357,7 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
   const [cause,setCause]=useState("");
   const [note,setNote]=useState("");
   const [qty,setQty]=useState(1);
-  const [reso,setReso]=useState("replacement");
+  const [reso,setReso]=useState("refund");
   const maxQty=Math.max(1,Number(item.qty)||1);
 
   if(claim) return(
@@ -6164,15 +6406,15 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
         placeholder={cause==="Other (explain below)"?"Please describe what happened (required)":"Anything else we should know? (optional)"}
         style={{width:"100%",boxSizing:"border-box",borderRadius:9,border:"1.5px solid #fed7aa",padding:"8px 10px",fontSize:11.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",marginBottom:9,fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
 
-      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>Preferred resolution</div>
+      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>Choose your resolution</div>
       <div style={{display:"flex",gap:6,marginBottom:10}}>
-        {[["replacement","🐟 Replace"],["refund","💸 Refund"],["coins","🪙 Coins"]].map(([k,l])=>(
+        {[["refund","💸 Refund"],["coins","🪙 Reward coins"]].map(([k,l])=>(
           <button key={k} type="button" className="press" onClick={()=>setReso(k)}
             style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${reso===k?"#9a3412":"#fed7aa"}`,background:reso===k?"#9a3412":"white",color:reso===k?"white":"#9a3412",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l}</button>
         ))}
       </div>
       <div style={{fontSize:10,color:"#9a3412",lineHeight:1.5,marginBottom:9}}>
-        Send ONE clear, continuous unboxing video (from the sealed package) on WhatsApp within <b>2 hours</b> of delivery — that video is what the claim is judged on, so film the unboxing before anything else. Claims close {DOA_WINDOW_HOURS} hours after delivery. The final resolution — replacement, store credit or refund of the fish value — is ours to decide, and replacement shipping &amp; packing are arranged at our discretion.
+        Send ONE clear, continuous unboxing video (from the sealed package) on WhatsApp within <b>2 hours</b> of delivery — that video is what the claim is judged on, so film the unboxing before anything else. Claims close {DOA_WINDOW_HOURS} hours after delivery. If approved, your choice of <b>refund or reward coins</b> for the affected fish value will be used.
       </div>
       <div style={{display:"flex",gap:7}}>
         <button className="press" disabled={!ready} onClick={()=>{
@@ -6189,7 +6431,7 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
   );
 }
 
-function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, onRateOrderProducts, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
+function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
   const [openId,setOpenId]=useState(null); // which order is expanded (list shows summaries; details open on tap)
   // Re-add the exact option that was bought (the 10" net, not whichever size happens to be first).
   const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){
@@ -6211,58 +6453,12 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
       (user.phone && normalizePhone(o.address?.phone)===normalizePhone(user.phone))
     )
   );
-  // Delivered products awaiting a review (deduped)
-  const toReview=[];
-  const seen={};
-  myOrders.filter(o=>o.status==="Delivered").forEach(o=>o.items.forEach(it=>{
-    if(seen[it.id]||reviewedSet.includes(it.id))return;
-    const prod=products.find(p=>p.id===it.id);
-    if(prod){ seen[it.id]=1; toReview.push({prod,name:it.name,category:it.category}); }
-  }));
-  const hasDelivered = myOrders.some(o=>o.status==="Delivered");
-  // "How was your order" + refer-a-friend show at the top only for a recent delivery (temporary),
-  // then live on inside that order's details in the list. (#13)
-  const RECENT_PROMPT_DAYS=7;
-  const recentDeliveredOrder=myOrders.filter(o=>o.status==="Delivered")
-    .sort((a,b)=>new Date(deliveredAtOf(b)||b.updatedAt||0)-new Date(deliveredAtOf(a)||a.updatedAt||0))[0]||null;
-  const recentDeliveredAt=recentDeliveredOrder?new Date(deliveredAtOf(recentDeliveredOrder)||recentDeliveredOrder.updatedAt||0).getTime():0;
-  const showTempPrompts=recentDeliveredAt>0 && (Date.now()-recentDeliveredAt)<=RECENT_PROMPT_DAYS*86400000;
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
-  const [doaOpen,setDoaOpen]=useState(null);
-  const [doaReso,setDoaReso]=useState("replacement");
-  const [doaClaim,setDoaClaim]=useState("");
-  const [doaOrderNo,setDoaOrderNo]=useState("");
-  const [doaLookupMsg,setDoaLookupMsg]=useState("");
-  const submitDoaByNumber=()=>{
-    const q=doaOrderNo.trim().toUpperCase().replace(/\s/g,"");
-    if(!q){ setDoaLookupMsg("Enter your order number"); return; }
-    const match=myOrders.find(o=>{
-      const id=(orderId(o.id)||"").toUpperCase(), no=(o.orderNo||"").toUpperCase();
-      return id===q||no===q||id.endsWith(q)||no.endsWith(q)||id.includes(q);
-    });
-    if(!match){ setDoaLookupMsg("No order found with that number"); return; }
-    if(match.status!=="Delivered"){ setDoaLookupMsg("DOA can only be reported on a delivered order"); return; }
-    if(!match.items.some(it=>it.category==="Live Fish")){ setDoaLookupMsg("That order has no live fish"); return; }
-    if(match.doa){ setDoaLookupMsg("A DOA request already exists for that order"); return; }
-    openWA(ownerWA,encodeURIComponent(`Hi, I received a Dead on Arrival (DOA) fish in order ${match.orderNo||orderId(match.id)}. I'm sharing my unboxing video for review — please help with a replacement/refund.`));
-    onReportDoa&&onReportDoa(match);
-    setDoaOrderNo(""); setDoaLookupMsg("");
-  };
-  const [refCode,setRefCode]=useState(null);
-  const [refCopied,setRefCopied]=useState(false);
-  const refAmt=settings.referralDiscount||50;
-  // Reveal the customer's own referral code once they have a delivered order (post-delivery reward)
-  useEffect(()=>{
-    if(settings.referralEnabled===false||!hasDelivered||!user?.uid){ setRefCode(null); return; }
-    let alive=true;
-    getMyReferralCode(user.uid).then(c=>{ if(alive) setRefCode(c); });
-    return ()=>{alive=false;};
-  },[hasDelivered,user,settings.referralEnabled]);
   const doaStatusText={
     "Requested":"Received — please send your unboxing video on WhatsApp so we can review it.",
     "Under Review":"Your DOA video is under review by our team.",
-    "Approved - Replacement":"Approved ✓ — a replacement is being arranged.",
-    "Approved - Store Credit":"Approved ✓ — store credit equal to the fish value is being issued.",
+    "Approved - Replacement":"Approved ✓ — the previously arranged replacement is being processed.",
+    "Approved - Store Credit":"Approved ✓ — your chosen reward coins are being issued.",
     "Approved - Refund":"Approved ✓ — a refund of the fish amount is being processed.",
     "Declined":"Reviewed — this DOA request was not approved.",
   };
@@ -6297,60 +6493,6 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
           <span style={{fontSize:18,color:C.textSub}}>›</span>
         </button>
-        {showTempPrompts&&toReview.length>0&&(
-          <div style={{background:`linear-gradient(140deg,${C.primary},${C.accent})`,borderRadius:20,padding:"18px",marginBottom:16,color:"white",position:"relative",overflow:"hidden"}}>
-            <div style={{position:"absolute",top:-24,right:-16,width:90,height:90,borderRadius:"50%",background:"rgba(255,255,255,.12)"}}/>
-            <div style={{position:"relative"}}>
-              <div style={{fontSize:26,marginBottom:6}}>🌟</div>
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,marginBottom:4}}>How was your order?</div>
-              <div style={{fontSize:12.5,opacity:.9,lineHeight:1.5,marginBottom:14}}>Your delivery is complete — please take a moment to rate your {toReview.length===1?"purchase":"purchases"}. It really helps us & other fishkeepers!</div>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {toReview.slice(0,4).map(({prod,name,category})=>{
-                  const m=CAT_META[category]||CAT_META["Live Fish"];
-                  // prod.media is an ARRAY of media entries, so `.images` never existed and this
-                  // always fell through to the legacy cache key — undefined for modern products.
-                  const img=getCardImg(prod,mediaCache);
-                  return(
-                    <button key={prod.id} className="press" onClick={()=>onWriteReview(prod)}
-                      style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,.95)",borderRadius:14,padding:"10px 12px",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
-                      <div style={{width:40,height:40,borderRadius:10,flexShrink:0,overflow:"hidden",background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
-                        {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</div>
-                        <div style={{fontSize:13,color:"#f59e0b",letterSpacing:1}}>★★★★★</div>
-                      </div>
-                      <span style={{fontSize:12,fontWeight:800,color:C.primary,flexShrink:0}}>Rate →</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showTempPrompts&&refCode&&(
-          <div style={{background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:18,padding:"16px",marginBottom:16,color:"white",position:"relative",overflow:"hidden"}}>
-            <div style={{position:"absolute",top:-20,right:-14,width:84,height:84,borderRadius:"50%",background:"rgba(255,255,255,.12)"}}/>
-            <div style={{position:"relative"}}>
-              <div style={{fontSize:24,marginBottom:4}}>💜</div>
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Refer a friend &amp; earn rewards</div>
-              <div style={{fontSize:12,opacity:.92,lineHeight:1.5,marginBottom:12}}>Thanks for shopping with us! Share your personal code — your friend gets a welcome reward on their first order, and you earn wallet coins once their order is delivered.</div>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.5)",borderRadius:10,padding:"10px 12px",fontFamily:"monospace",fontSize:17,fontWeight:800,letterSpacing:2,textAlign:"center"}}>{refCode}</div>
-                <button className="press" onClick={()=>{
-                    try{navigator.clipboard.writeText(refCode);}catch(e){}
-                    try{navigator.share&&navigator.share({text:`Use my code ${refCode} at ${STORE_NAME} Aqua Store and get a welcome reward on your order! 🐠`});}catch(e){}
-                    setRefCopied(true);setTimeout(()=>setRefCopied(false),2000);
-                  }}
-                  style={{background:refCopied?"rgba(255,255,255,.95)":"rgba(255,255,255,.25)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"11px 16px",color:refCopied?"#7c3aed":"white",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
-                  {refCopied?"✓ Copied!":"Share"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {myOrders.length===0?(
           <div style={{textAlign:"center",padding:"60px 20px",color:C.textSub}}>
             <div style={{fontSize:64,marginBottom:14}}>📦</div>
@@ -6360,26 +6502,13 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
         ):(
           <>
-          {myOrders.some(o=>o.status==="Delivered"&&o.items.some(it=>it.category==="Live Fish"))&&(
-            <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:16,padding:"14px 16px",marginBottom:16}}>
-              <div style={{fontSize:13,fontWeight:800,color:"#9a3412",marginBottom:4}}>🐟 Report a Dead-on-Arrival (DOA)</div>
-              <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.55,marginBottom:10}}>Enter your order number to start a claim. Have your unboxing video ready — share it on WhatsApp within 2 hours of delivery.</div>
-              <div style={{display:"flex",gap:8}}>
-                <input value={doaOrderNo} onChange={e=>{setDoaOrderNo(e.target.value);setDoaLookupMsg("");}} placeholder="Your order number"
-                  style={{flex:1,borderRadius:12,border:`1.5px solid ${doaLookupMsg?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",fontFamily:"monospace"}}/>
-                <button className="press" onClick={submitDoaByNumber}
-                  style={{background:"#25D366",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>Report DOA</button>
-              </div>
-              {doaLookupMsg&&<div style={{fontSize:11.5,color:C.danger,fontWeight:600,marginTop:4}}>{doaLookupMsg}</div>}
-            </div>
-          )}
           <div style={{fontSize:12,color:C.textSub,fontWeight:600,marginBottom:12}}>{myOrders.length} order{myOrders.length!==1?"s":""}</div>
           {myOrders.map(o=>{
             const open=openId===o.id;
             const names=(o.items||[]).map(i=>i.name).join(", ");
             const nItems=(o.items||[]).length;
             const isDelivered=o.status==="Delivered";
-            const orderRated=loadExpReviewedSet(uk).includes(o.id);
+            const needsProductReview=(o.items||[]).some(it=>products.some(p=>p.id===it.id)&&!reviewedSet.includes(it.id));
             return(
             <div key={o.id} style={{background:C.card,borderRadius:18,padding:"16px",marginBottom:12,border:`1px solid ${open?C.accent:C.border}`}}>
               {/* Compact summary — always visible; tap to open full details, bills & invoices (#11/#12) */}
@@ -6396,8 +6525,8 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     <span style={{fontSize:11,fontWeight:800,color:C.primary}}>{open?"Hide ▲":"Details ▾"}</span>
                   </div>
                 </div>
-                {isDelivered&&!orderRated&&!open&&(
-                  <div style={{marginTop:8,fontSize:11.5,fontWeight:800,color:"#f59e0b"}}>★★★★★ <span style={{color:C.primary}}>Tap to rate this order →</span></div>
+                {isDelivered&&needsProductReview&&!open&&(
+                  <div style={{marginTop:8,fontSize:11.5,fontWeight:800,color:"#f59e0b"}}>★★★★★ <span style={{color:C.primary}}>Tap to review your products →</span></div>
                 )}
               </button>
               {open&&(<div style={{marginTop:12}}>
@@ -6450,6 +6579,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 <span style={{fontSize:12,color:C.textSub}}>Grand Total</span>
                 <span style={{fontFamily:PRICE_FONT,fontSize:16,fontWeight:800,color:C.primary}}>₹{o.amountDue??(o.total+o.fee)}</span>
               </div>
+              <OrderReferralCode order={o}/>
               {["Confirmed","Shipped"].includes(o.status)&&!o.closed&&(()=>{
                 const eta=etaInfo(o); if(!eta) return null;
                 const d=eta.daysLeft;
@@ -6591,23 +6721,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 <ReturnRequestBlock o={o} products={products} ownerWA={ownerWA} settings={settings}
                   onRequestReturn={onRequestReturn} onSubmitReturnShipment={onSubmitReturnShipment}/>
               )}
-              {/* Refer-a-friend lives inside the most recent delivered order once the top banner's
-                  temporary window ends (#13) — the `!showTempPrompts` guard is what makes that true.
-                  Without it both rendered at once and the same code appeared twice on the page. */}
-              {!showTempPrompts&&isDelivered&&recentDeliveredOrder&&o.id===recentDeliveredOrder.id&&refCode&&(
-                <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-                  <div style={{background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:12,padding:"12px",color:"white"}}>
-                    <div style={{fontSize:12.5,fontWeight:800,marginBottom:4}}>💜 Refer a friend &amp; earn rewards</div>
-                    <div style={{fontSize:11,opacity:.9,lineHeight:1.5,marginBottom:9}}>Share your code — your friend gets a welcome reward, and you earn wallet coins once their order is delivered.</div>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.5)",borderRadius:9,padding:"8px 10px",fontFamily:"monospace",fontSize:14,fontWeight:800,letterSpacing:1.5,textAlign:"center"}}>{refCode}</div>
-                      <button className="press" onClick={()=>{ try{navigator.clipboard.writeText(refCode);}catch(e){} try{navigator.share&&navigator.share({text:`Use my code ${refCode} at ${STORE_NAME} Aqua Store and get a welcome reward on your order! 🐠`});}catch(e){} setRefCopied(true);setTimeout(()=>setRefCopied(false),2000); }}
-                        style={{background:refCopied?"rgba(255,255,255,.95)":"rgba(255,255,255,.25)",border:"1px solid rgba(255,255,255,.4)",borderRadius:9,padding:"9px 14px",color:refCopied?"#7c3aed":"white",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>{refCopied?"✓ Copied!":"Share"}</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {o.status==="Delivered" && <ExperienceReview order={o} uk={uk} user={user} products={products} mediaCache={mediaCache} reviewedSet={reviewedSet} onWriteReview={onWriteReview}/>}
+              {o.status==="Delivered" && <ProductReviewPrompt order={o} products={products} mediaCache={mediaCache} reviewedSet={reviewedSet} onWriteReview={onWriteReview}/>}
               </div>)}
             </div>
             );})}
@@ -6859,7 +6973,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.eb49392a";
+const APP_BUILD = "v90.448662e2";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -6921,7 +7035,53 @@ if(typeof window!=="undefined"){
 }
 
 /* ═══════════════════ CATEGORY DRAWER (left slide-in) ═══════════════════ */
-function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
+function ReferralDrawerCard({open,user,settings={},orders=[],nav,onClose}){
+  const [status,setStatus]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [copied,setCopied]=useState(false);
+  const uk=userKey(user);
+  useEffect(()=>{
+    if(!open||!uk||settings.referralEnabled===false){ setStatus(null); return; }
+    let alive=true; setLoading(true);
+    customerReferralStatus(uk,settings,orders).then(s=>{ if(alive){setStatus(s);setLoading(false);} }).catch(()=>{if(alive)setLoading(false);});
+    return ()=>{alive=false;};
+  },[open,uk,orders,settings.referralEnabled,settings.referralLifetimeSpendMin]);
+  if(settings.referralEnabled===false) return null;
+  if(!uk) return(
+    <div style={{margin:"2px 0 12px",background:"linear-gradient(135deg,#ede9fe,#eef2ff)",border:"1px solid #c4b5fd",borderRadius:14,padding:"12px"}}>
+      <div style={{fontSize:12.5,fontWeight:800,color:"#5b21b6",marginBottom:3}}>🎟️ Your referral code</div>
+      <div style={{fontSize:10.8,color:"#6d28d9",lineHeight:1.45,marginBottom:8}}>Sign in to see your spend progress and unlock your unique code.</div>
+      <button className="press" onClick={()=>{onClose&&onClose();nav&&nav("auth");}}
+        style={{width:"100%",background:"#6d28d9",color:"white",border:"none",borderRadius:9,padding:"8px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>
+    </div>
+  );
+  if(loading&&!status) return <div style={{margin:"2px 0 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px",fontSize:11.5,color:C.textSub}}>Loading your referral code…</div>;
+  if(!status) return null;
+  const pct=status.threshold<=0?100:Math.min(100,Math.round((status.spent/status.threshold)*100));
+  return(
+    <div style={{margin:"2px 0 12px",background:status.unlocked?"linear-gradient(135deg,#7c3aed,#4f46e5)":"linear-gradient(135deg,#f5f3ff,#eef2ff)",border:`1px solid ${status.unlocked?"#7c3aed":"#c4b5fd"}`,borderRadius:14,padding:"12px",color:status.unlocked?"white":"#4c1d95"}}>
+      <div style={{fontSize:12.5,fontWeight:800,marginBottom:3}}>🎟️ {status.unlocked?"Your referral code":"Referral code locked"}</div>
+      {status.unlocked?(
+        <>
+          <div style={{fontSize:10.8,opacity:.9,lineHeight:1.45,marginBottom:8}}>Friends get ₹{Number(settings.referralDiscount||0)} off when they use this at checkout.</div>
+          <div style={{display:"flex",alignItems:"center",gap:7}}>
+            <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.55)",borderRadius:8,padding:"8px 7px",fontFamily:"monospace",fontSize:13,fontWeight:800,letterSpacing:1.2,textAlign:"center"}}>{status.code}</div>
+            <button className="press" onClick={()=>{ try{navigator.clipboard.writeText(status.code);}catch(e){} try{navigator.share&&navigator.share({text:`Use ${status.code} at ${STORE_NAME} and get ₹${Number(settings.referralDiscount||0)} off.`});}catch(e){} setCopied(true);setTimeout(()=>setCopied(false),1800); }}
+              style={{background:copied?"white":"rgba(255,255,255,.24)",color:copied?"#6d28d9":"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"9px 10px",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied?"✓ Copied":"Share"}</button>
+          </div>
+        </>
+      ):(
+        <>
+          <div style={{fontSize:10.8,lineHeight:1.45,marginBottom:8}}>Spend ₹{status.remaining.toLocaleString("en-IN")} more successfully to unlock your permanent code.</div>
+          <div style={{height:7,background:"#ddd6fe",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:"#7c3aed",borderRadius:99}}/></div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:9.8,fontWeight:700,marginTop:5}}><span>₹{status.spent.toLocaleString("en-IN")} spent</span><span>₹{status.threshold.toLocaleString("en-IN")} goal</span></div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,settings={},orders=[]}){
   const go=(to)=>{ onClose&&onClose(); nav&&nav(to); };
   const [refreshing,setRefreshing]=useState(false);
   const COMPANY=[{label:"About Us",to:"about"},{label:"Care Guides",to:"guides"},{label:"Request a Product",to:"request"},{label:"Track My Orders",to:"orders"}];
@@ -6950,6 +7110,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav}){
         {/* Only this part scrolls; `overscroll-behavior:contain` stops the flick from
             carrying through to the page behind the drawer once the list hits its end. */}
         <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",padding:"12px 12px 18px"}}>
+          <ReferralDrawerCard open={open} user={user} settings={settings} orders={orders} nav={nav} onClose={onClose}/>
           <button className="press" onClick={()=>onSelect("All")}
             style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderRadius:13,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
             <span style={{fontSize:22,width:28,textAlign:"center"}}>🌊</span>
@@ -8112,7 +8273,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
   const offerProducts = products.filter(p=>!p.comingSoon && activeDiscount(p)>0 && (p.stockCount??DEFAULT_STOCK)>0);
   return(
     <div className="slide-up">
-      <CategoryDrawer open={menuOpen} onClose={()=>setMenuOpen(false)} recent={recent} nav={nav}
+      <CategoryDrawer open={menuOpen} onClose={()=>setMenuOpen(false)} recent={recent} nav={nav} user={user} settings={settings} orders={orders}
         onSelect={(cat)=>{ setMenuOpen(false); setCategory(cat); nav("shop"); }}
         onRecent={handleRecent}/>
       <WalletModal open={walletOpen} onClose={()=>setWalletOpen(false)} points={walletPts} user={user} settings={settings}/>
@@ -9911,19 +10072,6 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
   // bouncing here was creating duplicate orders + double-decrementing stock → false "sold out").
   useEffect(()=>{ if(step>=2&&cart.length===0&&!placed) setStep(1); },[cart.length,step,placed]);
   const [sentWA,setSentWA]=useState(false);
-  const [referralCopied,setReferralCopied]=useState(false);
-  const [myRefCode,setMyRefCode]=useState(null);
-  // Fetch this customer's real 6-digit referral code once an order is placed & meets the min-order threshold
-  useEffect(()=>{
-    if(!placed||!user) return;
-    if(settings.referralEnabled===false){ setMyRefCode(null); return; }
-    const orderVal=placed.amountDue??(placed.total+placed.fee);
-    const minOrder=Number(settings.referralMinOrder||0);
-    if(orderVal < minOrder){ setMyRefCode(null); return; }
-    let alive=true;
-    getMyReferralCode(user.uid).then(code=>{ if(alive) setMyRefCode(code); });
-    return ()=>{alive=false;};
-  },[placed,user,settings.referralMinOrder]);
   // Auto-fill the delivery State (and GST state code) from the pincode — the
   // place of supply that decides CGST+SGST (inside TN) vs IGST on the invoice.
   // A recognised pincode is authoritative; unknown pincodes keep any manual pick.
@@ -9978,7 +10126,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
   const couponBen=couponApplied?couponBenefit(couponApplied,total):{discount:0,coins:0};
   const couponCoins=couponBen.coins;
   let couponDiscount=Math.min(couponBen.discount,total+lgPrice);
-  let refDiscount=refApplied?Math.min(Number(settings.referralDiscount||50),Math.max(0,total+lgPrice-couponDiscount)):0;
+  let refDiscount=refApplied?Math.min(Number(settings.referralDiscount??50),Math.max(0,total+lgPrice-couponDiscount)):0;
   /* Coins may only pay for what is still left to pay. loyaltyDiscount was bounded by the
      owner's per-order coin limit but never by the order itself, so a small order — especially
      one already carrying a coupon — could swallow far more coins than it was worth: redeem 100
@@ -10022,7 +10170,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
   const renderOffersBox=()=>(<>
           {/* Coupon code. No longer behind a setting. A switch in Settings → Promotions used to
               hide this box while leaving the referral box beside it, so checkout showed a
-              6-digit code field and no coupon field — and nothing on any screen explained why.
+              referral field and no coupon field — and nothing on any screen explained why.
               A store that has coupons wants somewhere to type them; a store that has none has
               nothing to advertise here anyway, and the box costs it one empty row. */}
           {true && (
@@ -10072,16 +10220,16 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
             {couponMsg.text&&<div style={{fontSize:11.5,color:couponMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{couponMsg.text}</div>}
           </div>
           )}
-          {/* Referral code — a friend's 6-digit code, one-time use */}
+          {/* Permanent customer codes and qualifying-order codes use the same alphanumeric format. */}
           {settings.referralEnabled!==false && (
           <div style={{marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>💜 Referral Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <div style={{display:"flex",gap:8}}>
-              <input value={refInput} onChange={e=>{setRefInput(e.target.value.replace(/\D/g,"").slice(0,6));setRefMsg({text:"",ok:false});setRefApplied(false);}}
-                inputMode="numeric" placeholder="6-digit friend's code"
+              <input value={refInput} onChange={e=>{setRefInput(cleanRefCode(e.target.value).slice(0,12));setRefMsg({text:"",ok:false});setRefApplied(false);}}
+                autoCapitalize="characters" maxLength={12} placeholder="Enter referral code"
                 style={{flex:1,borderRadius:12,border:`1.5px solid ${refMsg.ok?"#22c55e":refMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",letterSpacing:2,fontFamily:"monospace"}}/>
-              <button className="press" onClick={applyReferral} disabled={refInput.length!==6}
-                style={{background:refInput.length===6?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+              <button className="press" onClick={applyReferral} disabled={!REF_CODE_RE.test(cleanRefCode(refInput))}
+                style={{background:REF_CODE_RE.test(cleanRefCode(refInput))?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
                 Apply
               </button>
             </div>
@@ -10127,10 +10275,11 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
     if(await promoLimitReached("referral", settings.referralDailyLimit)){
       setRefMsg({text:"Today's referral quota is full — please try tomorrow.",ok:false}); setRefApplied(false); return;
     }
-    const r=await validateReferral(refInput,user?.uid);
+    const r=await validateReferral(refInput,userKey(user));
     if(!r.ok){ setRefMsg({text:r.msg,ok:false}); setRefApplied(false); return; }
+    setRefInput(r.code);
     setRefApplied(true);
-    setRefMsg({text:`✓ Referral applied — ₹${Number(settings.referralDiscount||50)} off!`,ok:true});
+    setRefMsg({text:`✓ Referral applied — ₹${Number(settings.referralDiscount??50)} off!`,ok:true});
   };
 
   const submitPaymentHere=async(order,pay)=>{
@@ -10175,6 +10324,21 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
     const id=uid("ord");
     const now=Date.now();
     const orderNo=await nextOrderNo(now);
+    const uid2=userKey(user);
+    const appliedRefCode=refApplied?cleanRefCode(refInput):"";
+    if(appliedRefCode){
+      const reserved=await reserveReferral(appliedRefCode,uid2,id);
+      if(!reserved){
+        setRefApplied(false); setRefMsg({text:"This referral code is no longer available — please try another one.",ok:false});
+        setPlaceErr("The referral code could not be reserved. No order was placed."); setPlacing(false); return;
+      }
+    }
+    const qualifiesForOrderCode=settings.referralEnabled!==false&&grand>=orderReferralLimit(settings);
+    const earnedReferralCode=qualifiesForOrderCode?await createOrderReferralCode(uid2,id,grand,settings):"";
+    if(qualifiesForOrderCode&&!earnedReferralCode){
+      if(appliedRefCode) await releaseReferralReservation(appliedRefCode,uid2,id);
+      setPlaceErr("We couldn't generate this order's referral code. Please check your connection and try again; no order was placed."); setPlacing(false); return;
+    }
     const order={
       id,orderNo,items:[...cart],address:addr,
       billingAddress:useSameBilling?addr:billing,
@@ -10186,8 +10350,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
       suggestedPacking: hasLiveFish?suggestedPacking:"", suggestedPackingLabel: hasLiveFish?packingLabel(suggestedPacking):"",
       liveGuarantee:guaranteeActive,liveGuaranteeFee:0,
       coupon:couponApplied?couponCode.trim():"",couponDiscount,
-      referralCode:refApplied?refInput.trim():"", referralDiscount:refDiscount,
+      referralCode:appliedRefCode, referralDiscount:refDiscount,
+      earnedReferralCode,
       loyaltyDiscount:loyaltyRedeemed?loyaltyDiscount:0,
+      loyaltyCoinsUsed:loyaltyRedeemed?loyaltyCoinsUsed:0,
       thermacolFee: hasLiveFish?thermacolFeeFor(cart,packing,settings):0,
       shippingBreakup:{courier:shipBreak.courier,thermacol:shipBreak.thermacol,carton:shipBreak.carton,special:shipBreak.special},
       status:"Awaiting Payment",trackingNumber:"",
@@ -10203,10 +10369,15 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
       placedAt:new Date(now).toISOString(),updatedAt:new Date(now).toISOString(),
     };
     // Redeem loyalty points if applied
-    const uid2=userKey(user);
     if(loyaltyRedeemed&&loyaltyDiscount>0&&uid2){
       const ptsUsed=Math.ceil(loyaltyDiscount/loyaltyVal);
-      redeemPoints(uid2, ptsUsed, id);
+      const redeemed=await redeemPoints(uid2, ptsUsed, id);
+      if(!redeemed){
+        if(appliedRefCode) await releaseReferralReservation(appliedRefCode,uid2,id);
+        if(earnedReferralCode) await deactivateEarnedReferral(earnedReferralCode,id);
+        setPlaceErr("Your reward coins could not be applied. Please check your connection and try again; no order was placed.");
+        setPlacing(false); return;
+      }
     }
     /* NOBODY is emailed here — not the owner, not the customer. An order at this point is only
        "Awaiting Payment": the customer may cancel on the very next screen, or simply walk away
@@ -10214,11 +10385,8 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
        good number of cases never existed, and the customer is still sitting in front of the
        payment screen, so it tells them nothing they cannot see. Both copies go from
        submitPayment, when there is a payment to write about. */
-    // Claim the friend's referral code so it can never be reused
-    if(refApplied&&refInput.trim()) claimReferral(refInput.trim(), userKey(user), id);
     // Count today's promo usage toward the admin's daily caps
     if(couponApplied) bumpPromoUsage("coupon");
-    if(refApplied&&refInput.trim()) bumpPromoUsage("referral");
     // Root app handles state + storage + stock decrement
     onOrderPlaced(order);
     // The order carries the address now, so the half-typed draft has done its job. It is also
@@ -10302,38 +10470,16 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
           })()}
           {/* Loyalty points earned */}
           {settings.loyaltyEnabled&&placed&&(()=>{
-            const pph=Number(settings.loyaltyPointsPerHundred||10);
             const pts=coinsEarnedFor(placed, settings); // exactly what will be credited on delivery
             return pts>0?(
               <div className="points-pop" style={{background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:16,padding:"12px 20px",marginBottom:14,display:"flex",alignItems:"center",gap:10,width:"100%",maxWidth:340}}>
                 <span style={{fontSize:26}}>👛</span>
                 <div style={{textAlign:"left"}}>
                   <div style={{fontSize:14,fontWeight:800,color:"white"}}>{pts} wallet points pending</div>
-                  <div style={{fontSize:11,color:"rgba(255,255,255,.85)"}}>≈ ₹{Math.floor(pts*Number(settings.loyaltyRedeemValue||1))} — credited to your 👛 wallet once your order is delivered</div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,.85)"}}>≈ ₹{Math.floor(pts*Number(settings.loyaltyRedeemValue||1))} — credited after successful payment when your order is delivered</div>
                 </div>
               </div>
             ):null;
-          })()}
-          {/* Referral hint — uses the customer's real 6-digit one-time code; hidden if order is below the admin's min */}
-          {placed&&myRefCode&&(()=>{
-            const refCode=myRefCode;
-            const refAmt=settings.referralDiscount||50;
-            return(
-              <div style={{background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:16,padding:"14px 16px",marginBottom:14,width:"100%",maxWidth:340,textAlign:"left",boxShadow:"0 6px 20px rgba(124,58,237,.25)"}}>
-                <div style={{fontSize:13,fontWeight:800,color:"white",marginBottom:4}}>💜 Loved it? Share with friends!</div>
-                <div style={{fontSize:12,color:"rgba(255,255,255,.88)",marginBottom:8}}>Share your code — your friend gets a <b>welcome reward</b> on their first order, and you earn <b>wallet coins</b> once it's delivered!</div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.5)",borderRadius:8,padding:"6px 12px",fontFamily:"monospace",fontSize:13,fontWeight:800,color:"white",letterSpacing:1.5}}>{refCode}</div>
-                  <button className="press" onClick={()=>{
-                    try{navigator.clipboard.writeText(refCode);}catch(e){}
-                    try{navigator.share&&navigator.share({text:`Use my code ${refCode} at Nemo Aqua Store and get a welcome reward on your order! 🐠`});}catch(e){}
-                    setReferralCopied(true);setTimeout(()=>setReferralCopied(false),2000);
-                  }} style={{background:referralCopied?"rgba(255,255,255,.9)":"rgba(255,255,255,.25)",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"7px 12px",color:referralCopied?"#7c3aed":"white",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
-                    {referralCopied?"✓ Copied!":"Share"}
-                  </button>
-                </div>
-              </div>
-            );
           })()}
           <div style={{display:"flex",gap:10,width:"100%",maxWidth:340}}>
             <button className="press" onClick={()=>nav("home")}
@@ -10415,7 +10561,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
                choosing packing is repeated inside that chooser below. */}
             <Collapsible icon="🛡️" tone="green" title="Live Arrival Guarantee"
               subtitle="Free with our recommended packing — tap for the terms">
-              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish arrives dead (DOA), share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery and we'll make it right <b>one time</b> — a replacement, store credit, or refund of the fish's value (our choice). Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
+              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish arrives dead (DOA), share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery. If approved, <b>you choose either a refund or reward coins</b> for the fish's value. Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
             </Collapsible>
             </>
           )}
@@ -10514,11 +10660,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
           })()}
           </>)}
           <div style={{marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Order Summary / Special Requests <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Special Request <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
             <textarea value={addr.summary} onChange={e=>f("summary",e.target.value)} rows={3}
               placeholder="e.g. Please pack fish with extra oxygen, specific colour preference…"
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:"white"}}/>
-            <div style={{fontSize:11,color:C.textSub,marginTop:4}}>📝 Tell us anything special about your order — we'll see it with your order.</div>
           </div>
           {/* Special delivery — recommended parcel that carries the Live Arrival Guarantee for live fish */}
           {/* Live-fish packing chooser (customer picks); falls back to dry-goods special toggle */}
@@ -10598,7 +10743,6 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
               💾 {addrEditId?"Update this saved address":"Save this address for next time"}
             </button>
           )}
-          <div style={{fontSize:10.5,color:C.textSub,textAlign:"center",marginTop:7,lineHeight:1.45}}>What you type is kept as you go, so you can leave this page and come back without losing it.</div>
         </div>
       )}
 
@@ -10892,7 +11036,7 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
         })()}
         <div style={{maxHeight:"50vh",overflowY:"auto"}}>
           {hist.length===0?(
-            <div style={{padding:"30px 22px",textAlign:"center",color:C.textSub,fontSize:12.5,lineHeight:1.6}}>No coin activity yet.<br/>Earn coins on delivered orders &amp; referrals — they'll show here.</div>
+            <div style={{padding:"30px 22px",textAlign:"center",color:C.textSub,fontSize:12.5,lineHeight:1.6}}>No coin activity yet.<br/>Coins from successful delivered orders and approved rewards will show here.</div>
           ):hist.map((h,i)=>{
             const pos=(h.pts||0)>=0;
             const label=h.note||({credit:"Coins earned",earn:"Coins earned",reverse:"Coins reversed",redeem:"Coins used on order"}[h.type])||(pos?"Coins earned":"Coins used");
@@ -10999,7 +11143,7 @@ const WHY_US_ROWS = [
   { icon:"🚚", title:"Shipping charges", them:"Shipping padded up well above what the courier costs.",
     us:"<b>No additional shipping charge.</b> If the parcel ships for less, the extra rupees come <b>back to your wallet</b>." },
   { icon:"💜", title:"Referrals", them:"Refer all you like — nothing in it for you.",
-    us:"Refer a friend and <b>both of you get rewarded</b> on their 1st purchase." },
+    us:"Eligible customers unlock a personal referral code so <b>friends save at checkout</b>." },
   { icon:"🏷️", title:"Discounts", them:"One big sale a year, if you're lucky.",
     us:"<b>Frequent discounts</b> through the year." },
   { icon:"🔎", title:"Can't find what you want?", them:"\"Not in our catalogue.\"",
@@ -12442,23 +12586,37 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const liveUnit=liveQtyTotal>0?Math.round(liveValue/liveQtyTotal):0; // avg fish price, for a refund suggestion
   const [doaStatus,setDoaStatus]=useState(o.doa?.status&&o.doa.status!=="Requested"?o.doa.status:"Under Review");
   const [doaNote,setDoaNote]=useState(o.doa?.note||"");
-  const [doaSub,setDoaSub]=useState(o.doa?.substitute||"");
   const [doaQty,setDoaQty]=useState(o.doa?.qty||1);                       // how many fish died (admin selects)
   const [doaAmount,setDoaAmount]=useState(o.doa?.refundAmount!=null?o.doa.refundAmount:liveUnit); // ₹ for that qty
   const [doaAdminReason,setDoaAdminReason]=useState(o.doa?.adminReason||""); // reason admin records on approval
   const doaApproved=/^Approved/.test(doaStatus);
+  const doaChoice=o.doa?.resolution==="coins"?"coins":"refund";
   const saveDoa=async()=>{
+    if(doaApproved&&doaChoice==="coins"&&!paymentSucceeded(o)){
+      showToast("Verify the payment before issuing reward coins","error"); return;
+    }
     setSaving(true);
     const decided=doaApproved||doaStatus==="Declined";
-    const next={...(o.doa||{}),status:doaStatus,note:doaNote.trim(),substitute:doaSub.trim(),
+    const next={...(o.doa||{}),status:doaStatus,note:doaNote.trim(),
       qty:Math.max(1,Number(doaQty)||1),
       refundAmount:Math.max(0,Number(doaAmount)||0),
       adminReason:doaAdminReason.trim(),
-      resolution:doaStatus.indexOf("Replacement")>=0?"replacement":doaStatus.indexOf("Store Credit")>=0?"coins":doaStatus.indexOf("Refund")>=0?"refund":(o.doa?.resolution||"replacement"),
+      resolution:doaChoice,
       requestedAt:o.doa?.requestedAt||new Date().toISOString(),
       resolvedAt:decided?(o.doa?.resolvedAt||new Date().toISOString()):(o.doa?.resolvedAt||""),
       updatedAt:new Date().toISOString()};
-    await onUpdateOrder({...o,doa:next});
+    let patch={...o,doa:next};
+    if(doaApproved&&doaChoice==="coins"&&o.userUid){
+      const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
+      const coins=Math.ceil(next.refundAmount/coinVal);
+      if(coins>0){
+        const credited=await adminCreditLoyalty(o.userUid,coins,"doa:"+o.id,"DOA resolved as reward coins",settings.walletValidityMonths);
+        if(!credited){ showToast("Couldn't credit the reward wallet — please try again","error"); setSaving(false); return; }
+      }
+    }else if(doaApproved&&doaChoice==="refund"){
+      patch.refund={...(o.refund||{}),due:true,amount:next.refundAmount,method:o.refund?.method||"upi",refundTxnId:o.refund?.refundTxnId||"",status:o.refund?.status||"processing",updatedAt:new Date().toISOString()};
+    }
+    await onUpdateOrder(patch);
     showToast("DOA request updated");
     setSaving(false);
   };
@@ -12476,6 +12634,9 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const [retAdminReason,setRetAdminReason]=useState(rr?.adminReason||"");                       // reason admin records on approval
   const [retResolution,setRetResolution]=useState(rr?.adminResolution||rr?.resolution||"refund"); // how admin resolves: refund / replacement / coins
   const saveReturn=async(resolveNow)=>{
+    if(resolveNow&&retResolution==="coins"&&!paymentSucceeded(o)){
+      showToast("Verify the payment before issuing reward coins","error"); return;
+    }
     setSaving(true);
     const chosen=retAddrOpts.find(a=>a.key===retAddrKey)||retAddrOpts[0];
     const next={...(o.returnReq||{}),status:retStatus,note:retNote.trim(),
@@ -12490,7 +12651,8 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
       next.refundAmount=(retResolution==="replacement")?0:retValue;   // refund excludes shipping (product value only)
       if(retResolution==="coins" && o.userUid){
         const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
-        try{ adminCreditLoyalty(o.userUid, Math.ceil(retValue/coinVal), "return:"+o.id, "Return resolved as reward coins", settings.walletValidityMonths); }catch(e){}
+        const credited=await adminCreditLoyalty(o.userUid, Math.ceil(retValue/coinVal), "return:"+o.id, "Return resolved as reward coins", settings.walletValidityMonths);
+        if(!credited){ showToast("Couldn't credit the reward wallet — please try again","error"); setSaving(false); return; }
       }else if(retResolution==="replacement"){
         // Replacement — same order ID, no monetary refund; recorded on the return for the customer to track.
       }else{
@@ -12539,6 +12701,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const chargedShip=courierCharged;
   const [rewardConfirm,setRewardConfirm]=useState(false);
   const issueShippingReward=async()=>{
+    if(!paymentSucceeded(o)){ showToast("Verify the payment before issuing reward coins","error"); return; }
     const actual=Number(actualShip);
     if(!(actual>=0)){ showToast("Enter the actual courier cost","error"); return; }
     const diff=Math.round(chargedShip-actual);
@@ -12546,12 +12709,16 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
     setSaving(true);
     try{
       const code="NEMO"+Math.random().toString(36).slice(2,7).toUpperCase();
-      const reward={code,amount:diff,actual,charged:chargedShip,issuedAt:new Date().toISOString()};
-      await onUpdateOrder({...o,shippingReward:reward,updatedAt:new Date().toISOString()});
+      const creditId="ship:"+o.id;
+      const reward={code,creditId,amount:diff,actual,charged:chargedShip,issuedAt:new Date().toISOString()};
       // Credit the customer's wallet directly (admin context — rules permit writing any loyalty node).
       const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
       const coins=Math.round(diff/coinVal);
-      if(coins>0 && o.userUid) adminCreditLoyalty(o.userUid, coins, "ship:"+code, "Shipping refund", settings&&settings.walletValidityMonths);
+      if(coins>0 && o.userUid){
+        const credited=await adminCreditLoyalty(o.userUid, coins, creditId, "Shipping refund", settings&&settings.walletValidityMonths);
+        if(!credited) throw new Error("wallet-credit-failed");
+      }
+      await onUpdateOrder({...o,shippingReward:reward,updatedAt:new Date().toISOString()});
       showToast(`₹${diff} credited to ${o.address.name}'s wallet`);
       setRewardConfirm(false);
     }catch(err){ console.error("shipping reward",err); showToast("Couldn't issue the reward — please try again","error"); }
@@ -12890,7 +13057,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             {o.doa?(
               <div style={{fontSize:12,color:C.text,marginBottom:10,lineHeight:1.55}}>Customer reported a DOA{o.doa.requestedAt?` on ${fmtDate(o.doa.requestedAt)}`:""}. Review their unboxing video on WhatsApp, then set the outcome below.
                 {o.doa.claimReason&&<div style={{marginTop:6,fontSize:11.5,color:C.text,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px"}}><b>Customer's claim:</b> {o.doa.claimReason}</div>}
-                <div style={{marginTop:6,fontSize:11.5,color:C.textSub}}>Customer prefers: <b style={{color:C.text}}>{({replacement:"Replacement",refund:"Refund to source",coins:"Reward coins"})[o.doa.resolution]||"Replacement"}</b> · Covered up to fish value <b style={{color:C.text}}>₹{liveValue}</b>.</div>
+                <div style={{marginTop:6,fontSize:11.5,color:C.textSub}}>Customer chose: <b style={{color:C.text}}>{o.doa.resolution==="coins"?"Reward coins":"Refund"}</b> · Honour this choice if approved · Covered up to fish value <b style={{color:C.text}}>₹{liveValue}</b>.</div>
               </div>
             ):(
               <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>No DOA reported yet. You can still record an outcome here if the customer contacted you directly.</div>
@@ -12899,9 +13066,9 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>💬 Message customer on WhatsApp</button>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Outcome</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-              {["Under Review","Approved - Replacement","Approved - Store Credit","Approved - Refund","Declined"].map(s=>(
+              {["Under Review",doaChoice==="coins"?"Approved - Store Credit":"Approved - Refund","Declined"].map(s=>(
                 <button key={s} className="press" onClick={()=>setDoaStatus(s)}
-                  style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${doaStatus===s?C.primary:C.border}`,background:doaStatus===s?C.primary:"transparent",color:doaStatus===s?"white":C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{s.replace("Approved - ","✓ ")}</button>
+                  style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${doaStatus===s?C.primary:C.border}`,background:doaStatus===s?C.primary:"transparent",color:doaStatus===s?"white":C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{s==="Approved - Store Credit"?"✓ Reward Coins":s.replace("Approved - ","✓ ")}</button>
               ))}
             </div>
             {doaApproved&&(
@@ -12920,18 +13087,11 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                 </div>
               </div>
             )}
-            {doaStatus==="Approved - Replacement"&&(
-              <>
-                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Substitute fish <span style={{fontWeight:400,textTransform:"none"}}>(if the same one is out of stock)</span></div>
-                <input value={doaSub} onChange={e=>setDoaSub(e.target.value)} placeholder="e.g. Koi (Red) — agreed alternative of equal value"
-                  style={{...refundFld,marginBottom:10}}/>
-              </>
-            )}
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Reason on approval <span style={{fontWeight:400,textTransform:"none"}}>(for your records — what the video showed)</span></div>
             <input value={doaAdminReason} onChange={e=>setDoaAdminReason(e.target.value)} placeholder="e.g. Verified unboxing video — 1 fish confirmed dead on arrival"
               style={{...refundFld,marginBottom:10}}/>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Note to customer <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
-            <textarea value={doaNote} onChange={e=>setDoaNote(e.target.value)} rows={2} placeholder="e.g. Replacement will ship with your next order, or refund sent to your UPI"
+            <textarea value={doaNote} onChange={e=>setDoaNote(e.target.value)} rows={2} placeholder={doaChoice==="coins"?"e.g. Reward coins have been added to your wallet":"e.g. Refund is being returned to your payment account"}
               style={{...refundFld,resize:"none",lineHeight:1.5,marginBottom:10}}/>
             <button className="press" onClick={saveDoa} disabled={saving}
               style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:saving?.7:1}}>💾 Save DOA Outcome</button>
@@ -13202,7 +13362,13 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   useEffect(()=>{ setProdShown(PAGE); },[catFilter,prodQ]);
   const [allReviews,setAllReviews]=useState({}); // {pid: [reviews]}
   const [loadingRev,setLoadingRev]=useState(false);
-  const [expReviews,setExpReviews]=useState(null); // service & packing feedback (null = not loaded)
+  const [tankStreaks,setTankStreaks]=useState({});
+  useEffect(()=>{
+    if(!(FB_OK&&FB_DB)) return;
+    let alive=true;
+    withTimeout(FB_DB.ref("tankUploadStreaks").get(),6000,null).then(s=>{ if(alive&&s) setTankStreaks(s.val()||{}); });
+    return ()=>{alive=false;};
+  },[showcase]);
   const [walletBalances,setWalletBalances]=useState({}); // {uid: points}
   const [loadingWallets,setLoadingWallets]=useState(false);
   const [adjUid,setAdjUid]=useState(null);     // which customer's wallet is being adjusted
@@ -13257,7 +13423,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         setAllReviews(Object.fromEntries(entries));
         setLoadingRev(false);
       });
-      loadExperienceReviews().then(setExpReviews);
     }
   },[tab]);
 
@@ -13856,45 +14021,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── REVIEWS TAB ── */}
       {tab==="reviews"&&(
         <div style={{padding:"16px 16px 100px"}}>
-          {/* ── Service & packing feedback summary ── */}
-          {Array.isArray(expReviews)&&expReviews.length>0&&(()=>{
-            const n=expReviews.length;
-            const avgSvc=(expReviews.reduce((s,r)=>s+(Number(r.service)||0),0)/n);
-            const avgPack=(expReviews.reduce((s,r)=>s+(Number(r.packing)||0),0)/n);
-            return(
-              <div style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
-                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:10}}>📦 Service &amp; Packing Feedback</div>
-                <div style={{display:"flex",gap:12,marginBottom:14}}>
-                  <div style={{flex:1,background:C.bg,borderRadius:12,padding:"11px 12px",textAlign:"center"}}>
-                    <div style={{fontSize:11,color:C.textSub,fontWeight:700,marginBottom:3}}>SERVICE</div>
-                    <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.primary,lineHeight:1}}>{avgSvc.toFixed(1)}</div>
-                    <div style={{marginTop:4}}><ReviewStars value={Math.round(avgSvc)} size={12}/></div>
-                  </div>
-                  <div style={{flex:1,background:C.bg,borderRadius:12,padding:"11px 12px",textAlign:"center"}}>
-                    <div style={{fontSize:11,color:C.textSub,fontWeight:700,marginBottom:3}}>PACKING</div>
-                    <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.primary,lineHeight:1}}>{avgPack.toFixed(1)}</div>
-                    <div style={{marginTop:4}}><ReviewStars value={Math.round(avgPack)} size={12}/></div>
-                  </div>
-                </div>
-                <div style={{fontSize:11,color:C.textSub,fontWeight:600,marginBottom:8}}>{n} rating{n!==1?"s":""}</div>
-                {expReviews.map((r,i)=>(
-                  <div key={r.id||i} style={{paddingBottom:i<expReviews.length-1?10:0,marginBottom:i<expReviews.length-1?10:0,borderBottom:i<expReviews.length-1?`1px solid ${C.border}`:"none"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                      <div style={{minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:700,color:C.text}}>{r.name||"Customer"} <span style={{fontWeight:600,color:C.textSub}}>· {r.orderNo||""}</span></div>
-                        <div style={{fontSize:11,color:C.textSub,marginTop:2}}>Service {Number(r.service)||0}★ · Packing {Number(r.packing)||0}★{r.zone?` · ${r.zone}`:""}</div>
-                        {r.comment&&<div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginTop:4}}>{r.comment}</div>}
-                      </div>
-                      <button className="press" onClick={async()=>{await deleteExperienceReview(r.id);setExpReviews(list=>list.filter(x=>x.id!==r.id));showToast("Feedback deleted");}}
-                        style={{background:"#fee2e2",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:C.danger,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,marginLeft:8}}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
           {loadingRev?(
             <div style={{display:"flex",justifyContent:"center",padding:"40px"}}><Spinner/></div>
           ):products.map(p=>{
@@ -13947,11 +14073,11 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               </div>
             );
           })}
-          {!loadingRev&&Object.values(allReviews).every(r=>r.length===0)&&!(Array.isArray(expReviews)&&expReviews.length>0)&&(
+          {!loadingRev&&Object.values(allReviews).every(r=>r.length===0)&&(
             <div style={{textAlign:"center",padding:"50px 0",color:C.textSub}}>
               <div style={{fontSize:48,marginBottom:12}}>⭐</div>
               <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No reviews yet</div>
-              <div style={{fontSize:12}}>Customer &amp; service reviews will appear here</div>
+              <div style={{fontSize:12}}>Public product reviews will appear here</div>
             </div>
           )}
         </div>
@@ -14271,6 +14397,32 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               </div>
             </div>
           </div>
+          {Object.keys(tankStreaks).length>0&&(
+            <div style={{padding:"16px 16px 0"}}>
+              <div style={{background:"#fff7ed",borderRadius:16,padding:"16px",border:"1px solid #fed7aa"}}>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:"#9a3412",marginBottom:4}}>🔥 Tank Upload Streak Log</div>
+                <div style={{fontSize:11,color:"#9a3412",lineHeight:1.5,marginBottom:10}}>Target: {Number(settings.tankUploadStreakTarget)||7} consecutive upload days. Review a customer's history here, then use Customer Wallets to award points manually.</div>
+                <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                  {Object.values(tankStreaks).filter(Boolean).sort((a,b)=>(Number(b.current)||0)-(Number(a.current)||0)||(Number(b.best)||0)-(Number(a.best)||0)).map(st=>{
+                    const cust=customers.find(c=>c.uid===st.uid);
+                    const met=(Number(st.current)||0)>=(Number(settings.tankUploadStreakTarget)||7);
+                    return(
+                      <div key={st.uid} style={{display:"flex",alignItems:"center",gap:9,background:"white",border:`1px solid ${met?"#86efac":"#fed7aa"}`,borderRadius:10,padding:"8px 10px"}}>
+                        <span style={{fontSize:18}}>{met?"🏆":"🔥"}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:11.5,fontWeight:800,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cust?.name||st.uid}</div>
+                          <div style={{fontSize:10.5,color:C.textSub}}>Current {Number(st.current)||0} · best {Number(st.best)||0}{st.lastDay?` · last ${st.lastDay}`:""}</div>
+                        </div>
+                        {met&&<span style={{fontSize:9.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"3px 8px"}}>TARGET MET</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <button className="press" onClick={()=>setTab("wallets")}
+                  style={{width:"100%",marginTop:10,background:"#9a3412",color:"white",border:"none",borderRadius:10,padding:"9px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Open Customer Wallets →</button>
+              </div>
+            </div>
+          )}
           {/* Showcase management */}
           {showcase.length>0&&(()=>{
             const now=Date.now();
@@ -14282,7 +14434,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.ownerName}</div>
                   {s.caption&&<div style={{fontSize:11,color:C.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.caption}</div>}
-                  <div style={{fontSize:10,color:C.textSub}}>{fmtDate(s.createdAt)}{!isPending&&s.expiresAt?` · expires ${fmtDate(new Date(s.expiresAt).toISOString())}`:""}</div>
+                  <div style={{fontSize:10,color:C.textSub}}>{fmtDate(s.createdAt)}{!isPending&&showcaseExpiry(s)>0?` · ${showcaseHoursLeft(s,now)}h left`:""}</div>
                 </div>
                 {isPending&&(
                   <button className="press" onClick={()=>onApproveShowcase&&onApproveShowcase(s)}
@@ -15295,7 +15447,7 @@ function SettingsPanel({settings,onSave,products=[]}){
       {/* Wallet (loyalty points) */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>👛 Customer Wallet</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Every customer has a wallet. They earn points per ₹100 spent, plus referral rewards and shipping refunds — all land in the same wallet, redeemable for ₹ off at checkout. <b>₹ per point</b> is the coin value.</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Every customer has a wallet. They earn points per ₹100 on successfully paid delivered orders, plus approved shipping and support rewards — all redeemable for ₹ off at checkout. <b>₹ per point</b> is the coin value.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,cursor:"pointer"}}>
           <input type="checkbox" checked={!!f.loyaltyEnabled} onChange={e=>set("loyaltyEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable customer wallet</span>
@@ -15357,40 +15509,40 @@ function SettingsPanel({settings,onSave,products=[]}){
         </div>
       </div>
 
-      {/* Referral discount */}
+      {/* Referral codes */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12,display:"flex",alignItems:"center",flexWrap:"wrap"}}>💜 Referral Program{usageBadge("referral",f.referralDailyLimit)}</div>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12,display:"flex",alignItems:"center",flexWrap:"wrap"}}>🎟️ Referral Codes{usageBadge("referral",f.referralDailyLimit)}</div>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
           <input type="checkbox" checked={f.referralEnabled!==false} onChange={e=>set("referralEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable referral program</span>
         </label>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>After an order at/above the minimum, customers get a unique <b>6-digit code</b> to share. A friend enters it at checkout for ₹X off — each code works <b>once</b>, then is permanently used.</div>
-        <div style={{display:"flex",gap:12}}>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.55}}>Each new customer gets a permanent alphanumeric code whose unlock target is frozen when their profile is created. Separately, every successfully paid qualifying order earns one single-use alphanumeric code in that order's details.</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Friend's discount (₹)</div>
-            <input type="number" min="0" value={f.referralDiscount||50} onChange={e=>set("referralDiscount",Number(e.target.value))}
-              style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+            <input type="number" min="0" value={f.referralDiscount??50} onChange={e=>set("referralDiscount",Number(e.target.value))}
+              style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Giver's wallet coins</div>
-            <input type="number" min="0" value={f.referralCoins??50} onChange={e=>set("referralCoins",Number(e.target.value))}
-              style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Points added to the code-giver's 👛 wallet when a friend uses it.</div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Lifetime spend to unlock (₹)</div>
+            <input type="number" min="0" value={f.referralLifetimeSpendMin??1000} onChange={e=>set("referralLifetimeSpendMin",Number(e.target.value))}
+              style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Changing this affects upcoming new customers only.</div>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min order to issue (₹)</div>
-            <input type="number" min="0" value={f.referralMinOrder||0} onChange={e=>set("referralMinOrder",Number(e.target.value))}
-              style={{width:"130px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = always issue a code</div>
+            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min paid order for single-use code (₹)</div>
+            <input type="number" min="0" value={f.orderReferralMinOrder??1000} onChange={e=>set("orderReferralMinOrder",Number(e.target.value))}
+              style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = every successfully paid order</div>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Daily limit</div>
             <input type="number" min="0" value={f.referralDailyLimit||0} onChange={e=>set("referralDailyLimit",Number(e.target.value))}
-              style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = unlimited / day</div>
           </div>
         </div>
-        <div style={{fontSize:11,color:C.textSub,marginTop:10,lineHeight:1.5,background:C.bg,borderRadius:10,padding:"9px 11px"}}>💜 When a friend uses a code: the <b>friend</b> gets ₹{f.referralDiscount||50} off their order immediately, and the <b>giver</b> earns {f.referralCoins??50} wallet points (≈ ₹{Math.floor((f.referralCoins??50)*(f.loyaltyRedeemValue||1))}) <b>once the friend's order is successfully delivered</b>.</div>
+        <div style={{fontSize:11,color:C.textSub,marginTop:10,lineHeight:1.5,background:C.bg,borderRadius:10,padding:"9px 11px"}}>A code reserves at checkout but is counted as used <b>only after that buyer's payment succeeds</b>. An unpaid or cancelled order releases it. Order codes disappear from the source order as soon as they are consumed. No giver-wallet payout is made.</div>
       </div>
 
       {/* Tank showcase */}
@@ -15405,12 +15557,18 @@ function SettingsPanel({settings,onSave,products=[]}){
           <input type="checkbox" checked={f.testimonialsEnabled!==false} onChange={e=>set("testimonialsEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable customer testimonials</span>
         </label>
+        <div style={{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Upload streak target (days)</div>
+          <input type="number" min="1" value={f.tankUploadStreakTarget??7} onChange={e=>set("tankUploadStreakTarget",Math.max(1,Number(e.target.value)||1))}
+            style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+          <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.45}}>Daily approved/upload streaks are logged for you to review and reward manually.</div>
+        </div>
       </div>
 
       {/* Tank of the Month */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🏆 Tank of the Month</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Turns the tank showcase into a monthly vote. Entries stay up until the month ends instead of 24 hours, each customer gets one vote, and you pick the winner yourself from Orders → tank showcase — <b>no coins move until you verify it</b>.</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Groups the public 24-hour tank entries into a monthly vote. Every approved image still auto-deletes 24 hours after approval; customers can vote on other tanks while they are live, and you pick the winner yourself — <b>no coins move until you verify it</b>.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:12}}>
           <input type="checkbox" checked={!!f.totmEnabled} onChange={e=>set("totmEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Run Tank of the Month</span>
@@ -16207,7 +16365,7 @@ function NemoStore(){
   const [mediaCache,setMediaCache] = useState({});
   const [loading,setLoading]       = useState(true);
   const [showcase,setShowcase]     = useState([]);
-  const [totmVotes,setTotmVotes]  = useState({});   // totmVotes/<month> — voterUid -> entryId
+  const [totmVotes,setTotmVotes]  = useState({});   // totmVotes/<month>/<entry>/<day>/<voter> = true
   const [testimonials,setTestimonials] = useState([]);
   const [restockSet,setRestockSet] = useState(()=>loadRestockLocal().map(x=>x.pid));
   const [selProduct,setSelProduct] = useState(null);
@@ -16224,7 +16382,10 @@ function NemoStore(){
   const tapCount   = useRef(0);
   const tapTimer   = useRef(null);
 
-  const saveSettingsHandler=async(s)=>{ setSettings(s); RUNTIME_CO_ADMIN=(s&&s.coAdminUid||"").trim(); await saveSettings(s); showToast("Settings saved"); };
+  const saveSettingsHandler=async(s)=>{
+    if(lifetimeReferralLimit(s)!==lifetimeReferralLimit(settings)) await snapshotExistingReferralProfiles(orders,settings);
+    setSettings(s); RUNTIME_CO_ADMIN=(s&&s.coAdminUid||"").trim(); await saveSettings(s); showToast("Settings saved");
+  };
   // Keep the runtime co-admin UID in sync so an entered helper account also unlocks admin (cloud writes still gated by Firebase rules).
   useEffect(()=>{ RUNTIME_CO_ADMIN=((settings&&settings.coAdminUid)||"").trim(); },[settings.coAdminUid]);
 
@@ -16388,6 +16549,12 @@ function NemoStore(){
       try{ if(localStorage.getItem("nemo-settings")) setSettingsReady(true); }catch(e){}
       const u=await loadUser(); if(u){setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));loadFavorites(userKey(u)).then(setFavorites);setInterestedSet(loadIntLocal(userKey(u)));}
       setLoading(false);
+      // React now has a usable shell. Let the splash go immediately; a cold visitor sees the
+      // intentional catalogue skeleton while REST/Firebase hydrate it, rather than staring at
+      // a blocking animation for network work that can safely finish in the background.
+      revealStore();
+      // A repeat visitor already has a complete catalogue snapshot, so it skips the skeleton.
+      if(localP) setHydrated(true);
       // Safety: never leave skeletons up indefinitely (e.g. Firebase off) — reveal after a short wait
       // Fast path: the REST prefetch started before this component existed and normally
       // lands well ahead of the SDK, so the real catalogue replaces the placeholder within a
@@ -16405,8 +16572,7 @@ function NemoStore(){
       // visitor has no cache, so revealing on a bare timer is what flashes DEFAULT_PRODUCTS
       // at them a moment before the real shop arrives. With no cache to fall back on, wait
       // for the prefetch to settle first, capped so an unreachable database still reveals.
-      if(localP) setTimeout(()=>setHydrated(true),2500);
-      else Promise.race([CATALOG_PREFETCH,new Promise(r=>setTimeout(r,6000))]).then(()=>setHydrated(true));
+      if(!localP) Promise.race([CATALOG_PREFETCH,new Promise(r=>setTimeout(r,2500))]).then(()=>setHydrated(true));
       hydrateMedia(prods,reqs,guideList);
       // Seed defaults into the LOCAL cache only. saveProd also writes the cloud when Firebase
       // happens to be up by now, which would publish the ten placeholder products over a real
@@ -16420,13 +16586,9 @@ function NemoStore(){
       // only; publishing an empty cloud is cloudSync's job, and it now refuses to publish
       // samples at all.
       if(!localGuidesData()){ try{ dbSet("nemo-guides",JSON.stringify(guideList.filter(g=>g&&!g.sample))); }catch(e){} }
-      // 2) Cloud hydrate. This used to run purely in the background while the splash was torn
-      // down the moment the cached paint landed — which is why the store opened in well under a
-      // second and then visibly rewrote itself as real stock counts and Coming Soon badges
-      // arrived. The splash now stays up until this settles, so the first catalog the shopper
-      // sees is the live one. cloudSync reveals as soon as products + their images are in;
-      // this await covers the case where it returns early (Firebase off) with nothing to wait for.
-      if(!FB_OK) await waitForFirebase(2200);
+      // 2) Cloud hydrate behind the visible shell. Product grids remain skeletons until the
+      // catalogue is ready, avoiding both a blocked first paint and a flash of guessed stock.
+      if(!FB_OK) await waitForFirebase(1200);
       try{ await cloudSync(); }catch(e){ console.warn("cloudSync",e&&e.message); }
       revealStore();
     })();
@@ -16440,7 +16602,7 @@ function NemoStore(){
 
   // Safety net: first-ever visitors have no cache, so reveal settings-gated promo banners
   // from the local value after a short grace period even if Firebase is slow/blocked.
-  useEffect(()=>{ const t=setTimeout(()=>setSettingsReady(true), 1200); return()=>clearTimeout(t); },[]);
+  useEffect(()=>{ const t=setTimeout(()=>setSettingsReady(true), 650); return()=>clearTimeout(t); },[]);
 
   const deepLinkRef = useRef((()=>{ try{ return new URLSearchParams(window.location.search).get("p")||""; }catch(e){ return ""; } })());
   useEffect(()=>{
@@ -16908,11 +17070,10 @@ function NemoStore(){
   const handleApproveShowcase=async(item)=>{
     const updated=await approveShowcasePhoto(item,settings);
     setShowcase(s=>s.map(x=>x.id===item.id?updated:x));
-    showToast(settings.totmEnabled?"✓ Tank approved — in this month's vote":"✓ Tank approved — now live for 24h");
+    showToast(settings.totmEnabled?"✓ Tank approved — live for 24h and in this month's vote":"✓ Tank approved — live for voting for 24h");
   };
-  /* One vote per customer per month, so casting a vote clears whatever they voted for before.
-     The screen moves first and the write follows: a vote that fails puts the count back rather
-     than leaving a tick the server never agreed to. */
+  /* One vote per tank per customer per day. The screen moves first and the write follows: a
+     refused write puts the count back rather than leaving a tick the server never agreed to. */
   const handleShowcaseVote=async(entry)=>{
     const uid=user&&user.uid;
     if(!uid){ showToast("Sign in to vote","error"); return; }
@@ -17113,9 +17274,16 @@ function NemoStore(){
   const updateOrderHandler=async updated=>{
     const old=orders.find(o=>o.id===updated.id);
     const prevStatus=old?old.status:"";
-    const pph=Number(settings.loyaltyPointsPerHundred||10);
-    // ── On DELIVERY (first time): all rewards are granted HERE and nowhere else. ──
-    if(updated.status==="Delivered" && prevStatus!=="Delivered"){
+    const becamePaid=paymentSucceeded(updated)&&!paymentSucceeded(old);
+    if(becamePaid){
+      if(updated.earnedReferralCode) await activateEarnedReferral(updated.earnedReferralCode,updated.id);
+      if(updated.referralCode){
+        const consumed=await finalizeReferralOnPayment(updated.referralCode,updated.userUid,updated.id);
+        if(consumed&&!updated.referralUsageCounted){ bumpPromoUsage("referral"); updated={...updated,referralUsageCounted:true}; }
+      }
+    }
+    // ── On a successfully paid DELIVERY: all order-spend rewards are granted here. ──
+    if(updated.status==="Delivered" && paymentSucceeded(updated)){
       // (a) buyer earns loyalty points on the amount actually paid
       if(settings.loyaltyEnabled!==false && updated.userUid && !updated.pointsEarned){
         /* Reward coins are earned on what the customer ACTUALLY PAID for the goods: the product
@@ -17125,27 +17293,45 @@ function NemoStore(){
            spend a coupon, earn full coins anyway, spend those coins next order, earn full again.
            The comment here always claimed "the amount actually paid"; now it is true. */
         const pts=coinsEarnedFor(updated, settings);
-        if(pts>0){ adminCreditLoyalty(updated.userUid, pts, "earn:"+updated.id, "Order "+(updated.orderNo||updated.id), settings.walletValidityMonths); updated={...updated,pointsEarned:pts}; }
+        if(pts>0){
+          const credited=await adminCreditLoyalty(updated.userUid, pts, "earn:"+updated.id, "Order "+(updated.orderNo||updated.id), settings.walletValidityMonths);
+          if(credited) updated={...updated,pointsEarned:pts};
+        }
       }
-      // (b) referrer earns their reward, credited straight to their wallet
-      if(updated.referralCode){ creditReferralOnDelivery(updated.referralCode, settings, updated.id); }
     }
-    // ── On CANCEL (first time): restock + claw back anything this order earned. ──
-    if(updated.status==="Cancelled" && prevStatus!=="Cancelled"){
+    // ── On CANCEL: restock once and idempotently claw back anything this order earned. ──
+    // Running the wallet reconciliation on every later save means a temporary Firebase error
+    // is retried; each silent reversal carries a private idempotency marker in the wallet.
+    if(updated.status==="Cancelled"){
       if(!old?.restocked && !updated.restocked){ updated={...updated,restocked:true}; restock(updated); }
-      // reverse the buyer's earned points (only meaningful if they were credited on a prior delivery)
+      // Remove every coin lot tied to this order without adding cancellation rows to the wallet.
       if(Number(updated.pointsEarned)>0 && updated.userUid){
-        adminCreditLoyalty(updated.userUid, -Number(updated.pointsEarned), "earnrev:"+updated.id, "Order cancelled");
-        updated={...updated,pointsEarned:0,pointsReversed:true};
+        const removed=await silentlyRemoveLoyaltyCredit(updated.userUid,"earn:"+updated.id,Number(updated.pointsEarned));
+        if(removed) updated={...updated,pointsEarned:0,pointsReversed:true};
       }
-      // free the referral code used on this order (and claw back the referrer's reward if it was paid)
-      if(updated.referralCode){ reverseReferralOnCancel(updated.referralCode); }
+      if(updated.shippingReward&&updated.userUid){
+        const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
+        const coins=Math.round(Number(updated.shippingReward.amount||0)/coinVal);
+        const creditId=updated.shippingReward.creditId||("ship:"+updated.shippingReward.code);
+        const removed=await silentlyRemoveLoyaltyCredit(updated.userUid,creditId,coins);
+        if(removed) updated={...updated,shippingReward:null};
+      }
+      if(updated.doa?.resolution==="coins"&&Number(updated.doa.refundAmount)>0&&updated.userUid){
+        const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
+        await silentlyRemoveLoyaltyCredit(updated.userUid,"doa:"+updated.id,Math.ceil(Number(updated.doa.refundAmount)/coinVal));
+      }
+      if((updated.returnReq?.adminResolution||updated.returnReq?.resolution)==="coins"&&updated.userUid){
+        const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
+        await silentlyRemoveLoyaltyCredit(updated.userUid,"return:"+updated.id,Math.ceil(returnItemsValue(updated)/coinVal));
+      }
+      if(updated.referralCode) await releaseReferralReservation(updated.referralCode,updated.userUid,updated.id);
+      if(updated.earnedReferralCode) await deactivateEarnedReferral(updated.earnedReferralCode,updated.id);
       // refund any wallet points the buyer SPENT on this order (they shouldn't lose points on a cancelled order)
       if(Number(updated.loyaltyDiscount)>0 && updated.userUid && !updated.loyaltyRefunded){
         const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
         const back=Math.ceil(Number(updated.loyaltyDiscount)/coinVal);
-        adminCreditLoyalty(updated.userUid, back, "redeemrefund:"+updated.id, "Points refunded (order cancelled)", settings.walletValidityMonths);
-        updated={...updated,loyaltyRefunded:true};
+        const restored=await silentlyRestoreRedeemedPoints(updated.userUid,updated.id,back,settings.walletValidityMonths);
+        if(restored) updated={...updated,loyaltyRefunded:true};
       }
     }
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
@@ -17237,24 +17423,6 @@ function NemoStore(){
       return next;
     });
   };
-  // Order-level "Product" rating from the order page → applies to every product in the order
-  // and reflects on each product page (marks them reviewed so we don't re-ask).
-  const rateOrderProducts=async(order, star, comment)=>{
-    if(!(Number(star)>0)) return;
-    const nm=(user&&user.name)||order.address?.name||"Customer";
-    const seen={};
-    for(const it of (order.items||[])){
-      if(!it||seen[it.id]) continue; seen[it.id]=1;
-      try{
-        const rev={id:uid("rev"),name:nm,rating:Number(star),comment:(comment||"").trim(),photos:[],date:new Date().toISOString(),orderId:order.id,verified:true,uid:userKey(user)||""};
-        const next=await appendReview(it.id,rev);
-        recomputeProductRating(it.id,next);
-        addReviewedLocal(userKey(user),it.id);
-      }catch(e){}
-    }
-    setReviewedSet(prev=>{ const s=new Set(prev); (order.items||[]).forEach(it=>it&&s.add(it.id)); return [...s]; });
-  };
-
   const placeOrder=(o)=>{
     // Demo/review sessions: the order stays on this device only — no cloud order,
     // no stock decrement, no admin visibility.
@@ -17322,12 +17490,12 @@ function NemoStore(){
     const prevItems=(order.doaItems&&typeof order.doaItems==="object")?order.doaItems:{};
     const doaItems=opts.itemId
       ? {...prevItems,[opts.itemId]:{ name:opts.itemName||"", qty:Number(opts.qty)||1, cause:opts.cause||"",
-          note:opts.note||"", resolution:opts.resolution||"replacement", requestedAt:new Date().toISOString() }}
+          note:opts.note||"", resolution:opts.resolution==="coins"?"coins":"refund", requestedAt:new Date().toISOString() }}
       : prevItems;
     // The umbrella reason stays human-readable: every item's claim, one per line.
     const allReasons=Object.values(doaItems).map(c=>`${c.name||"Item"} x${c.qty||1}: ${[c.cause,c.note].filter(Boolean).join(" — ")}`).join(" | ")
       || opts.reason || "";
-    const updated={...order,doaItems,doa:{status:"Requested",requestedAt:(order.doa&&order.doa.requestedAt)||new Date().toISOString(),note:(order.doa&&order.doa.note)||"",resolution:opts.resolution||"replacement",claimReason:allReasons}};
+    const updated={...order,doaItems,doa:{status:"Requested",requestedAt:(order.doa&&order.doa.requestedAt)||new Date().toISOString(),note:(order.doa&&order.doa.note)||"",resolution:opts.resolution==="coins"?"coins":"refund",claimReason:allReasons}};
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
     showToast("DOA request noted — please send your video on WhatsApp");
@@ -17340,15 +17508,19 @@ function NemoStore(){
     const refund=paid
       ? { due:true, amount:order.amountDue??((order.total||0)+(order.fee||0)), method:"upi", refundTxnId:"", status:"pending", updatedAt:new Date().toISOString() }
       : { due:false, amount:0, method:"none", refundTxnId:"", status:"none", updatedAt:new Date().toISOString() };
-    const updated={...order,status:"Cancelled",paymentStatus:paid?"Cancelled by customer — refund due":"Cancelled by customer",cancelReason:"Cancelled by customer",cancelledBy:"customer",refund,updatedAt:new Date().toISOString()};
+    let updated={...order,status:"Cancelled",paymentStatus:paid?"Cancelled by customer — refund due":"Cancelled by customer",cancelReason:"Cancelled by customer",cancelledBy:"customer",refund,restocked:true,updatedAt:new Date().toISOString()};
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
     restock(order);
     if(Number(order.loyaltyDiscount)>0 && order.userUid && !order.loyaltyRefunded){
       const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
-      try{ adminCreditLoyalty(order.userUid, Math.ceil(Number(order.loyaltyDiscount)/coinVal), "redeemrefund:"+order.id, "Points refunded (order cancelled)", settings.walletValidityMonths); }catch(e){}
+      const restored=await silentlyRestoreRedeemedPoints(order.userUid,order.id,Number(order.loyaltyCoinsUsed)||Math.ceil(Number(order.loyaltyDiscount)/coinVal),settings.walletValidityMonths);
+      if(restored) updated={...updated,loyaltyRefunded:true};
     }
-    if(order.referralCode){ try{ reverseReferralOnCancel(order.referralCode); }catch(e){} }
+    if(order.referralCode) await releaseReferralReservation(order.referralCode,order.userUid,order.id);
+    if(order.earnedReferralCode) await deactivateEarnedReferral(order.earnedReferralCode,order.id);
+    setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
+    if(updated.loyaltyRefunded&&!order.loyaltyRefunded) await saveOneOrder(updated);
     showToast(paid?"Order cancelled — your refund will be processed":"Order cancelled");
   };
 
@@ -17417,9 +17589,18 @@ function NemoStore(){
   // Auto-cancel an unpaid order past its window (idempotent)
   const cancelUnpaid=async(order)=>{
     if(order.status!=="Awaiting Payment")return;
-    const updated={...order,status:"Cancelled",paymentStatus:"Unpaid — auto-cancelled",updatedAt:new Date().toISOString()};
+    let updated={...order,status:"Cancelled",paymentStatus:"Unpaid — auto-cancelled",restocked:true,updatedAt:new Date().toISOString()};
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     await saveOneOrder(updated);
+    if(Number(order.loyaltyDiscount)>0&&order.userUid&&!order.loyaltyRefunded){
+      const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
+      const restored=await silentlyRestoreRedeemedPoints(order.userUid,order.id,Number(order.loyaltyCoinsUsed)||Math.ceil(Number(order.loyaltyDiscount)/coinVal),settings.walletValidityMonths);
+      if(restored) updated={...updated,loyaltyRefunded:true};
+    }
+    if(order.referralCode) await releaseReferralReservation(order.referralCode,order.userUid,order.id);
+    if(order.earnedReferralCode) await deactivateEarnedReferral(order.earnedReferralCode,order.id);
+    setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
+    if(updated.loyaltyRefunded&&!order.loyaltyRefunded) await saveOneOrder(updated);
     restock(order);
   };
 
@@ -17599,13 +17780,13 @@ function NemoStore(){
      total nobody trusts. Scoped to the current month, so last month's ballots are not carried
      around forever. */
   useEffect(()=>{
-    if(!(FB_OK && FB_DB) || !settings.totmEnabled) return;
+    if(!(FB_OK && FB_DB)) return;
     const month=totmMonthOf(Date.now());
     const ref=FB_DB.ref("totmVotes/"+month);
     let alive=true;
     const cb=ref.on("value",s=>{ if(alive) setTotmVotes((s&&s.val())||{}); },()=>{});
     return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
-  },[fbReady,settings.totmEnabled]);
+  },[fbReady]);
 
   // GLOBAL: live listener on the CARE GUIDES — same one-shot read, same fix as the catalogue.
   useEffect(()=>{
@@ -17712,16 +17893,16 @@ function NemoStore(){
     }
   },[user,page,fbReady]);
 
-  // WALLET: load balance for the signed-in customer, sweeping in any pending
-  // referral rewards + shipping refunds (idempotent). Re-runs when their orders change.
+  // WALLET: load the signed-in customer's live balance. Re-runs when their orders change.
   useEffect(()=>{
     const uid=userKey(user);
     if(!uid){ setWalletPts(0); return; }
     let alive=true;
-    // Make sure this customer has a referral code provisioned (one-time, idempotent).
-    getMyReferralCode(uid).catch(()=>{});
+    // Provision the permanent referral profile now, freezing today's unlock threshold for
+    // this customer so later admin changes affect only profiles created afterwards.
+    if(settings.referralEnabled!==false) ensureReferralProfile(uid,settings).catch(()=>{});
     // ── Unified, live wallet: subscribe to the authoritative cloud loyalty node so any
-    //    admin credit (delivery reward, referral payout, shipping refund) or the customer's
+    //    admin credit (delivery reward or shipping refund) or the customer's
     //    own redemption reflects in the UI instantly — same source of truth for every user. ──
     if(FB_OK && FB_DB){
       const ref=FB_DB.ref("loyalty/"+uid);
@@ -17742,7 +17923,7 @@ function NemoStore(){
     // Offline fallback — one-shot read of the local cache.
     setWalletPts(loadLoyaltyLocal(uid).points||0);
     return ()=>{alive=false;};
-  },[user,settings.loyaltyRedeemValue,settings.referralCoins,fbReady]);
+  },[user,settings.loyaltyRedeemValue,settings.referralEnabled,settings.referralLifetimeSpendMin,fbReady]);
 
   if(loading)return(
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:C.bg,gap:16,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
@@ -17771,7 +17952,7 @@ function NemoStore(){
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} goBack={goBack} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} updateQty={updateQty} user={user} settings={settings} orders={orders} products={products} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={goBack}/>)}
         {page==="orders"   &&(user
-          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} onRateOrderProducts={rateOrderProducts} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
+          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
           : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={goBack}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={goBack}/>}
         {page==="request"  &&<RequestPage nav={nav} goBack={goBack} user={user} onSubmit={submitRequest}/>}
@@ -17786,7 +17967,7 @@ function NemoStore(){
         </div>
       </div>
       {/* Floating cart bar — Zepto-style: free-delivery nudge + cart chip, opens the mini-cart */}
-      {!isAdminPage && cart.length>0 && !["cart","checkout","auth","detail"].includes(page) && (()=>{
+      {!isAdminPage && cart.length>0 && !["cart","checkout","auth"].includes(page) && (()=>{
         const thr=Number(settings.freeDeliveryThreshold||0);
         const left=thr>0?Math.max(0,thr-cartTotal):0;
         // Nearest coupon discount to unlock. `orders` is what tells usableCoupons whether a
@@ -17819,5 +18000,3 @@ function NemoStore(){
     </div>
   );
 }
-
-

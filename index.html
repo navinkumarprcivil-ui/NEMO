@@ -276,13 +276,10 @@
 <script>
 (function(){
   var splashStart=Date.now();
-  // Never lift before this. It was 2400: with the catalogue now prefetched over REST the data
-  // is usually ready in a few hundred ms, so that hold had become the single biggest part of
-  // the wait — the store was sitting ready behind a splash for two extra seconds. 1200 still
-  // reads as a deliberate reveal rather than a flash. Raise it again if you want the longer
-  // cinematic open back; nothing else depends on this number.
-  var SPLASH_MIN_MS=1200;
-  var SPLASH_MAX_MS=6000; // …and never hold past this, however the load is going
+  // The splash only bridges React's first usable paint; cached visitors should never wait on
+  // background Firebase work, and a cold/offline visitor always gets the local store quickly.
+  var SPLASH_MIN_MS=400;
+  var SPLASH_MAX_MS=3000;
   var splashGone=false;
   function hideSplashNow(){
     if(splashGone) return; splashGone=true;
@@ -291,9 +288,9 @@
       if(s){ s.classList.add("hide"); setTimeout(function(){ if(s.parentNode) s.remove(); },550); }
     });
   }
-  /* The app calls this (as window.nemoSplashReady) once the live catalog has landed, so stock
-     counts and Coming Soon badges settle BEHIND the splash instead of visibly rewriting the
-     store a moment after it opens. Idempotent — repeat calls are ignored. */
+  /* The app calls this (as window.nemoSplashReady) once React has a usable shell. Catalogue
+     hydration may continue behind intentional skeletons; network work never blocks first paint.
+     Idempotent — repeat calls are ignored. */
   function fadeSplash(){
     setTimeout(hideSplashNow, Math.max(60, SPLASH_MIN_MS-(Date.now()-splashStart)));
   }

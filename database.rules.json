@@ -147,7 +147,7 @@
     "experienceReviews": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || !data.exists() )",
+        ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
         ".validate": "!newData.exists() || (newData.hasChild('service') && newData.hasChild('packing') && newData.child('service').isNumber() && newData.child('packing').isNumber())",
         "improve": {
           ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 1000)"
@@ -193,14 +193,29 @@
           "referralDiscount": {
             ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
           },
+          "referralCode": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "earnedReferralCode": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "referralUsageCounted": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
           "loyaltyDiscount": {
             ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
           },
+          "loyaltyCoinsUsed": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "loyaltyRefunded": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (!data.exists() && newData.val() !== true) || (data.exists() && newData.val() === data.val())"
+          },
           "status": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || newData.val() === 'Awaiting Payment' || newData.val() === 'Payment Review' || newData.val() === 'Cancelled' || (data.exists() && newData.val() === data.val())"
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (!data.exists() && newData.val() === 'Awaiting Payment') || (data.exists() && (newData.val() === data.val() || (data.val() === 'Awaiting Payment' && (newData.val() === 'Payment Review' || newData.val() === 'Cancelled')) || (data.val() === 'Payment Review' && newData.val() === 'Cancelled')))"
           },
           "paymentStatus": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || newData.val() !== 'Verified' || (data.exists() && newData.val() === data.val())"
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || ((newData.val() !== 'Verified' && newData.val() !== 'Paid') || (data.exists() && newData.val() === data.val()))"
           }
         }
       }
@@ -237,7 +252,7 @@
     "showcase": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && $id === auth.uid && newData.child('userUid').val() === auth.uid) || (auth.uid === data.child('userUid').val() && newData.child('winner').val() === data.child('winner').val() && newData.child('rewardPts').val() === data.child('rewardPts').val() && newData.child('wonMonth').val() === data.child('wonMonth').val()) || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )",
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && $id === auth.uid && newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists()) || (data.exists() && auth.uid === data.child('userUid').val() && $id === auth.uid && (!newData.exists() || (newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists() && newData.child('winner').val() === data.child('winner').val() && newData.child('rewardPts').val() === data.child('rewardPts').val() && newData.child('wonMonth').val() === data.child('wonMonth').val()))) || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now && !newData.exists()) )",
         "imgData": {
           ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 700000)"
         },
@@ -315,20 +330,15 @@
     "userrefs": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
-        ".write": "auth != null && ((auth.uid === $uid && !data.exists()) || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))"
+        ".write": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (auth.uid === $uid && (!data.exists() || !data.hasChildren()) && newData.child('unlocked').val() === false))",
+        ".validate": "!newData.exists() || (newData.child('code').isString() && newData.child('code').val().length >= 8 && newData.child('code').val().length <= 12 && newData.child('threshold').isNumber() && newData.child('threshold').val() >= 0 && newData.child('createdAt').isNumber() && newData.child('unlocked').isBoolean() && (!data.exists() || !data.hasChildren() || (newData.child('threshold').val() === data.child('threshold').val() && newData.child('createdAt').val() === data.child('createdAt').val())) && ((data.exists() && data.hasChildren()) || (root.child('settings').child('referralLifetimeSpendMin').isNumber() && newData.child('threshold').val() === root.child('settings').child('referralLifetimeSpendMin').val()) || (!root.child('settings').child('referralLifetimeSpendMin').isNumber() && newData.child('threshold').val() === 1000)))"
       }
     },
     "referrals": {
       "$code": {
         ".read": "auth != null",
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || !data.exists() || data.child('used').val() != true )",
-        ".validate": "newData.hasChild('owner') && (!data.exists() || data.child('owner').val() === newData.child('owner').val())",
-        "rewardCoins": {
-          ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || newData.val() === (data.exists() ? data.val() : 0)"
-        },
-        "delivered": {
-          ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || newData.val() === false || (data.exists() && newData.val() === data.val())"
-        }
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('owner').val() === auth.uid && newData.child('kind').val() === 'order' && newData.child('active').val() === false && newData.child('used').val() === false) || (data.exists() && data.child('used').val() != true && newData.child('owner').val() === data.child('owner').val() && newData.child('kind').val() === data.child('kind').val() && newData.child('active').val() === data.child('active').val() && newData.child('used').val() === data.child('used').val() && newData.child('sourceOrderId').val() === data.child('sourceOrderId').val() && newData.child('sourceOrderUid').val() === data.child('sourceOrderUid').val() && newData.child('redemptions').val() === data.child('redemptions').val()) )",
+        ".validate": "!newData.exists() || (newData.child('owner').isString() && (newData.child('kind').val() === 'customer' || newData.child('kind').val() === 'order') && newData.child('active').isBoolean() && (!data.exists() || newData.child('owner').val() === data.child('owner').val()))"
       }
     },
     "visitorLog": {
@@ -379,11 +389,18 @@
         "$entry": {
           "$day": {
             "$voter": {
-              ".write": "auth != null && $voter === auth.uid && !data.exists() && newData.val() === true && root.child('showcase').child($entry).child('userUid').val() !== auth.uid && root.child('showcase').child($entry).exists()",
+              ".write": "auth != null && $voter === auth.uid && !data.exists() && newData.val() === true && root.child('showcase').child($entry).child('userUid').val() !== auth.uid && root.child('showcase').child($entry).exists() && (root.child('showcase').child($entry).child('approved').val() === true || !root.child('showcase').child($entry).child('approved').exists()) && (!root.child('showcase').child($entry).child('expiresAt').exists() || root.child('showcase').child($entry).child('expiresAt').val() > now)",
               ".validate": "newData.isBoolean()"
             }
           }
         }
+      }
+    },
+    "tankUploadStreaks": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+        ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+        ".validate": "!newData.exists() || (newData.child('uid').val() === $uid && newData.child('current').isNumber() && newData.child('best').isNumber())"
       }
     }
   }

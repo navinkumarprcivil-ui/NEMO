@@ -21,7 +21,7 @@
  * returned by the existing auto-cancel if they never pay. Confirming a payment
  * must not decrement it a second time.
  */
-import { webhookSignatureValid, rawBody, readOrder, dbPatch, orderPath, toPaise } from '../lib/payments.mjs';
+import { webhookSignatureValid, rawBody, readOrder, dbPatch, dbTransaction, orderPath, toPaise, settleReferralsAfterPayment } from '../lib/payments.mjs';
 
 // Vercel parses JSON bodies by default, which destroys the bytes the signature
 // was computed over. Ask for the body untouched.
@@ -93,6 +93,12 @@ export default async function handler(req, res) {
       paidAt: order.paidAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+    const referralConsumed = await settleReferralsAfterPayment(order, userUid, orderId);
+    if (referralConsumed && !order.referralUsageCounted) {
+      const day = new Date().toISOString().slice(0, 10);
+      await dbTransaction(`promoUsage/${day}/referral`, value => (Number(value) || 0) + 1);
+      await dbPatch(orderPath(userUid, orderId), { referralUsageCounted: true });
+    }
 
     res.status(200).json({ ok: true });
   } catch (e) {

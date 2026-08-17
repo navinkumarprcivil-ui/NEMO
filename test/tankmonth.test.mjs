@@ -5,8 +5,8 @@
  *
  * These decide who gets paid, so they are lifted out of app.jsx and run directly rather than
  * eyeballed in the UI. The vote model is the part worth pinning down: votes live in
- * totmVotes/<month>/<voter> = <entryId>, one key per voter, so "one vote each" is the shape of
- * the data and not a rule the app remembers to apply.
+ * totmVotes/<month>/<entry>/<day>/<voter> = true, so every customer can vote for other
+ * customers' tanks once per tank per day.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -16,13 +16,14 @@ import assert from "node:assert";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = readFileSync(join(root, "app.jsx"), "utf8");
-const code = src.slice(src.indexOf("function totmMonthOf("), src.indexOf("function showcaseApproved("))
-           + "function showcaseApproved(x){ return x && x.approved!==false; }";
+const code = src.slice(src.indexOf("const SHOWCASE_TTL"), src.indexOf("function loadTankStreakLocal("));
 const M = new Function("FB_OK", code + `
   return {totmMonthOf,totmDayOf,totmMonthLabel,totmMonthEnd,showcaseImgs,voteCount,
-          hasVotedToday,votesCastToday,totmStandings,totmMinVotes,totmEligible};`)(false);
+          hasVotedToday,votesCastToday,totmStandings,totmMinVotes,totmEligible,
+          showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak};`)(false);
 const {totmMonthOf,totmDayOf,totmMonthLabel,totmMonthEnd,showcaseImgs,voteCount,
-       hasVotedToday,votesCastToday,totmStandings,totmMinVotes,totmEligible}=M;
+       hasVotedToday,votesCastToday,totmStandings,totmMinVotes,totmEligible,
+       showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak}=M;
 /* totmVotes/<month>/<entryId>/<day>/<voter> = true */
 const ballots = pairs => {
   const out = {};
@@ -91,7 +92,8 @@ test("the same tank can be voted again on a later day, and both count", () => {
 });
 
 test("a day key is the calendar day, not the month", () => {
-  assert.equal(totmDayOf(Date.parse("2026-08-14T23:30:00Z")), "2026-08-14");
+  assert.equal(totmDayOf(Date.parse("2026-08-14T18:29:59Z")), "2026-08-14");
+  assert.equal(totmDayOf(Date.parse("2026-08-14T18:30:00Z")), "2026-08-15");
   assert.notEqual(totmDayOf(Date.parse("2026-08-14T00:00:00Z")), totmDayOf(Date.parse("2026-08-15T00:00:00Z")));
 });
 
@@ -130,4 +132,32 @@ test("eligibility is the admin's minimum, and 0 means no minimum", () => {
   assert.ok(totmEligible(a, {totmMinVotes:3}, votes));             // exactly on the line
   assert.ok(totmEligible(a, {totmMinVotes:0}, votes));
   assert.ok(!totmEligible(a, {totmMinVotes:1}, {}));               // nobody voted
+});
+
+test("approved tank photos show hours remaining and expire at exactly 24 hours", () => {
+  const approvedAt = Date.parse("2026-08-17T08:00:00Z");
+  const photo = {expiresAt: approvedAt + 24 * 60 * 60 * 1000};
+  assert.equal(showcaseHoursLeft(photo, approvedAt), 24);
+  assert.equal(showcaseHoursLeft(photo, approvedAt + 23.2 * 60 * 60 * 1000), 1);
+  assert.ok(!showcaseExpired(photo, approvedAt + 24 * 60 * 60 * 1000 - 1));
+  assert.ok(showcaseExpired(photo, approvedAt + 24 * 60 * 60 * 1000));
+  assert.equal(showcaseHoursLeft(photo, approvedAt + 24 * 60 * 60 * 1000), 0);
+
+  const legacy = {approved:true, approvedAt:"2026-08-17T08:00:00Z"};
+  assert.equal(showcaseExpiry(legacy), approvedAt + 24 * 60 * 60 * 1000);
+  assert.equal(showcaseHoursLeft(legacy, approvedAt), 24);
+  assert.ok(showcaseExpired(legacy, approvedAt + 24 * 60 * 60 * 1000));
+  assert.equal(showcaseExpiry({approved:false,createdAt:"2026-08-17T08:00:00Z"}), 0);
+});
+
+test("daily tank uploads keep current and best streaks", () => {
+  const now = Date.parse("2026-08-17T12:00:00Z");
+  const streak = computeTankUploadStreak({
+    "2026-08-12": {entryId:"old"},
+    "2026-08-15": {entryId:"a"},
+    "2026-08-16": {entryId:"b"},
+    "2026-08-17": {entryId:"c"},
+  }, now);
+  assert.deepEqual(streak, {current:3,best:3,lastDay:"2026-08-17"});
+  assert.equal(computeTankUploadStreak({"2026-08-10":{}}, now).current, 0);
 });
