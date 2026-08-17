@@ -1877,6 +1877,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   tankUploadStreakTarget: 7, // legacy display target; tankMinStreak is the monthly reward gate
   tankVoteRewardCoins: 200,
   tankStreakRewardCoins: 200,
+  tankStreakRewardEnabled: true,
   tankMinStreak: 7,
   tankRewardRules: "Upload a clear photo of your own aquarium. Each approved photo can collect votes while it is live. Monthly vote totals add together across all of your approved photos. Upload on consecutive days to build a streak; the streak resets at the start of each month. You cannot vote for your own tank, and each customer can vote only once for each tank image. Reward coins are released only after the store verifies the monthly results.",
   /* Customer testimonials on the home page */
@@ -2605,6 +2606,8 @@ function istDayKey(ms){ return new Date((ms==null?Date.now():ms)+IST_OFFSET_MS).
    A monthly scoreboard laid over the same public showcase. Every approved upload keeps the
    same 24-hour retention window; votes collected while it is live count toward its month. */
 function totmMonthOf(ms){ return istDayKey(ms==null?Date.now():ms).slice(0,7); }
+function tankVoteRewardOn(settings){ return !!(settings&&settings.totmEnabled); }
+function tankStreakRewardOn(settings){ return !settings||settings.tankStreakRewardEnabled!==false; }
 function previousTotmMonth(ms){
   const [year,month]=totmMonthOf(ms).split("-").map(Number), d=new Date(Date.UTC(year,month-2,1));
   return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0");
@@ -5406,7 +5409,9 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
   },[user?.name]);
   if(!settings.showcaseEnabled)return null;
   const now=clock;
-  const contest=!!settings.totmEnabled;
+  const contest=tankVoteRewardOn(settings);
+  const streakReward=tankStreakRewardOn(settings);
+  const anyReward=contest||streakReward;
   const month=totmMonthOf(now);
   const liveShowcase=(showcase||[]).filter(s=>showcaseApproved(s)&&!showcaseExpired(s,now));
   const ranked=contest?totmStandings(liveShowcase,month,votes):liveShowcase;
@@ -5468,13 +5473,6 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
         {ranked.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{ranked.length} live</span>}
       </div>
 
-      {previousWinners&&(previousWinners.vote||previousWinners.streak)&&(
-        <div style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"1px solid #fcd34d",borderRadius:14,padding:"10px 13px",marginBottom:12}}>
-          <div style={{fontSize:11.5,color:"#92400e",fontWeight:800,lineHeight:1.5}}>🏆 {totmMonthLabel(previousMonth)} winners</div>
-          {previousWinners.vote&&<div style={{fontSize:11,color:"#92400e",marginTop:2}}>Most votes: <b>{previousWinners.vote.name}</b> · {previousWinners.vote.total} vote{Number(previousWinners.vote.total)===1?"":"s"}</div>}
-          {previousWinners.streak&&<div style={{fontSize:11,color:"#92400e",marginTop:2}}>Best streak: <b>{previousWinners.streak.name}</b> · {previousWinners.streak.total} day{Number(previousWinners.streak.total)===1?"":"s"}</div>}
-        </div>
-      )}
       {minePending&&(
         <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={showcaseImgs(mine)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
@@ -5485,7 +5483,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
         <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={showcaseImgs(mineApproved)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
           <div style={{fontSize:11.5,color:"#15803d",fontWeight:600,lineHeight:1.45}}>
-            ✓ Your current tank stays live with <b>{votesFor(mineApproved)} vote{votesFor(mineApproved)===1?"":"s"}</b>{showcaseHoursLeft(mineApproved,now)>0?<> · <b>{showcaseHoursLeft(mineApproved,now)}h left</b></>:null}{minePending?" while the replacement is reviewed":""}.
+            ✓ Your current tank stays live{contest?<> with <b>{votesFor(mineApproved)} vote{votesFor(mineApproved)===1?"":"s"}</b></>:null}{showcaseHoursLeft(mineApproved,now)>0?<> · <b>{showcaseHoursLeft(mineApproved,now)}h left</b></>:null}{minePending?" while the replacement is reviewed":""}.
           </div>
         </div>
       )}
@@ -5496,7 +5494,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
             const n=votesFor(s);
             const voted=hasVotedForTank(s,user&&user.uid,votes);
             return(
-              <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:142,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${voted?C.primary:C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
+              <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:142,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${contest&&voted?C.primary:C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
                 <div style={{position:"relative",height:104}}>
                   <TankSlides imgs={imgs} alt={s.ownerName} height={104}/>
                   {contest&&idx===0&&n>0&&<span style={{position:"absolute",top:6,left:6,background:"rgba(251,191,36,.95)",color:"#7c2d12",fontSize:9,fontWeight:800,borderRadius:20,padding:"2px 7px"}}>LEADING</span>}
@@ -5504,7 +5502,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
                 </div>
                 <div style={{padding:"7px 8px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🐠 {s.ownerName}</div>
-                  <div style={{fontSize:10.5,color:voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>{voted?`✓ Voted · ${n}`:`🗳️ ${n} vote${n===1?"":"s"}`} · {showcaseHoursLeft(s,now)}h left</div>
+                  <div style={{fontSize:10.5,color:contest&&voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>{contest?(voted?`✓ Voted · ${n}`:`🗳️ ${n} vote${n===1?"":"s"}`):"Customer tank"} · {showcaseHoursLeft(s,now)}h left</div>
                   {s.caption&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.caption}</div>}
                 </div>
               </div>
@@ -5517,9 +5515,19 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text}}>📸 {minePending?"Update pending photos":mineApproved?"Submit replacement photos":contest?"Enter Tank of the Month":"Share your aquarium"}</div>
-            <button type="button" className="press" onClick={()=>setRulesOpen(true)} style={{background:"#eff6ff",color:C.primary,border:`1px solid ${C.accent}`,borderRadius:20,padding:"5px 10px",fontSize:10.5,fontWeight:800,flexShrink:0}}>Rules</button>
+            <button type="button" className="press" disabled={!anyReward} onClick={()=>{if(anyReward)setRulesOpen(true);}}
+              title={anyReward?"View customer tank reward rules":"Both monthly rewards are off"}
+              style={{background:anyReward?"#eff6ff":C.bg,color:anyReward?C.primary:C.textSub,border:`1px solid ${anyReward?C.accent:C.border}`,borderRadius:20,padding:"5px 10px",fontSize:10.5,fontWeight:800,flexShrink:0,cursor:anyReward?"pointer":"not-allowed",opacity:anyReward?1:.65}}>Rules</button>
           </div>
-          {streak&&(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:9}}>
+            <div style={{fontSize:10.5,fontWeight:800,color:contest?"#15803d":C.textSub,background:contest?"#ecfdf5":C.bg,border:`1px solid ${contest?"#a7f3d0":C.border}`,borderRadius:9,padding:"7px 8px",lineHeight:1.35}}>
+              🏆 Tank of the month: {contest?"ON":"OFF"}
+            </div>
+            <div style={{fontSize:10.5,fontWeight:800,color:streakReward?"#15803d":C.textSub,background:streakReward?"#ecfdf5":C.bg,border:`1px solid ${streakReward?"#a7f3d0":C.border}`,borderRadius:9,padding:"7px 8px",lineHeight:1.35}}>
+              🔥 Streak reward: {streakReward?"ON":"OFF"}
+            </div>
+          </div>
+          {streakReward&&streak&&(
             <div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>
               🔥 This month: <b>{Number(monthlyStreak&&monthlyStreak.current)||0} day{Number(monthlyStreak&&monthlyStreak.current)===1?"":"s"}</b> · best {Number(monthlyStreak&&monthlyStreak.best)||0}{Number(settings.tankMinStreak||settings.tankUploadStreakTarget)>0?` · eligibility ${Number(settings.tankMinStreak||settings.tankUploadStreakTarget)} days`:""}. Only approved daily shares count; the monthly streak resets on day 1.
             </div>
@@ -5554,7 +5562,28 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
           </button>
         </div>
       )}
-      {rulesOpen&&(
+      {showUpload&&previousWinners&&(previousWinners.vote||previousWinners.streak)&&(
+        <div style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"1px solid #fcd34d",borderRadius:16,padding:"13px",marginTop:10}}>
+          <div style={{fontSize:11.5,color:"#92400e",fontWeight:800,marginBottom:9}}>🏆 {totmMonthLabel(previousMonth)} rewards issued</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {previousWinners.vote&&(
+              <div style={{background:"rgba(255,255,255,.72)",borderRadius:11,padding:"10px 11px",color:"#78350f",lineHeight:1.5}}>
+                <div style={{fontSize:12.5,fontWeight:800}}>Tank of the month</div>
+                <div style={{fontSize:11.5}}>Receiver's name: <b>{previousWinners.vote.name}</b></div>
+                <div style={{fontSize:11.5}}>Reward coins: <b>{Number(previousWinners.vote.rewardCoins)||0}</b></div>
+              </div>
+            )}
+            {previousWinners.streak&&(
+              <div style={{background:"rgba(255,255,255,.72)",borderRadius:11,padding:"10px 11px",color:"#78350f",lineHeight:1.5}}>
+                <div style={{fontSize:12.5,fontWeight:800}}>Longest streak of the month</div>
+                <div style={{fontSize:11.5}}>Receiver name: <b>{previousWinners.streak.name}</b></div>
+                <div style={{fontSize:11.5}}>Reward coins: <b>{Number(previousWinners.streak.rewardCoins)||0}</b></div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {rulesOpen&&anyReward&&(
         <Portal><div onClick={()=>setRulesOpen(false)} style={{position:"fixed",inset:0,background:"rgba(8,30,33,.65)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div onClick={e=>e.stopPropagation()} className="fade-in" style={{width:"100%",maxWidth:390,maxHeight:"78vh",overflowY:"auto",background:"white",borderRadius:18,padding:"20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10}}>
@@ -5595,7 +5624,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
               <div style={{color:"white",fontWeight:700,fontSize:14}}>🐠 {fullImg.ownerName}{fullImg.winner?" 🏆":""}</div>
               {fullImg.caption&&<div style={{color:"rgba(255,255,255,.8)",fontSize:12,marginTop:4}}>{fullImg.caption}</div>}
             </div>
-            {
+            {contest&&(
               <div style={{width:"100%",marginTop:14}}>
                 <button className="press" disabled={!!own||voted||voting===fullImg.id} onClick={()=>vote(fullImg)}
                   style={{width:"100%",background:own?"rgba(255,255,255,.14)":voted?"rgba(255,255,255,.92)":C.primary,color:own?"rgba(255,255,255,.7)":voted?C.success:"#fff",
@@ -5608,7 +5637,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
                 </button>
                 {!user&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center"}}>Sign in to vote.</div>}
               </div>
-            }
+            )}
           </div>
           <button onClick={()=>setFullImg(null)} style={{marginTop:16,background:"rgba(255,255,255,.18)",border:"1px solid rgba(255,255,255,.3)",borderRadius:12,color:"white",padding:"9px 20px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Close</button>
         </div>
@@ -7047,7 +7076,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.03fbd954";
+const APP_BUILD = "v90.01c0fbfb";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -14470,12 +14499,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                     <div style={{fontSize:10.5,color:"#9a3412",lineHeight:1.5,marginBottom:9}}>{complete?"Completed month — verify the leaders before awarding.":"Live month — votes and approved share days update here and reset next month."}</div>
                     {complete&&(
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-                        {[{type:"vote",title:"Most votes",top:voteTop,coins:voteCoins,won:winners.vote},{type:"streak",title:"Best streak",top:streakTop,coins:streakCoins,won:winners.streak}].map(reward=>(
+                        {[{type:"vote",title:"Most votes",top:voteTop,coins:voteCoins,won:winners.vote,enabled:tankVoteRewardOn(settings)},{type:"streak",title:"Best streak",top:streakTop,coins:streakCoins,won:winners.streak,enabled:tankStreakRewardOn(settings)}].map(reward=>(
                           <div key={reward.type} style={{background:"white",border:`1px solid ${reward.won?"#86efac":"#fde68a"}`,borderRadius:11,padding:"9px"}}>
                             <div style={{fontSize:10,fontWeight:800,color:C.textSub,textTransform:"uppercase"}}>{reward.title}</div>
-                            <div style={{fontSize:11.5,fontWeight:800,color:C.text,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reward.won?reward.won.name:reward.top?reward.top.ownerName:"No eligible customer"}</div>
-                            <div style={{fontSize:10,color:C.textSub,marginTop:2}}>{reward.won?`${reward.won.total} ${reward.type==="vote"?"votes":"days"} · ${reward.won.rewardCoins||0} coins paid`:reward.top?`${reward.type==="vote"?reward.top.votes:reward.top.streak} ${reward.type==="vote"?"votes":"days"} · ${reward.coins} coins`:reward.type==="streak"?`Minimum ${minStreak} days`:"No votes received"}</div>
-                            {!reward.won&&reward.top&&<button className="press" onClick={()=>{if(window.confirm(`Award ${reward.coins} coins to ${reward.top.ownerName} for ${reward.title.toLowerCase()} in ${totmMonthLabel(month)}?`)) awardMonthlyTank(reward.type,month,reward.top);}}
+                            <div style={{fontSize:11.5,fontWeight:800,color:C.text,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reward.won?reward.won.name:!reward.enabled?"Reward is off":reward.top?reward.top.ownerName:"No eligible customer"}</div>
+                            <div style={{fontSize:10,color:C.textSub,marginTop:2}}>{reward.won?`${reward.won.total} ${reward.type==="vote"?"votes":"days"} · ${reward.won.rewardCoins||0} coins paid`:!reward.enabled?"Turn it on in Settings to issue this reward":reward.top?`${reward.type==="vote"?reward.top.votes:reward.top.streak} ${reward.type==="vote"?"votes":"days"} · ${reward.coins} coins`:reward.type==="streak"?`Minimum ${minStreak} days`:"No votes received"}</div>
+                            {!reward.won&&reward.enabled&&reward.top&&<button className="press" onClick={()=>{if(window.confirm(`Award ${reward.coins} coins to ${reward.top.ownerName} for ${reward.title.toLowerCase()} in ${totmMonthLabel(month)}?`)) awardMonthlyTank(reward.type,month,reward.top);}}
                               style={{width:"100%",marginTop:7,background:C.primary,color:"white",border:"none",borderRadius:8,padding:"6px",fontSize:10,fontWeight:800}}>Verify &amp; award</button>}
                           </div>
                         ))}
@@ -15638,7 +15667,11 @@ function SettingsPanel({settings,onSave,products=[]}){
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Groups public 24-hour entries into monthly customer totals. Votes add across every approved daily image; photos still auto-delete after 24 hours. Use the collapsible monthly log above to verify and award the completed month's vote and streak winners.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:12}}>
           <input type="checkbox" checked={!!f.totmEnabled} onChange={e=>set("totmEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
-          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Run Tank of the Month</span>
+          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable Tank of the Month vote reward</span>
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:12}}>
+          <input type="checkbox" checked={f.tankStreakRewardEnabled!==false} onChange={e=>set("tankStreakRewardEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
+          <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable longest-streak monthly reward</span>
         </label>
         {!f.showcaseEnabled&&f.totmEnabled&&<div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",marginBottom:12,lineHeight:1.5}}>⚠ The tank showcase is switched off above, so nothing will appear. Turn it on for this to run.</div>}
         <div style={{fontSize:11,color:C.textSub,background:C.bg,borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>Reward values and the minimum approved streak are configured in Customer Tank Showcase above. Awards are never automatic.</div>
@@ -17138,6 +17171,7 @@ function NemoStore(){
      refused write puts the count back rather than leaving a tick the server never agreed to. */
   const handleShowcaseVote=async(entry)=>{
     const uid=user&&user.uid;
+    if(!tankVoteRewardOn(settings)){ showToast("Tank of the Month voting is currently off","error"); return; }
     if(!uid){ showToast("Sign in to vote","error"); return; }
     if(entry.userUid===uid){ showToast("You can't vote for your own tank","error"); return; }
     const month=totmMonthOf(Date.now());
@@ -17152,6 +17186,8 @@ function NemoStore(){
   };
   const handleTankMonthlyAward=async(type,month,row)=>{
     const isStreak=type==="streak";
+    if(isStreak&&!tankStreakRewardOn(settings)){ showToast("The longest-streak reward is turned off in Settings","error"); return null; }
+    if(!isStreak&&!tankVoteRewardOn(settings)){ showToast("The Tank of the Month reward is turned off in Settings","error"); return null; }
     const pts=Math.max(0,Number(isStreak?settings.tankStreakRewardCoins:(settings.tankVoteRewardCoins??settings.totmRewardCoins))||0);
     const minimum=Math.max(1,Number(settings.tankMinStreak||settings.tankUploadStreakTarget)||1);
     if(isStreak&&Number(row.streak)<minimum){ showToast(`Minimum ${minimum}-day streak not met`,"error"); return null; }
