@@ -1,7 +1,7 @@
 {
   "cleanUrls": true,
   "crons": [
-    { "path": "/api/cron-tank-cleanup", "schedule": "0 * * * *" }
+    { "path": "/api/cron-tank-cleanup", "schedule": "0 0 * * *" }
   ],
   "rewrites": [
     { "source": "/s/:id", "destination": "/api/share?id=:id" },
