@@ -7345,52 +7345,6 @@ function DoaInsights({orders=[]}){
   );
 }
 
-/* ═══════════════════ ARRIVED ALIVE GALLERY ═══════════════════ */
-/* Trust wall of real photos customers attached to their verified reviews. */
-function ArrivedAliveGallery({products=[]}){
-  const [photos,setPhotos]=useState(null);
-  const [zoom,setZoom]=useState(null);
-  useEffect(()=>{ let on=true; loadArrivedAlivePhotos(24).then(p=>{ if(on) setPhotos(p); }); return ()=>{on=false;}; },[]);
-  if(!photos||photos.length===0) return null;
-  const nameFor=pid=>{ const p=products.find(x=>x.id===pid); return p?p.name:""; };
-  return(
-    <div style={{marginBottom:26}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>🐠 Arrived Alive</span>
-        <span style={{fontSize:11,color:C.success,fontWeight:700,background:"#dcfce7",padding:"3px 9px",borderRadius:20}}>✓ Real buyer photos</span>
-      </div>
-      <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.45}}>Unboxing photos shared by verified customers — see how healthy our fish arrive.</div>
-      <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6}}>
-        {photos.map((ph,i)=>(
-          <button key={i} className="press showcase-slide" onClick={()=>setZoom(ph)}
-            style={{flexShrink:0,width:128,padding:0,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${C.border}`,cursor:"zoom-in",textAlign:"left"}}>
-            <div style={{height:128,overflow:"hidden",position:"relative"}}>
-              <img src={ph.photo} alt="" loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-              <div style={{position:"absolute",top:6,left:6,background:"rgba(21,128,61,.92)",color:"white",fontSize:9,fontWeight:800,padding:"2px 7px",borderRadius:20}}>✓ Verified</div>
-            </div>
-            <div style={{padding:"7px 9px"}}>
-              <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🐠 {ph.name}</div>
-              {nameFor(ph.pid)&&<div style={{fontSize:9.5,color:C.textSub,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{nameFor(ph.pid)}</div>}
-            </div>
-          </button>
-        ))}
-      </div>
-      {zoom&&(
-        <Portal>
-        <div onClick={()=>setZoom(null)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:9000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
-          <img src={zoom.photo} alt="" style={{maxWidth:"100%",maxHeight:"72vh",objectFit:"contain",borderRadius:12}}/>
-          <div style={{marginTop:14,color:"white",textAlign:"center"}}>
-            <div style={{fontWeight:800,fontSize:15}}>🐠 {zoom.name} <span style={{fontSize:11,fontWeight:700,color:"#86efac",marginLeft:6}}>✓ Verified buyer</span></div>
-            {nameFor(zoom.pid)&&<div style={{fontSize:12,opacity:.8,marginTop:3}}>{nameFor(zoom.pid)}</div>}
-          </div>
-          <button className="press" onClick={()=>setZoom(null)} style={{position:"absolute",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22,cursor:"pointer"}}>×</button>
-        </div>
-        </Portal>
-      )}
-    </div>
-  );
-}
-
 /* ═══════════════════ AQUA TOOLS — My Tank, community planner & calculators ═══════════════════ */
 /* Species traits, from common fishkeeping guidance (OATA care sheets, adult sizes as sold-on
    grown-out, not shop size). Every field the planner reads is here, so adding a fish is a data
@@ -8415,9 +8369,6 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         <FoodReorderBanner orders={orders} products={products} addToCart={addToCart} nav={nav}/>
 
         <TankShowcaseSection mode="gallery" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit} onVote={onShowcaseVote} votes={totmVotes}/>
-
-        {/* Arrived Alive — verified-buyer unboxing photos */}
-        <ArrivedAliveGallery products={products}/>
 
         {/* Categories */}
         {/* Recently viewed — replaces the old category grid */}
