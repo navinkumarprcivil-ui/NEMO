@@ -4992,9 +4992,11 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
 /* Left filter drawer */
 @keyframes slideInLeft{from{transform:translateX(-100%)}to{transform:translateX(0)}}
 .drawer-panel{animation:slideInLeft .22s cubic-bezier(.22,1,.36,1) both;}
-/* Keep the cart offer attached to the viewport on phones too. Its bottom offset
-   clears the mobile navigation and respects devices with a safe-area inset. */
-.floating-cart-bar{position:fixed !important;left:50% !important;bottom:calc(76px + env(safe-area-inset-bottom)) !important;}
+/* The generic .slide-up animation ends at transform:none, which cancels the -50%
+   centring transform and pushes half of a fixed bar off-screen. Give this bar its
+   own entrance animation so it remains centred after the animation completes. */
+@keyframes floatingCartIn{from{transform:translate(-50%,16px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
+.floating-cart-bar{position:fixed !important;left:50% !important;bottom:calc(76px + env(safe-area-inset-bottom)) !important;transform:translateX(-50%) !important;animation:floatingCartIn .25s cubic-bezier(.22,1,.36,1) both;}
 @media(min-width:1000px){
   /* Surround matches the app background exactly, so the centred column blends into the page
      (no visible frame / dark band, regardless of window width) */
@@ -7083,7 +7085,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.8fda5ff3";
+const APP_BUILD = "v90.4a54228b";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -18101,9 +18103,9 @@ function NemoStore(){
         // Show whichever reward needs the least extra spend (Zepto-style).
         const showFree=left>0 && (!dc || left<=dc.need);
         return(
-          <button className="press slide-up floating-cart-bar" onClick={()=>setMiniOpen(true)}
+          <button className="press floating-cart-bar" onClick={()=>setMiniOpen(true)}
             style={{position:"absolute",left:"50%",transform:"translateX(-50%)",bottom:"calc(76px + env(safe-area-inset-bottom))",zIndex:90,width:"calc(100% - 28px)",maxWidth:440,background:"#0f172a",color:"white",border:"none",borderRadius:99,padding:"7px 8px 7px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,boxShadow:"0 14px 34px rgba(15,23,42,.35)",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-            <span style={{fontSize:12.5,fontWeight:700,textAlign:"left",lineHeight:1.3,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            <span style={{fontSize:12.5,fontWeight:700,textAlign:"left",lineHeight:1.3,minWidth:0,flex:1,overflow:"visible",textOverflow:"clip",whiteSpace:"normal"}}>
               {showFree?<>🚚 Add <b style={{color:"#fda4af"}}>₹{left}</b> more for free delivery</>
                :dc?<>🏷️ Add <b style={{color:"#fda4af"}}>₹{dc.need}</b> more to get <b>{dc.off}</b> ({dc.code})</>
                :thr>0&&cartTotal>=thr?<>🎉 Free delivery unlocked!</>
