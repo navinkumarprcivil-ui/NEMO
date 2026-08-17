@@ -4992,6 +4992,9 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
 /* Left filter drawer */
 @keyframes slideInLeft{from{transform:translateX(-100%)}to{transform:translateX(0)}}
 .drawer-panel{animation:slideInLeft .22s cubic-bezier(.22,1,.36,1) both;}
+/* Keep the cart offer attached to the viewport on phones too. Its bottom offset
+   clears the mobile navigation and respects devices with a safe-area inset. */
+.floating-cart-bar{position:fixed !important;left:50% !important;bottom:calc(76px + env(safe-area-inset-bottom)) !important;}
 @media(min-width:1000px){
   /* Surround matches the app background exactly, so the centred column blends into the page
      (no visible frame / dark band, regardless of window width) */
@@ -5016,6 +5019,10 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
   .home-body{padding-left:40px !important;padding-right:40px !important;}
   .sheet-overlay{align-items:center !important;padding:24px !important;}
   .sheet-panel{border-radius:20px !important;max-width:460px !important;}
+  /* The mobile shell reserves room for its bottom navigation, but desktop has no bottom nav.
+     Pin the cart nudge to the viewport instead of the app's scrolling content so it always
+     stays at the true bottom centre of the PC screen. */
+  .floating-cart-bar{position:fixed !important;left:50% !important;bottom:20px !important;width:min(440px,calc(100vw - 32px)) !important;}
   /* Keep single-column reading/forms comfortable inside the wide shell */
   .dt-read{max-width:780px;margin-left:auto !important;margin-right:auto !important;}
 }
@@ -7076,7 +7083,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.01c0fbfb";
+const APP_BUILD = "v90.8fda5ff3";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -18094,7 +18101,7 @@ function NemoStore(){
         // Show whichever reward needs the least extra spend (Zepto-style).
         const showFree=left>0 && (!dc || left<=dc.need);
         return(
-          <button className="press slide-up" onClick={()=>setMiniOpen(true)}
+          <button className="press slide-up floating-cart-bar" onClick={()=>setMiniOpen(true)}
             style={{position:"absolute",left:"50%",transform:"translateX(-50%)",bottom:"calc(76px + env(safe-area-inset-bottom))",zIndex:90,width:"calc(100% - 28px)",maxWidth:440,background:"#0f172a",color:"white",border:"none",borderRadius:99,padding:"7px 8px 7px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,boxShadow:"0 14px 34px rgba(15,23,42,.35)",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
             <span style={{fontSize:12.5,fontWeight:700,textAlign:"left",lineHeight:1.3,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
               {showFree?<>🚚 Add <b style={{color:"#fda4af"}}>₹{left}</b> more for free delivery</>
