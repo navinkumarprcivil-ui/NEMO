@@ -17,10 +17,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = readFileSync(join(root, "app.jsx"), "utf8");
 const code = src.slice(src.indexOf("const SHOWCASE_TTL"), src.indexOf("function loadTankStreakLocal("));
 const M = new Function("FB_OK", code + `
-  return {totmMonthOf,previousTotmMonth,totmDayOf,totmMonthLabel,totmMonthEnd,showcaseImgs,voteCount,
+  return {totmMonthOf,previousTotmMonth,totmDayOf,totmMonthLabel,totmMonthEnd,tankVoteRewardOn,tankStreakRewardOn,showcaseImgs,voteCount,
           hasVotedForTank,totmStandings,totmMinVotes,totmEligible,
           showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak,monthUploadStats,tankMonthlyRows,replacementForApproval};`)(false);
-const {totmMonthOf,previousTotmMonth,totmDayOf,totmMonthLabel,totmMonthEnd,showcaseImgs,voteCount,
+const {totmMonthOf,previousTotmMonth,totmDayOf,totmMonthLabel,totmMonthEnd,tankVoteRewardOn,tankStreakRewardOn,showcaseImgs,voteCount,
        hasVotedForTank,totmStandings,totmMinVotes,totmEligible,
        showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak,monthUploadStats,tankMonthlyRows,replacementForApproval}=M;
 /* Legacy ballot fixture: totmVotes/<month>/<entryId>/<day>/<voter> = true. */
@@ -49,6 +49,14 @@ test("a month key and its end are derived, never stored twice", () => {
   assert.equal(previousTotmMonth(Date.parse("2026-01-15T00:00:00Z")), "2025-12");
   assert.equal(totmMonthOf(Date.parse("2026-08-31T18:29:59Z")), "2026-08");
   assert.equal(totmMonthOf(Date.parse("2026-08-31T18:30:00Z")), "2026-09");
+});
+
+test("the two monthly tank rewards can be switched independently", () => {
+  assert.equal(tankVoteRewardOn({totmEnabled:true}), true);
+  assert.equal(tankVoteRewardOn({totmEnabled:false}), false);
+  assert.equal(tankStreakRewardOn({tankStreakRewardEnabled:true}), true);
+  assert.equal(tankStreakRewardOn({tankStreakRewardEnabled:false}), false);
+  assert.equal(tankStreakRewardOn({}), true); // preserves the existing streak reward until the admin turns it off
 });
 
 test("monthly totals add votes across every approved daily image for one customer", () => {
