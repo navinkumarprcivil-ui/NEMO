@@ -507,7 +507,10 @@ function applyGstTerms(text,gstin){
 }
 function normalizeSettings(s){
   if(!s) return s;
-  const fixed = s.termsPolicy ? {...s, termsPolicy: applyGstTerms(s.termsPolicy, s.gstin)} : s;
+  let fixed = s.termsPolicy ? {...s, termsPolicy: applyGstTerms(s.termsPolicy, s.gstin)} : s;
+  if(/vote for the same tank more than once per day/i.test(String(fixed.tankRewardRules||""))){
+    fixed={...fixed,tankRewardRules:String(fixed.tankRewardRules).replace(/vote for the same tank more than once per day/gi,"vote more than once for the same tank image")};
+  }
   if(fixed.shippingRates) return {...fixed, shippingRates: normalizeShippingRates(fixed.shippingRates)};
   return fixed;
 }
@@ -1871,7 +1874,11 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   totmEnabled: false,
   totmMinVotes: 5,        // an entry cannot win on fewer votes than this
   totmRewardCoins: 200,   // coins credited to the winner once the admin verifies
-  tankUploadStreakTarget: 7, // admin-visible target; rewards remain a manual admin decision
+  tankUploadStreakTarget: 7, // legacy display target; tankMinStreak is the monthly reward gate
+  tankVoteRewardCoins: 200,
+  tankStreakRewardCoins: 200,
+  tankMinStreak: 7,
+  tankRewardRules: "Upload a clear photo of your own aquarium. Each approved photo can collect votes while it is live. Monthly vote totals add together across all of your approved photos. Upload on consecutive days to build a streak; the streak resets at the start of each month. You cannot vote for your own tank, and each customer can vote only once for each tank image. Reward coins are released only after the store verifies the monthly results.",
   /* Customer testimonials on the home page */
   testimonialsEnabled: true,
   /* Editable marketing copy (admin can change these from Settings; blank = use the built-in default) */
@@ -2597,7 +2604,11 @@ function istDayKey(ms){ return new Date((ms==null?Date.now():ms)+IST_OFFSET_MS).
 /* ── Tank of the Month ─────────────────────────────────────────────────────────
    A monthly scoreboard laid over the same public showcase. Every approved upload keeps the
    same 24-hour retention window; votes collected while it is live count toward its month. */
-function totmMonthOf(ms){ const d=new Date(ms||Date.now()); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+function totmMonthOf(ms){ return istDayKey(ms==null?Date.now():ms).slice(0,7); }
+function previousTotmMonth(ms){
+  const [year,month]=totmMonthOf(ms).split("-").map(Number), d=new Date(Date.UTC(year,month-2,1));
+  return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0");
+}
 function totmMonthLabel(ym){
   if(!ym) return "";
   const [y,m]=String(ym).split("-").map(Number);
@@ -2614,38 +2625,29 @@ function showcaseImgs(x){
 /* Votes live in their own node, not on the entry — an entrant cannot inflate a count that is
    not stored on their own record. The path is the rule:
 
-     totmVotes/<month>/<entryId>/<YYYY-MM-DD>/<voterUid> = true
+     totmVotes/<month>/<entryId>/_once/<voterUid> = true
 
-   A voter may back as many tanks as they like each day, but the same tank only once a day,
-   because that is one key and the rules make it create-only. Coming back tomorrow to vote
-   again is the point; stuffing the box today is not possible. */
-/* Voting and upload streaks follow the store's Indian calendar. Using UTC made every action
-   before 5:30am IST count toward the previous day, breaking genuine consecutive-day streaks
-   and reopening yesterday's vote window at the wrong local time. */
+   The `_once` key is create-only, so a customer can vote for an entry exactly once while it is
+   live. Older releases stored votes in daily buckets; readers still deduplicate those voters so
+   historical repeat-day votes cannot inflate monthly rewards. */
+/* Monthly voting and upload streaks follow the store's Indian calendar. */
 function totmDayOf(ms){ return istDayKey(ms==null?Date.now():ms); }
 function voteCount(x,votes){
-  const days=x&&votes&&votes[x.id];
-  if(!days) return 0;
-  let n=0;
-  for(const d in days){ const v=days[d]; if(v) for(const u in v) if(v[u]) n++; }
-  return n;
+  const buckets=x&&votes&&votes[x.id];
+  if(!buckets) return 0;
+  const voters=new Set();
+  for(const bucket in buckets){ const values=buckets[bucket]; if(values&&typeof values==="object") for(const uid in values) if(values[uid]) voters.add(uid); }
+  return voters.size;
 }
-function hasVotedToday(x,uid,votes,day){
+function hasVotedForTank(x,uid,votes){
   if(!uid||!x||!votes) return false;
-  const d=(votes[x.id]||{})[day||totmDayOf(Date.now())];
-  return !!(d&&d[uid]);
-}
-/* How many different tanks this customer has backed today — the line under the vote button. */
-function votesCastToday(uid,votes,day){
-  if(!uid||!votes) return 0;
-  const key=day||totmDayOf(Date.now());
-  let n=0;
-  for(const id in votes){ const d=(votes[id]||{})[key]; if(d&&d[uid]) n++; }
-  return n;
+  const buckets=votes[x.id]||{};
+  for(const bucket in buckets){ const values=buckets[bucket]; if(values&&typeof values==="object"&&values[uid]) return true; }
+  return false;
 }
 async function castShowcaseVote(month,entryId,uid){
   if(!FB_OK||!uid||!month||!entryId) return false;
-  try{ await FB_DB.ref("totmVotes/"+month+"/"+entryId+"/"+totmDayOf(Date.now())+"/"+uid).set(true); return true; }
+  try{ await FB_DB.ref("totmVotes/"+month+"/"+entryId+"/_once/"+uid).set(true); return true; }
   catch(e){ return false; }
 }
 /* Standings for a month, most votes first. Ties break towards whoever posted first — the entry
@@ -2658,6 +2660,57 @@ function totmStandings(showcase,month,votes){
 }
 function totmMinVotes(settings){ const n=Number(settings&&settings.totmMinVotes); return n>0?n:0; }
 function totmEligible(entry,settings,votes){ return voteCount(entry,votes)>=totmMinVotes(settings); }
+
+/* Monthly reward accounting is deliberately based on metadata, never retained photo data.
+   Approved uploads are copied to tankMonthlyEntries with only their owner, dates and id; the
+   base64 photos can still honour the 24-hour deletion promise. Votes remain create-only ballots
+   and are summed across every approved entry belonging to the same customer. */
+function monthUploadStats(dates,month){
+  const monthDates={};
+  Object.keys(dates||{}).filter(day=>day.startsWith(month+"-")).forEach(day=>{ monthDates[day]=dates[day]; });
+  const [year,number]=month.split("-").map(Number);
+  const monthEnd=Date.UTC(year,number,0,12,0,0);
+  const anchor=month===totmMonthOf(Date.now())?Date.now():monthEnd;
+  const streak=computeTankUploadStreak(monthDates,anchor);
+  return {days:Object.keys(monthDates).sort(),current:streak.current,best:streak.best,lastDay:streak.lastDay};
+}
+function tankMonthlyRows(entries,votes,streaks,month){
+  const rows={};
+  const list=Array.isArray(entries)?entries:Object.values(entries||{});
+  list.filter(Boolean).forEach(entry=>{
+    const uid=entry.userUid||entry.uid; if(!uid) return;
+    const row=rows[uid]||(rows[uid]={uid,ownerName:entry.ownerName||entry.name||uid,entryIds:[],votes:0,uploadDays:[],streak:0,lastDay:"",firstApprovedAt:entry.approvedAt||entry.createdAt||""});
+    if(entry.ownerName) row.ownerName=entry.ownerName;
+    if(entry.id&&!row.entryIds.includes(entry.id)) row.entryIds.push(entry.id);
+    if(entry.id) row.votes+=voteCount(entry,votes);
+    const uploadDay=entry.createdAt?totmDayOf(Date.parse(entry.createdAt)):"";
+    if(uploadDay.startsWith(month+"-")&&!row.uploadDays.includes(uploadDay)) row.uploadDays.push(uploadDay);
+    const at=entry.approvedAt||entry.createdAt||"";
+    if(at&&(!row.firstApprovedAt||at<row.firstApprovedAt)) row.firstApprovedAt=at;
+  });
+  Object.entries(streaks||{}).filter(([,log])=>!!log).forEach(([key,log])=>{
+    const uid=log.uid||key; if(!uid) return;
+    const dates=log.dates||log;
+    const stats=monthUploadStats(dates,month);
+    if(!stats.days.length&&!rows[uid]) return;
+    const row=rows[uid]||(rows[uid]={uid,ownerName:log.ownerName||uid,entryIds:[],votes:0,firstApprovedAt:""});
+    const dayName=Object.values(dates).find(Boolean)?.ownerName;
+    if((log.ownerName||dayName)&&row.ownerName===uid) row.ownerName=log.ownerName||dayName;
+    row.uploadDays=[...new Set([...(row.uploadDays||[]),...stats.days])].sort();
+    const approvedStats=computeTankUploadStreak(Object.fromEntries(row.uploadDays.map(day=>[day,true])),Date.parse(month+"-28T12:00:00Z"));
+    row.streak=Math.max(stats.best,approvedStats.best); row.lastDay=row.uploadDays[row.uploadDays.length-1]||stats.lastDay;
+  });
+  Object.values(rows).forEach(row=>{
+    row.uploadDays=[...new Set(row.uploadDays||[])].sort();
+    row.streak=computeTankUploadStreak(Object.fromEntries(row.uploadDays.map(day=>[day,true])),Date.parse(month+"-28T12:00:00Z")).best;
+    row.lastDay=row.uploadDays[row.uploadDays.length-1]||row.lastDay||"";
+  });
+  return Object.values(rows).map(row=>({uploadDays:[],streak:0,lastDay:"",...row}))
+    .sort((a,b)=>b.votes-a.votes||b.streak-a.streak||String(a.firstApprovedAt||"").localeCompare(String(b.firstApprovedAt||""))||String(a.ownerName).localeCompare(String(b.ownerName)));
+}
+function replacementForApproval(showcase,item){
+  return (showcase||[]).find(entry=>entry&&entry.id!==item.id&&entry.userUid===item.userUid&&showcaseApproved(entry)&&!showcaseExpired(entry,Date.now()))||null;
+}
 
 function showcaseApproved(x){ return x && x.approved!==false; } // legacy items (no flag) count as approved
 /* Entries approved before `expiresAt` was introduced still follow the same retention promise.
@@ -2692,27 +2745,17 @@ function loadTankStreakLocal(uid){
 }
 async function loadTankUploadStreak(uid){
   if(FB_OK&&uid){
-    try{ const s=await withTimeout(FB_DB.ref("tankUploadStreaks/"+uid).get(),5000); const v=s&&s.val(); if(v){ try{localStorage.setItem(tankStreakKey(uid),JSON.stringify(v));}catch(e){} return v; } }catch(e){}
-  }
-  return loadTankStreakLocal(uid)||{dates:{},current:0,best:0,lastDay:""};
-}
-async function recordTankUploadStreak(uid,entryId,uploadedAt){
-  if(!uid) return null;
-  const at=Number(uploadedAt)||Date.now(), day=totmDayOf(at), updatedAt=Date.now();
-  /* The server re-reads showcase/<uid> and derives the day from its createdAt. This keeps the
-     streak log auditable: the browser cannot invent upload days before asking for points. */
-  if(FB_OK&&FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid===uid){
     try{
-      const token=await FB_AUTH.currentUser.getIdToken();
-      const response=await withTimeout(fetch("/api/tank-streak",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token},body:JSON.stringify({entryId:entryId||""})}),7000,null);
-      if(response&&response.ok){ const v=await response.json(); try{localStorage.setItem(tankStreakKey(uid),JSON.stringify(v));}catch(e){} return v; }
+      const month=totmMonthOf(Date.now());
+      const s=await withTimeout(FB_DB.ref("tankApprovedDays/"+month+"/"+uid).get(),5000);
+      const dates=(s&&s.val())||{};
+      const st=computeTankUploadStreak(dates,Date.now());
+      const v={uid,month,dates,current:st.current,best:st.best,lastDay:st.lastDay};
+      try{localStorage.setItem(tankStreakKey(uid),JSON.stringify(v));}catch(e){}
+      return v;
     }catch(e){}
   }
-  const cur=loadTankStreakLocal(uid)||{dates:{},best:0};
-  const dates={...(cur.dates||{}),[day]:{at,entryId:entryId||""}}, st=computeTankUploadStreak(dates,updatedAt);
-  const next={uid,dates,current:st.current,best:Math.max(Number(cur.best)||0,st.best),lastDay:st.lastDay,updatedAt};
-  try{localStorage.setItem(tankStreakKey(uid),JSON.stringify(next));}catch(e){}
-  return next;
+  return loadTankStreakLocal(uid)||{dates:{},current:0,best:0,lastDay:""};
 }
 /* Drop from the local copy anything the cloud no longer has. Only ids the cache already held are
    kept, so this never grows into a full mirror of everybody's base64 photos. */
@@ -2743,33 +2786,47 @@ async function loadShowcase(){
   return live;
 }
 async function addShowcasePhoto(item){
-  await dbSet("nemo-showcase",JSON.stringify([item])); // local
-  const uploadedAt=Date.parse(item.createdAt)||Date.now();
-  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).set(item); await recordTankUploadStreak(item.userUid,item.id,uploadedAt); return true; }catch(e){ return false; } }
-  await recordTankUploadStreak(item.userUid,item.id,uploadedAt);
+  const cached=await dbGet("nemo-showcase");
+  let existing=[]; try{ existing=cached?JSON.parse(cached):[]; }catch(e){}
+  await dbSet("nemo-showcase",JSON.stringify([item,...existing.filter(x=>x&&x.id!==item.id)]));
+  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).set(item); return true; }catch(e){ return false; } }
   return false;
 }
 /* Approval always starts one 24-hour window. Voting and the optional monthly board never extend
    a customer's photo beyond that privacy/retention promise. */
-async function approveShowcasePhoto(item,settings){
+async function approveShowcasePhoto(item,settings,showcase){
   const now=Date.now(), contest=!!(settings&&settings.totmEnabled);
   const month=totmMonthOf(now);
   const updated={...item, approved:true, approvedAt:new Date(now).toISOString(),
     expiresAt: now+SHOWCASE_TTL,
     ...(contest?{month}:{})};
-  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).update({approved:true, approvedAt:updated.approvedAt, expiresAt:updated.expiresAt, ...(contest?{month}:{})}); }catch(e){} }
-  return updated;
+  const replaced=replacementForApproval(showcase,item);
+  const history={id:item.id,userUid:item.userUid,ownerName:item.ownerName||"Aquarist",createdAt:item.createdAt||updated.approvedAt,approvedAt:updated.approvedAt,month};
+  let ok=!FB_OK;
+  if(FB_OK){
+    try{
+      const writes={
+        ["showcase/"+item.id]:updated,
+        ["tankMonthlyEntries/"+month+"/"+item.id]:history,
+      };
+      if(replaced) writes["showcase/"+replaced.id]=null;
+      const uploadedAt=Date.parse(item.createdAt)||now, uploadDay=totmDayOf(uploadedAt), uploadMonth=uploadDay.slice(0,7);
+      writes["tankApprovedDays/"+uploadMonth+"/"+item.userUid+"/"+uploadDay]={entryId:item.id,at:uploadedAt,approvedAt:now,ownerName:item.ownerName||"Aquarist"};
+      await FB_DB.ref().update(writes);
+      ok=true;
+    }catch(e){ ok=false; }
+  }
+  return {updated,replacedId:replaced&&replaced.id,ok};
 }
-/* The admin has looked at the tank, agreed it won, and released the coins. Recorded ON the
-   entry so a second press cannot pay twice, and so the badge survives the month ending. */
-async function markTotmWinner(item,pts){
-  const patch={winner:true, wonMonth:item.month||totmMonthOf(Date.now()), rewardPts:Number(pts)||0, rewardedAt:new Date().toISOString()};
-  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).update(patch); }catch(e){} }
-  return {...item,...patch};
+async function markTankMonthlyWinner(month,type,row,coins){
+  const record={uid:row.uid,name:row.ownerName||row.uid,total:type==="vote"?(Number(row.votes)||0):(Number(row.streak)||0),rewardCoins:Number(coins)||0,awardedAt:new Date().toISOString()};
+  if(FB_OK) await FB_DB.ref("tankMonthlyWinners/"+month+"/"+type).set(record);
+  return record;
 }
 async function deleteShowcasePhoto(id){
-  if(FB_OK){ try{ await FB_DB.ref("showcase/"+id).remove(); }catch(e){} }
+  if(FB_OK){ try{ await FB_DB.ref("showcase/"+id).remove(); }catch(e){ return false; } }
   const r=await dbGet("nemo-showcase"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-showcase",JSON.stringify(arr.filter(x=>x.id!==id)));
+  return true;
 }
 
 /* ── Testimonials — any signed-in customer can post one short note; public to all; admin can delete ── */
@@ -5322,7 +5379,7 @@ function TankSlides({imgs,alt,height,rounded=0,ms=3000,paused=false}){
   );
 }
 
-function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mode="full"}){
+function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},previousWinners=null,mode="full"}){
   const [preview,setPreview]=useState([]);
   const [ownerName,setOwnerName]=useState(user?.name||"");
   const [caption,setCaption]=useState("");
@@ -5331,23 +5388,17 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
   const swipeStartX=useRef(null);
   const [uploading,setUploading]=useState(false);
   const [voting,setVoting]=useState("");
+  const [rulesOpen,setRulesOpen]=useState(false);
   const [clock,setClock]=useState(Date.now());
   const [streak,setStreak]=useState(()=>user?loadTankStreakLocal(user.uid):null);
-  const streakEntry=user?.uid?(showcase||[]).find(s=>s&&s.userUid===user.uid):null;
-  const streakEntryId=streakEntry?.id||"";
-  const streakEntryCreatedAt=streakEntry?.createdAt||"";
+  const approvedMineKey=user?.uid?(showcase||[]).filter(s=>s&&s.userUid===user.uid&&showcaseApproved(s)).map(s=>s.id).sort().join("|"):"";
   useEffect(()=>{ const id=setInterval(()=>setClock(Date.now()),60000); return ()=>clearInterval(id); },[]);
   useEffect(()=>{
     let alive=true;
     if(!user?.uid){ setStreak(null); return ()=>{alive=false;}; }
-    // Reconcile the visible upload too: if its first streak write lost connection, the next
-    // live read restores the original upload day (the transaction is day-key idempotent).
-    const task=streakEntryId
-      ? recordTankUploadStreak(user.uid,streakEntryId,Date.parse(streakEntryCreatedAt)||Date.now())
-      : loadTankUploadStreak(user.uid);
-    task.then(v=>{if(alive)setStreak(v);});
+    loadTankUploadStreak(user.uid).then(v=>{if(alive)setStreak(v);});
     return ()=>{alive=false;};
-  },[user?.uid,streakEntryId,streakEntryCreatedAt]);
+  },[user?.uid,approvedMineKey]);
   // ── Sync name field with the signed-in Google account.
   // Functional updater preserves any name the user has already typed manually.
   useEffect(()=>{
@@ -5364,16 +5415,16 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
     const idx=ranked.findIndex(entry=>entry.id===fullImg.id);
     if(idx>=0) setFullImg(ranked[(idx+dir+ranked.length)%ranked.length]);
   };
-  const mine=user&&(showcase||[]).find(s=>s.userUid===user.uid&&!showcaseExpired(s,now));
-  const minePending=mine&&!showcaseApproved(mine);
-  const today=totmDayOf(now);
-  const castToday=votesCastToday(user&&user.uid,votes,today);
-  const winner=(showcase||[]).find(s=>s&&s.winner&&s.wonMonth===month)||null;
+  const minePending=user&&(showcase||[]).find(s=>s.userUid===user.uid&&!showcaseApproved(s));
+  const mineApproved=user&&(showcase||[]).find(s=>s.userUid===user.uid&&showcaseApproved(s)&&!showcaseExpired(s,now));
+  const mine=minePending||mineApproved;
+  const previousMonth=previousTotmMonth(now);
+  const monthlyStreak=streak?monthUploadStats(streak.dates,month):null;
   const votesFor=e=>voteCount(e,votes);
   const showGallery = mode!=="upload";
   const showUpload  = mode!=="gallery" && !!user;
   // Nothing to show: gallery with no live photos & no pending submission, or upload with no signed-in user.
-  if(showGallery && !showUpload && ranked.length===0 && !mine) return null;
+  if(showGallery && !showUpload && ranked.length===0 && !mine && !(previousWinners&&(previousWinners.vote||previousWinners.streak))) return null;
   if(!showGallery && !showUpload) return null;
 
   const MAX_IMGS=3;
@@ -5393,7 +5444,8 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
     if(!preview.length){setNote("⚠ Please add at least one photo");return;}
     const finalName=(user?.name||ownerName||"Aquarist").trim();
     setUploading(true);
-    await onSubmit({id:user?.uid||uid("sc"),imgData:preview[0],imgs:preview,ownerName:finalName,caption:caption.trim(),
+    const entryId=minePending?.id||(user?.uid?(user.uid+"_"+Date.now().toString(36)):uid("sc"));
+    await onSubmit({id:entryId,imgData:preview[0],imgs:preview,ownerName:finalName,caption:caption.trim(),
       createdAt:new Date().toISOString(),approved:false,userUid:user?.uid||(user?userKey(user):""),...(contest?{month}:{})});
     if(user?.uid) loadTankUploadStreak(user.uid).then(setStreak);
     setPreview([]);setCaption("");setOwnerName(user?.name||"");setNote("📩 Submitted! We'll review it soon.");setUploading(false);
@@ -5402,7 +5454,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
   const vote=async(entry)=>{
     if(!user){ setNote("⚠ Sign in to vote"); return; }
     if(entry.userUid===user.uid){ setNote("⚠ You can't vote for your own tank"); return; }
-    if(hasVotedToday(entry,user.uid,votes,today)){ setNote("⚠ Already voted for this tank today — come back tomorrow"); return; }
+    if(hasVotedForTank(entry,user.uid,votes)){ setNote("⚠ You already voted for this tank"); return; }
     setVoting(entry.id);
     await onVote(entry);
     setVoting("");
@@ -5416,26 +5468,24 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
         {ranked.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{ranked.length} live</span>}
       </div>
 
-      {contest&&winner&&(
-        <div style={{display:"flex",alignItems:"center",gap:10,background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"1px solid #fcd34d",borderRadius:14,padding:"10px 13px",marginBottom:12}}>
-          <img src={showcaseImgs(winner)[0]} alt="" style={{width:42,height:42,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#92400e",fontWeight:700,lineHeight:1.45}}>
-            🏆 {winner.ownerName} won {totmMonthLabel(winner.wonMonth)}
-            {winner.rewardPts>0&&<> — {winner.rewardPts} reward coins credited</>}
-          </div>
+      {previousWinners&&(previousWinners.vote||previousWinners.streak)&&(
+        <div style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"1px solid #fcd34d",borderRadius:14,padding:"10px 13px",marginBottom:12}}>
+          <div style={{fontSize:11.5,color:"#92400e",fontWeight:800,lineHeight:1.5}}>🏆 {totmMonthLabel(previousMonth)} winners</div>
+          {previousWinners.vote&&<div style={{fontSize:11,color:"#92400e",marginTop:2}}>Most votes: <b>{previousWinners.vote.name}</b> · {previousWinners.vote.total} vote{Number(previousWinners.vote.total)===1?"":"s"}</div>}
+          {previousWinners.streak&&<div style={{fontSize:11,color:"#92400e",marginTop:2}}>Best streak: <b>{previousWinners.streak.name}</b> · {previousWinners.streak.total} day{Number(previousWinners.streak.total)===1?"":"s"}</div>}
         </div>
       )}
       {minePending&&(
         <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={showcaseImgs(mine)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your tank is awaiting approval. Once approved it goes live for voting for 24 hours{contest?" and joins this month's board":""}.</div>
+          <div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your new tank is awaiting approval. {mineApproved?"Your current approved photo stays live unless this replacement is approved.":"It will go live only after it meets the store rules and is approved."}</div>
         </div>
       )}
-      {mine&&!minePending&&(
+      {mineApproved&&(
         <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
-          <img src={showcaseImgs(mine)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+          <img src={showcaseImgs(mineApproved)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
           <div style={{fontSize:11.5,color:"#15803d",fontWeight:600,lineHeight:1.45}}>
-            ✓ Your tank is live with <b>{votesFor(mine)} vote{votesFor(mine)===1?"":"s"}</b>{showcaseHoursLeft(mine,now)>0?<> · <b>{showcaseHoursLeft(mine,now)}h left</b></>:null}. Upload again below to replace it.
+            ✓ Your current tank stays live with <b>{votesFor(mineApproved)} vote{votesFor(mineApproved)===1?"":"s"}</b>{showcaseHoursLeft(mineApproved,now)>0?<> · <b>{showcaseHoursLeft(mineApproved,now)}h left</b></>:null}{minePending?" while the replacement is reviewed":""}.
           </div>
         </div>
       )}
@@ -5444,7 +5494,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
           {ranked.map((s,idx)=>{
             const imgs=showcaseImgs(s);
             const n=votesFor(s);
-            const voted=hasVotedToday(s,user&&user.uid,votes,today);
+            const voted=hasVotedForTank(s,user&&user.uid,votes);
             return(
               <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:142,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${voted?C.primary:C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
                 <div style={{position:"relative",height:104}}>
@@ -5454,7 +5504,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
                 </div>
                 <div style={{padding:"7px 8px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🐠 {s.ownerName}</div>
-                  <div style={{fontSize:10.5,color:voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>{voted?`✓ Voted today · ${n}`:`🗳️ ${n} vote${n===1?"":"s"}`} · {showcaseHoursLeft(s,now)}h left</div>
+                  <div style={{fontSize:10.5,color:voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>{voted?`✓ Voted · ${n}`:`🗳️ ${n} vote${n===1?"":"s"}`} · {showcaseHoursLeft(s,now)}h left</div>
                   {s.caption&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.caption}</div>}
                 </div>
               </div>
@@ -5465,10 +5515,13 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
       </React.Fragment>}
       {showUpload&&(
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>📸 {mine?"Replace your tank photos":contest?"Enter Tank of the Month":"Share your aquarium"}</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text}}>📸 {minePending?"Update pending photos":mineApproved?"Submit replacement photos":contest?"Enter Tank of the Month":"Share your aquarium"}</div>
+            <button type="button" className="press" onClick={()=>setRulesOpen(true)} style={{background:"#eff6ff",color:C.primary,border:`1px solid ${C.accent}`,borderRadius:20,padding:"5px 10px",fontSize:10.5,fontWeight:800,flexShrink:0}}>Rules</button>
+          </div>
           {streak&&(
             <div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>
-              🔥 Upload streak: <b>{Number(streak.current)||0} day{Number(streak.current)===1?"":"s"}</b> · best {Number(streak.best)||0}{Number(settings.tankUploadStreakTarget)>0?` · target ${Number(settings.tankUploadStreakTarget)} days`:""}. Each upload day is logged for the store to review before awarding points.
+              🔥 This month: <b>{Number(monthlyStreak&&monthlyStreak.current)||0} day{Number(monthlyStreak&&monthlyStreak.current)===1?"":"s"}</b> · best {Number(monthlyStreak&&monthlyStreak.best)||0}{Number(settings.tankMinStreak||settings.tankUploadStreakTarget)>0?` · eligibility ${Number(settings.tankMinStreak||settings.tankUploadStreakTarget)} days`:""}. Only approved daily shares count; the monthly streak resets on day 1.
             </div>
           )}
           {preview.length>0&&(
@@ -5497,14 +5550,26 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
           {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:note[0]==="🎉"?C.success:C.primary,fontWeight:600,marginBottom:6}}>{note}</div>}
           <button className="press" onClick={submit} disabled={uploading}
             style={{width:"100%",background:uploading?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            {uploading?"Uploading…":(mine?"Update my tank 🐠":"Share my tank 🐠")}
+            {uploading?"Uploading…":(minePending?"Update pending tank 🐠":mineApproved?"Send replacement for review 🐠":"Share my tank 🐠")}
           </button>
         </div>
+      )}
+      {rulesOpen&&(
+        <Portal><div onClick={()=>setRulesOpen(false)} style={{position:"fixed",inset:0,background:"rgba(8,30,33,.65)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div onClick={e=>e.stopPropagation()} className="fade-in" style={{width:"100%",maxWidth:390,maxHeight:"78vh",overflowY:"auto",background:"white",borderRadius:18,padding:"20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10}}>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Customer Tank Reward Rules</div>
+              <button type="button" onClick={()=>setRulesOpen(false)} aria-label="Close rules" style={{border:"none",background:C.bg,borderRadius:99,width:32,height:32,fontSize:18,cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{whiteSpace:"pre-wrap",fontSize:12.5,lineHeight:1.65,color:C.text}}>{String(settings.tankRewardRules||DEFAULT_SETTINGS.tankRewardRules)}</div>
+            <div style={{marginTop:14,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 12px",fontSize:11,color:"#9a3412",lineHeight:1.5}}>Only photos approved by the store count toward your streak and monthly vote total. Rejected submissions do not count.</div>
+          </div>
+        </div></Portal>
       )}
       {fullImg&&(()=>{
         const imgs=showcaseImgs(fullImg);
         const n=votesFor(fullImg);
-        const voted=hasVotedToday(fullImg,user&&user.uid,votes,today);
+        const voted=hasVotedForTank(fullImg,user&&user.uid,votes);
         const own=user&&fullImg.userUid===user.uid;
         return(
         <Portal>
@@ -5538,7 +5603,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},mo
                           fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(own||voted)?"default":"pointer"}}>
                   {own?`Your tank · ${n} vote${n===1?"":"s"}`
                      : voting===fullImg.id?"…"
-                     : voted?`✓ Voted today · ${n} · back tomorrow`
+                     : voted?`✓ Vote recorded · ${n}`
                      : `🗳️ Vote for this tank · ${n}`}
                 </button>
                 {!user&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center"}}>Sign in to vote.</div>}
@@ -6982,7 +7047,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.448662e2";
+const APP_BUILD = "v90.03fbd954";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -8210,7 +8275,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   );
 }
 
-function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,onShowcaseVote,totmVotes={},restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true}){
+function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,onShowcaseVote,totmVotes={},tankPreviousWinners=null,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true}){
   const featured=[...products].sort(byAvailabilityThen()).slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
   const [walletOpen,setWalletOpen]=useState(false);
@@ -8377,7 +8442,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Food re-order reminder */}
         <FoodReorderBanner orders={orders} products={products} addToCart={addToCart} nav={nav}/>
 
-        <TankShowcaseSection mode="gallery" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit} onVote={onShowcaseVote} votes={totmVotes}/>
+        <TankShowcaseSection mode="gallery" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit} onVote={onShowcaseVote} votes={totmVotes} previousWinners={tankPreviousWinners}/>
 
         {/* Categories */}
         {/* Recently viewed — replaces the old category grid */}
@@ -8499,7 +8564,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
         {/* Share your tank (upload form) + Testimonials — moved to the bottom of the home page */}
         <div style={{marginTop:28}}>
-          <TankShowcaseSection mode="upload" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit} onVote={onShowcaseVote} votes={totmVotes}/>
+          <TankShowcaseSection mode="upload" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit} onVote={onShowcaseVote} votes={totmVotes} previousWinners={tankPreviousWinners}/>
         </div>
         {settings.testimonialsEnabled!==false&&<TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>}
 
@@ -13226,7 +13291,7 @@ function AdminExitConfirm({onStay,onLeave}){
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onDeleteGuides,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTotmAward,totmVotes={},testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onDeleteGuides,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTankMonthlyAward,totmVotes={},tankMonthKey=totmMonthOf(Date.now()),testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
@@ -13322,13 +13387,38 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   useEffect(()=>{ setProdShown(PAGE); },[catFilter,prodQ]);
   const [allReviews,setAllReviews]=useState({}); // {pid: [reviews]}
   const [loadingRev,setLoadingRev]=useState(false);
-  const [tankStreaks,setTankStreaks]=useState({});
+  const [tankMonthEntries,setTankMonthEntries]=useState({});
+  const [tankMonthVotes,setTankMonthVotes]=useState({});
+  const [tankMonthDays,setTankMonthDays]=useState({});
+  const [tankMonthWinners,setTankMonthWinners]=useState({});
+  const [tankMonthLoading,setTankMonthLoading]=useState(false);
   useEffect(()=>{
-    if(!(FB_OK&&FB_DB)) return;
+    if(tab!=="settings"||!(FB_OK&&FB_DB)) return;
     let alive=true;
-    withTimeout(FB_DB.ref("tankUploadStreaks").get(),6000,null).then(s=>{ if(alive&&s) setTankStreaks(s.val()||{}); });
+    const months=[tankMonthKey,previousTotmMonth(Date.now())];
+    setTankMonthLoading(true);
+    Promise.all(months.map(async month=>{
+      const [entries,votes,days,winners]=await Promise.all([
+        withTimeout(FB_DB.ref("tankMonthlyEntries/"+month).get(),6000,null),
+        withTimeout(FB_DB.ref("totmVotes/"+month).get(),6000,null),
+        withTimeout(FB_DB.ref("tankApprovedDays/"+month).get(),6000,null),
+        withTimeout(FB_DB.ref("tankMonthlyWinners/"+month).get(),6000,null),
+      ]);
+      return [month,(entries&&entries.val())||{},(votes&&votes.val())||{},(days&&days.val())||{},(winners&&winners.val())||{}];
+    })).then(results=>{
+      if(!alive) return;
+      setTankMonthEntries(Object.fromEntries(results.map(r=>[r[0],r[1]])));
+      setTankMonthVotes(Object.fromEntries(results.map(r=>[r[0],r[2]])));
+      setTankMonthDays(Object.fromEntries(results.map(r=>[r[0],r[3]])));
+      setTankMonthWinners(Object.fromEntries(results.map(r=>[r[0],r[4]])));
+      setTankMonthLoading(false);
+    });
     return ()=>{alive=false;};
-  },[showcase]);
+  },[tab,showcase,tankMonthKey]);
+  const awardMonthlyTank=async(type,month,row)=>{
+    const record=await (onTankMonthlyAward&&onTankMonthlyAward(type,month,row));
+    if(record) setTankMonthWinners(all=>({...all,[month]:{...(all[month]||{}),[type]:record}}));
+  };
   const [walletBalances,setWalletBalances]=useState({}); // {uid: points}
   const [loadingWallets,setLoadingWallets]=useState(false);
   const [adjUid,setAdjUid]=useState(null);     // which customer's wallet is being adjusted
@@ -14357,32 +14447,67 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               </div>
             </div>
           </div>
-          {Object.keys(tankStreaks).length>0&&(
-            <div style={{padding:"16px 16px 0"}}>
-              <div style={{background:"#fff7ed",borderRadius:16,padding:"16px",border:"1px solid #fed7aa"}}>
-                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:"#9a3412",marginBottom:4}}>🔥 Tank Upload Streak Log</div>
-                <div style={{fontSize:11,color:"#9a3412",lineHeight:1.5,marginBottom:10}}>Target: {Number(settings.tankUploadStreakTarget)||7} consecutive upload days. Review a customer's history here, then use Customer Wallets to award points manually.</div>
-                <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                  {Object.values(tankStreaks).filter(Boolean).sort((a,b)=>(Number(b.current)||0)-(Number(a.current)||0)||(Number(b.best)||0)-(Number(a.best)||0)).map(st=>{
-                    const cust=customers.find(c=>c.uid===st.uid);
-                    const met=(Number(st.current)||0)>=(Number(settings.tankUploadStreakTarget)||7);
-                    return(
-                      <div key={st.uid} style={{display:"flex",alignItems:"center",gap:9,background:"white",border:`1px solid ${met?"#86efac":"#fed7aa"}`,borderRadius:10,padding:"8px 10px"}}>
-                        <span style={{fontSize:18}}>{met?"🏆":"🔥"}</span>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:11.5,fontWeight:800,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cust?.name||st.uid}</div>
-                          <div style={{fontSize:10.5,color:C.textSub}}>Current {Number(st.current)||0} · best {Number(st.best)||0}{st.lastDay?` · last ${st.lastDay}`:""}</div>
-                        </div>
-                        {met&&<span style={{fontSize:9.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"3px 8px"}}>TARGET MET</span>}
+          {(()=>{
+            const current=tankMonthKey, previous=previousTotmMonth(Date.now());
+            const renderMonth=(month,complete)=>{
+              const archived=Object.values(tankMonthEntries[month]||{});
+              const liveFallback=showcase.filter(entry=>showcaseApproved(entry)&&(entry.month||totmMonthOf(Date.parse(entry.approvedAt||entry.createdAt)||Date.now()))===month);
+              const byId=new Map([...archived,...liveFallback].filter(Boolean).map(entry=>[entry.id,entry]));
+              const ballots=month===current?totmVotes:(tankMonthVotes[month]||{});
+              const rows=tankMonthlyRows([...byId.values()],ballots,tankMonthDays[month]||{},month);
+              const winners=tankMonthWinners[month]||{};
+              const voteTop=[...rows].filter(row=>row.votes>0).sort((a,b)=>b.votes-a.votes||String(a.firstApprovedAt||"").localeCompare(String(b.firstApprovedAt||"")))[0];
+              const minStreak=Math.max(1,Number(settings.tankMinStreak||settings.tankUploadStreakTarget)||1);
+              const streakTop=[...rows].filter(row=>row.streak>=minStreak).sort((a,b)=>b.streak-a.streak||String(a.firstApprovedAt||"").localeCompare(String(b.firstApprovedAt||"")))[0];
+              const voteCoins=Math.max(0,Number(settings.tankVoteRewardCoins??settings.totmRewardCoins)||0);
+              const streakCoins=Math.max(0,Number(settings.tankStreakRewardCoins)||0);
+              return(
+                <details key={month} open={complete} style={{background:"#fff7ed",borderRadius:14,border:"1px solid #fed7aa",overflow:"hidden"}}>
+                  <summary style={{cursor:"pointer",padding:"12px 13px",fontSize:12.5,fontWeight:800,color:"#9a3412",listStylePosition:"inside"}}>
+                    {totmMonthLabel(month)} · {rows.length} customer{rows.length===1?"":"s"}
+                  </summary>
+                  <div style={{padding:"0 12px 12px"}}>
+                    <div style={{fontSize:10.5,color:"#9a3412",lineHeight:1.5,marginBottom:9}}>{complete?"Completed month — verify the leaders before awarding.":"Live month — votes and approved share days update here and reset next month."}</div>
+                    {complete&&(
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                        {[{type:"vote",title:"Most votes",top:voteTop,coins:voteCoins,won:winners.vote},{type:"streak",title:"Best streak",top:streakTop,coins:streakCoins,won:winners.streak}].map(reward=>(
+                          <div key={reward.type} style={{background:"white",border:`1px solid ${reward.won?"#86efac":"#fde68a"}`,borderRadius:11,padding:"9px"}}>
+                            <div style={{fontSize:10,fontWeight:800,color:C.textSub,textTransform:"uppercase"}}>{reward.title}</div>
+                            <div style={{fontSize:11.5,fontWeight:800,color:C.text,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reward.won?reward.won.name:reward.top?reward.top.ownerName:"No eligible customer"}</div>
+                            <div style={{fontSize:10,color:C.textSub,marginTop:2}}>{reward.won?`${reward.won.total} ${reward.type==="vote"?"votes":"days"} · ${reward.won.rewardCoins||0} coins paid`:reward.top?`${reward.type==="vote"?reward.top.votes:reward.top.streak} ${reward.type==="vote"?"votes":"days"} · ${reward.coins} coins`:reward.type==="streak"?`Minimum ${minStreak} days`:"No votes received"}</div>
+                            {!reward.won&&reward.top&&<button className="press" onClick={()=>{if(window.confirm(`Award ${reward.coins} coins to ${reward.top.ownerName} for ${reward.title.toLowerCase()} in ${totmMonthLabel(month)}?`)) awardMonthlyTank(reward.type,month,reward.top);}}
+                              style={{width:"100%",marginTop:7,background:C.primary,color:"white",border:"none",borderRadius:8,padding:"6px",fontSize:10,fontWeight:800}}>Verify &amp; award</button>}
+                          </div>
+                        ))}
                       </div>
-                    );
-                  })}
-                </div>
-                <button className="press" onClick={()=>setTab("wallets")}
-                  style={{width:"100%",marginTop:10,background:"#9a3412",color:"white",border:"none",borderRadius:10,padding:"9px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Open Customer Wallets →</button>
-              </div>
-            </div>
-          )}
+                    )}
+                    {tankMonthLoading&&<div style={{fontSize:11,color:C.textSub,padding:"8px 0"}}>Loading monthly log…</div>}
+                    {!tankMonthLoading&&rows.length===0&&<div style={{fontSize:11,color:C.textSub,fontStyle:"italic",padding:"6px 0"}}>No approved customer tank days in this month.</div>}
+                    <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                      {rows.map(row=>(
+                        <details key={row.uid} style={{background:"white",border:`1px solid ${row.streak>=minStreak?"#86efac":"#fed7aa"}`,borderRadius:10,padding:"8px 10px"}}>
+                          <summary style={{cursor:"pointer",fontSize:11.5,fontWeight:800,color:C.text}}>
+                            {row.ownerName} · {row.votes} vote{row.votes===1?"":"s"} · {row.streak}-day streak
+                          </summary>
+                          <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.55,padding:"7px 2px 1px"}}>
+                            <div>Approved share days: {row.uploadDays.length}</div>
+                            <div>Total monthly votes: {row.votes}</div>
+                            <div>Longest approved streak: {row.streak} day{row.streak===1?"":"s"}</div>
+                            <div style={{marginTop:4,wordBreak:"break-word"}}>Daily log: {row.uploadDays.length?row.uploadDays.join(" · "):"No approved days"}</div>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                </details>
+              );
+            };
+            return <div style={{padding:"16px 16px 0"}}><div style={{background:C.card,borderRadius:16,padding:"14px",border:`1px solid ${C.border}`}}>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:4}}>📊 Monthly Tank Reward Log</div>
+              <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginBottom:10}}>Collapsible audit of approved share days, longest streaks and all votes received across each customer's daily images.</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>{renderMonth(current,false)}{renderMonth(previous,true)}</div>
+            </div></div>;
+          })()}
           {/* Showcase management */}
           {showcase.length>0&&(()=>{
             const now=Date.now();
@@ -14412,42 +14537,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <div style={{padding:"16px 16px 0"}}>
               <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:0,border:`1px solid ${C.border}`}}>
                 <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase</div>
-                {settings.totmEnabled&&(()=>{
-                  /* Standings, and the one button that moves money. Nothing is credited by the
-                     vote count on its own — the admin looks at the tank first, which is the whole
-                     point of "after admin's verification". */
-                  const month=totmMonthOf(now);
-                  const board=totmStandings(live,month,totmVotes);
-                  const need=totmMinVotes(settings);
-                  const pts=Math.max(0,Number(settings.totmRewardCoins)||0);
-                  const won=board.find(x=>x.winner&&x.wonMonth===month);
-                  return(
-                    <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"12px 13px",marginBottom:14}}>
-                      <div style={{fontSize:12.5,fontWeight:800,color:"#92400e",marginBottom:2}}>🏆 Tank of the Month — {totmMonthLabel(month)}</div>
-                      <div style={{fontSize:11,color:"#92400e",opacity:.85,marginBottom:10,lineHeight:1.5}}>{need>0?`${need} votes needed to be eligible`:"No minimum vote requirement set"} · reward {pts} coin{pts===1?"":"s"}</div>
-                      {board.length===0&&<div style={{fontSize:11.5,color:"#92400e",fontStyle:"italic"}}>No approved entries this month yet.</div>}
-                      {board.map((e,i)=>{
-                        const v=voteCount(e,totmVotes), ok=totmEligible(e,settings,totmVotes);
-                        return(
-                          <div key={e.id} style={{display:"flex",alignItems:"center",gap:9,background:"#fff",borderRadius:10,padding:"7px 9px",marginBottom:6,border:`1px solid ${e.winner?"#fcd34d":C.border}`}}>
-                            <span style={{fontSize:12,fontWeight:800,color:C.textSub,width:16,flexShrink:0}}>{i+1}</span>
-                            <img src={showcaseImgs(e)[0]} alt="" style={{width:36,height:36,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:11.5,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.ownerName}{e.winner?" 🏆":""}</div>
-                              <div style={{fontSize:10.5,color:ok?C.success:C.textSub,fontWeight:600}}>{v} vote{v===1?"":"s"}{ok?"":need>0?` · ${need-v} short`:""}{showcaseImgs(e).length>1?` · ${showcaseImgs(e).length} photos`:""}</div>
-                            </div>
-                            {e.winner
-                              ? <span style={{fontSize:10,fontWeight:800,color:"#92400e",background:"#fef3c7",borderRadius:20,padding:"4px 9px",flexShrink:0}}>{e.rewardPts>0?`${e.rewardPts} coins paid`:"Declared"}</span>
-                              : <button className="press" disabled={!ok||!!won} onClick={()=>onTotmAward&&onTotmAward(e)}
-                                  style={{background:(ok&&!won)?C.primary:"#e2e8f0",color:(ok&&!won)?"#fff":C.textSub,border:"none",borderRadius:8,padding:"6px 11px",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(ok&&!won)?"pointer":"default",flexShrink:0}}>
-                                  {won?"Winner picked":ok?"Verify & award":"Not eligible"}
-                                </button>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
                 {pending.length>0&&(
                   <div style={{marginBottom:14}}>
                     <div style={{fontSize:11.5,fontWeight:800,color:"#9a3412",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>⏳ Pending approval ({pending.length})</div>
@@ -15518,36 +15607,41 @@ function SettingsPanel({settings,onSave,products=[]}){
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable customer testimonials</span>
         </label>
         <div style={{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Upload streak target (days)</div>
-          <input type="number" min="1" value={f.tankUploadStreakTarget??7} onChange={e=>set("tankUploadStreakTarget",Math.max(1,Number(e.target.value)||1))}
-            style={{width:"110px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.45}}>Daily approved/upload streaks are logged for you to review and reward manually.</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9}}>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:C.textSub,marginBottom:5}}>Min approved streak</div>
+              <input type="number" min="1" value={f.tankMinStreak??f.tankUploadStreakTarget??7} onChange={e=>set("tankMinStreak",Math.max(1,Number(e.target.value)||1))}
+                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px",fontSize:13,outline:"none",background:"white"}}/>
+            </div>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:C.textSub,marginBottom:5}}>Most-votes coins</div>
+              <input type="number" min="0" value={f.tankVoteRewardCoins??f.totmRewardCoins??200} onChange={e=>set("tankVoteRewardCoins",Math.max(0,Number(e.target.value)||0))}
+                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px",fontSize:13,outline:"none",background:"white"}}/>
+            </div>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:C.textSub,marginBottom:5}}>Best-streak coins</div>
+              <input type="number" min="0" value={f.tankStreakRewardCoins??200} onChange={e=>set("tankStreakRewardCoins",Math.max(0,Number(e.target.value)||0))}
+                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px",fontSize:13,outline:"none",background:"white"}}/>
+            </div>
+          </div>
+          <div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>Only admin-approved daily shares count. Both vote totals and streaks reset automatically on the first day of each month.</div>
+          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginTop:12,marginBottom:5}}>Customer tank reward rules</div>
+          <textarea value={f.tankRewardRules??DEFAULT_SETTINGS.tankRewardRules} onChange={e=>set("tankRewardRules",e.target.value.slice(0,3000))} rows={8} placeholder="Write the conditions a tank photo must satisfy before you approve it…"
+            style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:12,lineHeight:1.55,outline:"none",background:"white",resize:"vertical"}}/>
+          <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.45}}>Customers see this text from the Rules button beside the tank upload control.</div>
         </div>
       </div>
 
       {/* Tank of the Month */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🏆 Tank of the Month</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Groups the public 24-hour tank entries into a monthly vote. Every approved image still auto-deletes 24 hours after approval; customers can vote on other tanks while they are live, and you pick the winner yourself — <b>no coins move until you verify it</b>.</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Groups public 24-hour entries into monthly customer totals. Votes add across every approved daily image; photos still auto-delete after 24 hours. Use the collapsible monthly log above to verify and award the completed month's vote and streak winners.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:12}}>
           <input type="checkbox" checked={!!f.totmEnabled} onChange={e=>set("totmEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Run Tank of the Month</span>
         </label>
         {!f.showcaseEnabled&&f.totmEnabled&&<div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",marginBottom:12,lineHeight:1.5}}>⚠ The tank showcase is switched off above, so nothing will appear. Turn it on for this to run.</div>}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5}}>Minimum votes</div>
-            <input type="number" min="0" value={f.totmMinVotes??5} onChange={e=>set("totmMinVotes",e.target.value===""?"":Number(e.target.value))}
-              style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"#f8fafc"}}/>
-            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>To be eligible for the reward. 0 = no minimum</div>
-          </div>
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5}}>Reward coins</div>
-            <input type="number" min="0" value={f.totmRewardCoins??200} onChange={e=>set("totmRewardCoins",e.target.value===""?"":Number(e.target.value))}
-              style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"#f8fafc"}}/>
-            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>≈ ₹{Math.floor((Number(f.totmRewardCoins)||0)*(f.loyaltyRedeemValue||1))} of store credit</div>
-          </div>
-        </div>
+        <div style={{fontSize:11,color:C.textSub,background:C.bg,borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>Reward values and the minimum approved streak are configured in Customer Tank Showcase above. Awards are never automatic.</div>
       </div>
 
       </>)}
@@ -16325,7 +16419,9 @@ function NemoStore(){
   const [mediaCache,setMediaCache] = useState({});
   const [loading,setLoading]       = useState(true);
   const [showcase,setShowcase]     = useState([]);
-  const [totmVotes,setTotmVotes]  = useState({});   // totmVotes/<month>/<entry>/<day>/<voter> = true
+  const [totmVotes,setTotmVotes]  = useState({});   // canonical _once ballots plus deduplicated legacy daily buckets
+  const [tankPreviousWinners,setTankPreviousWinners] = useState(null);
+  const [activeTankMonth,setActiveTankMonth] = useState(()=>totmMonthOf(Date.now()));
   const [testimonials,setTestimonials] = useState([]);
   const [restockSet,setRestockSet] = useState(()=>loadRestockLocal().map(x=>x.pid));
   const [selProduct,setSelProduct] = useState(null);
@@ -16341,6 +16437,11 @@ function NemoStore(){
   const vidUrlsRef = useRef({});
   const tapCount   = useRef(0);
   const tapTimer   = useRef(null);
+
+  useEffect(()=>{
+    const timer=setInterval(()=>setActiveTankMonth(month=>{ const next=totmMonthOf(Date.now()); return next===month?month:next; }),60000);
+    return ()=>clearInterval(timer);
+  },[]);
 
   const saveSettingsHandler=async(s)=>{
     if(lifetimeReferralLimit(s)!==lifetimeReferralLimit(settings)) await snapshotExistingReferralProfiles(orders,settings);
@@ -17023,41 +17124,48 @@ function NemoStore(){
   };
   const handleShowcaseSubmit=async(item)=>{
     const cloudOk=await addShowcasePhoto(item);
-    setShowcase(s=>[item,...s.filter(x=>x.id!==item.id)]); // one per customer — replaces their previous photo
+    setShowcase(s=>[item,...s.filter(x=>x.id!==item.id)]); // pending replacement and approved photo may coexist
     if(cloudOk) showToast("📩 Submitted! We'll review and post it soon.");
     else showToast("⚠ Saved on this device, but it couldn't reach our server — please check your connection and try again.");
   };
   const handleApproveShowcase=async(item)=>{
-    const updated=await approveShowcasePhoto(item,settings);
-    setShowcase(s=>s.map(x=>x.id===item.id?updated:x));
-    showToast(settings.totmEnabled?"✓ Tank approved — live for 24h and in this month's vote":"✓ Tank approved — live for voting for 24h");
+    const {updated,replacedId,ok}=await approveShowcasePhoto(item,settings,showcase);
+    if(!ok){ showToast("Couldn't approve — sign in with the admin Google account and retry","error"); return; }
+    setShowcase(s=>s.filter(x=>!replacedId||x.id!==replacedId).map(x=>x.id===item.id?updated:x));
+    showToast(replacedId?"✓ Replacement approved — previous photo removed":"✓ Tank approved — streak day logged and live for 24h");
   };
-  /* One vote per tank per customer per day. The screen moves first and the write follows: a
+  /* One vote per tank image per customer. The screen moves first and the write follows: a
      refused write puts the count back rather than leaving a tick the server never agreed to. */
   const handleShowcaseVote=async(entry)=>{
     const uid=user&&user.uid;
     if(!uid){ showToast("Sign in to vote","error"); return; }
     if(entry.userUid===uid){ showToast("You can't vote for your own tank","error"); return; }
-    const month=totmMonthOf(Date.now()), day=totmDayOf(Date.now());
-    if(hasVotedToday(entry,uid,totmVotes,day)){ showToast("Already voted for this tank today","error"); return; }
+    const month=totmMonthOf(Date.now());
+    if(hasVotedForTank(entry,uid,totmVotes)){ showToast("You already voted for this tank","error"); return; }
     // Tick first, write second, and put it back if the write is refused — the rules make the
-    // day key create-only, so a refusal here means it was already counted.
+    // voter key create-only, so a refusal here means it was already counted.
     const before=totmVotes;
-    setTotmVotes(v=>({...v,[entry.id]:{...(v[entry.id]||{}),[day]:{...(((v[entry.id]||{})[day])||{}),[uid]:true}}}));
+    setTotmVotes(v=>({...v,[entry.id]:{...(v[entry.id]||{}),_once:{...(((v[entry.id]||{})._once)||{}),[uid]:true}}}));
     const ok=await castShowcaseVote(month,entry.id,uid);
     if(!ok){ setTotmVotes(before); showToast("Couldn't record that vote — check your connection","error"); return; }
     showToast("Voted for "+entry.ownerName+" 🗳️");
   };
-  /* The admin has seen the tank and released the coins. adminCreditLoyalty is keyed on the
-     entry, so pressing it twice cannot pay twice. */
-  const handleTotmAward=async(entry)=>{
-    const pts=Math.max(0,Number(settings.totmRewardCoins)||0);
-    const uid=entry.userUid;
-    if(!uid){ showToast("This entry has no customer account attached","error"); return; }
-    if(pts>0) await adminCreditLoyalty(uid,pts,"totm:"+(entry.wonMonth||entry.month||totmMonthOf(Date.now()))+":"+entry.id,"Tank of the Month",settings.walletValidityMonths);
-    const updated=await markTotmWinner(entry,pts);
-    setShowcase(s=>s.map(x=>x.id===entry.id?updated:x));
-    showToast(pts>0?`🏆 ${entry.ownerName} declared winner — ${pts} coins credited`:`🏆 ${entry.ownerName} declared winner`);
+  const handleTankMonthlyAward=async(type,month,row)=>{
+    const isStreak=type==="streak";
+    const pts=Math.max(0,Number(isStreak?settings.tankStreakRewardCoins:(settings.tankVoteRewardCoins??settings.totmRewardCoins))||0);
+    const minimum=Math.max(1,Number(settings.tankMinStreak||settings.tankUploadStreakTarget)||1);
+    if(isStreak&&Number(row.streak)<minimum){ showToast(`Minimum ${minimum}-day streak not met`,"error"); return null; }
+    if(!isStreak&&Number(row.votes)<=0){ showToast("No valid votes to reward","error"); return null; }
+    if(pts>0){
+      const ok=await adminCreditLoyalty(row.uid,pts,`tank-month:${month}:${type}`,isStreak?"Monthly tank streak winner":"Monthly tank vote winner",settings.walletValidityMonths);
+      if(!ok){ showToast("Couldn't credit the reward — verify admin sign-in","error"); return null; }
+    }
+    try{
+      const record=await markTankMonthlyWinner(month,type,row,pts);
+      if(month===previousTotmMonth(Date.now())) setTankPreviousWinners(w=>({...((w)||{}),[type]:record}));
+      showToast(`🏆 ${row.ownerName} awarded ${pts} coin${pts===1?"":"s"} for ${isStreak?"best streak":"most votes"}`);
+      return record;
+    }catch(e){ showToast("Reward was credited, but the winner record needs retrying","error"); return null; }
   };
   const handleTestimonialSubmit=async(t)=>{
     const cloudOk=await addTestimonial(t);
@@ -17735,18 +17843,27 @@ function NemoStore(){
     return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
   },[fbReady]);
 
+  // Only the compact winner record is public. Monthly entry metadata stays admin-only, and
+  // expired photos remain deleted rather than being retained for a winner banner.
+  useEffect(()=>{
+    if(!(FB_OK&&FB_DB)) return;
+    const ref=FB_DB.ref("tankMonthlyWinners/"+previousTotmMonth(Date.now()));
+    const cb=ref.on("value",s=>setTankPreviousWinners((s&&s.val())||null),()=>{});
+    return ()=>{ try{ref.off("value",cb);}catch(e){} };
+  },[fbReady,activeTankMonth]);
+
   /* GLOBAL: live listener on this month's Tank-of-the-Month votes. Counts have to move for
      everyone as they are cast — a vote total that only refreshes on a cold start is a vote
      total nobody trusts. Scoped to the current month, so last month's ballots are not carried
      around forever. */
   useEffect(()=>{
     if(!(FB_OK && FB_DB)) return;
-    const month=totmMonthOf(Date.now());
-    const ref=FB_DB.ref("totmVotes/"+month);
+    setTotmVotes({});
+    const ref=FB_DB.ref("totmVotes/"+activeTankMonth);
     let alive=true;
     const cb=ref.on("value",s=>{ if(alive) setTotmVotes((s&&s.val())||{}); },()=>{});
     return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
-  },[fbReady]);
+  },[fbReady,activeTankMonth]);
 
   // GLOBAL: live listener on the CARE GUIDES — same one-shot read, same fix as the catalogue.
   useEffect(()=>{
@@ -17904,7 +18021,7 @@ function NemoStore(){
           chaining out to the document and dragging the pinned bottom nav with it. */}
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
         <div key={page} className="page-swap">
-        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
+        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} tankPreviousWinners={tankPreviousWinners} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
         {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} goBack={goBack} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={products} mediaCache={mediaCache} orders={orders}/>}
@@ -17922,7 +18039,7 @@ function NemoStore(){
         {page==="about"    &&<AboutPage nav={nav} goBack={goBack} settings={settings}/>}
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} settings={settings}/>}
-        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{await deleteShowcasePhoto(id);setShowcase(s=>s.filter(x=>x.id!==id));}} onApproveShowcase={handleApproveShowcase} onTotmAward={handleTotmAward} totmVotes={totmVotes} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
+        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{const ok=await deleteShowcasePhoto(id);if(ok)setShowcase(s=>s.filter(x=>x.id!==id));else showToast("Couldn't remove that submission — verify admin sign-in","error");}} onApproveShowcase={handleApproveShowcase} onTankMonthlyAward={handleTankMonthlyAward} totmVotes={totmVotes} tankMonthKey={activeTankMonth} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onDeleteGuides={deleteGuidesHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
       </div>

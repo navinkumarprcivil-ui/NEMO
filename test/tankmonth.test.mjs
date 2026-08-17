@@ -4,9 +4,8 @@
  *   node --test test/tankmonth.test.mjs
  *
  * These decide who gets paid, so they are lifted out of app.jsx and run directly rather than
- * eyeballed in the UI. The vote model is the part worth pinning down: votes live in
- * totmVotes/<month>/<entry>/<day>/<voter> = true, so every customer can vote for other
- * customers' tanks once per tank per day.
+ * eyeballed in the UI. New votes live in totmVotes/<month>/<entry>/_once/<voter> = true;
+ * legacy daily buckets remain readable but are deduplicated per image and voter.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -18,13 +17,13 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = readFileSync(join(root, "app.jsx"), "utf8");
 const code = src.slice(src.indexOf("const SHOWCASE_TTL"), src.indexOf("function loadTankStreakLocal("));
 const M = new Function("FB_OK", code + `
-  return {totmMonthOf,totmDayOf,totmMonthLabel,totmMonthEnd,showcaseImgs,voteCount,
-          hasVotedToday,votesCastToday,totmStandings,totmMinVotes,totmEligible,
-          showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak};`)(false);
-const {totmMonthOf,totmDayOf,totmMonthLabel,totmMonthEnd,showcaseImgs,voteCount,
-       hasVotedToday,votesCastToday,totmStandings,totmMinVotes,totmEligible,
-       showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak}=M;
-/* totmVotes/<month>/<entryId>/<day>/<voter> = true */
+  return {totmMonthOf,previousTotmMonth,totmDayOf,totmMonthLabel,totmMonthEnd,showcaseImgs,voteCount,
+          hasVotedForTank,totmStandings,totmMinVotes,totmEligible,
+          showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak,monthUploadStats,tankMonthlyRows,replacementForApproval};`)(false);
+const {totmMonthOf,previousTotmMonth,totmDayOf,totmMonthLabel,totmMonthEnd,showcaseImgs,voteCount,
+       hasVotedForTank,totmStandings,totmMinVotes,totmEligible,
+       showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak,monthUploadStats,tankMonthlyRows,replacementForApproval}=M;
+/* Legacy ballot fixture: totmVotes/<month>/<entryId>/<day>/<voter> = true. */
 const ballots = pairs => {
   const out = {};
   for (const [entry, day, voter] of pairs) {
@@ -47,6 +46,42 @@ test("a month key and its end are derived, never stored twice", () => {
   assert.ok(end > Date.parse("2026-08-31T00:00:00Z"));             // past the last day
   assert.ok(end < Date.parse("2026-09-02T00:00:00Z"));
   assert.match(totmMonthLabel("2026-08"), /August 2026/);
+  assert.equal(previousTotmMonth(Date.parse("2026-01-15T00:00:00Z")), "2025-12");
+  assert.equal(totmMonthOf(Date.parse("2026-08-31T18:29:59Z")), "2026-08");
+  assert.equal(totmMonthOf(Date.parse("2026-08-31T18:30:00Z")), "2026-09");
+});
+
+test("monthly totals add votes across every approved daily image for one customer", () => {
+  const entries=[
+    entry("day-one",{userUid:"u1",ownerName:"Nila",createdAt:"2026-08-01T08:00:00Z"}),
+    entry("day-two",{userUid:"u1",ownerName:"Nila",createdAt:"2026-08-02T08:00:00Z"}),
+    entry("other",{userUid:"u2",ownerName:"Ravi",createdAt:"2026-08-02T09:00:00Z"}),
+  ];
+  const votes=ballots([["day-one",D1,"v1"],["day-one",D1,"v2"],["day-two",D2,"v1"],["other",D2,"v3"]]);
+  const rows=tankMonthlyRows(entries,votes,{},"2026-08");
+  assert.equal(rows.find(row=>row.uid==="u1").votes,3);
+  assert.equal(rows.find(row=>row.uid==="u2").votes,1);
+});
+
+test("only approved share days build a monthly streak and a missed day ends it", () => {
+  const approvedDays={u1:{
+    "2026-08-01":{ownerName:"Nila"},
+    "2026-08-02":{ownerName:"Nila"},
+    "2026-08-04":{ownerName:"Nila"},
+  }};
+  const row=tankMonthlyRows([],{},approvedDays,"2026-08")[0];
+  assert.equal(row.ownerName,"Nila");
+  assert.equal(row.streak,2);
+  assert.deepEqual(row.uploadDays,["2026-08-01","2026-08-02","2026-08-04"]);
+  assert.equal(monthUploadStats(approvedDays.u1,"2026-08").best,2);
+});
+
+test("approving a replacement selects only the customer's current approved tank", () => {
+  const current=entry("old",{userUid:"u1",expiresAt:Date.now()+60000});
+  const pending=entry("new",{userUid:"u1",approved:false});
+  const other=entry("other",{userUid:"u2",expiresAt:Date.now()+60000});
+  assert.equal(replacementForApproval([current,pending,other],pending).id,"old");
+  assert.equal(replacementForApproval([other],pending),null);
 });
 
 test("photos read the same whether the entry is old or new", () => {
@@ -66,29 +101,32 @@ test("votes are counted off the ballot map, not off the entry", () => {
   assert.equal(voteCount({...a, votes:{x:true,y:true,z:true}}, votes), 2);
 });
 
-test("a voter may back many tanks a day, but each of them only once", () => {
+test("a voter may back many tank images, but each image only once", () => {
   const a = entry("a"), b = entry("b");
-  // one person, two tanks, same day — both count
+  // one person, two tank images — both count
   let votes = ballots([["a",D1,"v1"],["b",D1,"v1"]]);
   assert.equal(voteCount(a, votes), 1);
   assert.equal(voteCount(b, votes), 1);
-  assert.equal(votesCastToday("v1", votes, D1), 2);
-  assert.ok(hasVotedToday(a, "v1", votes, D1));
-  assert.ok(hasVotedToday(b, "v1", votes, D1));
-  // voting the same tank again the same day writes the key it already holds — still one
+  assert.ok(hasVotedForTank(a, "v1", votes));
+  assert.ok(hasVotedForTank(b, "v1", votes));
+  // repeating the same image remains one vote
   votes = ballots([["a",D1,"v1"],["a",D1,"v1"],["b",D1,"v1"]]);
   assert.equal(voteCount(a, votes), 1);
 });
 
-test("the same tank can be voted again on a later day, and both count", () => {
+test("legacy repeat-day votes for the same image are deduplicated by voter", () => {
   const a = entry("a");
   const votes = ballots([["a",D1,"v1"],["a",D2,"v1"]]);
-  assert.equal(voteCount(a, votes), 2);                            // a returning voter adds
-  assert.ok(hasVotedToday(a, "v1", votes, D2));
-  assert.ok(!hasVotedToday(a, "v2", votes, D2));                   // someone else has not
-  assert.equal(votesCastToday("v1", votes, D2), 1);                // one tank backed today
-  assert.equal(votesCastToday("v1", {}, D2), 0);
-  assert.ok(!hasVotedToday(a, null, votes, D1));                   // signed out
+  assert.equal(voteCount(a, votes), 1);
+  assert.ok(hasVotedForTank(a, "v1", votes));
+  assert.ok(!hasVotedForTank(a, "v2", votes));
+  assert.ok(!hasVotedForTank(a, null, votes));
+});
+
+test("new once-only ballots use the canonical bucket", () => {
+  const a=entry("a"), votes={a:{_once:{v1:true,v2:true}}};
+  assert.equal(voteCount(a,votes),2);
+  assert.ok(hasVotedForTank(a,"v1",votes));
 });
 
 test("a day key is the calendar day, not the month", () => {
@@ -101,7 +139,7 @@ test("standings rank by votes, and a tie goes to whoever posted first", () => {
   const early = entry("early", {createdAt:"2026-08-01T00:00:00.000Z"});
   const late  = entry("late",  {createdAt:"2026-08-09T00:00:00.000Z"});
   const lone  = entry("lone",  {createdAt:"2026-08-05T00:00:00.000Z"});
-  const votes = ballots([["late",D1,"v1"],["early",D1,"v2"],["lone",D1,"v3"],["late",D2,"v1"],["early",D2,"v2"]]);
+  const votes = ballots([["late",D1,"v1"],["early",D1,"v2"],["lone",D1,"v3"],["late",D2,"v4"],["early",D2,"v5"]]);
   const board = totmStandings([late, lone, early], "2026-08", votes);
   assert.deepEqual(board.map(e=>e.id), ["early","late","lone"]);   // 2,2,1 — early wins the tie
   assert.deepEqual(board.map(e=>e.votes_), [2,2,1]);
@@ -124,7 +162,7 @@ test("an entry with no month falls back to when it was posted", () => {
 
 test("eligibility is the admin's minimum, and 0 means no minimum", () => {
   const a = entry("a");
-  const votes = ballots([["a",D1,"v1"],["a",D1,"v2"],["a",D2,"v1"]]);
+  const votes = ballots([["a",D1,"v1"],["a",D1,"v2"],["a",D2,"v3"]]);
   assert.equal(totmMinVotes({totmMinVotes:5}), 5);
   assert.equal(totmMinVotes({}), 0);
   assert.equal(totmMinVotes({totmMinVotes:-3}), 0);

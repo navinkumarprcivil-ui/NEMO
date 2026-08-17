@@ -33,9 +33,13 @@ export default async function handler(req, res) {
   if (!uid) { res.status(401).json({ error: 'sign-in-required' }); return; }
 
   try {
-    const entry = await dbGet(`showcase/${encodeURIComponent(uid)}`);
     const requestedId = String(req.body?.entryId || '');
-    if (!entry || entry.userUid !== uid || (requestedId && entry.id !== requestedId)) {
+    if (!requestedId || requestedId.length > 160) {
+      res.status(400).json({ error: 'entry-id-required' });
+      return;
+    }
+    const entry = await dbGet(`showcase/${encodeURIComponent(requestedId)}`);
+    if (!entry || entry.userUid !== uid || entry.id !== requestedId || entry.approved !== true) {
       res.status(409).json({ error: 'upload-not-found' });
       return;
     }
@@ -51,6 +55,7 @@ export default async function handler(req, res) {
       const streak = computeStreak(dates, updatedAt);
       return {
         uid,
+        ownerName: String(entry.ownerName || current?.ownerName || '').slice(0, 80),
         dates,
         current: streak.current,
         best: Math.max(Number(current?.best) || 0, streak.best),
