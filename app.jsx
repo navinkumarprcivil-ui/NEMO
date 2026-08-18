@@ -1313,6 +1313,10 @@ function waitForFirebase(ms){
    briefly so an early reveal is never dropped. */
 function revealStore(){
   try{
+    /* Boot data owns the reveal now. Several fast paths call revealStore as their own data
+       lands, but none of them alone means the signed-in wallet and the rest of the storefront
+       are ready. Queue those early signals until NemoStore marks the complete boot ready. */
+    if(window.__nemoBootReady!==true){ window.__nemoRevealQueued=true; return; }
     if(window.nemoSplashReady){ window.nemoSplashReady(); return; }
     let n=30;   // ~1.5s of 50ms retries, inside the splash's own short backstop
     const t=setInterval(()=>{
@@ -7085,7 +7089,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.4a54228b";
+const APP_BUILD = "v90.6f636ee3";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -10624,7 +10628,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
                choosing packing is repeated inside that chooser below. */}
             <Collapsible icon="🛡️" tone="green" title="Live Arrival Guarantee"
               subtitle="Free with our recommended packing — tap for the terms">
-              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish arrives dead (DOA), share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery. If approved, <b>you choose either a refund or reward coins</b> for the fish's value. Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
+              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish is <b>Dead on Arrival (DOA)</b>, share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery. If approved, <b>you choose either a refund or reward coins</b> for the fish's value. Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
             </Collapsible>
             </>
           )}
@@ -10892,7 +10896,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
                         {isSug&&<span style={{fontSize:8.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
                         {covered
                           ? <span style={{fontSize:9,fontWeight:800,color:"#15803d"}} title="Live Arrival Guarantee applies">🛡️</span>
-                          : <span style={{fontSize:8.5,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"1px 6px"}}>NO DOA COVER</span>}
+                          : <span style={{fontSize:8.5,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"1px 6px"}}>NO DEAD-ON-ARRIVAL COVER</span>}
                       </div>
                       <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
                     </div>
@@ -16468,6 +16472,7 @@ function NemoStore(){
   const [restockSet,setRestockSet] = useState(()=>loadRestockLocal().map(x=>x.pid));
   const [selProduct,setSelProduct] = useState(null);
   const [walletPts,setWalletPts]   = useState(0);
+  const [walletReady,setWalletReady] = useState(false);
   // Cart persists across sessions (localStorage) — a returning shopper finds their items waiting,
   // which itself recovers otherwise-abandoned carts.
   const [cart,setCart]             = useState(()=>{ try{ return JSON.parse(localStorage.getItem("nemo-cart")||"[]")||[]; }catch(e){ return []; } });
@@ -16706,6 +16711,15 @@ function NemoStore(){
   // Safety net: first-ever visitors have no cache, so reveal settings-gated promo banners
   // from the local value after a short grace period even if Firebase is slow/blocked.
   useEffect(()=>{ const t=setTimeout(()=>setSettingsReady(true), 650); return()=>clearTimeout(t); },[]);
+
+  /* Keep the cinematic loader over the app until the shared data needed by the home screen
+     and every customer page is ready. The wallet is included deliberately: previously the
+     cached shell dismissed the splash first and the coin total visibly changed afterward. */
+  useEffect(()=>{
+    if(loading||!hydrated||!settingsReady||!walletReady) return;
+    try{ window.__nemoBootReady=true; }catch(e){}
+    revealStore();
+  },[loading,hydrated,settingsReady,walletReady]);
 
   const deepLinkRef = useRef((()=>{ try{ return new URLSearchParams(window.location.search).get("p")||""; }catch(e){ return ""; } })());
   useEffect(()=>{
@@ -18017,9 +18031,17 @@ function NemoStore(){
 
   // WALLET: load the signed-in customer's live balance. Re-runs when their orders change.
   useEffect(()=>{
+    if(loading) return;
     const uid=userKey(user);
-    if(!uid){ setWalletPts(0); return; }
+    if(!uid){ setWalletPts(0); setWalletReady(true); return; }
     let alive=true;
+    setWalletReady(false);
+    const cached=loadLoyaltyLocal(uid);
+    setWalletPts(cached.points||0);
+    /* If Firebase is unavailable, do not strand an offline customer behind the splash. Six
+       seconds gives the async SDK and authenticated wallet read time to complete on a slow
+       phone, then accepts the cached balance as the best available result. */
+    const fallback=setTimeout(()=>{ if(alive) setWalletReady(true); },6000);
     // Provision the permanent referral profile now, freezing today's unlock threshold for
     // this customer so later admin changes affect only profiles created afterwards.
     if(settings.referralEnabled!==false) ensureReferralProfile(uid,settings).catch(()=>{});
@@ -18039,13 +18061,13 @@ function NemoStore(){
         }
         try{ localStorage.setItem("nemo-lp-"+uid, JSON.stringify(data||{points:0,history:[]})); }catch(e){}
         setWalletPts(pts);
-      },()=>{ /* read denied / offline → fall back to cached value */ if(alive) setWalletPts(loadLoyaltyLocal(uid).points||0); });
-      return ()=>{ alive=false; try{ ref.off("value",cb); }catch(e){} };
+        setWalletReady(true);
+      },()=>{ /* read denied / offline → fall back to cached value */ if(alive){ setWalletPts(loadLoyaltyLocal(uid).points||0); setWalletReady(true); } });
+      return ()=>{ alive=false; clearTimeout(fallback); try{ ref.off("value",cb); }catch(e){} };
     }
-    // Offline fallback — one-shot read of the local cache.
-    setWalletPts(loadLoyaltyLocal(uid).points||0);
-    return ()=>{alive=false;};
-  },[user,settings.loyaltyRedeemValue,settings.referralEnabled,settings.referralLifetimeSpendMin,fbReady]);
+    // Offline fallback is already painted from cache; the bounded timer above releases boot.
+    return ()=>{alive=false;clearTimeout(fallback);};
+  },[loading,user,settings.loyaltyRedeemValue,settings.referralEnabled,settings.referralLifetimeSpendMin,fbReady]);
 
   if(loading)return(
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:C.bg,gap:16,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
