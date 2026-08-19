@@ -4,6 +4,8 @@
     { "path": "/api/cron-tank-cleanup", "schedule": "0 0 * * *" }
   ],
   "rewrites": [
+    { "source": "/contact-us", "destination": "/index.html" },
+    { "source": "/cancellations-returns-refunds", "destination": "/index.html" },
     { "source": "/s/:id", "destination": "/api/share?id=:id" },
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/p", "destination": "/api/product-page" },

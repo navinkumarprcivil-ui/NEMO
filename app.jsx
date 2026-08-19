@@ -11,8 +11,6 @@ const C = {
 };
 const STORE_NAME     = "Nemo";
 const PRICE_FONT     = "'Plus Jakarta Sans',sans-serif"; // prices / amounts (weight 800)
-const ADMIN_PASS_HASH = "hlltu9q"; // default admin password stored as a non-reversible hash (never plaintext). Change it right after launch: tap the logo 10× → Settings → Admin Security.
-const ADMIN_OVERRIDE_HASH = "h11ya21j"; // secret-answer fallback when the OTP email can't be sent. Clue shown: "IITM Roll Number". (hash, never plaintext)
 const ADMIN_UID      = "cI2HmMt6FdR7fO7uUnugH85GeZt2"; // your Google account — must match Firebase rules
 const ADMIN_UID_2    = ""; // OPTIONAL co-admin (your helper). Paste their Google UID here, then also add it in database.rules.json + Firebase console. Leave "" if unused.
 const ADMIN_UIDS     = [ADMIN_UID, ADMIN_UID_2].filter(Boolean); // everyone allowed admin access
@@ -38,39 +36,6 @@ const STORE_LOGO = "assets/nemo-logo.webp"; // hard-coded inline brand logo (ins
 
 /* Is the current Firebase user the admin Google account? (cloud writes only work when true) */
 function isAdminSignedIn(){ return !!(FB_OK && FB_AUTH && FB_AUTH.currentUser && isAdminUid(FB_AUTH.currentUser.uid)); }
-/* Lightweight non-reversible hash so the admin password is never stored in plaintext */
-/* ── Admin password hashing ───────────────────────────────────────────────────
-   `hashPass` is DJB2 — a 32-bit string-bucketing hash, not a password hash. It is kept for one
-   reason only: to verify hashes written before the change below, including the two baked-in
-   constants above, whose plaintexts aren't recoverable from here. New passwords are stored as
-   SHA-256 with an `s256:` marker, so `verifyPass` can tell the two generations apart and the
-   owner moves onto the strong hash the next time they set a password.
-
-   Worth being clear about what this does and doesn't buy. `adminPassHash` lives in the
-   admin-only `settingsPrivate` node and now hashes properly — that is a real improvement. The
-   two constants above are compiled into a bundle anyone can download, so for a short or numeric
-   secret the hash function was never the weak part; shipping the check to the client is. All
-   three are defence-in-depth regardless: the gate that actually stops a write is the Firebase
-   rule on the admin's Google uid, which is enforced server-side and unaffected by any of this. */
-function hashPass(s){ let h=5381; for(let i=0;i<String(s).length;i++){ h=(((h<<5)+h)+String(s).charCodeAt(i))>>>0; } return "h"+h.toString(36); }
-const SHA_PREFIX = "s256:";
-/* crypto.subtle ships in every browser that can run this app and needs no dependency — it does
-   require a secure context, which the store always has (https, or localhost in development). */
-async function sha256Hex(s){
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(s)));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
-}
-async function hashPassStrong(s){ return SHA_PREFIX + await sha256Hex(s); }
-/* Compare a typed password against a stored hash of either generation. */
-async function verifyPass(pw, stored){
-  const h = String(stored||"");
-  if(!h) return false;
-  if(h.startsWith(SHA_PREFIX)){
-    try{ return (await hashPassStrong(pw)) === h; }
-    catch(e){ console.warn("sha256 unavailable", e?.message); return false; }
-  }
-  return hashPass(pw) === h;
-}
 /* Crop any image to a centered circle (cover-fit), returns a transparent PNG data-URL */
 function cropToCircle(dataURL, size=512){
   return new Promise(res=>{
@@ -1805,7 +1770,7 @@ async function deleteReview(pid,rid){
 const COURIER_COLLECT_TERM = "Tracking & collection: once your order is dispatched we share the courier partner and consignment number. Please keep tracking your parcel and collect it from the courier partner as soon as it reaches your area. Door delivery depends entirely on the courier partner and is not in our hands, so we request every customer to put in that effort and take delivery of the package at the earliest — especially when ordering live fish or plants, where every extra hour the parcel spends in transit or lying at the hub affects the livestock. Loss or deterioration caused by a parcel left uncollected, collected late, refused, or returned undelivered is not covered by the Live Arrival Guarantee or by any refund or reward coins.";
 
 /* Store settings (WhatsApp numbers, payment) — shared via Firebase */
-const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", adminPassHash:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"", website:"", bankAccountName:"", bankName:"", bankBranch:"", bankAccountNo:"", bankIfsc:"", invoiceSignature:"",
+const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"", website:"", bankAccountName:"", bankName:"", bankBranch:"", bankAccountNo:"", bankIfsc:"", invoiceSignature:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
   liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video and, if the claim is approved, you choose either a refund of the affected fish value or the same value as reward coins. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nApproved reward coins are added to your Nemo wallet. Approved refunds are returned through the applicable payment method. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
@@ -1902,7 +1867,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
    policies, rates and so on before anyone signs in). These keys are NOT storefront data and
    have no business being fetched by a stranger, so they live in `settingsPrivate`, which the
    rules restrict to the admin uid:
-     · adminPassHash   — the admin password hash
+     · adminPassHash   — retired legacy value, kept private until it is removed from old data
      · coAdminUid      — the helper account's uid
      · returnAddress*  — the proprietor's physical return addresses. The customer never needs
                          these from settings: the admin snapshots the chosen address onto the
@@ -3145,8 +3110,8 @@ async function logVisitorName(user){
 /* Admin view: the retained days, newest first, each with its named visitors. Sweeps anything
    expired on the way through, so opening the panel also tidies up. */
 /* Returns {days, error}. An empty log and a refused read look the same from the outside —
-   both produce no names — so they are reported apart: only the admin Google account may read
-   this node, and being past the panel password is not the same as being signed in as them. */
+   both produce no names — so they are reported apart: only the configured admin Google account
+   may read this node. */
 async function loadVisitorLog(){
   if(!FB_OK||!FB_DB) return {days:[],error:"offline"};
   if(!isAdminSignedIn()) return {days:[],error:"not-signed-in"};
@@ -3284,54 +3249,56 @@ async function googleSignIn(){
   const u=res.user;
   return { name:u.displayName||"Customer", email:u.email||"", phone:normalizePhone(u.phoneNumber||""), uid:u.uid, photoURL:u.photoURL||"", method:"google", loginAt:new Date().toISOString() };
 }
-/* ═══════════════════ PAYMENT GATEWAY (Razorpay) ═══════════════════
+/* ═══════════════════ PAYMENT GATEWAY (Cashfree) ═══════════════════
    The store ships with the manual flow — pay by UPI, send a screenshot, the owner
    verifies it by hand — and switches itself to the gateway the moment the keys
    exist in the server environment. Nothing here needs editing to make that happen:
    /api/pay-create answers whether it is configured, and this asks once per load.
 
-   Everything that matters is decided on the server. This code opens a payment and
-   then waits; it never tells the app an order was paid. That word comes from
-   Razorpay's signed webhook (api/pay-webhook.js), lands on the order in the
-   database, and reaches the customer through the live order listener they already
-   have. So a closed tab, a lost connection or a tampered client changes nothing
-   about whether an order is confirmed. */
-let PAY_GATEWAY = { ready:false, checked:false };
+   Everything that matters is decided on the server. Cashfree's popup result is
+   only a cue to ask our server to check the order directly with Cashfree; the
+   signed webhook is a second, asynchronous path. A closed tab, lost connection or
+   tampered client therefore cannot mark an order paid. */
+let PAY_GATEWAY = { ready:false, checked:false, provider:"", mode:"" };
 async function payGatewayStatus(){
   if(PAY_GATEWAY.checked) return PAY_GATEWAY;
   PAY_GATEWAY.checked = true;
   try{
     const r = await withTimeout(fetch("/api/pay-create",{method:"GET"}), 5000, null);
-    if(r && r.ok){ const j = await r.json(); PAY_GATEWAY.ready = !!j.ready; }
+    if(r && r.ok){
+      const j = await r.json();
+      PAY_GATEWAY={...PAY_GATEWAY,ready:!!j.ready,provider:j.provider||"",mode:j.mode||""};
+    }
   }catch(e){ /* no gateway reachable — the manual flow stands */ }
   return PAY_GATEWAY;
 }
-/* Razorpay's own script, fetched only when a payment is actually opened — an
+/* Cashfree's own script, fetched only when a payment is actually opened — an
    unconfigured store and every non-checkout page pay nothing for it. */
-let RZP_SCRIPT=null;
-function loadRazorpayScript(){
-  if(RZP_SCRIPT) return RZP_SCRIPT;
-  RZP_SCRIPT = new Promise((resolve,reject)=>{
-    if(typeof window!=="undefined" && window.Razorpay) return resolve(true);
+let CASHFREE_SCRIPT=null;
+function loadCashfreeScript(){
+  if(CASHFREE_SCRIPT) return CASHFREE_SCRIPT;
+  CASHFREE_SCRIPT = new Promise((resolve,reject)=>{
+    if(typeof window!=="undefined" && window.Cashfree) return resolve(true);
     const s=document.createElement("script");
-    s.src="https://checkout.razorpay.com/v1/checkout.js"; s.async=true;
+    s.src="https://sdk.cashfree.com/js/v3/cashfree.js"; s.async=true;
     s.onload=()=>resolve(true);
-    s.onerror=()=>{ RZP_SCRIPT=null; reject(new Error("checkout-script-failed")); };
+    s.onerror=()=>{ CASHFREE_SCRIPT=null; reject(new Error("checkout-script-failed")); };
     document.head.appendChild(s);
   });
-  return RZP_SCRIPT;
+  return CASHFREE_SCRIPT;
 }
 /**
  * Open the gateway for an order that is already in the database.
  *
- * Resolves "submitted" once the customer has completed Razorpay's flow — NOT
- * "paid". Confirmation is the webhook's job. Rejects with "dismissed" if they
- * close the sheet, which leaves the order exactly as it was: still awaiting
- * payment, still holding its stock until the ten-minute window runs out.
+ * The Firebase ID token proves which customer owns the order. When the modal
+ * closes, /api/pay-verify reads Cashfree's order status server-side; no field from
+ * the browser can confirm payment.
  */
 async function payWithGateway(order, settings={}){
+  if(!FB_OK||!FB_AUTH||!FB_AUTH.currentUser) throw new Error("sign-in-required");
+  const token = await FB_AUTH.currentUser.getIdToken();
   const res = await fetch("/api/pay-create",{
-    method:"POST", headers:{"content-type":"application/json"},
+    method:"POST", headers:{"content-type":"application/json",authorization:"Bearer "+token},
     body: JSON.stringify({ userUid: order.userUid, orderId: order.id }),
   });
   if(!res.ok){
@@ -3339,31 +3306,27 @@ async function payWithGateway(order, settings={}){
     throw new Error(j.error||"create-failed");
   }
   const cfg = await res.json();
-  await loadRazorpayScript();
-  return new Promise((resolve,reject)=>{
-    const rzp = new window.Razorpay({
-      key: cfg.keyId,
-      order_id: cfg.razorpayOrderId,
-      amount: cfg.amount,
-      currency: cfg.currency||"INR",
-      name: settings.legalName || (STORE_NAME+" Aqua Store"),
-      description: "Order "+(cfg.orderNo||""),
-      image: settings.storeLogo || undefined,
-      prefill: { name: cfg.name||"", email: cfg.email||"", contact: cfg.contact||"" },
-      theme: { color: "#0ea5e9" },
-      /* Razorpay hands back a payment id and its own signature here. Both are
-         deliberately ignored: the same values arrive server-side on the webhook,
-         where the signature is checked against a secret this page never holds. */
-      handler: ()=>resolve("submitted"),
-      modal: { ondismiss: ()=>reject(new Error("dismissed")) },
-    });
-    rzp.on("payment.failed", (e)=>reject(new Error(e?.error?.description||"payment-failed")));
-    rzp.open();
+  await loadCashfreeScript();
+  const cashfree=window.Cashfree({mode:cfg.mode==="production"?"production":"sandbox"});
+  const checkoutResult=await cashfree.checkout({
+    paymentSessionId:cfg.paymentSessionId,
+    redirectTarget:"_modal",
   });
+  if(checkoutResult&&checkoutResult.redirect) return "redirected";
+  const freshToken=await FB_AUTH.currentUser.getIdToken();
+  const verify=await fetch("/api/pay-verify",{
+    method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+freshToken},
+    body:JSON.stringify({userUid:order.userUid,orderId:order.id}),
+  });
+  const checked=await verify.json().catch(()=>({}));
+  if(!verify.ok){
+    if(checked.error==="payment-not-complete"&&checkoutResult&&checkoutResult.error) throw new Error("dismissed");
+    throw new Error(checked.error||"payment-verification-failed");
+  }
+  return checked.mode==="sandbox"?"test-confirmed":"confirmed";
 }
-/** Admin-only: send a refund back through the gateway. Authorised by the admin's
-    Firebase ID token, which the server verifies — the panel password never leaves
-    this device and could not be checked there anyway. */
+/** Admin-only: send a refund back through Cashfree. Authorised by the admin's
+    Firebase ID token, which the server verifies. */
 async function refundViaGateway(order, amount, reason){
   if(!FB_OK||!FB_AUTH||!FB_AUTH.currentUser) throw new Error("sign-in-required");
   const token = await FB_AUTH.currentUser.getIdToken();
@@ -3871,7 +3834,7 @@ function sendOrderEmail(order, email, settings){
 /* ── Bill / Invoice generator ──────────────────────────────────────────────
    Returns an HTML string that can be opened in a new tab for printing or sharing. */
 /* Email a one-time 6-digit security code to the admin email via EmailJS (reuses the customer template).
-   Confirms sensitive changes (WhatsApp / email / admin password). Returns {ok, error}. */
+   Confirms sensitive changes to store contact or payment settings. Returns {ok, error}. */
 async function sendOtpEmail(email, code, settings){
   const s=settings||{};
   const ej=ejKeys(s);
@@ -3894,7 +3857,7 @@ async function sendOtpEmail(email, code, settings){
     ship_name: "",
     ship_phone: "",
     ship_address: "",
-    care_reminder: "Enter this code in the app to confirm a change to your WhatsApp number, email, or admin password. It expires in 5 minutes. If you did not request this, ignore this email and change your admin password.",
+    care_reminder: "Enter this code in the app to confirm a change to your WhatsApp number, email, or payment settings. It expires in 5 minutes. If you did not request this, ignore this email and review your admin account security.",
     store_name: STORE_NAME,
     store_whatsapp: s.ownerWhatsapp||BUSINESS_WA,
   };
@@ -4494,7 +4457,7 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
     ${/* One source of truth for the window. The invoice used to carry its own fallback copy
            promising 7 days for accessories while the settings default said 3 — a printed
            promise the store had no intention of honouring if the setting was ever cleared. */""}
-    <p style="font-size:10px"><b>Returns &amp; Refunds:</b> ${policyHTML(s.returnPolicy||DEFAULT_SETTINGS.returnPolicy)}</p>
+    <p style="font-size:10px"><b>Cancellations, Returns &amp; Refunds:</b> ${policyHTML(s.returnPolicy||DEFAULT_SETTINGS.returnPolicy)}</p>
   </div>
   ${sigHtml}
   <div class="np" style="text-align:right;margin-top:18px"><button onclick="window.print()" style="background:#2f4b7c;color:#fff;border:none;border-radius:6px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save as PDF</button></div>
@@ -7089,7 +7052,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.6f636ee3";
+const APP_BUILD = "v90.3fe4802b";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7201,7 +7164,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
   const go=(to)=>{ onClose&&onClose(); nav&&nav(to); };
   const [refreshing,setRefreshing]=useState(false);
   const COMPANY=[{label:"About Us",to:"about"},{label:"Care Guides",to:"guides"},{label:"Request a Product",to:"request"},{label:"Track My Orders",to:"orders"}];
-  const POLICIES=[{label:"Live Guarantee",to:"policy-guarantee"},{label:"Returns & Refunds",to:"policy-returns"},{label:"Terms & Conditions",to:"policy-terms"},{label:"Privacy Policy",to:"policy-privacy"},{label:"Contact Us",to:"about"}];
+  const POLICIES=[{label:"Live Guarantee",to:"policy-guarantee"},{label:"Cancellations, Returns & Refunds",to:"policy-returns",href:"/cancellations-returns-refunds"},{label:"Terms & Conditions",to:"policy-terms"},{label:"Privacy Policy",to:"policy-privacy"},{label:"Contact Us",to:"contact",href:"/contact-us"}];
   return(
     /* Portal: the drawer sits inside the page's .slide-up wrapper, whose held identity
        matrix traps position:fixed — the overlay was being sized to the whole home page
@@ -7277,8 +7240,8 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
               ))}
               <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",margin:"20px 0 4px",borderTop:`1px solid ${C.border}`,paddingTop:16}}>Policies</div>
               {POLICIES.map(l=>(
-                <button key={l.label} className="press" onClick={()=>go(l.to)}
-                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l.label}</button>
+                <a key={l.label} className="press" href={l.href||"#"} onClick={e=>{e.preventDefault();go(l.to);}}
+                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",textDecoration:"none",boxSizing:"border-box"}}>{l.label}</a>
               ))}
             </div>
           )}
@@ -8653,15 +8616,15 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Policies</div>
               {[
                 {label:"Live Guarantee",to:"policy-guarantee"},
-                {label:"Returns & Refunds",to:"policy-returns"},
+                {label:"Cancellations, Returns & Refunds",to:"policy-returns",href:"/cancellations-returns-refunds"},
                 {label:"Terms & Conditions",to:"policy-terms"},
                 {label:"Privacy Policy",to:"policy-privacy"},
-                {label:"Contact Us",to:"about"},
+                {label:"Contact Us",to:"contact",href:"/contact-us"},
               ].map(l=>(
-                <button key={l.label} className="press" onClick={()=>nav(l.to)}
-                  style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
+                <a key={l.label} className="press" href={l.href||"#"} onClick={e=>{e.preventDefault();nav(l.to);}}
+                  style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",cursor:"pointer",width:"100%",textDecoration:"none"}}>
                   {l.label}
-                </button>
+                </a>
               ))}
             </div>
             {/* Contact */}
@@ -9835,23 +9798,33 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
   const [now,setNow]=useState(Date.now());
   /* Which checkout this order gets. Asked once, of the server — the store flips to
      the gateway when the keys are in the environment, without a rebuild. */
-  const [gatewayOn,setGatewayOn]=useState(PAY_GATEWAY.ready);
+  const [gatewayOn,setGatewayOn]=useState(PAY_GATEWAY.ready&&PAY_GATEWAY.mode==="production");
+  const [gatewayMode,setGatewayMode]=useState(PAY_GATEWAY.mode||"");
   const [payBusy,setPayBusy]=useState(false);
   const [payNote,setPayNote]=useState("");
-  useEffect(()=>{ let live=true; payGatewayStatus().then(s=>{ if(live) setGatewayOn(s.ready); }); return()=>{live=false;}; },[]);
+  useEffect(()=>{
+    let live=true;
+    payGatewayStatus().then(s=>{
+      if(!live)return;
+      setGatewayMode(s.mode||"");
+      // Sandbox is an owner test bench, never a payment option for real customers.
+      setGatewayOn(!!s.ready&&(s.mode==="production"||isAdminSignedIn()));
+    });
+    return()=>{live=false;};
+  },[]);
   const payNow=async()=>{
     setPayBusy(true); setPayNote("");
     try{
-      await payWithGateway(order, settings);
-      /* Razorpay has taken the payment; the order is not confirmed until the
-         webhook says so, which is usually a second or two. Say exactly that
-         rather than claiming success this page cannot verify. */
-      setPayNote("✓ Payment received — confirming your order…");
+      const outcome=await payWithGateway(order, settings);
+      if(outcome==="test-confirmed") setPayNote("✓ Sandbox test completed — no real money was charged. This is not a fulfilment order.");
+      else if(outcome==="redirected") setPayNote("Payment opened in a secure page. Check My Orders after completing it.");
+      else setPayNote("✓ Payment verified and recorded — the store will confirm your order shortly.");
     }catch(e){
       const m=String(e?.message||"");
       if(m==="dismissed") setPayNote("");                       // they closed it; nothing has changed
       else if(m==="order-not-payable") setPayNote("⚠ This order has already been paid or cancelled.");
       else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote(""); } // fall back to the manual flow
+      else if(m==="sandbox-admin-only"){ setGatewayOn(false); setPayNote(""); }
       else if(m==="checkout-script-failed") setPayNote("⚠ Couldn't load the payment window — check your connection and try again.");
       else setPayNote("⚠ Payment didn't go through. Nothing has been charged — please try again.");
     }finally{ setPayBusy(false); }
@@ -9918,17 +9891,25 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
             Present only once the server holds keys. One button, and then nothing
             for the customer to do: no reference to copy out of their bank app, no
             screenshot, no waiting a day or two for someone to look at it. The
-            order confirms itself when Razorpay's webhook lands, which reaches this
+            payment records itself when Cashfree's webhook lands, which reaches this
             screen through the live order listener. */}
         {gatewayOn?(
           <>
+            {gatewayMode==="sandbox"&&(
+              <div style={{background:"#fff7ed",border:"1.5px solid #fb923c",borderRadius:12,padding:"10px 12px",marginBottom:11,textAlign:"center"}}>
+                <div style={{fontSize:11.5,fontWeight:900,color:"#9a3412",letterSpacing:.35}}>CASHFREE SANDBOX · TEST MODE</div>
+                <div style={{fontSize:10.5,color:"#c2410c",marginTop:3,lineHeight:1.45}}>Owner testing only. No real money is charged and the order will not enter fulfilment.</div>
+              </div>
+            )}
             <button className="press" onClick={payNow} disabled={payBusy||expired}
               style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:(payBusy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               <span style={{fontSize:18}}>💳</span>
-              {payBusy?"Opening secure payment…":expired?"Payment window closed":`Pay ₹${grand} securely`}
+              {payBusy?"Opening secure payment…":expired?"Payment window closed":gatewayMode==="sandbox"?`Try Test Payment ₹${grand}`:`Pay ₹${grand} securely`}
             </button>
             <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:9,lineHeight:1.5}}>
-              UPI · Card · Netbanking · Wallets — your order is confirmed automatically the moment payment succeeds.
+              {gatewayMode==="sandbox"
+                ?"Uses Cashfree's sandbox payment details. Cancel this test order afterwards to release its reserved stock."
+                :"UPI · Card · Netbanking · Wallets — your payment is recorded automatically after Cashfree verifies it."}
             </div>
             {payNote&&<div style={{fontSize:12,fontWeight:700,marginTop:10,textAlign:"center",lineHeight:1.5,color:payNote[0]==="⚠"?C.danger:C.success}}>{payNote}</div>}
           </>
@@ -11359,23 +11340,26 @@ function BottomNav({page,nav,cartCount}){
 }
 
 /* ═══════════════════ ADMIN LOGIN ═══════════════════ */
-function AdminLogin({onSuccess,onBack,settings={}}){
-  const [pw,setPw]=useState("");
-  const [show,setShow]=useState(false);
-  const [err,setErr]=useState(false);
-  const [shaking,setShaking]=useState(false);
-  const inpRef=useRef(null);
+function AdminLogin({onSuccess,onBack,onAdminSignIn}){
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState("");
 
-  useEffect(()=>{const t=setTimeout(()=>inpRef.current?.focus(),200);return()=>clearTimeout(t);},[]);
+  /* A client-side password hash is still a downloadable credential. Admin entry therefore
+     relies only on the configured Firebase Google UID, which is also what the database rules
+     enforce. Returning admins go straight through once Firebase restores their session. */
+  useEffect(()=>{
+    let live=true;
+    (async()=>{ await waitForFirebase(8000); if(live&&isAdminSignedIn()) onSuccess(); })();
+    return()=>{live=false;};
+  },[]);
 
   const submit=async()=>{
-    const custom = settings.adminPassHash;
-    const ok = await verifyPass(pw, custom || ADMIN_PASS_HASH);
-    if(ok){onSuccess();}
-    else{
-      setShaking(true);setErr(true);
-      setTimeout(()=>{setShaking(false);},500);
-    }
+    setBusy(true); setMsg("");
+    try{
+      const u=await onAdminSignIn?.();
+      if(u&&isAdminUid(u.uid)) onSuccess();
+      else if(u) setMsg("This Google account is not configured as an admin.");
+    }finally{ setBusy(false); }
   };
 
   return(
@@ -11383,47 +11367,19 @@ function AdminLogin({onSuccess,onBack,settings={}}){
       <button className="press" onClick={onBack} style={{position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
       <div style={{fontSize:56,marginBottom:14}}>🔐</div>
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:6}}>Admin Access</div>
-      <div style={{fontSize:13.5,color:C.textSub,marginBottom:28,textAlign:"center"}}>Enter your admin password</div>
+      <div style={{fontSize:13.5,color:C.textSub,marginBottom:28,textAlign:"center",lineHeight:1.55}}>Sign in with the Google account configured as the store admin.</div>
 
-      <div className={shaking?"shake":""} style={{width:"100%",maxWidth:320}}>
-        <div style={{position:"relative",marginBottom:6}}>
-          <input
-            ref={inpRef}
-            type={show?"text":"password"}
-            value={pw}
-            onChange={e=>{setPw(e.target.value);if(err)setErr(false);}}
-            onKeyDown={e=>{if(e.key==="Enter")submit();}}
-            placeholder="Password"
-            autoComplete="off"
-            style={{
-              width:"100%",borderRadius:14,
-              border:`1.5px solid ${err?C.danger:C.border}`,
-              padding:"16px 50px 16px 18px",
-              fontSize:16,outline:"none",
-              background:"white",
-              fontFamily:"'Plus Jakarta Sans',sans-serif",
-              letterSpacing: show?0:2,
-            }}
-          />
-          <button className="press" onClick={()=>setShow(s=>!s)} type="button"
-            style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",
-              background:"transparent",border:"none",width:40,height:40,
-              fontSize:18,color:C.textSub,cursor:"pointer",
-              display:"flex",alignItems:"center",justifyContent:"center"}}>
-            {show?"🙈":"👁"}
-          </button>
-        </div>
-        <div style={{minHeight:20,marginBottom:14}}>
-          {err&&<div style={{fontSize:12.5,color:C.danger,fontWeight:600}}>✕ Incorrect password</div>}
-        </div>
-        <button className="press" onClick={submit} disabled={!pw}
-          style={{width:"100%",background:pw?C.primary:"#9ca3af",color:"white",
+      <div style={{width:"100%",maxWidth:320}}>
+        <button className="press" onClick={submit} disabled={busy}
+          style={{width:"100%",background:busy?"#9ca3af":C.primary,color:"white",
             border:"none",borderRadius:14,padding:"16px",
             fontSize:15,fontWeight:700,
             fontFamily:"'Plus Jakarta Sans',sans-serif",
             transition:"background .2s"}}>
-          Unlock Admin →
+          {busy?"Opening Google…":"Continue with Google →"}
         </button>
+        {msg&&<div style={{fontSize:12.5,color:C.danger,fontWeight:650,textAlign:"center",marginTop:12,lineHeight:1.5}}>{msg}</div>}
+        <div style={{fontSize:11.5,color:C.textSub,textAlign:"center",marginTop:16,lineHeight:1.55}}>No admin password is stored in this website or browser bundle.</div>
       </div>
     </div>
   );
@@ -12569,10 +12525,10 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   };
   /* Gateway refund — one tap, money on its way back, no bank app and no typing a
      UPI reference into the box below. Offered only for orders the gateway actually
-     collected: an order paid by manual UPI has no payment for Razorpay to reverse,
+     collected: an order paid by manual UPI has no Cashfree payment to reverse,
      and the editor underneath stays for those. */
   const [refundBusy,setRefundBusy]=useState(false);
-  const gatewayPaid=!!(o.gatewayPaymentId||(o.gateway==="razorpay"&&o.txnId));
+  const gatewayPaid=!!(o.gatewayPaymentId||(o.gateway==="cashfree"&&o.txnId));
   const alreadyRefunded=o.paymentStatus==="Refunded";
   const sendGatewayRefund=async()=>{
     const full=Number(amtDue)||0;
@@ -12586,10 +12542,11 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
       showToast(`✓ ₹${r.amount} refund sent — the gateway settles it in 5–7 working days`);
       // Mirror it onto the order the admin is looking at; the server has already
       // written the authoritative record.
-      await onUpdateOrder({...o, refundId:r.refundId, refundedAmount:r.amount,
+      await onUpdateOrder({...o, refundId:r.refundId, gatewayRefundId:r.gatewayRefundId||o.gatewayRefundId||"",
+        gatewayRefundStatus:r.status||"PENDING", refundedAmount:r.totalRefunded??r.amount,
         refundedAt:new Date().toISOString(),
-        ...(r.fullyRefunded?{paymentStatus:"Refunded"}:{}),
-        refund:{...(o.refund||{}), method:"gateway", amount:r.amount, ref:r.refundId, at:new Date().toISOString()},
+        ...(r.fullyRefunded?{paymentStatus:r.mode==="sandbox"?"Test Refunded":"Refunded"}:{}),
+        refund:{...(o.refund||{}), method:"gateway", amount:r.totalRefunded??r.amount, ref:r.refundId, status:String(r.status||"pending").toLowerCase(), at:new Date().toISOString()},
         updatedAt:new Date().toISOString()});
     }catch(err){
       const m=String(err?.message||"");
@@ -12599,7 +12556,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         m==="sign-in-required" ? "Sign in with Google first — a refund needs a verified admin" :
         m==="no-gateway-payment" ? "No gateway payment on this order — record the refund manually below" :
         m==="gateway-not-configured" ? "Payment gateway isn't configured yet" :
-        "Refund failed — nothing was sent. Check the Razorpay dashboard before retrying","error");
+        "Refund failed — nothing was sent. Check the Cashfree dashboard before retrying","error");
     }finally{ setRefundBusy(false); }
   };
   const gatewayRefundButton=()=>(!gatewayPaid?null:(
@@ -13633,7 +13590,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <span style={{fontSize:18}}>⚠️</span>
             <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#9a3412"}}>Sign in to load orders &amp; save changes</span>
           </div>
-          <div style={{fontSize:12.5,color:"#9a3412",lineHeight:1.55,marginBottom:10}}>The admin password unlocks this screen, but for customer privacy <b>order details only load after you sign in with your Google admin account</b>. Products, posters &amp; settings also won't sync to customers until you sign in.</div>
+          <div style={{fontSize:12.5,color:"#9a3412",lineHeight:1.55,marginBottom:10}}>For customer privacy, <b>order details load only after you sign in with your configured Google admin account</b>. Products, posters and settings also will not sync until you sign in.</div>
           <button className="press" onClick={onAdminSignIn}
             style={{display:"inline-flex",alignItems:"center",gap:8,background:"white",border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.2 35.9 26.7 37 24 37c-5.3 0-9.7-2.6-11.3-7l-6.5 5C9.2 41.4 16 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.3 5.3C41.9 35.5 45 30.2 45 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
@@ -13683,7 +13640,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                  of them. Name the actual one rather than letting the owner wonder. */
               visitorLogErr==="not-signed-in" ? (
                 <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"11px 13px",fontSize:12,color:"#9a3412",lineHeight:1.55}}>
-                  <b>Sign in with the admin Google account to see this.</b> The panel password unlocks the screen, but visitor names are personal data and only the admin account may read them.
+                  <b>Sign in with the admin Google account to see this.</b> Visitor names are personal data and only the configured admin account may read them.
                 </div>
               ) : visitorLogErr==="offline" ? (
                 <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>Not connected — can't read the log right now.</div>
@@ -14635,8 +14592,6 @@ function SettingsPanel({settings,onSave,products=[]}){
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const [logoNote,setLogoNote]=useState("");
   const [sigNote,setSigNote]=useState("");
-  const [npw,setNpw]=useState("");
-  const [npw2,setNpw2]=useState("");
   const [pwMsg,setPwMsg]=useState("");
   const [backupMsg,setBackupMsg]=useState("");
   const [cacheMsg,setCacheMsg]=useState("");
@@ -14656,7 +14611,7 @@ function SettingsPanel({settings,onSave,products=[]}){
     );
   };
 
-  /* ── OTP-gated sensitive changes (WhatsApp number + admin password) ──
+  /* ── OTP-gated sensitive changes (store contact and payment settings) ──
      Only the signed-in Google admin can change these, and only after entering a
      code emailed to the configured admin email. The Google-admin-UID Firebase rule
      is the real lock; this OTP is a second factor on the edit itself. */
@@ -14669,21 +14624,10 @@ function SettingsPanel({settings,onSave,products=[]}){
   const [otpBusy,setOtpBusy]=useState(false);
   const [otpTries,setOtpTries]=useState(0);
   const [pendingSave,setPendingSave]=useState(null);
-  const [otpSendFailed,setOtpSendFailed]=useState(false); // true when the code email couldn't be sent — unlocks the verified-admin override
-  const [overrideText,setOverrideText]=useState("");
-  // Verifying is async now (hashes can be SHA-256), so the button's enabled state is settled in
-  // an effect rather than recomputed inline during render.
-  const [overrideOk,setOverrideOk]=useState(false);
-  useEffect(()=>{
-    let live=true;
-    verifyPass(overrideText, ADMIN_OVERRIDE_HASH).then(ok=>{ if(live) setOverrideOk(ok); });
-    return()=>{ live=false; };
-  },[overrideText]);
   const genCode=()=>String(Math.floor(100000+Math.random()*900000));
   const sensitiveChanged=(nf)=>(
     String(nf.ownerWhatsapp||"")!==String(settings.ownerWhatsapp||"") ||
     String(nf.orderEmail||"")!==String(settings.orderEmail||"") ||
-    String(nf.adminPassHash||"")!==String(settings.adminPassHash||"") ||
     String(nf.upiId||"")!==String(settings.upiId||"") ||
     String(nf.razorpayLink||"")!==String(settings.razorpayLink||"")
   );
@@ -14693,7 +14637,7 @@ function SettingsPanel({settings,onSave,products=[]}){
     if(!sensitiveChanged(nf)){ onSave(nf); return; }
     // Sensitive change requires the Google admin account…
     if(!isAdminSignedIn()){
-      setPwMsg("🔒 Sign in with your Google admin account (banner at the top of Admin) before changing your WhatsApp number, email, password or payment details.");
+      setPwMsg("🔒 Sign in with your Google admin account before changing your WhatsApp number, email or payment details.");
       return;
     }
     // …and an email to send the code to.
@@ -14705,12 +14649,10 @@ function SettingsPanel({settings,onSave,products=[]}){
     const code=genCode();
     setOtpCode(code); setOtpExp(Date.now()+5*60*1000); setOtpEmail(email);
     setOtpInput(""); setOtpMsg(""); setOtpTries(0); setPendingSave(nf);
-    setOtpSendFailed(false); setOverrideText("");
     setOtpOpen(true); setOtpBusy(true);
     let res; try{ res=await sendOtpEmail(email, code, settings); }
     catch(err){ res={ok:false,error:(err&&err.message)||"send failed"}; }
     finally{ setOtpBusy(false); }
-    setOtpSendFailed(!res.ok);
     setOtpMsg(res.ok ? ("✓ Code sent to "+maskEmail(email)) : ("⚠ Couldn't send — "+res.error+". In your EmailJS template, set the “To Email” field to {{to_email}}, and allow your site's domain under Account → Security."));
   };
   const resendOtp=async()=>{
@@ -14719,7 +14661,6 @@ function SettingsPanel({settings,onSave,products=[]}){
     let res; try{ res=await sendOtpEmail(otpEmail, code, settings); }
     catch(err){ res={ok:false,error:(err&&err.message)||"send failed"}; }
     finally{ setOtpBusy(false); }
-    setOtpSendFailed(!res.ok);
     setOtpMsg(res.ok ? ("✓ New code sent to "+maskEmail(otpEmail)) : ("⚠ "+res.error));
   };
   const verifyOtp=()=>{
@@ -14733,13 +14674,6 @@ function SettingsPanel({settings,onSave,products=[]}){
     }
   };
 
-  const changePassword=async()=>{
-    if(npw.length<4){ setPwMsg("⚠ Use at least 4 characters"); return; }
-    if(npw!==npw2){ setPwMsg("⚠ Passwords don't match"); return; }
-    set("adminPassHash", await hashPassStrong(npw));
-    setNpw(""); setNpw2("");
-    setPwMsg("✓ New password set — tap Save Settings, then enter the emailed code to apply.");
-  };
   /* The signature is stored inline on the settings record, so it has to stay
      small — a phone camera shot is several megabytes and would blow the write.
      Narrow and short is all a signature needs, and JPEG is fine: it is printed
@@ -14909,23 +14843,11 @@ function SettingsPanel({settings,onSave,products=[]}){
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🔐 Admin Security</div>
 
-        {/* Change password — only the signed-in Google admin can save it */}
-        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Change Admin Password</div>
-        {adminOk ? (
-          <div style={{marginBottom:14}}>
-            <input type="password" value={npw} onChange={e=>{setNpw(e.target.value);setPwMsg("");}} placeholder="New password"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white",marginBottom:8}}/>
-            <input type="password" value={npw2} onChange={e=>{setNpw2(e.target.value);setPwMsg("");}} placeholder="Confirm new password"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white",marginBottom:8}}/>
-            <button className="press" onClick={changePassword} disabled={!npw}
-              style={{background:npw?C.primary:"#9ca3af",color:"white",border:"none",borderRadius:10,padding:"10px 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Set New Password</button>
-            {pwMsg&&<div style={{fontSize:11.5,color:pwMsg[0]==="✓"?C.success:C.danger,fontWeight:600,marginTop:8}}>{pwMsg}</div>}
-          </div>
-        ) : (
-          <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:"#9a3412",lineHeight:1.5}}>
-            🔒 Sign in with your Google admin account (banner at the top of Admin) to change the password. This keeps it changeable <b>only by you</b>.
-          </div>
-        )}
+        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Google-only admin access</div>
+        <div style={{background:adminOk?"#ecfdf5":"#fff7ed",border:`1px solid ${adminOk?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:adminOk?"#166534":"#9a3412",lineHeight:1.55}}>
+          {adminOk?"✓ Signed in with the configured Google admin account.":"🔒 Sign in with your configured Google admin account. Client-side admin passwords and recovery answers have been removed."}
+        </div>
+        {pwMsg&&<div style={{fontSize:11.5,color:pwMsg[0]==="✓"?C.success:C.danger,fontWeight:600,marginBottom:12}}>{pwMsg}</div>}
 
         <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:6}}>Your Google Admin UID</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Paste this into your Firebase rules to lock admin to your account.</div>
@@ -15035,7 +14957,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         {area("Our Story","aboutStory")}
         {area("Delivery Areas","deliveryAreas")}
         {area("Live Arrival Guarantee","liveArrivalGuarantee")}
-        {area("Returns & DOA Policy","returnPolicy")}
+        {area("Cancellations, Returns & DOA Policy","returnPolicy")}
         <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px 12px 2px",marginBottom:14}}>
           <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>↩️ Return Shipping Addresses</div>
           <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Set up to <b>2</b> pickup/return points (e.g. main store + warehouse). When you approve a return you'll choose which one the customer should courier the item to.</div>
@@ -15089,10 +15011,10 @@ function SettingsPanel({settings,onSave,products=[]}){
       {/* Payment */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💳 Online Payment</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Two ways to collect payment — use either or both:<br/><b>1. UPI ID</b> — direct to your phone (good while starting out; this is temporary).<br/><b>2. Payment Gateway link</b> — once your current account &amp; gateway (Razorpay etc.) are ready, paste the link below and it takes over. To stop UPI later, clear the UPI ID field and Save.</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Two ways to collect payment — use either or both:<br/><b>1. UPI ID</b> — the current manual payment route.<br/><b>2. Cashfree checkout</b> — enabled securely from the server after credentials are configured. The link below is only a fallback. To stop manual UPI after production activation, clear the UPI ID field and Save.</div>
         {field("UPI ID","upiId","yourname@oksbi","Direct UPI collection. Clear this field + Save to remove it once your gateway is live.")}
         {field("UPI Display Name","upiName","Nemo Aqua Store")}
-        {field("Payment Gateway / Razorpay Link","razorpayLink","https://rzp.io/i/xxxx","Paste your Razorpay Payment Link / Page (or any gateway checkout URL) for card, netbanking & UPI. This is the long-term option once you have a current account.")}
+        {field("Fallback Payment Link","razorpayLink","https://payments.cashfree.com/...","Optional Cashfree Payment Link used only when the integrated checkout is unavailable. Sandbox/live API credentials stay securely in Vercel, never in this field.")}
         {/* Printed in the "Bank & Payment Details" box on every invoice — a business buyer's
             accountant needs an account to pay into and something to reconcile against. All
             optional: any field left blank simply doesn't print. */}
@@ -15706,7 +15628,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             <div style={{fontSize:40,textAlign:"center",marginBottom:8}}>🔐</div>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text,textAlign:"center",marginBottom:6}}>Confirm with email code</div>
             <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.5,marginBottom:18}}>
-              We emailed a 6-digit code to<br/><b style={{color:C.text}}>{maskEmail(otpEmail)}</b>.<br/>Enter it to confirm this change (WhatsApp, email, password or payment details).
+              We emailed a 6-digit code to<br/><b style={{color:C.text}}>{maskEmail(otpEmail)}</b>.<br/>Enter it to confirm this change (WhatsApp, email or payment details).
             </div>
             <input value={otpInput} onChange={e=>{setOtpInput(e.target.value.replace(/\D/g,"").slice(0,6));if(otpMsg)setOtpMsg("");}}
               onKeyDown={e=>{if(e.key==="Enter")verifyOtp();}}
@@ -15723,16 +15645,6 @@ function SettingsPanel({settings,onSave,products=[]}){
               <button className="press" onClick={resendOtp} disabled={otpBusy}
                 style={{background:"none",border:"none",color:C.primary,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",padding:"6px 4px",opacity:otpBusy?.5:1}}>Resend code</button>
             </div>
-            {otpSendFailed&&(
-              <div style={{marginTop:14,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"12px 13px"}}>
-                <div style={{fontSize:11.5,color:"#9a3412",lineHeight:1.55,marginBottom:4}}>📭 Code didn't arrive? You can still save by entering your secret answer.</div>
-                <div style={{fontSize:11,color:"#b45309",fontWeight:800,marginBottom:8}}>🔑 Clue: IITM Roll Number</div>
-                <input value={overrideText} onChange={e=>setOverrideText(e.target.value)} placeholder="Enter secret answer" type="password"
-                  style={{width:"100%",borderRadius:10,border:"1.5px solid #fed7aa",padding:"10px 12px",fontSize:13,letterSpacing:1,textAlign:"center",fontWeight:700,outline:"none",background:"white",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
-                <button className="press" disabled={!overrideOk} onClick={()=>{ const nf=pendingSave; setOtpOpen(false); setOtpCode(""); setPendingSave(null); setOtpSendFailed(false); setOverrideText(""); onSave(nf); }}
-                  style={{width:"100%",marginTop:10,background:overrideOk?C.danger:"#e5b89a",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Save with secret answer</button>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -16215,7 +16127,7 @@ function AboutPage({nav,goBack,settings={}}){
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {[
               {icon:"🛡️",label:"Live Arrival Guarantee",to:"policy-guarantee"},
-              {icon:"↩️",label:"Returns & Refunds",to:"policy-returns"},
+              {icon:"↩️",label:"Cancellations, Returns & Refunds",to:"policy-returns"},
               {icon:"💧",label:"Acclimatization Guide",to:"policy-acclimatize"},
               {icon:"📜",label:"Terms & Conditions",to:"policy-terms"},
               {icon:"🔒",label:"Privacy Policy",to:"policy-privacy"},
@@ -16254,10 +16166,67 @@ function AboutPage({nav,goBack,settings={}}){
   );
 }
 
+/* ═══════════════════ CONTACT PAGE ═══════════════════ */
+function ContactPage({nav,goBack,settings={}}){
+  const s={...DEFAULT_SETTINGS,...settings};
+  const phone=String(s.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
+  const email=String(s.orderEmail||BUSINESS_EMAIL).trim();
+  const address=String(s.storeAddress||s.legalAddress||s.legalCity||"Salem, Tamil Nadu, India").trim();
+  const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px",display:"flex",alignItems:"flex-start",gap:12,textDecoration:"none"};
+  return(
+    <div className="slide-up">
+      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
+        <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>Contact Us</div>
+        <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:330}}>Customer support for orders, payments, cancellations, returns, refunds and delivery.</div>
+      </div>
+      <div className="dt-read" style={{padding:"18px 16px 100px"}}>
+        <div style={{background:C.accentLight,border:`1px solid ${C.primary}33`,borderRadius:18,padding:"17px",marginBottom:14}}>
+          <div style={{fontSize:15,fontWeight:900,color:C.text,marginBottom:5}}>{s.legalName||(STORE_NAME+" Aqua Store")}</div>
+          <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.65}}>Please include your order number when contacting us about an existing purchase so we can help quickly.</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:11}}>
+          <a className="press" href={`https://wa.me/${phone}`} target="_blank" rel="noopener" style={card}>
+            <span style={{width:42,height:42,borderRadius:12,background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>💬</span>
+            <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>WhatsApp / Customer Support</span><span style={{display:"block",fontSize:14,fontWeight:800,color:"#15803d",marginTop:3}}>+{phone}</span></span>
+          </a>
+          <a className="press" href={`tel:+${phone}`} style={card}>
+            <span style={{width:42,height:42,borderRadius:12,background:"#e0f2fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>📞</span>
+            <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Phone</span><span style={{display:"block",fontSize:14,fontWeight:800,color:C.primaryDark,marginTop:3}}>+{phone}</span></span>
+          </a>
+          <a className="press" href={`mailto:${email}`} style={card}>
+            <span style={{width:42,height:42,borderRadius:12,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>✉️</span>
+            <span style={{minWidth:0}}><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Email</span><span style={{display:"block",fontSize:13.5,fontWeight:800,color:"#6d28d9",marginTop:3,wordBreak:"break-word"}}>{email}</span></span>
+          </a>
+          <div style={card}>
+            <span style={{width:42,height:42,borderRadius:12,background:"#ffedd5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>📍</span>
+            <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Business Address</span><span style={{display:"block",fontSize:13.5,fontWeight:700,color:C.text,marginTop:3,lineHeight:1.55}}>{address}</span></span>
+          </div>
+          {s.storeHours&&(
+            <div style={card}>
+              <span style={{width:42,height:42,borderRadius:12,background:"#fef3c7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>🕒</span>
+              <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Support Hours</span><span style={{display:"block",fontSize:13.5,fontWeight:700,color:C.text,marginTop:3,lineHeight:1.55}}>{s.storeHours}</span></span>
+            </div>
+          )}
+        </div>
+        <div style={{marginTop:20,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px"}}>
+          <div style={{fontSize:13.5,fontWeight:800,color:C.text,marginBottom:9}}>Before contacting us</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            <a href="/cancellations-returns-refunds" onClick={e=>{e.preventDefault();nav("policy-returns");}} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,textDecoration:"none"}}>Cancellations, Returns &amp; Refunds</a>
+            <button className="press" onClick={()=>nav("policy-guarantee")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Live Arrival Guarantee</button>
+            <button className="press" onClick={()=>nav("orders")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Track My Orders</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════ SINGLE POLICY PAGE ═══════════════════ */
 const POLICY_META = {
   guarantee:   { icon:"🛡️", title:"Live Arrival Guarantee", key:"liveArrivalGuarantee", sub:"Our promise on every live order." },
-  returns:     { icon:"↩️", title:"Returns & Refunds",       key:"returnPolicy",         sub:"Returns, DOA claims & refunds." },
+  returns:     { icon:"↩️", title:"Cancellations, Returns & Refunds", key:"returnPolicy", sub:"Cancellations, returns, DOA claims & refunds." },
   acclimatize: { icon:"💧", title:"Acclimatization Guide",   key:"acclimatizationTips",  sub:"Settle your new arrivals in safely." },
   terms:       { icon:"📜", title:"Terms & Conditions",      key:"termsPolicy",          sub:"The terms you agree to when ordering." },
   privacy:     { icon:"🔒", title:"Privacy Policy",          key:"privacyPolicy",        sub:"How we handle your information." },
@@ -16441,9 +16410,15 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+const DIRECT_PAGE_BY_PATH={
+  "/contact-us":"contact",
+  "/cancellations-returns-refunds":"policy-returns",
+};
+const DIRECT_PATH_BY_PAGE={contact:"/contact-us","policy-returns":"/cancellations-returns-refunds"};
+
 /* ═══════════════════ ROOT APP ═══════════════════ */
 function NemoStore(){
-  const [page,setPage]             = useState("home");
+  const [page,setPage]             = useState(()=>DIRECT_PAGE_BY_PATH[window.location.pathname]||"home");
   const [products,setProducts]     = useState(DEFAULT_PRODUCTS);
   // Cold-start skeleton: true once we have real/cached data (returning visitors keep instant paint)
   const [hydrated,setHydrated]     = useState(()=>{ try{ return !!localProducts(); }catch(e){ return false; } });
@@ -16812,6 +16787,9 @@ function NemoStore(){
     saveScroll();
     pageRef.current = pg;
     setPage(pg);
+    if(DIRECT_PATH_BY_PAGE[pg]||DIRECT_PATH_BY_PAGE[from]){
+      try{ history.replaceState(history.state||{},"",DIRECT_PATH_BY_PAGE[pg]||"/"); }catch(e){}
+    }
     if(product){ setSelProduct(product); selProductRef.current=product; }
     // Forward = open at the top. Back (opts.restore) = pick up where they left off.
     applyScroll(opts.restore ? (scrollMem.current[pg]||0) : 0);
@@ -17115,6 +17093,7 @@ function NemoStore(){
         if(isAdminUid(u.uid)){ showToast("✓ Admin signed in — changes will now sync"); }
         else{ showToast("Signed in, but this isn't the admin account"); }
         setTimeout(()=>{ loadOrders().then(o=>o&&setOrders(o)); loadInterestCounts().then(setInterestCounts); },400);
+        return u;
       }
     }catch(e){
       const msg=String(e?.message||""), code=String(e?.code||"");
@@ -17123,6 +17102,7 @@ function NemoStore(){
       else if(code.includes("popup-closed")||code.includes("cancelled")) showToast("Sign-in cancelled","error");
       else if(code.includes("network-request-failed")) showToast("Network hiccup — try again","error");
       else showToast("Sign-in failed — try again","error");
+      return null;
     }
   };
   const markReviewed=(pid)=>{ if(user){ setReviewedSet(addReviewedLocal(userKey(user),pid)); } };
@@ -18103,9 +18083,10 @@ function NemoStore(){
         {page==="guides"   &&<CareGuidesPage nav={nav} goBack={goBack} guides={guides} mediaCache={mediaCache}/>}
         {page==="tools"    &&<AquaToolsPage nav={nav} goBack={goBack} user={user} settings={settings}/>}
         {page==="saved"    &&<SavedPage nav={nav} products={products} mediaCache={mediaCache} favorites={favorites} addToCart={addToCart} cartMap={cartMap} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} user={user} restockSet={restockSet} onRestock={handleRestock}/>}
-        {page==="about"    &&<AboutPage nav={nav} goBack={goBack} settings={settings}/>}
+        {page==="about"    &&<AboutPage nav={nav} goBack={goBack} settings={settings}/>} 
+        {page==="contact"  &&<ContactPage nav={nav} goBack={goBack} settings={settings}/>} 
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
-        {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} settings={settings}/>}
+        {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} onAdminSignIn={adminGoogleSignIn}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{const ok=await deleteShowcasePhoto(id);if(ok)setShowcase(s=>s.filter(x=>x.id!==id));else showToast("Couldn't remove that submission — verify admin sign-in","error");}} onApproveShowcase={handleApproveShowcase} onTankMonthlyAward={handleTankMonthlyAward} totmVotes={totmVotes} tankMonthKey={activeTankMonth} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onDeleteGuides={deleteGuidesHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
