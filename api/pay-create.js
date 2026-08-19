@@ -1,69 +1,131 @@
-/**
- * Open a payment for an order that already exists.
- *
- * The browser posts only { userUid, orderId }. It does NOT get to say what the
- * order costs — this reads the order back out of the database and bills the
- * amountDue recorded there. That is the whole point of the endpoint: if the
- * amount travelled from the browser, tampering with it would be trivial and the
- * gateway would faithfully collect the wrong sum.
- *
- * Returns what Razorpay Checkout needs to open, and nothing secret.
- */
-import { gatewayReady, rzpKeyId, readOrder, createRazorpayOrder, toPaise, dbPatch, orderPath } from '../lib/payments.mjs';
+import {
+  cashfreeMode,
+  cashfreeOrderIdFor,
+  createCashfreeOrder,
+  dbPatch,
+  fetchCashfreeOrder,
+  gatewayReady,
+  isPaymentAdmin,
+  money,
+  orderPath,
+  readOrder,
+  stableUuid,
+  verifyIdToken,
+  writePaymentMapping,
+} from '../lib/payments.mjs';
+
+const bearer = req => String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+const publicSite = () => String(process.env.PUBLIC_SITE_URL || 'https://www.nemoaquastore.in').replace(/\/$/, '');
+const safePhone = value => {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.slice(-10);
+};
 
 export default async function handler(req, res) {
-  /* Readiness probe. The storefront asks once at boot whether a gateway exists and
-     picks its checkout accordingly, so dropping the keys into the environment
-     switches the store over with no code change and no build. Only the public key
-     id is ever returned. */
   if (req.method === 'GET') {
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
-    res.status(200).json({ ready: gatewayReady(), keyId: gatewayReady() ? rzpKeyId() : '' });
+    res.status(200).json({
+      ready: gatewayReady(),
+      provider: 'cashfree',
+      mode: cashfreeMode(),
+      currency: 'INR',
+    });
     return;
   }
-  if (req.method !== 'POST') { res.status(405).json({ error: 'method' }); return; }
+  if (req.method !== 'POST') { res.status(405).json({ error: 'method-not-allowed' }); return; }
   if (!gatewayReady()) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
 
+  const uid = await verifyIdToken(bearer(req));
+  if (!uid) { res.status(401).json({ error: 'sign-in-required' }); return; }
+  if (cashfreeMode() === 'sandbox' && !(await isPaymentAdmin(uid))) {
+    res.status(403).json({ error: 'sandbox-admin-only' });
+    return;
+  }
+
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-    const userUid = String(body.userUid || '').slice(0, 128);
-    const orderId = String(body.orderId || '').slice(0, 128);
-    if (!userUid || !orderId) { res.status(400).json({ error: 'missing-order' }); return; }
-
+    const userUid = String(req.body?.userUid || '');
+    const orderId = String(req.body?.orderId || '');
+    if (!userUid || !orderId || userUid.length > 160 || orderId.length > 160 || uid !== userUid) {
+      res.status(403).json({ error: 'order-owner-mismatch' });
+      return;
+    }
     const order = await readOrder(userUid, orderId);
-    if (!order) { res.status(404).json({ error: 'order-not-found' }); return; }
+    if (!order || order.userUid !== userUid || order.id !== orderId) {
+      res.status(404).json({ error: 'order-not-found' });
+      return;
+    }
+    if (order.status !== 'Awaiting Payment' || String(order.paymentStatus || '') !== 'Awaiting Payment') {
+      res.status(409).json({ error: 'order-not-payable' });
+      return;
+    }
+    const deadline = Number(order.paymentDeadline || 0);
+    if (deadline && Date.now() >= deadline) {
+      res.status(409).json({ error: 'payment-window-closed' });
+      return;
+    }
+    const amount = money(order.amountDue ?? ((Number(order.total) || 0) + (Number(order.fee) || 0)));
+    if (!(amount >= 1)) { res.status(409).json({ error: 'invalid-order-amount' }); return; }
+    const phone = safePhone(order.userPhone || order.address?.phone);
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      res.status(409).json({ error: 'valid-phone-required' });
+      return;
+    }
 
-    // Only an order still waiting for money may open a payment. Without this an
-    // already-paid order could be charged a second time by replaying the call.
-    if (order.status !== 'Awaiting Payment') { res.status(409).json({ error: 'order-not-payable', status: order.status || '' }); return; }
-
-    const amountPaise = toPaise(order.amountDue != null ? order.amountDue : order.total);
-    if (!(amountPaise > 0)) { res.status(400).json({ error: 'bad-amount' }); return; }
-
-    const rzpOrder = await createRazorpayOrder({
-      amountPaise,
-      receipt: String(order.orderNo || orderId).slice(0, 40),
-      // Echoed back on the webhook so it can find the order again.
-      notes: { userUid, orderId, orderNo: String(order.orderNo || '') },
-    });
-
-    // Remember which Razorpay order belongs to this one, so the webhook can be
-    // matched even if the notes are ever missing, and so a duplicate payment is
-    // recognisable afterwards.
-    await dbPatch(orderPath(userUid, orderId), { gatewayOrderId: rzpOrder.id, gateway: 'razorpay' });
-
+    const cashfreeOrderId = String(order.gateway === 'cashfree' && order.gatewayOrderId || cashfreeOrderIdFor(orderId));
+    let gatewayOrder = null;
+    if (order.gateway === 'cashfree' && order.gatewayOrderId) {
+      gatewayOrder = await fetchCashfreeOrder(cashfreeOrderId);
+    } else {
+      const returnUrl = `${publicSite()}/?payment_return=cashfree&order_id=${encodeURIComponent(orderId)}`;
+      const notifyUrl = `${publicSite()}/api/pay-webhook`;
+      const body = {
+        order_id: cashfreeOrderId,
+        order_amount: amount,
+        order_currency: 'INR',
+        customer_details: {
+          customer_id: userUid.slice(0, 50),
+          customer_name: String(order.address?.name || '').slice(0, 85),
+          customer_email: String(order.userEmail || '').slice(0, 85) || undefined,
+          customer_phone: phone,
+        },
+        order_meta: { return_url: returnUrl, notify_url: notifyUrl },
+        order_expiry_time: new Date(deadline || (Date.now() + 10 * 60 * 1000)).toISOString(),
+        order_note: `Nemo order ${String(order.orderNo || orderId)}`.slice(0, 200),
+      };
+      try {
+        gatewayOrder = await createCashfreeOrder(body, stableUuid(`create:${userUid}:${orderId}`));
+      } catch (error) {
+        if (error?.code !== 'order_already_exists') throw error;
+        gatewayOrder = await fetchCashfreeOrder(cashfreeOrderId);
+      }
+    }
+    if (!gatewayOrder?.payment_session_id || gatewayOrder.order_id !== cashfreeOrderId) {
+      throw new Error('cashfree-session-missing');
+    }
+    if (!['ACTIVE', 'PAID'].includes(String(gatewayOrder.order_status || ''))) {
+      res.status(409).json({ error: 'payment-window-closed' });
+      return;
+    }
+    await Promise.all([
+      dbPatch(orderPath(userUid, orderId), {
+        gateway: 'cashfree',
+        gatewayMode: cashfreeMode(),
+        gatewayOrderId: cashfreeOrderId,
+        gatewayCreatedAt: order.gatewayCreatedAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+      writePaymentMapping(cashfreeOrderId, userUid, orderId),
+    ]);
     res.status(200).json({
-      keyId: rzpKeyId(),
-      razorpayOrderId: rzpOrder.id,
-      amount: amountPaise,
+      provider: 'cashfree',
+      mode: cashfreeMode(),
+      paymentSessionId: gatewayOrder.payment_session_id,
+      cashfreeOrderId,
+      amount,
       currency: 'INR',
-      orderNo: order.orderNo || '',
-      name: order.address?.name || '',
-      email: order.userEmail || '',
-      contact: order.userPhone || '',
+      orderNo: order.orderNo || orderId,
     });
-  } catch (e) {
-    console.error('pay-create', e?.message || e);
-    res.status(500).json({ error: 'create-failed' });
+  } catch (error) {
+    console.error('pay-create', error?.message || error);
+    res.status(500).json({ error: 'payment-session-failed' });
   }
 }
