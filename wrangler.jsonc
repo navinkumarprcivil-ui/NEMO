@@ -3,7 +3,7 @@
   "name": "nemo-aqua-store",
   "main": "./cloudflare/worker.js",
   "compatibility_date": "2026-08-20",
-  "workers_dev": true,
+  "workers_dev": false,
   "routes": [
     {
       "pattern": "www.nemoaquastore.in",
