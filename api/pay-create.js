@@ -15,7 +15,16 @@ import {
 } from '../lib/payments.mjs';
 
 const bearer = req => String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-const publicSite = () => String(process.env.PUBLIC_SITE_URL || 'https://www.nemoaquastore.in').replace(/\/$/, '');
+const PAYMENT_HOSTS = new Set([
+  'www.nemoaquastore.in',
+  'nemoaquastore.in',
+  'nemo-aqua-store.navinkumarprcivil.workers.dev',
+]);
+const publicSite = req => {
+  const configured = String(process.env.PUBLIC_SITE_URL || 'https://www.nemoaquastore.in').replace(/\/$/, '');
+  const host = String(req.headers.host || req.headers['x-forwarded-host'] || '').split(',')[0].trim().split(':')[0].toLowerCase();
+  return PAYMENT_HOSTS.has(host) ? `https://${host}` : configured;
+};
 const safePhone = value => {
   const digits = String(value || '').replace(/\D/g, '');
   return digits.slice(-10);
@@ -75,8 +84,9 @@ export default async function handler(req, res) {
     if (order.gateway === 'cashfree' && order.gatewayOrderId) {
       gatewayOrder = await fetchCashfreeOrder(cashfreeOrderId);
     } else {
-      const returnUrl = `${publicSite()}/?payment_return=cashfree&order_id=${encodeURIComponent(orderId)}`;
-      const notifyUrl = `${publicSite()}/api/pay-webhook`;
+      const site = publicSite(req);
+      const returnUrl = `${site}/?payment_return=cashfree&order_id=${encodeURIComponent(orderId)}`;
+      const notifyUrl = `${site}/api/pay-webhook`;
       const body = {
         order_id: cashfreeOrderId,
         order_amount: amount,
