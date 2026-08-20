@@ -3,6 +3,7 @@
   "name": "nemo-aqua-store",
   "main": "./cloudflare/worker.js",
   "compatibility_date": "2026-08-20",
+  "workers_dev": true,
   "assets": {
     "directory": "./cf-dist",
     "binding": "ASSETS",
@@ -18,14 +19,6 @@
   "vars": {
     "PUBLIC_SITE_URL": "https://www.nemoaquastore.in",
     "CASHFREE_ENV": "sandbox"
-  },
-  "secrets": {
-    "required": [
-      "CASHFREE_APP_ID",
-      "CASHFREE_SECRET_KEY",
-      "FIREBASE_SERVICE_ACCOUNT",
-      "CRON_SECRET"
-    ]
   },
   "triggers": {
     "crons": ["0 0 * * *"]
