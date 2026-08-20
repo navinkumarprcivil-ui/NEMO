@@ -1,5 +1,8 @@
 {
   "cleanUrls": true,
+  "git": {
+    "deploymentEnabled": false
+  },
   "crons": [
     { "path": "/api/cron-tank-cleanup", "schedule": "0 0 * * *" }
   ],
