@@ -3294,6 +3294,14 @@ function loadCashfreeScript(){
  * closes, /api/pay-verify reads Cashfree's order status server-side; no field from
  * the browser can confirm payment.
  */
+function cashfreeCheckoutWasClosed(result){
+  const error=result&&result.error;
+  if(!error||result.paymentDetails) return false;
+  const detail=[error.code,error.type,error.reason,error.message,error.description,typeof error==="string"?error:""]
+    .filter(Boolean).join(" ").toLowerCase();
+  return /close|cancel|dismiss|abort|user[_ -]?drop|dropped/.test(detail);
+}
+
 async function payWithGateway(order, settings={}){
   if(!FB_OK||!FB_AUTH||!FB_AUTH.currentUser) throw new Error("sign-in-required");
   const token = await FB_AUTH.currentUser.getIdToken();
@@ -3320,7 +3328,7 @@ async function payWithGateway(order, settings={}){
   });
   const checked=await verify.json().catch(()=>({}));
   if(!verify.ok){
-    if(checked.error==="payment-not-complete"&&checkoutResult&&checkoutResult.error) throw new Error("dismissed");
+    if(checked.error==="payment-not-complete"&&cashfreeCheckoutWasClosed(checkoutResult)) throw new Error("dismissed");
     throw new Error(checked.error||"payment-verification-failed");
   }
   return checked.mode==="sandbox"?"test-confirmed":"confirmed";
