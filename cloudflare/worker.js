@@ -133,6 +133,20 @@ function redirectApex(url) {
   });
 }
 
+async function staticAssetResponse(request, env, path) {
+  const response = await env.ASSETS.fetch(request);
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(securityHeaders)) headers.set(name, value);
+  if (path.startsWith('/assets/')) {
+    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 async function scheduledCleanup(env) {
   const url = new URL('https://nemo.internal/api/cron-tank-cleanup');
   const req = new Request(url, {
@@ -178,7 +192,7 @@ export default {
       });
     }
 
-    return env.ASSETS.fetch(request);
+    return staticAssetResponse(request, env, path);
   },
 
   async scheduled(_controller, env, ctx) {
