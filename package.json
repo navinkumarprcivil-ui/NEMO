@@ -1,4 +1,13 @@
 {
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "build:cloudflare": "node scripts/build-cloudflare.mjs",
+    "cf:dev": "npm run build:cloudflare && wrangler dev",
+    "cf:check": "npm run build:cloudflare && wrangler deploy --dry-run",
+    "cf:deploy": "npm run build:cloudflare && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
 }
