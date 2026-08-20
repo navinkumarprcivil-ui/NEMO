@@ -4,6 +4,12 @@
   "main": "./cloudflare/worker.js",
   "compatibility_date": "2026-08-20",
   "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "www.nemoaquastore.in",
+      "custom_domain": true
+    }
+  ],
   "assets": {
     "directory": "./cf-dist",
     "binding": "ASSETS",
