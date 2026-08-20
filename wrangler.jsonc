@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "nemo-aqua-store",
+  "main": "./cloudflare/worker.js",
+  "compatibility_date": "2026-08-20",
+  "assets": {
+    "directory": "./cf-dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*",
+      "/s/*",
+      "/p",
+      "/p/*",
+      "/sitemap.xml"
+    ]
+  },
+  "vars": {
+    "PUBLIC_SITE_URL": "https://www.nemoaquastore.in",
+    "CASHFREE_ENV": "sandbox"
+  },
+  "secrets": {
+    "required": [
+      "CASHFREE_APP_ID",
+      "CASHFREE_SECRET_KEY",
+      "FIREBASE_SERVICE_ACCOUNT",
+      "CRON_SECRET"
+    ]
+  },
+  "triggers": {
+    "crons": ["0 0 * * *"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
