@@ -118,6 +118,21 @@ function withQuery(url, key, value) {
   return next;
 }
 
+function redirectApex(url) {
+  const target = new URL(url);
+  target.protocol = 'https:';
+  target.hostname = 'www.nemoaquastore.in';
+  target.port = '';
+  return new Response(null, {
+    status: 308,
+    headers: {
+      ...securityHeaders,
+      Location: target.toString(),
+      'Cache-Control': 'public, max-age=3600',
+    },
+  });
+}
+
 async function scheduledCleanup(env) {
   const url = new URL('https://nemo.internal/api/cron-tank-cleanup');
   const req = new Request(url, {
@@ -134,6 +149,9 @@ async function scheduledCleanup(env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (url.hostname === 'nemoaquastore.in') return redirectApex(url);
+
     const path = url.pathname.replace(/\/+$/, '') || '/';
 
     if (path === '/sitemap.xml') return runHandler(sitemap, request, url);
