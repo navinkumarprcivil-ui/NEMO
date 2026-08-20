@@ -1,5 +1,16 @@
 {
   "cleanUrls": true,
+  "crons": [
+    { "path": "/api/cron-tank-cleanup", "schedule": "0 0 * * *" }
+  ],
+  "rewrites": [
+    { "source": "/contact-us", "destination": "/" },
+    { "source": "/cancellations-returns-refunds", "destination": "/" },
+    { "source": "/s/:id", "destination": "/api/share?id=:id" },
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/p", "destination": "/api/product-page" },
+    { "source": "/p/:slug", "destination": "/api/product-page?slug=:slug" }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",
@@ -13,7 +24,7 @@
         { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "geolocation=(), microphone=(), camera=(), payment=(), usb=()" },
+        { "key": "Permissions-Policy", "value": "geolocation=(), microphone=(), camera=(), payment=(self), usb=()" },
         { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
         { "key": "X-Permitted-Cross-Domain-Policies", "value": "none" },
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" }

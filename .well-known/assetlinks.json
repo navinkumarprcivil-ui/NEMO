@@ -3,6 +3,6 @@
       "target": {
         "namespace": "android_app",
         "package_name": "in.nemoaquastore.app",
-        "sha256_cert_fingerprints": ["2B:EA:58:3B:A5:81:43:E7:A1:0E:26:0E:7F:F2:3D:17:AB:65:55:C2:55:96:BE:AE:AB:0D:EF:02:F0:97:0C:54"]
+        "sha256_cert_fingerprints": ["2B:EA:58:3B:A5:81:43:E7:A1:0E:26:0E:7F:F2:3D:17:AB:65:55:C2:55:96:BE:AE:AB:0D:EF:02:F0:97:0C:54", "E9:85:54:02:07:6A:BF:58:88:E7:03:9A:F3:9C:18:3F:E1:62:D7:6C:30:DE:1C:01:A9:20:93:8B:F2:C3:81:D4"]
       }
     }]

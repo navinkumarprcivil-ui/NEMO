@@ -8,30 +8,30 @@ A mobile-first aquarium storefront (HTML + React + Firebase Realtime Database).
 index.html              ← the app (served at the root)
 app.jsx                 ← all the app code
 assets/                 ← UPLOAD THE WHOLE FOLDER (logo, favicons, share banner)
-  ├─ nemo-logo.png
+  ├─ nemo-logo.webp     ← what the splash shows; the .png beside it is the fallback
+  ├─ nemo-logo.png      ← and what share cards and structured data point at
+  ├─ fish-betta/clown.webp  ← the two aquarium fish, desktop-only, .png fallback
   ├─ share-banner.png
   ├─ apple-touch-icon.png
   └─ favicon-16/32/48/96/144/192/512.png
 favicon.ico             ← root favicon Google probes by default
 favicon.png
-p/                      ← UPLOAD THE WHOLE FOLDER (SEO product pages + social images)
-  ├─ index.html         ← product catalog page
-  ├─ <product>.html     ← one page per product (clownfish, java-fern, …)
-  └─ og/                ← share images for each product (.jpg)
+api/                    ← serverless functions (share links, /p/ pages, sitemap)
+lib/catalog.mjs         ← renders the /p/ pages and sitemap from the live catalogue
 manifest.webmanifest    ← PWA manifest (installable app)
 sw.js                   ← service worker (offline shell + install)
 robots.txt              ← search-engine crawl rules
-sitemap.xml             ← page list for Google
 google….html            ← Google Search Console verification file
 vercel.json             ← static config + security headers
 database.rules.json     ← Firebase security rules (NOT served — paste into Firebase, see below)
-seo/                    ← build-time script only; the LIVE site does NOT need it
+seo/README.md           ← how the /p/ pages work
+test/                   ← node test/catalog.test.mjs
 README.md               ← this file
 LAUNCH_CHECKLIST.md     ← pre-launch checklist
 .gitignore
 ```
 
-> ⚠️ **Keep the folder structure exactly as above — upload the `assets/` and `p/` folders WITH their contents (including `p/og/`).** `index.html` and the product pages reference files *inside* these folders by path, so if a folder uploads empty you'll get a broken logo/favicons and 404s on every `/p/...` product link. Only `seo/` is safe to leave off the live host (it's a build script). If your host's uploader skips folder contents, see **"Uploading"** at the bottom — zip-and-extract or `git push` keeps the structure intact.
+> ⚠️ **Keep the folder structure exactly as above — upload the `assets/` folder WITH its contents.** `index.html` references files *inside* it by path, so if it uploads empty you'll get a broken logo and favicons. `api/` and `lib/` must go up too: `/p/`, `/s/` and `/sitemap.xml` are served by those functions, not by files. If your host's uploader skips folder contents, see **"Uploading"** at the bottom — zip-and-extract or `git push` keeps the structure intact.
 
 ## ⭐ NEW since last version
 - **Installable app (PWA):** customers get an "Install Nemo App" button + browser "Add to Home Screen". Needs `manifest.webmanifest` + `sw.js` in the repo (already included).
@@ -39,8 +39,63 @@ LAUNCH_CHECKLIST.md     ← pre-launch checklist
 - **Inventory truth:** stock is decremented with an atomic Firebase transaction at checkout, so two buyers can't oversell the last item.
 - **About & Policies page** (editable in admin → Settings), **Live Arrival Guarantee** + acclimatization guide at checkout, **product Share** buttons, **order-notification email** (free, via FormSubmit — set your email in Settings), and a new rounded font theme.
 
+## 🔗 Sharing a product
+
+Tapping **Share** on a product copies a link like `nemoaquastore.in/s/<product-id>`.
+That path is served by `api/share.js`, which reads the product from Firebase and
+returns **that product's** Open Graph tags — its own photo, its name and its
+price — before sending the reader on to the storefront.
+
+It exists because the storefront is a single page. A link like `/?p=<id>` looks
+different to a person and identical to a scraper: WhatsApp and Facebook read the
+tags out of the HTML and never run the JavaScript that would swap the product
+in, so every product ever shared previewed with the same site-wide banner and
+blurb. The pages under `/p/` are the same idea aimed at Google rather than at
+WhatsApp — see `seo/README.md`.
+
+Nothing here needs credentials: the catalogue is world-readable and product
+photos are public, which is what makes a request-time lookup safe. If the
+database is slow or the product is gone, the link still works and falls back to
+the store-level card.
+
+> **Note:** a preview already delivered is cached by *WhatsApp*, not by your
+> phone. Clearing the cache in Settings will not refresh a message you already
+> sent — share the link again and the new preview appears.
+
+## 🧹 Clearing cached copies
+
+**Settings → Email & Security → Clear Cached Copies** empties everything this
+device is holding: saved product photos, the app shell, offline copies, and the
+compiled app bundle. It then reloads.
+
+It is safe by construction — every one of those is a *copy* of something in
+Firebase and comes straight back. Your cart, saved items and the store settings
+on that page are deliberately left alone.
+
+Use it when an old picture or an old version of the app is still showing.
+
 ## 🔐 Admin is already locked to your Google account
 Your admin Google UID (`cI2HmMt6FdR7fO7uUnugH85GeZt2`) is **already filled into `database.rules.json`** — only that account can edit products/guides/settings; customers can only read the catalog and manage their own orders. There is **nothing to paste**; you just need to **publish the rules** (step 4 in the deploy steps below).
+
+### The `stockLedger` node
+
+`database.rules.json` carries one node the storefront never touches:
+**`stockLedger`**, written by the analytics app. It is your **real, physical
+stock** — what is actually on the shelf.
+
+That is deliberately *not* the `stockCount` on a product. Product stock is a
+*listing* decision: the store lists items you do not hold, and when someone
+orders one you buy it in and send it on. Physical stock is a different fact,
+so it lives in a different place and neither overwrites the other.
+
+The node holds one child per entry — a count, a receipt or a removal, each an
+immutable fact with its own id. It is **owner-only in both directions**: it is
+commercially sensitive and nothing on the storefront reads it. The
+`.validate` rules reject a malformed entry at write time, so a bad record
+cannot sit in the ledger and surface later as a wrong stock figure.
+
+Publishing the rules is what switches this on. Until then the analytics app
+keeps stock on the device it was entered on, and says so.
 
 **Optional — add a second admin:** have them sign in to the live site with Google once, copy their UID from Firebase Console → **Authentication → Users**, replace every **`PASTE_FRIEND_UID_HERE`** in `database.rules.json` with it, and **Publish** again. Leave `PASTE_FRIEND_UID_HERE` as-is if you don't want a second admin — the rules still work.
 

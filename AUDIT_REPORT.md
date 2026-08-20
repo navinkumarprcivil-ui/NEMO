@@ -184,7 +184,7 @@
 | Schema: Store, Organization, WebSite, Product, AggregateRating, BreadcrumbList | ✅ | — | — |
 | FAQ schema | ❌ 🟡 E | Add FAQPage to guide articles. |
 | Review schema (individual reviews) | ⚠️ ⚪ E | AggregateRating present. |
-| **Static product-page coverage** | ⚠️ | 🟠 | M | Only 9 products have `/p/` pages; `seo/generate.mjs` exists — regenerate as catalog grows (or automate). |
+| **Static product-page coverage** | ✅ | — | — | Fixed. `/p/` and `sitemap.xml` are rendered per request from the live catalogue by `api/product-page.js` and `api/sitemap.js`; the generator is gone. Every product is covered the moment it is listed. |
 | SPA content not crawlable | ⚠️ 🟠 — | Inherent to architecture; static mirror + rich `<noscript>` (present ✅) is the right mitigation. |
 | Heading hierarchy / image alt / internal linking | ⚠️ 🟡 E | Alts present (40); audit H1 uniqueness per static page; add guide↔product cross-links. |
 | No duplicate content | ✅ | — | — |
@@ -307,7 +307,7 @@ Trust messaging (Live Arrival Guarantee) ✅ · Testimonials ✅ · Delivery inf
 | 10 | Accessibility pass 1: aria-labels on icon buttons, visible focus rings, `aria-live` on toasts, skip-link | 🟠 | E–M |
 | 11 | Accessibility pass 2: modal/drawer focus trapping + full keyboard nav | 🟠 | M |
 | 12 | **CSP header** (report-only first, then enforce) | 🟠 | M |
-| 13 | Regenerate `/p/` static pages for the **full live catalog** (script exists: `seo/generate.mjs`) | 🟠 | M |
+| 13 | ~~Regenerate `/p/` static pages for the **full live catalog**~~ — done: they render from the live catalogue per request, so there is nothing left to regenerate | ✅ | — |
 | 14 | Image pipeline: compress/resize on admin upload (protects Firebase quota + speeds pages) | 🟡 | M |
 | 15 | Surface **Best Sellers / Trending** on home from existing analytics | 🟡 | E |
 | 16 | Product-page spec table + per-product FAQ (+ FAQ schema) | 🟡 | M |

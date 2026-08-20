@@ -2,55 +2,230 @@
   "rules": {
     ".read": false,
     ".write": false,
-
     "products": {
       ".read": true,
       ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       "$id": {
         "stockCount": {
-          ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.val() <= data.val())",
+          ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (newData.val() <= data.val() && newData.val() >= data.val() - 100))",
           ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "variantStock": {
+          "$vid": {
+            ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (newData.val() <= data.val() && newData.val() >= data.val() - 100))",
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          }
         }
       }
     },
-
-    "guides":   { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')" },
-    "settings": { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')" },
-    "media":    { ".read": true, ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')" },
-
+    "guides": {
+      ".read": true,
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+    },
+    "settings": {
+      ".read": true,
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+    },
+    "media": {
+      ".read": true,
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+    },
+    "settingsPrivate": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+    },
+    "settingsBank": {
+      ".read": "auth != null",
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+    },
+    "purchases": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$entry": {
+        ".validate": "newData.hasChildren(['supplierName','invoiceNo','invoiceDate'])",
+        "supplierName": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120"
+        },
+        "supplierGstin": {
+          ".validate": "newData.isString() && newData.val().length <= 15"
+        },
+        "invoiceNo": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60"
+        },
+        "invoiceDate": {
+          ".validate": "newData.isString() && newData.val().length === 10"
+        },
+        "purpose": {
+          ".validate": "newData.isString() && newData.val().length <= 40"
+        },
+        "notes": {
+          ".validate": "newData.isString() && newData.val().length <= 400"
+        },
+        "invoiceUrl": {
+          ".validate": "newData.isString() && newData.val().length <= 500"
+        },
+        "hsn": {
+          ".validate": "newData.isString() && newData.val().length <= 12"
+        },
+        "itcEligibility": {
+          ".validate": "newData.val() === 'eligible' || newData.val() === 'ineligible' || newData.val() === 'capital'"
+        },
+        "createdAt": {
+          ".validate": "newData.isString() && newData.val().length >= 20"
+        },
+        "gstRate": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
+        },
+        "taxableValue": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "cgst": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "sgst": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "igst": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "cess": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "totalTax": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "amountPaid": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "stockLedger": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$entry": {
+        ".validate": "newData.hasChildren(['sku','type','qty','at'])",
+        "sku": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120"
+        },
+        "type": {
+          ".validate": "newData.isString() && (newData.val() === 'count' || newData.val() === 'receive' || newData.val() === 'remove')"
+        },
+        "qty": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "at": {
+          ".validate": "newData.isString() && newData.val().length >= 20"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
     "reviews": {
       ".read": true,
       "$pid": {
         "$rid": {
-          ".write": "auth != null",
-          ".validate": "newData.hasChild('rating') && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5"
+          ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
+          ".validate": "!newData.exists() || (newData.hasChild('rating') && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5)",
+          "comment": {
+            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 1000)"
+          },
+          "name": {
+            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)"
+          },
+          "photos": {
+            "$i": {
+              ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 700000)"
+            }
+          }
         }
       }
     },
-
     "experienceReviews": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || !data.exists() )",
-        ".validate": "!newData.exists() || (newData.hasChild('service') && newData.hasChild('packing') && newData.child('service').isNumber() && newData.child('packing').isNumber())"
+        ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+        ".validate": "!newData.exists() || (newData.hasChild('service') && newData.hasChild('packing') && newData.child('service').isNumber() && newData.child('packing').isNumber())",
+        "improve": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 1000)"
+        },
+        "name": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)"
+        },
+        "zone": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)"
+        }
       }
     },
-
     "orders": {
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
+        "$oid": {
+          ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (auth.uid === $uid && newData.exists()) )",
+          "id": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "orderNo": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "placedAt": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "userUid": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "total": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "fee": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "amountDue": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "couponDiscount": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "referralDiscount": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "referralCode": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "earnedReferralCode": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "referralUsageCounted": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "loyaltyDiscount": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "loyaltyCoinsUsed": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+          },
+          "loyaltyRefunded": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (!data.exists() && newData.val() !== true) || (data.exists() && newData.val() === data.val())"
+          },
+          "status": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (!data.exists() && newData.val() === 'Awaiting Payment') || (data.exists() && (newData.val() === data.val() || (data.val() === 'Awaiting Payment' && (newData.val() === 'Payment Review' || newData.val() === 'Cancelled')) || (data.val() === 'Payment Review' && newData.val() === 'Cancelled')))"
+          },
+          "paymentStatus": {
+            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || ((newData.val() !== 'Verified' && newData.val() !== 'Paid') || (data.exists() && newData.val() === data.val()))"
+          }
+        }
+      }
+    },
+    "favorites": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
         ".write": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))"
       }
     },
-
-    "favorites": {
-      "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
-        ".write": "auth != null && auth.uid === $uid"
-      }
-    },
-
     "abandonedCarts": {
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       "$uid": {
@@ -59,7 +234,6 @@
         ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber())"
       }
     },
-
     "interest": {
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       "$pid": {
@@ -69,37 +243,98 @@
         }
       }
     },
-
     "requests": {
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       "$id": {
         ".write": "auth != null && (!data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))"
       }
     },
-
     "showcase": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && ( !data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || auth.uid === data.child('userUid').val() || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )"
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('id').val() === $id && newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists()) || (data.exists() && auth.uid === data.child('userUid').val() && data.child('approved').val() === false && (!newData.exists() || (newData.child('id').val() === $id && newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists()))) || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now && !newData.exists()) )",
+        "imgData": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 700000)"
+        },
+        "caption": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)"
+        },
+        "ownerName": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)"
+        },
+        "imgs": {
+          ".validate": "!newData.exists() || newData.hasChildren()",
+          "$i": {
+            ".validate": "newData.isString() && newData.val().length <= 700000"
+          }
+        },
+        "month": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 7)"
+        }
       }
     },
-
+    "tankMonthlyEntries": {
+      ".read": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+      ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'"
+    },
+    "tankMonthlyWinners": {
+      ".read": true,
+      ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'"
+    },
+    "tankApprovedDays": {
+      "$month": {
+        "$uid": {
+          ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+          ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'"
+        }
+      }
+    },
     "analytics": {
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
-      "total": { ".write": "auth != null", ".validate": "newData.isNumber()" },
-      "daily": { "$d": { ".write": "auth != null", ".validate": "newData.isNumber()" } },
-      "funnel": { "$step": { ".write": "auth != null", ".validate": "newData.isNumber()" } },
-      "events": { "$type": { "$key": { ".write": "auth != null", ".validate": "newData.isNumber()" } } },
-      "search": { "$term": { ".write": "auth != null", ".validate": "newData.isNumber()" } }
+      "total": {
+        ".write": "auth != null",
+        ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
+      },
+      "daily": {
+        "$d": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
+        }
+      },
+      "funnel": {
+        "$step": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
+        }
+      },
+      "events": {
+        "$type": {
+          "$key": {
+            ".write": "auth != null",
+            ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
+          }
+        }
+      },
+      "search": {
+        "$term": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
+        }
+      }
     },
-
+    "orderSeq": {
+      ".read": "auth != null",
+      "$day": {
+        ".write": "auth != null",
+        ".validate": "newData.isNumber() && (!data.exists() ? newData.val() === 1 : newData.val() === data.val() + 1)"
+      }
+    },
     "loyalty": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
         ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (auth.uid === $uid && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= (data.exists() ? data.child('points').val() : 0)) )"
       }
     },
-
     "restock": {
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
       "$pid": {
@@ -108,43 +343,81 @@
         }
       }
     },
-
     "userrefs": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid && !data.exists()"
+        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
+        ".write": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (auth.uid === $uid && (!data.exists() || !data.hasChildren()) && newData.child('unlocked').val() === false))",
+        ".validate": "!newData.exists() || (newData.child('code').isString() && newData.child('code').val().length >= 8 && newData.child('code').val().length <= 12 && newData.child('threshold').isNumber() && newData.child('threshold').val() >= 0 && newData.child('createdAt').isNumber() && newData.child('unlocked').isBoolean() && (!data.exists() || !data.hasChildren() || (newData.child('threshold').val() === data.child('threshold').val() && newData.child('createdAt').val() === data.child('createdAt').val())) && ((data.exists() && data.hasChildren()) || (root.child('settings').child('referralLifetimeSpendMin').isNumber() && newData.child('threshold').val() === root.child('settings').child('referralLifetimeSpendMin').val()) || (!root.child('settings').child('referralLifetimeSpendMin').isNumber() && newData.child('threshold').val() === 1000)))"
       }
     },
-
     "referrals": {
       "$code": {
         ".read": "auth != null",
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || !data.exists() || data.child('used').val() != true )",
-        ".validate": "newData.hasChild('owner') && (!data.exists() || data.child('owner').val() === newData.child('owner').val())",
-        "rewardCoins": {
-          ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || newData.val() === (data.exists() ? data.val() : 0)"
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('owner').val() === auth.uid && newData.child('kind').val() === 'order' && newData.child('active').val() === false && newData.child('used').val() === false) || (data.exists() && data.child('used').val() != true && newData.child('owner').val() === data.child('owner').val() && newData.child('kind').val() === data.child('kind').val() && newData.child('active').val() === data.child('active').val() && newData.child('used').val() === data.child('used').val() && newData.child('sourceOrderId').val() === data.child('sourceOrderId').val() && newData.child('sourceOrderUid').val() === data.child('sourceOrderUid').val() && newData.child('redemptions').val() === data.child('redemptions').val()) )",
+        ".validate": "!newData.exists() || (newData.child('owner').isString() && (newData.child('kind').val() === 'customer' || newData.child('kind').val() === 'order') && newData.child('active').isBoolean() && (!data.exists() || newData.child('owner').val() === data.child('owner').val()))"
+      }
+    },
+    "visitorLog": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      "$day": {
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!newData.exists() && data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )",
+        "expiresAt": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber()"
         },
-        "delivered": {
-          ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || newData.val() === false || (data.exists() && newData.val() === data.val())"
+        "u": {
+          "$uid": {
+            ".write": "auth != null && ($uid === auth.uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+            ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length <= 60)"
+          }
         }
       }
     },
-
     "testimonials": {
       ".read": true,
       "$id": {
         ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
-        ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))"
+        ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))",
+        "text": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 400)"
+        },
+        "name": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)"
+        }
       }
     },
-
     "promoUsage": {
       ".read": true,
       "$date": {
-        "$type": { ".write": "auth != null", ".validate": "newData.isNumber()" }
+        "$type": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
+        }
       }
     },
-
-    "__ping": { ".read": true, ".write": "auth != null" }
+    "__ping": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "totmVotes": {
+      ".read": true,
+      "$month": {
+        "$entry": {
+          "$day": {
+            "$voter": {
+              ".write": "auth != null && $day === '_once' && $voter === auth.uid && !data.exists() && newData.val() === true && root.child('showcase').child($entry).child('userUid').val() !== auth.uid && root.child('showcase').child($entry).exists() && (root.child('showcase').child($entry).child('approved').val() === true || !root.child('showcase').child($entry).child('approved').exists()) && (!root.child('showcase').child($entry).child('expiresAt').exists() || root.child('showcase').child($entry).child('expiresAt').val() > now)",
+              ".validate": "newData.isBoolean()"
+            }
+          }
+        }
+      }
+    },
+    "tankUploadStreaks": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+        ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+        ".validate": "!newData.exists() || (newData.child('uid').val() === $uid && newData.child('current').isNumber() && newData.child('best').isNumber())"
+      }
+    }
   }
 }
