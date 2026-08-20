@@ -12,12 +12,73 @@
 
 import { loadCatalogue, productPage, catalogPage, notFoundPage } from '../lib/catalog.mjs';
 
+const DB = 'https://nemo-aqua-store-default-rtdb.asia-southeast1.firebasedatabase.app';
+
+function mediaUrl(value) {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object') return '';
+  return value.url || value.downloadURL || value.downloadUrl || '';
+}
+
+/**
+ * The browser storefront can resolve product media through its media cache:
+ *   media item -> /media/m-<key>
+ * and older products can use /media/img-<product id>.
+ *
+ * The server-rendered /p pages do not have that browser cache, so hydrate the
+ * same pointers from the public Firebase media node before rendering. This keeps
+ * SEO/product pages visually identical to the main storefront without copying
+ * images into the Worker bundle.
+ */
+async function hydrateCatalogueMedia(cat) {
+  let mediaMap = {};
+  try {
+    const r = await fetch(`${DB}/media.json`, { signal: AbortSignal.timeout(5000) });
+    if (r.ok) mediaMap = (await r.json()) || {};
+  } catch {
+    // Images are optional for serving the page. Keep the category placeholder
+    // if Firebase media is temporarily unavailable.
+    return cat;
+  }
+
+  for (const p of cat.products || []) {
+    let hasPhoto = false;
+    const existing = Array.isArray(p.media) ? p.media : [];
+
+    p.media = existing.map((m) => {
+      if (!m || m.type === 'video') return m;
+
+      const key = String(m.key || '').trim();
+      const full = mediaUrl(m.url) || (key ? mediaUrl(mediaMap[`m-${key}`]) : '');
+      const thumb = mediaUrl(m.thumbUrl)
+        || mediaUrl(m.url_thumb)
+        || (key ? mediaUrl(mediaMap[`thumb-${key}`]) : '')
+        || (key ? mediaUrl(mediaMap[`m-${key}_thumb`]) : '');
+
+      if (full || thumb) hasPhoto = true;
+      return {
+        ...m,
+        ...(full ? { url: full } : {}),
+        ...(thumb ? { thumbUrl: thumb } : {}),
+      };
+    });
+
+    if (!hasPhoto) {
+      const legacy = mediaUrl(p.imageUrl) || mediaUrl(mediaMap[`img-${p.id}`]);
+      if (legacy) p.media = [{ type: 'image', url: legacy }, ...p.media];
+    }
+  }
+
+  return cat;
+}
+
 export default async function handler(req, res) {
   const slug = String((req.query && req.query.slug) || '').trim();
 
   let cat = null;
   try {
     cat = await loadCatalogue();
+    await hydrateCatalogueMedia(cat);
   } catch (e) {
     // A slow or unreachable database must not make the shop look deleted. 503
     // with a short retry tells a crawler to come back rather than drop the URL.
