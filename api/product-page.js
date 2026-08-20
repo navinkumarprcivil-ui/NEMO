@@ -21,14 +21,10 @@ function mediaUrl(value) {
 }
 
 /**
- * The browser storefront can resolve product media through its media cache:
- *   media item -> /media/m-<key>
- * and older products can use /media/img-<product id>.
- *
- * The server-rendered /p pages do not have that browser cache, so hydrate the
- * same pointers from the public Firebase media node before rendering. This keeps
- * SEO/product pages visually identical to the main storefront without copying
- * images into the Worker bundle.
+ * Hydrate the server-rendered /p pages with the same public Firebase media that
+ * the browser storefront resolves through loadMediaItem(). Firebase stores
+ * legacy gallery bytes/URLs under media/<key>, thumbnails under
+ * media/<key>_thumb, and older single-product images under media/img-<id>.
  */
 async function hydrateCatalogueMedia(cat) {
   let mediaMap = {};
@@ -36,8 +32,6 @@ async function hydrateCatalogueMedia(cat) {
     const r = await fetch(`${DB}/media.json`, { signal: AbortSignal.timeout(5000) });
     if (r.ok) mediaMap = (await r.json()) || {};
   } catch {
-    // Images are optional for serving the page. Keep the category placeholder
-    // if Firebase media is temporarily unavailable.
     return cat;
   }
 
@@ -49,11 +43,11 @@ async function hydrateCatalogueMedia(cat) {
       if (!m || m.type === 'video') return m;
 
       const key = String(m.key || '').trim();
-      const full = mediaUrl(m.url) || (key ? mediaUrl(mediaMap[`m-${key}`]) : '');
+      const full = mediaUrl(m.url)
+        || (key ? mediaUrl(mediaMap[key]) : '');
       const thumb = mediaUrl(m.thumbUrl)
         || mediaUrl(m.url_thumb)
-        || (key ? mediaUrl(mediaMap[`thumb-${key}`]) : '')
-        || (key ? mediaUrl(mediaMap[`m-${key}_thumb`]) : '');
+        || (key ? mediaUrl(mediaMap[`${key}_thumb`]) : '');
 
       if (full || thumb) hasPhoto = true;
       return {
