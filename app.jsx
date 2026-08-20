@@ -6510,7 +6510,7 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
   );
 }
 
-function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
+function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onCancelPayment, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
   const [openId,setOpenId]=useState(null); // which order is expanded (list shows summaries; details open on tap)
   // Re-add the exact option that was bought (the 10" net, not whichever size happens to be first).
   const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){
@@ -6710,7 +6710,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               {o.status==="Awaiting Payment"&&(
                 <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
                   {payOpen===o.id?(
-                    <PaymentPanel order={o} settings={settings} compact onSubmitPayment={onSubmitPayment} onCancelled={onCancelled}/>
+                    <PaymentPanel order={o} settings={settings} compact onSubmitPayment={onSubmitPayment} onCancelled={onCancelled} onCheckoutCancelled={onCancelPayment}/>
                   ):(
                     <>
                       <div style={{background:"#fef3c7",border:`1px solid #fde68a`,borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:12,color:"#92400e",fontWeight:600,lineHeight:1.5}}>⏳ Payment pending — complete it to confirm this order (auto-cancels if unpaid).</div>
@@ -9788,7 +9788,7 @@ function Collapsible({title, icon="", subtitle="", open=false, tone="plain", chi
 }
 
 /* ═══════════════════ PAYMENT PANEL (prepayment + proof upload) ═══════════════════ */
-function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact=false}){
+function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, onCheckoutCancelled, compact=false}){
   const grand = order.amountDue ?? (order.total+order.fee);
   const [txn,setTxn]=useState(order.txnId||"");
   const [proof,setProof]=useState(order.paymentProof||"");
@@ -9821,7 +9821,10 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, compact
       else setPayNote("✓ Payment verified and recorded — the store will confirm your order shortly.");
     }catch(e){
       const m=String(e?.message||"");
-      if(m==="dismissed") setPayNote("");                       // they closed it; nothing has changed
+      if(m==="dismissed"&&onCheckoutCancelled){
+        setPayNote("Returning your items to the cart…");
+        await onCheckoutCancelled(order);
+      } else if(m==="dismissed") setPayNote("");
       else if(m==="order-not-payable") setPayNote("⚠ This order has already been paid or cancelled.");
       else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote(""); } // fall back to the manual flow
       else if(m==="sandbox-admin-only"){ setGatewayOn(false); setPayNote(""); }
@@ -10540,7 +10543,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
         <>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:4}}>Almost there — complete payment</div>
           <div style={{fontSize:12.5,color:C.textSub,marginBottom:18,maxWidth:330,lineHeight:1.5}}>Your order is reserved. Pay the full amount now &amp; submit proof to confirm it.</div>
-          {placed&&<PaymentPanel order={placed} settings={settings} onSubmitPayment={submitPaymentHere} onCancelled={(o)=>{onCancelled&&onCancelled(o);}}/>}
+          {placed&&<PaymentPanel order={placed} settings={settings} onSubmitPayment={submitPaymentHere} onCancelled={(o)=>{onCancelled&&onCancelled(o);}} onCheckoutCancelled={onCancelPayment}/>}
           <button className="press" onClick={()=>nav("orders")}
             style={{marginTop:16,background:"none",border:"none",color:C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
             I'll pay later — go to Orders
@@ -18076,7 +18079,7 @@ function NemoStore(){
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} goBack={goBack} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} updateQty={updateQty} user={user} settings={settings} orders={orders} products={products} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={goBack}/>)}
         {page==="orders"   &&(user
-          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
+          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
           : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={goBack}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={goBack}/>}
         {page==="request"  &&<RequestPage nav={nav} goBack={goBack} user={user} onSubmit={submitRequest}/>}
