@@ -1,204 +1,107 @@
-# 🐠 Nemo Aqua Store
+# Nemo Aqua Store
 
-A mobile-first aquarium storefront (HTML + React + Firebase Realtime Database).
+Mobile-first aquarium storefront powered by React, Firebase Realtime Database and a Cloudflare Worker.
 
-## Files to put in your GitHub repo
+Production:
 
-```
-index.html              ← the app (served at the root)
-app.jsx                 ← all the app code
-assets/                 ← UPLOAD THE WHOLE FOLDER (logo, favicons, share banner)
-  ├─ nemo-logo.webp     ← what the splash shows; the .png beside it is the fallback
-  ├─ nemo-logo.png      ← and what share cards and structured data point at
-  ├─ fish-betta/clown.webp  ← the two aquarium fish, desktop-only, .png fallback
-  ├─ share-banner.png
-  ├─ apple-touch-icon.png
-  └─ favicon-16/32/48/96/144/192/512.png
-favicon.ico             ← root favicon Google probes by default
-favicon.png
-api/                    ← serverless functions (share links, /p/ pages, sitemap)
-lib/catalog.mjs         ← renders the /p/ pages and sitemap from the live catalogue
-manifest.webmanifest    ← PWA manifest (installable app)
-sw.js                   ← service worker (offline shell + install)
-robots.txt              ← search-engine crawl rules
-google….html            ← Google Search Console verification file
-vercel.json             ← static config + security headers
-database.rules.json     ← Firebase security rules (NOT served — paste into Firebase, see below)
-seo/README.md           ← how the /p/ pages work
-test/                   ← node test/catalog.test.mjs
-README.md               ← this file
-LAUNCH_CHECKLIST.md     ← pre-launch checklist
-.gitignore
-```
+- Store: https://www.nemoaquastore.in
+- Apex redirect: https://nemoaquastore.in → https://www.nemoaquastore.in
+- Hosting and server routes: Cloudflare Workers
+- Payments: Cashfree sandbox until production approval is complete
 
-> ⚠️ **Keep the folder structure exactly as above — upload the `assets/` folder WITH its contents.** `index.html` references files *inside* it by path, so if it uploads empty you'll get a broken logo and favicons. `api/` and `lib/` must go up too: `/p/`, `/s/` and `/sitemap.xml` are served by those functions, not by files. If your host's uploader skips folder contents, see **"Uploading"** at the bottom — zip-and-extract or `git push` keeps the structure intact.
+## Architecture
 
-## ⭐ NEW since last version
-- **Installable app (PWA):** customers get an "Install Nemo App" button + browser "Add to Home Screen". Needs `manifest.webmanifest` + `sw.js` in the repo (already included).
-- **Per-customer order security + admin-only writes:** new `database.rules.json` — see "Lock admin" below. Orders are now stored per user so customers can only read their own.
-- **Inventory truth:** stock is decremented with an atomic Firebase transaction at checkout, so two buyers can't oversell the last item.
-- **About & Policies page** (editable in admin → Settings), **Live Arrival Guarantee** + acclimatization guide at checkout, **product Share** buttons, **order-notification email** (free, via FormSubmit — set your email in Settings), and a new rounded font theme.
+The Cloudflare Worker serves the static storefront and adapts the existing API handlers for the Workers runtime.
 
-## 🔗 Sharing a product
+- `index.html`, `app.js`, `app.jsx` — storefront
+- `assets/` — images, icons and branding
+- `cloudflare/worker.js` — Worker router, security headers and scheduled handler
+- `api/` — payment, SEO, sharing, loyalty, referral and tank-maintenance handlers
+- `lib/` — shared catalogue and payment helpers used by the API handlers
+- `scripts/build.mjs` — compiles `app.jsx` to `app.js` and updates the build version
+- `scripts/build-cloudflare.mjs` — prepares static assets in `cf-dist/`
+- `wrangler.jsonc` — Cloudflare routes, assets, cron and environment configuration
+- `database.rules.json`, `storage.rules` — Firebase rules published separately
+- `test/` — Node test suite
 
-Tapping **Share** on a product copies a link like `nemoaquastore.in/s/<product-id>`.
-That path is served by `api/share.js`, which reads the product from Firebase and
-returns **that product's** Open Graph tags — its own photo, its name and its
-price — before sending the reader on to the storefront.
+The `api/` and `lib/` directories are required by `cloudflare/worker.js`; they are not legacy hosting files.
 
-It exists because the storefront is a single page. A link like `/?p=<id>` looks
-different to a person and identical to a scraper: WhatsApp and Facebook read the
-tags out of the HTML and never run the JavaScript that would swap the product
-in, so every product ever shared previewed with the same site-wide banner and
-blurb. The pages under `/p/` are the same idea aimed at Google rather than at
-WhatsApp — see `seo/README.md`.
-
-Nothing here needs credentials: the catalogue is world-readable and product
-photos are public, which is what makes a request-time lookup safe. If the
-database is slow or the product is gone, the link still works and falls back to
-the store-level card.
-
-> **Note:** a preview already delivered is cached by *WhatsApp*, not by your
-> phone. Clearing the cache in Settings will not refresh a message you already
-> sent — share the link again and the new preview appears.
-
-## 🧹 Clearing cached copies
-
-**Settings → Email & Security → Clear Cached Copies** empties everything this
-device is holding: saved product photos, the app shell, offline copies, and the
-compiled app bundle. It then reloads.
-
-It is safe by construction — every one of those is a *copy* of something in
-Firebase and comes straight back. Your cart, saved items and the store settings
-on that page are deliberately left alone.
-
-Use it when an old picture or an old version of the app is still showing.
-
-## 🔐 Admin is already locked to your Google account
-Your admin Google UID (`cI2HmMt6FdR7fO7uUnugH85GeZt2`) is **already filled into `database.rules.json`** — only that account can edit products/guides/settings; customers can only read the catalog and manage their own orders. There is **nothing to paste**; you just need to **publish the rules** (step 4 in the deploy steps below).
-
-### The `stockLedger` node
-
-`database.rules.json` carries one node the storefront never touches:
-**`stockLedger`**, written by the analytics app. It is your **real, physical
-stock** — what is actually on the shelf.
-
-That is deliberately *not* the `stockCount` on a product. Product stock is a
-*listing* decision: the store lists items you do not hold, and when someone
-orders one you buy it in and send it on. Physical stock is a different fact,
-so it lives in a different place and neither overwrites the other.
-
-The node holds one child per entry — a count, a receipt or a removal, each an
-immutable fact with its own id. It is **owner-only in both directions**: it is
-commercially sensitive and nothing on the storefront reads it. The
-`.validate` rules reject a malformed entry at write time, so a bad record
-cannot sit in the ledger and surface later as a wrong stock figure.
-
-Publishing the rules is what switches this on. Until then the analytics app
-keeps stock on the device it was entered on, and says so.
-
-**Optional — add a second admin:** have them sign in to the live site with Google once, copy their UID from Firebase Console → **Authentication → Users**, replace every **`PASTE_FRIEND_UID_HERE`** in `database.rules.json` with it, and **Publish** again. Leave `PASTE_FRIEND_UID_HERE` as-is if you don't want a second admin — the rules still work.
-
-
----
-
-## 1. Push to GitHub
+## Local setup
 
 ```bash
-git init
-git add .
-git commit -m "Nemo Aqua Store"
-git branch -M main
-git remote add origin https://github.com/<your-username>/nemo-aqua-store.git
-git push -u origin main
+npm install
+node scripts/build.mjs
+npm run build
 ```
 
-## 2. Deploy on Vercel
+Preview locally:
 
-1. Go to **vercel.com → Add New → Project** and import your GitHub repo.
-2. Framework Preset: **Other** (it's a static site — no build step).
-3. Build Command: leave **empty**. Output Directory: leave **empty** (root).
-4. Click **Deploy**. You'll get a URL like `https://nemo-aqua-store.vercel.app`.
-
-## 3. Authorize the domain for Google sign-in
-
-Firebase Console → **Authentication → Settings → Authorized domains → Add domain**
-add your Vercel domain, e.g. `nemo-aqua-store.vercel.app`
-(`localhost` is already allowed for local testing).
-
-Also confirm **Authentication → Sign-in method** has **Google** and **Anonymous** both **enabled**.
-
-## 4. Publish the database rules
-
-Firebase Console → **Realtime Database → Rules** → paste the contents of
-`database.rules.json` → **Publish**. (This replaces the temporary open test rules.)
-
-## 5. Configure the store (in the app)
-
-Open your site → tap the **logo 10 times** → enter your admin password → **⚙️ Settings**.
-
-> 🔒 The starter password is stored in `app.jsx` only as a **non-reversible hash** (not plaintext). **Change it right after launch** under **Settings → Admin Security** so it's yours alone.
-
-In Settings, fill in:
-
-- **Your WhatsApp Number** — full international format, e.g. `919876543210` (no `+`, no spaces).
-- **Supporter's WhatsApp** — optional, toggle on to show a "notify support" button.
-- **UPI ID** — e.g. `yourname@oksbi` to enable "Pay Online" via UPI.
-- **Razorpay / Payment Link** — optional; paste a Razorpay Payment Link for card/netbanking.
-- **Drive Folder + API key** — see below.
-
-## 6. (Optional) Google Drive product photos
-
-1. Put product photos in **one Google Drive folder**.
-2. Right-click the folder → **Share → Anyone with the link → Viewer**.
-3. Get a **Drive API key**: [console.cloud.google.com](https://console.cloud.google.com) → same project → **APIs & Services → Library → enable “Google Drive API”** → **Credentials → Create credentials → API key**.
-4. **Restrict the key** (important): under the key's settings → **API restrictions → restrict to Google Drive API**, and **Application restrictions → HTTP referrers** → add `https://your-domain.vercel.app/*`.
-5. Paste the **folder link** and **API key** into ⚙️ Settings. Now "Browse Drive folder" works in the product form.
-
----
-
-## 🔒 About the security rules
-
-The included rules:
-- **Catalog** (`products`, `guides`, `reviews`, `settings`, `showcase`, `testimonials`) — readable by anyone (needed to show the storefront), **writable only by the admin Google account(s)** whose UID is in the rules.
-- **Customer data** (`orders`, `favorites`, `loyalty`, `requests`) — each customer can only read/write their **own**; the admin can read all.
-
-> ✅ Admin writes are **already** locked to your Google UID (`cI2HmMt6FdR7fO7uUnugH85GeZt2`) in `database.rules.json`. Just publish the rules to activate them.
-
-### Add a second admin (optional)
-
-Admin writes are already locked to your Google UID. To let a partner also manage the store, copy **their** UID (Firebase Console → **Authentication → Users**) and replace every **`PASTE_FRIEND_UID_HERE`** in `database.rules.json` with it, then **Publish** again.
-
-### ⏰ Important
-Your original test rules expire automatically on a date. Publishing `database.rules.json` removes that expiry and replaces them with the rules above.
-
----
-
-## Local testing
-
-Just open `index.html` in a browser, or run any static server:
 ```bash
-npx serve .
+npm run preview
 ```
-(Google sign-in only works on `localhost` or an authorized domain; elsewhere the app shows demo accounts.)
 
----
+Validate the Cloudflare bundle without deploying:
 
-## Uploading to your host
+```bash
+npm run cf:check
+```
 
-Whatever you do, the **folders must keep their files inside them** (`assets/`, `p/`, and `p/og/`). The #1 cause of a broken live site is uploading the loose files but leaving the folders empty.
+Run the tests:
 
-**Easiest & most reliable — zip then extract (file-manager hosts like cPanel/Hostinger):**
-1. Zip the whole site folder so the zip contains `index.html`, `assets/`, `p/`, etc.
-2. In your host's File Manager, open `public_html` (or your web root) and **delete the old files**.
-3. **Upload the single `.zip`**, then use the host's **Extract** button. This rebuilds every folder exactly — nothing gets skipped.
-4. Make sure `index.html` ends up at the web root (not inside a sub-folder).
+```bash
+node --test test/*.test.mjs
+```
 
-**Cleanest for repeat updates — GitHub + Vercel (recommended):**
-1. `git push` the folder to a GitHub repo (git always preserves folders).
-2. vercel.com → Add New → Project → import the repo → Framework: **Other**, no build command → **Deploy**.
-3. Future changes: just `git push` again; Vercel redeploys automatically.
+Whenever `app.jsx` or `index.html` changes, run `node scripts/build.mjs` so `app.js`, `version.json` and the service-worker cache version stay synchronized.
 
-**If you must drag-and-drop:** drag the **`assets` and `p` folders themselves** onto the uploader — do **not** open them, select-all, and drag the files out. Most uploaders only recurse when you hand them the folder.
+## Cloudflare deployment
 
-> After uploading, hard-refresh the live site and check: the logo loads, a `/p/clownfish` style link opens, and the favicon shows. If any 404, that folder didn't go up — re-extract the zip.
+Cloudflare Git integration deploys the production Worker from `main`. A manual deployment can be run from an authenticated development environment with:
+
+```bash
+npm run deploy
+```
+
+Production routes are configured in `wrangler.jsonc`:
+
+- `www.nemoaquastore.in`
+- `nemoaquastore.in`
+- `/p/*` product pages
+- `/s/*` share pages
+- `/sitemap.xml`
+- `/api/*` supported API routes
+- Daily tank-cleanup cron
+
+The temporary `workers.dev` route is disabled.
+
+## Runtime secrets
+
+Configure secrets in Cloudflare; never commit or paste their values into repository files:
+
+- `CASHFREE_APP_ID`
+- `CASHFREE_SECRET_KEY`
+- `FIREBASE_SERVICE_ACCOUNT`
+- `CRON_SECRET`
+
+`CASHFREE_ENV` must remain `sandbox` until Cashfree approves the website and sandbox checkout, webhook delivery and server-side verification all pass.
+
+## Firebase
+
+Firebase Authentication and Realtime Database remain the application data services. Publish `database.rules.json` and `storage.rules` through Firebase when those files change.
+
+Authorized production domains should include:
+
+- `nemoaquastore.in`
+- `www.nemoaquastore.in`
+
+## Safety
+
+Do not commit:
+
+- Firebase service-account JSON
+- Cashfree secret keys
+- Cloudflare API tokens
+- Android signing keystores or passwords
+- Local `.env*` or `.dev.vars*` files
+
+The repository is now Cloudflare-only. No Vercel project or configuration is required.
