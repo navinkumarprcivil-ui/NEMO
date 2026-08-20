@@ -8,6 +8,10 @@
     {
       "pattern": "www.nemoaquastore.in",
       "custom_domain": true
+    },
+    {
+      "pattern": "nemoaquastore.in",
+      "custom_domain": true
     }
   ],
   "assets": {
