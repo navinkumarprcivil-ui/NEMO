@@ -3,6 +3,7 @@
   "name": "nemo-aqua-store",
   "main": "./cloudflare/worker.js",
   "compatibility_date": "2026-08-20",
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "routes": [
     {

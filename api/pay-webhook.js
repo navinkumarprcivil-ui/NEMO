@@ -18,6 +18,11 @@ export default async function handler(req, res) {
     const raw = await rawBody(req);
     const timestamp = String(req.headers['x-webhook-timestamp'] || '');
     const signature = String(req.headers['x-webhook-signature'] || '');
+    const webhookVersion = String(req.headers['x-webhook-version'] || '');
+    if (!timestamp || !signature || !webhookVersion) {
+      res.status(400).json({ error: 'missing-webhook-headers' });
+      return;
+    }
     if (!webhookSignatureValid(raw, timestamp, signature)) {
       res.status(401).json({ error: 'invalid-signature' });
       return;
@@ -46,6 +51,7 @@ export default async function handler(req, res) {
       processed: true,
       cashfreeOrderId,
       paymentId: result.gatewayPaymentId,
+      webhookVersion,
       processedAt: Date.now(),
     });
     res.status(200).json({ ok: true });

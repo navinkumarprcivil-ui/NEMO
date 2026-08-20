@@ -18,7 +18,6 @@ const bearer = req => String(req.headers.authorization || '').replace(/^Bearer\s
 const PAYMENT_HOSTS = new Set([
   'www.nemoaquastore.in',
   'nemoaquastore.in',
-  'nemo-aqua-store.navinkumarprcivil.workers.dev',
 ]);
 const publicSite = req => {
   const configured = String(process.env.PUBLIC_SITE_URL || 'https://www.nemoaquastore.in').replace(/\/$/, '');
