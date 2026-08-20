@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { cp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
 const ROOT = process.cwd();
@@ -38,6 +38,20 @@ for (const entry of entries) {
     await cp(source, target);
   }
 }
+
+const headers = `/*
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(self), usb=()
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Permitted-Cross-Domain-Policies: none
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+`;
+await writeFile(join(OUT, '_headers'), headers, 'utf8');
 
 for (const required of ['index.html', 'app.js', 'sw.js', 'manifest.webmanifest']) {
   try {
