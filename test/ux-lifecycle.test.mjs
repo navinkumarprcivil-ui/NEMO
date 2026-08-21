@@ -77,8 +77,16 @@ test('every admin settings card is independently collapsible', () => {
     'WhatsApp Notifications', 'Store Logo', 'Home Page Text', 'Store Contact',
     'Customer Confirmation Emails', 'Visitor Analytics', 'Admin Security', 'Data & Backup',
     'Clear Cached Copies', 'About & Policies', 'Business & Legal Info', 'Online Payment',
-    'Shipping Rates', 'Live-Fish Packing & Couriers', 'Premium Delivery & Live Guarantee',
+    'Shipping Rates', 'Live-Fish Packing & Couriers', 'Free Delivery', 'Premium Delivery & Live Guarantee',
     'HSN Master List', 'Coupons & Offer Banners', 'How discounts combine', 'Customer Wallet',
     'Referral Codes', 'Customer Tank Showcase', 'Tank of the Month',
   ]) assert.match(settings, new RegExp(`<Collapsible[^>]+title="${title.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}"`));
+});
+
+test('shipping settings use weight-bracket packaging and no Start Fresh control', () => {
+  assert.match(app, /basePackagingByWeight/);
+  assert.match(app, /liveBasePackagingByWeight/);
+  assert.match(app, /function basePackagingWeight\(/);
+  assert.match(app, /Packaging weight added by item-weight bracket/);
+  assert.doesNotMatch(app, /🧹 Start Fresh|clearAllCloudNode|clearAllShowcaseHandler/);
 });
