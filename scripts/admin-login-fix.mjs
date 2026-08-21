@@ -1,6 +1,6 @@
 const ADMIN_LOGIN_MARKER = 'const [checking,setChecking]=useState(!String(settings.adminSetupHash||"").trim());';
 
-const FIXED_ADMIN_LOGIN = String.raw`function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
+const FIXED_ADMIN_LOGIN = `function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
   const [password,setPassword]=useState("");
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState("");
