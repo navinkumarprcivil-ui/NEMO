@@ -20,6 +20,15 @@ test('customer orders use four simple lifecycle groups', () => {
   assert.match(app, /!\[['"]Shipped['"],['"]Delivered['"]\]\.includes\(o\.status\)/);
 });
 
+test('admin orders use the requested lifecycle and claim filters', () => {
+  assert.match(app, /const ADMIN_ORDER_FILTERS = \["All","Order Placed","Shipped","Delivered","Past Orders","Return\/Replacement"\]/);
+  assert.match(app, /function adminOrderStage\(/);
+  assert.match(app, /if\(adminOrderNeedsAttention\(o\)\) return "Return\/Replacement"/);
+  assert.match(app, /adminOrderStage\(o\)===s/);
+  const admin = app.slice(app.indexOf('function AdminHub('), app.indexOf('function SettingsPanel('));
+  assert.doesNotMatch(admin, /\["All",\.\.\.ALL_STATUSES\]/);
+});
+
 test('My Tank has persisted checkboxes and a clear action without a photo request', () => {
   const block = app.slice(app.indexOf('function AquaToolsPage('), app.indexOf('function HomePage('));
   assert.match(block, /type="checkbox"/);
@@ -60,4 +69,16 @@ test('month-end rewards create an in-admin notification and settings badge', () 
   assert.match(block, /Streak/);
   assert.match(block, /settingsAlertCount/);
   assert.match(block, /nemo-admin-rewards-dismissed/);
+});
+
+test('every admin settings card is independently collapsible', () => {
+  const settings = app.slice(app.indexOf('function SettingsPanel('), app.indexOf('function PosterRecovery('));
+  for (const title of [
+    'WhatsApp Notifications', 'Store Logo', 'Home Page Text', 'Store Contact',
+    'Customer Confirmation Emails', 'Visitor Analytics', 'Admin Security', 'Data & Backup',
+    'Clear Cached Copies', 'About & Policies', 'Business & Legal Info', 'Online Payment',
+    'Shipping Rates', 'Live-Fish Packing & Couriers', 'Premium Delivery & Live Guarantee',
+    'HSN Master List', 'Coupons & Offer Banners', 'How discounts combine', 'Customer Wallet',
+    'Referral Codes', 'Customer Tank Showcase', 'Tank of the Month',
+  ]) assert.match(settings, new RegExp(`<Collapsible[^>]+title="${title.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}"`));
 });
