@@ -35,10 +35,16 @@ jobs:
           s=p.read_text()
           s=s.replace("app.find('<Collapsible title=\"Admin Security\"')", "app.find('title=\"Admin Security\"')")
           s=s.replace("app.find('<Collapsible title=\"Data & Backup\"', sec_start)", "app.find('title=\"Data & Backup\"', sec_start)")
-          old="index, n = re.subn(r'const SPLASH_MAX_MS\\\\s*=\\\\s*12000', 'const SPLASH_MAX_MS = 4000', index, count=1)"
-          new="index, n = re.subn(r'(var|const)\\s+SPLASH_MAX_MS\\s*=\\s*12000', r'\\1 SPLASH_MAX_MS = 4000', index, count=1)"
-          s=s.replace(old,new)
-          p.write_text(s)
+          lines=s.splitlines()
+          fixed=False
+          for i,line in enumerate(lines):
+              if 'index, n = re.subn' in line and 'SPLASH_MAX_MS' in line:
+                  lines[i]="index, n = re.subn(r'(?:var|const)\\s+SPLASH_MAX_MS\\s*=\\s*12000', 'var SPLASH_MAX_MS = 4000', index, count=1)"
+                  fixed=True
+                  break
+          if not fixed:
+              raise SystemExit('release splash matcher line not found')
+          p.write_text('\n'.join(lines)+'\n')
           PY
       - name: Apply requested release changes
         run: python3 scripts/apply-admin-release.py
