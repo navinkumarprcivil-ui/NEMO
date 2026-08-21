@@ -43,6 +43,14 @@ jobs:
           p=Path('scripts/apply-admin-release.py')
           s=p.read_text()
           s=s.replace(
+              "app = replace_function(app, 'function AdminLogin(', 'function AdminHub(', admin_login, 'AdminLogin')",
+              "app = replace_function(app, 'function AdminLogin(', '/* ═══════════════════ ADMIN SALES DASHBOARD', admin_login, 'AdminLogin')"
+          )
+          s=s.replace(
+              "line_end = app.find('\\n', hub)",
+              "tab_line = app.find('const [tab,setTab]=useState', hub)\nline_end = app.find('\\n', tab_line)"
+          )
+          s=s.replace(
               'sec_start = app.find(\'<Collapsible title="Admin Security"\')',
               'sec_title = app.find(\'title="Admin Security"\')\nsec_start = app.rfind(\'<Collapsible\', 0, sec_title) if sec_title >= 0 else -1'
           )
@@ -69,20 +77,6 @@ jobs:
           PATCH=$?
           echo "patch_exit=$PATCH" >> .agent-release-status.txt
           cat /tmp/patch.log >> .agent-release-status.txt
-
-          python3 - <<'PY' >> .agent-release-status.txt
-          from pathlib import Path
-          a=Path('app.jsx').read_text()
-          ai=a.find('function AdminInsights('); ap=a.find('function AdminProducts('); ad=a.find('function AdminSalesDashboard(')
-          insights=a[ai:ap] if ai>=0 and ap>=0 else ''
-          dashboard=a[ad:ai] if ad>=0 and ai>=0 else ''
-          print('diag_positions=',ad,ai,ap)
-          for s in ['Overall','Today','Most Viewed','Most Added to Cart','Top Searches']:
-              print('diag_insights_'+s.replace(' ','_')+'=',s in insights)
-          print('diag_dashboard_Abandoned_Carts=', 'Abandoned Carts' in dashboard)
-          for s in ['Dead-on-Arrival claims require one continuous unboxing video sent on WhatsApp within 2 hours','Unused accessories and equipment in original, undamaged packaging may be returned within 3 days','Confirm Cashfree refund','Customers will no longer be able to use or see it']:
-              print('diag_policy_'+s[:18].replace(' ','_')+'=',s in a)
-          PY
 
           if [ "$PATCH" -eq 0 ]; then
             node --test test/*.test.mjs > /tmp/tests.log 2>&1
