@@ -68,6 +68,7 @@ const CAT_META = {
 const CATEGORIES  = Object.keys(CAT_META);
 const ORDER_STATUSES = ["Confirmed","Shipped","Delivered"]; // Cashfree confirms; admin ships and delivers
 const ALL_STATUSES   = ["Awaiting Payment","Payment Review","Confirmed","Shipped","Delivered","Cancelled"];
+const ADMIN_ORDER_FILTERS = ["All","Order Placed","Shipped","Delivered","Past Orders","Return/Replacement"];
 const PAY_WINDOW_MIN = 20; // Cashfree requires order expiry to be more than 15 minutes
 const DEFAULT_STOCK  = 10;
 const MAX_PER_ORDER  = 10;
@@ -103,6 +104,21 @@ function customerOrderStage(o,now=Date.now()){
   if(o&&o.status==="Delivered") return "Delivered";
   if(o&&o.status==="Shipped") return "Shipped";
   return "Orders Placed";
+}
+function adminOrderNeedsAttention(o){
+  if(!o) return false;
+  const ret=String((o.returnReq&&o.returnReq.status)||"");
+  const doa=String((o.doa&&o.doa.status)||"");
+  const returnOpen=!!o.returnReq&&!['Resolved','Declined'].includes(ret);
+  const doaOpen=!!o.doa&&!doa.startsWith("Approved")&&doa!=="Declined";
+  return returnOpen||doaOpen;
+}
+function adminOrderStage(o,now=Date.now()){
+  if(adminOrderNeedsAttention(o)) return "Return/Replacement";
+  if(orderIsPast(o,now)) return "Past Orders";
+  if(o&&o.status==="Delivered") return "Delivered";
+  if(o&&o.status==="Shipped") return "Shipped";
+  return "Order Placed";
 }
 /* An order the customer walked away from: cancelled by their own press, or auto-cancelled
    because the payment window ran out. Nothing shipped, nothing charged, nobody left to act —
@@ -312,6 +328,8 @@ function effectivePrice(p, discountPct){
 const DEFAULT_SHIPPING_RATES = {
   basePackagingKg: 0.5,        // base box/material weight added to every dry-goods order
   liveBasePackagingKg: 0.5,    // base box/oxygen-bag weight added to every live-fish order
+  basePackagingByWeight: {},   // optional per-item-weight overrides; falls back to basePackagingKg
+  liveBasePackagingByWeight: {}, // optional per-item-weight overrides; falls back to liveBasePackagingKg
   dryGoods: {
     "Up to 500g":{ TN:60,  SouthIndia:80,  CentralIndia:100, NorthIndia:120 },
     "500g-1kg":  { TN:80,  SouthIndia:100, CentralIndia:120, NorthIndia:150 },
@@ -644,7 +662,7 @@ function parcelWeightBracket(cart, r){
   const dry=(cart||[]).filter(i=>i.category!=="Live Fish");
   const fishWt=fish.reduce((s,i)=>s+(Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2)*i.qty,0);
   const dryWt=dry.reduce((s,i)=>s+(Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.1)*i.qty,0);
-  const base=fish.length?Number(r.liveBasePackagingKg!=null?r.liveBasePackagingKg:(r.basePackagingKg??0.5)):(Number(r.basePackagingKg)||0.5);
+  const base=basePackagingWeight(r,fish.length?"live":"dry",fishWt+dryWt);
   return getWeightBracket(fishWt+dryWt+base);
 }
 /* Live fish uses the same 5-tier weight brackets as dry goods so rates are directly comparable */
@@ -661,6 +679,17 @@ function getWeightBracket(kg){
   if(kg<=2)  return "1-2kg";
   if(kg<=5)  return "2-5kg";
   return "5-10kg";
+}
+function basePackagingWeight(r,kind,itemKg){
+  r=r||DEFAULT_SHIPPING_RATES;
+  const live=kind==="live";
+  const map=(live?r.liveBasePackagingByWeight:r.basePackagingByWeight)||{};
+  const value=map[getWeightBracket(Math.max(0,Number(itemKg)||0))];
+  if(value===0||value) return Math.max(0,Number(value)||0);
+  const legacy=live
+    ? (r.liveBasePackagingKg!=null?r.liveBasePackagingKg:(r.basePackagingKg??0.5))
+    : (r.basePackagingKg??0.5);
+  return Math.max(0,Number(legacy)||0);
 }
 /* ─────────── Live-fish packing options (customer chooses one at checkout) ───────────
    Two independent layers fold into 4 named options:
@@ -709,7 +738,7 @@ function thermacolFeeFor(cart, packingKey, settings){
   if(!fishItems.length) return 0;
   const r=settings.shippingRates||DEFAULT_SHIPPING_RATES;
   const fishWt=fishItems.reduce((s,i)=>s+(Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2)*i.qty,0);
-  const liveBase=Number(r.liveBasePackagingKg!=null?r.liveBasePackagingKg:(r.basePackagingKg??0.5));
+  const liveBase=basePackagingWeight(r,"live",fishWt);
   return thermacolCharge(getLiveFishWeightBracket(fishWt+liveBase), settings);
 }
 /* Zones live fish are NOT delivered to when the admin restriction is on. */
@@ -754,7 +783,7 @@ function shippingBreakdown(cart, zone, opts, settings){
       const wt = Number(i.variantPackagingWeight != null ? i.variantPackagingWeight : i.packagingWeight) || 0.2;
       return s + wt * i.qty;
     },0);
-    const liveBase = Number(r.liveBasePackagingKg != null ? r.liveBasePackagingKg : (r.basePackagingKg ?? 0.5));
+    const liveBase = basePackagingWeight(r,"live",fishWt);
     const bracket = getLiveFishWeightBracket(fishWt + liveBase);
     courier += (r.liveFish?.[bracket]?.[zone]||0);
     if(packing.box==="thermacol") thermacol += thermacolCharge(bracket, settings);
@@ -763,8 +792,8 @@ function shippingBreakdown(cart, zone, opts, settings){
   if(dryItems.length){
     // Per-option weight wins when the product has options (a 1kg feed pack vs a 100g one),
     // falling back to the product's own packing weight.
-    const wt = dryItems.reduce((s,i)=>s+((Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.1)*i.qty),0)+(Number(r.basePackagingKg)||0.5);
-    const bracket = getWeightBracket(wt);
+    const itemWt = dryItems.reduce((s,i)=>s+((Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.1)*i.qty),0);
+    const bracket = getWeightBracket(itemWt+basePackagingWeight(r,"dry",itemWt));
     courier += (r.dryGoods?.[bracket]?.[zone]||0);
     // Standard (base) packing — carton box / courier bag. Only when no live fish already drives the box.
     if(!fishItems.length) carton += cartonCharge(bracket, settings);
@@ -2846,24 +2875,6 @@ async function deleteTestimonial(id){
   try{ const r=await dbGet("nemo-testimonials"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-testimonials",JSON.stringify(arr.filter(x=>x.id!==id))); }catch(e){}
   return cloudOk;
 }
-/* ── Admin "Start Fresh": bulk-clear every customer submission ──
-   The parent nodes (showcase/testimonials/requests) have no .write rule, so a whole-node
-   .remove() is denied — we must remove each child id individually (the Google admin is
-   allowed to). We clear the local cache too, then re-read the cloud and return how many
-   entries STILL remain: 0 means a clean wipe; >0 means this browser isn't signed in as the
-   admin Google account (those entries are protected and can't be removed without it). */
-async function clearAllCloudNode(node, localKey){
-  if(FB_OK){
-    try{ const s=await withTimeout(FB_DB.ref(node).get(),6000); const v=s&&s.val(); if(v){ for(const k of Object.keys(v)){ try{ await FB_DB.ref(node+"/"+k).remove(); }catch(e){} } } }catch(e){}
-  }
-  try{ await dbSet(localKey,"[]"); }catch(e){}
-  if(!FB_OK) return 0;
-  try{ const s=await withTimeout(FB_DB.ref(node).get(),6000); const v=s&&s.val(); return v?Object.keys(v).length:0; }catch(e){ return 0; }
-}
-async function clearAllShowcase(){ return clearAllCloudNode("showcase","nemo-showcase"); }
-async function clearAllTestimonials(){ return clearAllCloudNode("testimonials","nemo-testimonials"); }
-async function clearAllRequestsCloud(){ return clearAllCloudNode("requests","nemo-requests"); }
-
 /* ── Go-live reset — wipe every order placed during testing ────────────────────────────
    One-time tool for the switch from test stage to live trading: it removes the orders and
    everything the store derived from them, so day one starts from a genuinely empty book
@@ -4302,7 +4313,7 @@ function generateInvoiceHTML(order, settings, opts){
   const pkgKg=(()=>{
     const r=(s.shippingRates||{});
     const w=items.reduce((a,it)=>a+((Number(it.variantPackagingWeight!=null?it.variantPackagingWeight:it.packagingWeight)||0)*(Number(it.qty)||0)),0);
-    const base=Number(items.some(it=>it.isLiveFish||it.category==="Live Fish")?(r.liveBasePackagingKg??r.basePackagingKg??0.5):(r.basePackagingKg??0.5))||0;
+    const base=basePackagingWeight(r,items.some(it=>it.isLiveFish||it.category==="Live Fish")?"live":"dry",w);
     const tot=w+base;
     return tot>0?tot.toFixed(2)+" kg (approx.)":"";
   })();
@@ -7137,7 +7148,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.03622c78";
+const APP_BUILD = "v90.1c296a81";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -10041,7 +10052,7 @@ function ShippingRatesChart({settings={}}){
   return(
     <div style={{marginTop:12,padding:"0 2px"}}>
       <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
-        Rates shown are approximate. Packaging weight ~{r.basePackagingKg||0.5}kg added per dry-goods order; ~{r.liveBasePackagingKg??r.basePackagingKg??0.5}kg base added per live-fish order. Actual charges confirmed at dispatch.
+        Rates shown are approximate. Packaging weight is added using the item-weight bracket configured by the store. Actual charges are confirmed at dispatch.
       </div>
       {tbl("🐟 Dry Goods (Food, Accessories, Plants, Tanks)", r.dryGoods||{})}
       {tbl("🐠 Live Fish Shipping (by total parcel weight)", r.liveFish||{})}
@@ -10623,7 +10634,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             {hasLiveFish&&(()=>{
               const r2=settings.shippingRates||DEFAULT_SHIPPING_RATES;
               const fishWt=cart.filter(i=>i.category==="Live Fish").reduce((s,i)=>{const wt=Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2;return s+wt*i.qty;},0);
-              const base=Number(r2.liveBasePackagingKg!=null?r2.liveBasePackagingKg:(r2.basePackagingKg??0.5));
+              const base=basePackagingWeight(r2,"live",fishWt);
               const total=fishWt+base;
               return <div style={{fontSize:11,color:C.textSub,marginTop:4}}>🐠 Estimated live parcel weight: <b style={{color:C.primary}}>{total.toFixed(2)} kg</b> (fish packing: {fishWt.toFixed(2)} kg + base: {base} kg)</div>;
             })()}
@@ -13297,7 +13308,7 @@ function AdminExitConfirm({onStay,onLeave}){
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onDeleteGuides,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTankMonthlyAward,totmVotes={},tankMonthKey=totmMonthOf(Date.now()),testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onDeleteGuides,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTankMonthlyAward,totmVotes={},tankMonthKey=totmMonthOf(Date.now()),testimonials=[],onDeleteTestimonial,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
@@ -13515,11 +13526,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   };
 
   const filteredOrders=orders.filter(o=>{
-    /* Orders the customer abandoned stay out of the working list — the admin has nothing to
-       do with them. Still reachable on purpose: pick the Cancelled filter and they appear,
-       so the record is out of the way rather than out of reach. */
-    if(orderFilter!=="Cancelled" && cancelledByCustomer(o)) return false;
-    if(orderFilter!=="All" && o.status!==orderFilter) return false;
+    if(orderFilter!=="All" && adminOrderStage(o)!==orderFilter) return false;
     const q=orderSearch.trim().toLowerCase();
     if(!q) return true;
     // Match on order number, name, or phone
@@ -13543,7 +13550,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   );
 
   const filteredProds=products.filter(p=>(catFilter==="All"||p.category===catFilter)&&(!prodQ||p.name.toLowerCase().includes(prodQ.toLowerCase())));
-  const newOrderCount=orders.filter(o=>o.status==="Placed").length;          // new paid orders awaiting action
+  const newOrderCount=orders.filter(o=>adminOrderStage(o)==="Order Placed").length;
   const outOfStockCount=products.filter(p=>(p.stockCount??DEFAULT_STOCK)<=0).length; // products that went out of stock
   const lowStockCount=products.filter(p=>{const s=p.stockCount??DEFAULT_STOCK; return s>0&&s<=3;}).length; // running low (1–3 left)
   const attnProds=products.filter(needsStockAttn);          // low/out AND not yet acknowledged by admin
@@ -13557,7 +13564,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const pendingModeration=showcase.filter(s=>!showcaseApproved(s)&&!showcaseExpired(s,nowMod)).length;
   const settingsAlertCount=pendingModeration+(rewardReminder?1:0);
   const totalReviews=Object.values(allReviews).reduce((s,r)=>s+r.length,0);
-  const stats=[{l:"Products",v:products.length,i:"📦"},{l:"Orders",v:orders.length,i:"🛒"},{l:"New",v:orders.filter(o=>o.status==="Placed").length,i:"🔔"},{l:"Reviews",v:totalReviews||"—",i:"⭐"}];
+  const stats=[{l:"Products",v:products.length,i:"📦"},{l:"Orders",v:orders.length,i:"🛒"},{l:"New",v:newOrderCount,i:"🔔"},{l:"Reviews",v:totalReviews||"—",i:"⭐"}];
 
   return(
     <div className="slide-up">
@@ -14029,12 +14036,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           </div>
           {/* Status filter */}
           <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:14}}>
-            {["All",...ALL_STATUSES].map(s=>(
+            {ADMIN_ORDER_FILTERS.map(s=>(
               <button key={s} className="press" onClick={()=>setOrderFilter(s)}
                 style={{flexShrink:0,background:orderFilter===s?C.primary:C.card,color:orderFilter===s?"white":C.textSub,border:`1.5px solid ${orderFilter===s?C.primary:C.border}`,borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 {s}
                 {s!=="All"&&<span style={{marginLeft:4,background:orderFilter===s?"rgba(255,255,255,.25)":C.border,borderRadius:10,padding:"1px 6px",fontSize:10}}>
-                  {orders.filter(o=>o.status===s).length}
+                  {orders.filter(o=>adminOrderStage(o)===s).length}
                 </span>}
               </button>
             ))}
@@ -14416,27 +14423,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── SETTINGS TAB ── */}
       {tab==="settings"&&(
         <div>
-          {/* Start Fresh — bulk-clear all customer submissions */}
-          <div style={{padding:"16px 16px 0"}}>
-            <div style={{background:"#fff5f5",borderRadius:16,padding:"16px",border:`1.5px solid ${C.danger}`}}>
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.danger,marginBottom:4}}>🧹 Start Fresh</div>
-              <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Permanently delete all customer-submitted content so you can launch with a clean slate. Each clear cannot be undone.</div>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {[
-                  {label:"Customer Tanks",count:showcase.length,fn:onClearShowcase,word:"customer tank photo"},
-                  {label:"Testimonials",count:testimonials.length,fn:onClearTestimonials,word:"testimonial"},
-                  {label:"Requests",count:requests.length,fn:onClearRequests,word:"product request"},
-                ].map(b=>(
-                  <button key={b.label} className="press" disabled={!b.count}
-                    onClick={()=>{ if(b.count&&window.confirm(`Delete ALL ${b.count} ${b.word}${b.count>1?"s":""}?\n\nThis permanently removes them from the website and cannot be undone.`)){ b.fn&&b.fn(); } }}
-                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:b.count?"#fee2e2":C.bg,color:b.count?C.danger:C.textSub,border:`1.5px solid ${b.count?C.danger:C.border}`,borderRadius:12,padding:"11px 14px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:b.count?"pointer":"default",opacity:b.count?1:.6}}>
-                    <span>Clear all {b.label}</span>
-                    <span style={{fontSize:12,fontWeight:800,background:b.count?"rgba(220,38,38,.12)":"transparent",borderRadius:20,padding:b.count?"2px 9px":"0"}}>{b.count}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
           {(()=>{
             const current=tankMonthKey, previous=previousTotmMonth(Date.now());
             const renderMonth=(month,complete)=>{
@@ -14718,19 +14704,17 @@ function SettingsPanel({settings,onSave,products=[]}){
       </div>
       {secOpen&&sec==="store"&&(<>
       {/* WhatsApp */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:14}}>💬 WhatsApp Notifications</div>
+      <Collapsible icon="💬" title="WhatsApp Notifications">
         {field("Your WhatsApp Number","ownerWhatsapp","919876543210","With country code, no + or spaces. New orders open here. Changing this needs a code emailed to your admin email.")}
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
           <input type="checkbox" checked={!!f.supporterEnabled} onChange={e=>set("supporterEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,color:C.text,fontWeight:600}}>Also notify a support team member</span>
         </label>
         {f.supporterEnabled&&field("Supporter's WhatsApp Number","supporterWhatsapp","919123456780","Shown a 'notify support' button on each new order.")}
-      </div>
+      </Collapsible>
 
       {/* Store contact (shown on home page) */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🖼️ Store Logo</div>
+      <Collapsible icon="🖼️" title="Store Logo">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Upload your logo (PNG with transparent background works best). It updates everywhere for all customers.</div>
         <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:10}}>
           <div style={{width:72,height:72,borderRadius:14,background:C.bg,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
@@ -14745,11 +14729,10 @@ function SettingsPanel({settings,onSave,products=[]}){
             {logoNote&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>{logoNote}</div>}
           </div>
         </div>
-      </div>
+      </Collapsible>
 
       {/* Home-page marketing copy */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>✍️ Home Page Text</div>
+      <Collapsible icon="✍️" title="Home Page Text">
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>The headline & taglines customers see on the home page. Type your own, or tap a suggestion.</div>
         {(()=>{
           const presets={
@@ -14775,24 +14758,22 @@ function SettingsPanel({settings,onSave,products=[]}){
             {chips("tagline")}
           </>);
         })()}
-      </div>
+      </Collapsible>
 
       {/* Store contact (shown on home page) */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📍 Store Contact</div>
+      <Collapsible icon="📍" title="Store Contact">
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Shown at the bottom of the home page for customers.</div>
         {field("Store Address","storeAddress","e.g. 12 Lake View Rd, Chennai 600001")}
         {field("Opening Hours (optional)","storeHours","e.g. Mon–Sat, 10am–8pm")}
         {field("Instagram Link (optional)","instagramUrl","https://instagram.com/yourstore","Shown in the home-page footer under Follow Us.")}
         {field("Facebook Link (optional)","facebookUrl","https://facebook.com/yourstore")}
         {field("Order Notification Email (optional)","orderEmail","you@example.com","Where new-order alerts and your admin security codes are sent. Delivered via EmailJS (set the keys below). Changing this needs an email security code.","email")}
-      </div>
+      </Collapsible>
 
       </>)}
       {secOpen&&sec==="emails"&&(<>
       {/* Customer confirmation emails (EmailJS) */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📧 Customer Confirmation Emails</div>
+      <Collapsible icon="📧" title="Customer Confirmation Emails">
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Auto-emails customers an order confirmation. Create a free account at emailjs.com → add an Email Service + Template, then paste the 3 IDs here. Template should use variables: to_email, to_name, order_no, order_items, order_total, payment_method, store_name.</div>
         {field("EmailJS Service ID","emailjsService","service_xxxxxxx")}
         {field("EmailJS Template ID","emailjsTemplate","template_xxxxxxx")}
@@ -14822,18 +14803,16 @@ function SettingsPanel({settings,onSave,products=[]}){
             <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>📥 Email me each new order</span><br/><span style={{fontSize:11,color:C.textSub}}>Sends the order-received copy to admin</span></span>
           </label>
         </div>
-      </div>
+      </Collapsible>
 
       {/* Visitor analytics */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📈 Visitor Analytics</div>
+      <Collapsible icon="📈" title="Visitor Analytics">
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Basic visit counts already appear on your Orders dashboard — no setup needed. For detailed reports (traffic sources, devices, locations), create a free Google Analytics 4 property and paste its Measurement ID here.</div>
         {field("Google Analytics ID (optional)","gaId","G-XXXXXXXXXX","From analytics.google.com → Admin → Data Streams → your web stream.")}
-      </div>
+      </Collapsible>
 
       {/* Admin security */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🔐 Admin Security</div>
+      <Collapsible icon="🔐" title="Admin Security">
 
         <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Google-only admin access</div>
         <div style={{background:adminOk?"#ecfdf5":"#fff7ed",border:`1px solid ${adminOk?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:adminOk?"#166534":"#9a3412",lineHeight:1.55}}>
@@ -14885,11 +14864,10 @@ function SettingsPanel({settings,onSave,products=[]}){
             6. In Firebase Console → Realtime Database → Rules, paste the updated <code style={{fontSize:10.5,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 5px"}}>database_rules.json</code> and click Publish
           </div>
         </div>
-      </div>
+      </Collapsible>
 
       {/* Data & Backup */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💾 Data &amp; Backup</div>
+      <Collapsible icon="💾" title="Data & Backup">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Download a complete copy of your store — products, orders, settings, reviews and photos — as one file. Keep it safe (email it to yourself or save to Google Drive). To restore, use Firebase Console → Realtime Database → ⋮ → Import JSON.</div>
         {adminOk ? (
           <button className="press" onClick={async()=>{ setBackupMsg("Preparing backup…"); try{ const keys=await downloadFullBackup(); setBackupMsg("✓ Backup downloaded ("+keys.length+" sections)"); }catch(e){ setBackupMsg("⚠ Backup failed — try again"); } }}
@@ -14900,7 +14878,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",fontSize:12,color:"#9a3412",lineHeight:1.5}}>🔒 Sign in with your Google admin account to download the full backup (it includes orders, which only you can read).</div>
         )}
         {backupMsg&&<div style={{fontSize:11.5,color:backupMsg[0]==="✓"?C.success:backupMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8}}>{backupMsg}</div>}
-      </div>
+      </Collapsible>
 
       {/* Clear cached copies ─────────────────────────────────────────────────
           For when something old is still on screen: a replaced product photo,
@@ -14908,8 +14886,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           Safe by construction — everything cleared is a copy of what is in
           Firebase, and it comes back on the next load. The basket, saved items
           and the store settings on this page are left alone. */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🧹 Clear Cached Copies</div>
+      <Collapsible icon="🧹" title="Clear Cached Copies">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>
           Clears saved photos, the app shell and offline copies on <b>this device</b>, then reloads fresh from the server.
           Use it when an old picture or an old version of the app is still showing.
@@ -14938,13 +14915,12 @@ function SettingsPanel({settings,onSave,products=[]}){
           {cacheBusy?"Clearing…":"🧹 Clear Cache & Reload"}
         </button>
         {cacheMsg&&<div style={{fontSize:11.5,color:cacheMsg[0]==="✓"?C.success:cacheMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8,lineHeight:1.5}}>{cacheMsg}</div>}
-      </div>
+      </Collapsible>
 
       </>)}
       {secOpen&&sec==="content"&&(<>
       {/* About & Policies content */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📄 About &amp; Policies</div>
+      <Collapsible icon="📄" title="About & Policies">
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Shown on the About page. Edit these to your real policies.</div>
         {area("Our Story","aboutStory")}
         {area("Delivery Areas","deliveryAreas")}
@@ -14962,11 +14938,10 @@ function SettingsPanel({settings,onSave,products=[]}){
         {area("Acclimatization Guide","acclimatizationTips")}
         {area("Terms & Conditions","termsPolicy")}
         {area("Privacy Policy","privacyPolicy")}
-      </div>
+      </Collapsible>
 
       {/* Business / legal identity */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🏛️ Business &amp; Legal Info</div>
+      <Collapsible icon="🏛️" title="Business & Legal Info">
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Shown on the About page and your invoices for legitimacy. <b>Never enter PAN or other private data here</b> — only business-level details customers may see.</div>
         {field("Registered Business Name","legalName","NEMO AQUA STORE")}
         {field("Entity Type","legalEntity","Proprietorship · Udyam-registered Micro Enterprise")}
@@ -14996,13 +14971,12 @@ function SettingsPanel({settings,onSave,products=[]}){
         </div>
         {field("Website (invoice + About page)","website","www.nemoaquastore.in")}
         {field("Legal Jurisdiction","jurisdiction","Salem, Tamil Nadu")}
-      </div>
+      </Collapsible>
 
       </>)}
       {secOpen&&sec==="payship"&&(<>
       {/* Payment */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💳 Online Payment</div>
+      <Collapsible icon="💳" title="Online Payment">
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}><b>Customer payments use the integrated Cashfree checkout.</b> Its production credentials are stored securely on Cloudflare and are never entered here. The optional UPI details below are printed on invoices only.</div>
         {field("UPI ID (invoice only)","upiId","yourname@oksbi","Optional business UPI reference printed on invoices; it is not a checkout fallback.")}
         {field("UPI Display Name","upiName","Nemo Aqua Store")}
@@ -15045,29 +15019,34 @@ function SettingsPanel({settings,onSave,products=[]}){
             </div>
           </div>
         </div>
-      </div>
+      </Collapsible>
 
       {/* Drive removed — photos are uploaded directly from device in the product form */}
 
       {/* Shipping rates editor */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🚚 Shipping Rates</div>
+      <Collapsible icon="🚚" title="Shipping Rates">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Edit shipping prices per zone. Leave blank to use default rates. Changes apply immediately after Save.</div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:4}}>Base packaging weight for <b>Dry Goods</b> orders (kg)</div>
-          <input type="number" step="0.25" min="0"
-            value={(f.shippingRates||DEFAULT_SHIPPING_RATES).basePackagingKg||0.5}
-            onChange={e=>{const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};set("shippingRates",{...cur,basePackagingKg:Number(e.target.value)||0.5});}}
-            style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-        </div>
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:4}}>Base packaging weight for <b>Live Fish</b> orders (kg) — oxygen bag + box</div>
-          <input type="number" step="0.25" min="0"
-            value={(f.shippingRates||DEFAULT_SHIPPING_RATES).liveBasePackagingKg??0.5}
-            onChange={e=>{const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};set("shippingRates",{...cur,liveBasePackagingKg:Number(e.target.value)||0.5});}}
-            style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Each fish's per-variant packaging weight is set in the product form. Total = fish weights + this base.</div>
-        </div>
+        <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>⚖️ Packaging weight added by item-weight bracket</div>
+        <div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.45}}>Set the box, oxygen bag and packing-material weight separately for each order-weight range. The app adds it before choosing the courier rate.</div>
+        {[['dry','Dry Goods','basePackagingByWeight','basePackagingKg'],['live','Live Fish · oxygen bag + box','liveBasePackagingByWeight','liveBasePackagingKg']].map(([kind,label,mapKey,legacyKey])=>{
+          const cur=f.shippingRates||DEFAULT_SHIPPING_RATES;
+          const map=cur[mapKey]||{};
+          const fallback=Number(cur[legacyKey]??cur.basePackagingKg??0.5);
+          return <div key={kind} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 11px",marginBottom:10}}>
+            <div style={{fontSize:11.5,fontWeight:800,color:C.text,marginBottom:7}}>{label}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 82px",gap:"6px 10px",alignItems:"center"}}>
+              {SHIP_TIERS.map(t=><React.Fragment key={t}>
+                <span style={{fontSize:10.5,color:C.textSub,fontWeight:700}}>{t}</span>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <input type="number" step="0.05" min="0" value={map[t]??fallback}
+                    onChange={e=>{const rates=f.shippingRates||{...DEFAULT_SHIPPING_RATES};const next={...(rates[mapKey]||{}),[t]:Math.max(0,Number(e.target.value)||0)};set("shippingRates",{...rates,[mapKey]:next});}}
+                    style={{width:"58px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px",fontSize:12,outline:"none",background:"white",textAlign:"right"}}/>
+                  <span style={{fontSize:10,color:C.textSub}}>kg</span>
+                </div>
+              </React.Fragment>)}
+            </div>
+          </div>;
+        })}
         {["dryGoods","liveFish"].map(type=>{
           const rows = (f.shippingRates||DEFAULT_SHIPPING_RATES)[type]||{};
           const label = type==="dryGoods"?"🐟 Dry Goods (by weight)":"🐠 Live Fish (by total parcel weight)";
@@ -15107,11 +15086,10 @@ function SettingsPanel({settings,onSave,products=[]}){
             </div>
           );
         })}
-      </div>
+      </Collapsible>
 
       {/* Live-fish packing: thermacol charge chart + courier partners */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📦 Live-Fish Packing &amp; Couriers</div>
+      <Collapsible icon="📦" title="Live-Fish Packing & Couriers">
         {/* Live-fish delivery region restriction */}
         <label style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none",background:f.liveFishRestrictNCIndia!==false?"#fef2f2":C.bg,borderRadius:12,padding:"11px 13px",border:`1.5px solid ${f.liveFishRestrictNCIndia!==false?"#fecaca":C.border}`}}>
           <input type="checkbox" checked={f.liveFishRestrictNCIndia!==false} onChange={e=>set("liveFishRestrictNCIndia",e.target.checked)} style={{width:18,height:18,accentColor:C.danger,flexShrink:0,marginTop:1}}/>
@@ -15182,18 +15160,20 @@ function SettingsPanel({settings,onSave,products=[]}){
           style={{width:"100%",background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:2}}>
           ＋ Add Courier Partner
         </button>
-      </div>
+      </Collapsible>
+
+      <Collapsible icon="🚚" title="Free Delivery">
+        <div style={{maxWidth:260}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>Free Delivery above (₹)</div>
+          <input type="number" min="0" value={f.freeDeliveryThreshold||0} onChange={e=>set("freeDeliveryThreshold",Number(e.target.value))}
+            style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
+          <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
+        </div>
+      </Collapsible>
 
       {/* Special delivery & live guarantee pricing */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>⚡ Premium Delivery &amp; 🛡️ Live Guarantee</div>
+      <Collapsible icon="⚡" title="Premium Delivery & Live Guarantee">
         <div style={{display:"grid",gridTemplateColumns:"1fr",gap:14}}>
-          <div style={{maxWidth:260}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>🚚 Free Delivery above (₹)</div>
-            <input type="number" min="0" value={f.freeDeliveryThreshold||0} onChange={e=>set("freeDeliveryThreshold",Number(e.target.value))}
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
-          </div>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:4}}>⚡ Premium-courier charge (₹ per parcel-weight bracket × zone)</div>
             <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Added when a customer picks a <b>Premium-courier</b> option, by total parcel weight &amp; their pincode zone.</div>
@@ -15220,7 +15200,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             })}
           </div>
         </div>
-      </div>
+      </Collapsible>
 
       </>)}
       {secOpen&&sec==="hsn"&&(<>
@@ -15236,8 +15216,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           restating those from a settings screen is how a filed return stops
           matching the invoices behind it. Products carrying the old code are
           listed under each row so they can be corrected by hand. */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>🧾 HSN Master List</div>
+      <Collapsible icon="🧾" title="HSN Master List">
         <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55,marginBottom:14}}>
           Every HSN code and GST rate you've used, kept so you never type one twice. When you list a
           product and tick "Claim GST", the code you enter is added here automatically — and suggested
@@ -15317,13 +15296,12 @@ function SettingsPanel({settings,onSave,products=[]}){
             </div>
           );
         })()}
-      </div>
+      </Collapsible>
       </>)}
 
       {secOpen&&sec==="promos"&&(<>
       {/* Coupon codes */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎟 Coupons &amp; Offer Banners</div>
+      <Collapsible icon="🎟" title="Coupons & Offer Banners">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.55}}>
           One list for every offer — welcome codes, seasonal and festival banners, secret codes.
           Add as many as you like; each row decides for itself where it shows and who it is for.
@@ -15422,11 +15400,10 @@ function SettingsPanel({settings,onSave,products=[]}){
           style={{width:"100%",background:"white",border:`1.5px dashed ${C.border}`,borderRadius:11,padding:"11px",fontSize:12.5,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
           + Add an offer / banner
         </button>
-      </div>
+      </Collapsible>
 
       {/* How discounts combine */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🧮 How discounts combine</div>
+      <Collapsible icon="🧮" title="How discounts combine">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.55}}>
           Reward coins can always be spent alongside a code. The caps below apply to everything
           together — coupon, referral and coins — and whichever cap is lower wins. Leave a cap at
@@ -15449,11 +15426,10 @@ function SettingsPanel({settings,onSave,products=[]}){
               style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white"}}/>
           </div>
         </div>
-      </div>
+      </Collapsible>
 
       {/* Wallet (loyalty points) */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>👛 Customer Wallet</div>
+      <Collapsible icon="👛" title="Customer Wallet">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Every customer has a wallet. They earn points per ₹100 on successfully paid delivered orders, plus approved shipping and support rewards — all redeemable for ₹ off at checkout. <b>₹ per point</b> is the coin value.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,cursor:"pointer"}}>
           <input type="checkbox" checked={!!f.loyaltyEnabled} onChange={e=>set("loyaltyEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
@@ -15514,11 +15490,10 @@ function SettingsPanel({settings,onSave,products=[]}){
             <span style={{fontSize:11,color:C.textSub,lineHeight:1.4,flex:1}}>Each batch of coins expires this many months after it's earned, with a ⏳ reminder before expiry; expired coins are removed automatically. <b>Changing this only affects coins earned afterwards</b> — coins already in wallets keep their original expiry. <b>0 = never expire.</b></span>
           </div>
         </div>
-      </div>
+      </Collapsible>
 
       {/* Referral codes */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12,display:"flex",alignItems:"center",flexWrap:"wrap"}}>🎟️ Referral Codes{usageBadge("referral",f.referralDailyLimit)}</div>
+      <Collapsible icon="🎟️" title="Referral Codes" subtitle={`${promoToday.referral||0}${Number(f.referralDailyLimit||0)>0?` of ${Number(f.referralDailyLimit)} used today`:" used today"}`}>
         <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer",userSelect:"none"}}>
           <input type="checkbox" checked={f.referralEnabled!==false} onChange={e=>set("referralEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable referral program</span>
@@ -15550,11 +15525,10 @@ function SettingsPanel({settings,onSave,products=[]}){
           </div>
         </div>
         <div style={{fontSize:11,color:C.textSub,marginTop:10,lineHeight:1.5,background:C.bg,borderRadius:10,padding:"9px 11px"}}>A code reserves at checkout but is counted as used <b>only after that buyer's payment succeeds</b>. An unpaid or cancelled order releases it. Order codes disappear from the source order as soon as they are consumed. No giver-wallet payout is made.</div>
-      </div>
+      </Collapsible>
 
       {/* Tank showcase */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase</div>
+      <Collapsible icon="🪸" title="Customer Tank Showcase">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Let signed-in customers upload their tank photos, displayed as a gallery on the home page.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
           <input type="checkbox" checked={!!f.showcaseEnabled} onChange={e=>set("showcaseEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
@@ -15588,11 +15562,10 @@ function SettingsPanel({settings,onSave,products=[]}){
             style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:12,lineHeight:1.55,outline:"none",background:"white",resize:"vertical"}}/>
           <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.45}}>Customers see this text from the Rules button beside the tank upload control.</div>
         </div>
-      </div>
+      </Collapsible>
 
       {/* Tank of the Month */}
-      <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🏆 Tank of the Month</div>
+      <Collapsible icon="🏆" title="Tank of the Month">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Groups public 24-hour entries into monthly customer totals. Votes add across every approved daily image; photos still auto-delete after 24 hours. Use the collapsible monthly log above to verify and award the completed month's vote and streak winners.</div>
         <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:12}}>
           <input type="checkbox" checked={!!f.totmEnabled} onChange={e=>set("totmEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
@@ -15604,7 +15577,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         </label>
         {!f.showcaseEnabled&&f.totmEnabled&&<div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",marginBottom:12,lineHeight:1.5}}>⚠ The tank showcase is switched off above, so nothing will appear. Turn it on for this to run.</div>}
         <div style={{fontSize:11,color:C.textSub,background:C.bg,borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>Reward values and the minimum approved streak are configured in Customer Tank Showcase above. Awards are never automatic.</div>
-      </div>
+      </Collapsible>
 
       </>)}
       <button className="press" onClick={()=>startSave(f)}
@@ -17276,29 +17249,6 @@ function NemoStore(){
     await deleteRequest(r.id);
     showToast("✓ User data deleted");
   };
-  // ── "Start Fresh" — admin bulk-clears every customer submission ──
-  const clearAllShowcaseHandler=async()=>{
-    const remaining=await clearAllShowcase();
-    setShowcase([]); // the live listener will also reflect the cleared cloud node
-    if(remaining>0) showToast("⚠ "+remaining+" tank"+(remaining>1?"s":"")+" couldn't be removed — sign in with the admin Google account, then try again","error");
-    else showToast("✓ All customer tanks cleared");
-  };
-  const clearAllTestimonialsHandler=async()=>{
-    const remaining=await clearAllTestimonials();
-    setTestimonials([]);
-    if(remaining>0) showToast("⚠ "+remaining+" testimonial"+(remaining>1?"s":"")+" couldn't be removed — sign in with the admin Google account, then try again","error");
-    else showToast("✓ All testimonials cleared");
-  };
-  const clearAllRequestsHandler=async()=>{
-    const ids=requests.map(r=>r.id);
-    const remaining=await clearAllRequestsCloud();
-    for(const id of ids){ try{ await delMedia(id); }catch(e){} }
-    setRequests([]);
-    setMediaCache(c=>{const n={...c}; ids.forEach(id=>delete n["img-"+id]); return n;});
-    if(remaining>0) showToast("⚠ "+remaining+" request"+(remaining>1?"s":"")+" couldn't be removed — sign in with the admin Google account, then try again","error");
-    else showToast("✓ All requests cleared");
-  };
-
   // Guides
   /* The write is awaited and its result reported. A guide that only reached this device is
      a guide that is going to vanish the next time the store syncs, so say so at the moment
@@ -18077,7 +18027,7 @@ function NemoStore(){
         {page==="contact"  &&<ContactPage nav={nav} goBack={goBack} settings={settings}/>} 
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} onAdminSignIn={adminGoogleSignIn}/>}
-        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{const ok=await deleteShowcasePhoto(id);if(ok)setShowcase(s=>s.filter(x=>x.id!==id));else showToast("Couldn't remove that submission — verify admin sign-in","error");}} onApproveShowcase={handleApproveShowcase} onTankMonthlyAward={handleTankMonthlyAward} totmVotes={totmVotes} tankMonthKey={activeTankMonth} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
+        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{const ok=await deleteShowcasePhoto(id);if(ok)setShowcase(s=>s.filter(x=>x.id!==id));else showToast("Couldn't remove that submission — verify admin sign-in","error");}} onApproveShowcase={handleApproveShowcase} onTankMonthlyAward={handleTankMonthlyAward} totmVotes={totmVotes} tankMonthKey={activeTankMonth} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onDeleteGuides={deleteGuidesHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
       </div>
