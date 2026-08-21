@@ -66,7 +66,7 @@ const CAT_META = {
   "Medicine":    { emoji:"💊", c1:"#5b2d82", c2:"#8b5cf6" },
 };
 const CATEGORIES  = Object.keys(CAT_META);
-const ORDER_STATUSES = ["Payment Review","Confirmed","Shipped","Delivered"]; // post-payment progress
+const ORDER_STATUSES = ["Confirmed","Shipped","Delivered"]; // Cashfree confirms; admin ships and delivers
 const ALL_STATUSES   = ["Awaiting Payment","Payment Review","Confirmed","Shipped","Delivered","Cancelled"];
 const PAY_WINDOW_MIN = 20; // Cashfree requires order expiry to be more than 15 minutes
 const DEFAULT_STOCK  = 10;
@@ -3318,7 +3318,7 @@ function cashfreeCheckoutFailureCode(result){
   return String(raw).replace(/[^A-Za-z0-9_-]/g,"-").replace(/-+/g,"-").slice(0,60)||"checkout-rejected";
 }
 
-async function payWithGateway(order, settings={}){
+async function payWithGateway(order){
   /* The visible customer profile is cached for fast boot; payment authority is not. It must
      be the live, non-anonymous Firebase account that owns this exact order. */
   const authUser=FB_OK&&FB_AUTH&&FB_AUTH.currentUser;
@@ -6753,7 +6753,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 </div>
               )}
               {o.status==="Payment Review"&&(
-                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>{o.gateway==="cashfree"?"✓ Payment received and verified by Cashfree — awaiting store confirmation.":`🔎 Payment submitted${o.txnId?` (Ref: ${o.txnId})`:""} — under verification.`}</div>
+                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>{o.gateway==="cashfree"?(o.testPayment?"Cashfree test payment recorded — not a fulfilment order.":"Cashfree payment recorded — this older order still needs admin review."):`🔎 Payment submitted${o.txnId?` (Ref: ${o.txnId})`:""} — under verification.`}</div>
               )}
               {o.status==="Cancelled"&&(
                 <div style={{marginTop:10}}>
@@ -7084,7 +7084,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.a49bd739";
+const APP_BUILD = "v90.41e8dfc8";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -9850,11 +9850,11 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
   const payNow=async()=>{
     setPayBusy(true); setPayNote("");
     try{
-      const outcome=await payWithGateway(order, settings);
+      const outcome=await payWithGateway(order);
       if(outcome==="test-confirmed") setPayNote("✓ Sandbox test completed — no real money was charged. This is not a fulfilment order.");
       else if(outcome==="redirected") setPayNote("Payment opened in a secure page. Check My Orders after completing it.");
       else{
-        setPayNote("✓ Payment verified and recorded — the store will confirm your order shortly.");
+        setPayNote("✓ Payment verified — your order is confirmed automatically.");
         if(onVerified) onVerified(order);
       }
     }catch(e){
@@ -10417,8 +10417,8 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
        "Awaiting Payment": the customer may cancel on the very next screen, or simply walk away
        and let the payment window close it. Mail sent now is mail about an order that in a
        good number of cases never existed, and the customer is still sitting in front of the
-       payment screen, so it tells them nothing they cannot see. Both copies go from
-       submitPayment, when there is a payment to write about. */
+       payment screen, so it tells them nothing they cannot see. Cashfree's verified
+       payment update is the point at which the paid order becomes actionable. */
     // Count today's promo usage toward the admin's daily caps
     if(couponApplied) bumpPromoUsage("coupon");
     // Root app handles state + storage + stock decrement
@@ -10464,7 +10464,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Verified! 🎉</div>
           {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
-          <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,marginBottom:20,maxWidth:320}}>Thank you! Cashfree has <b style={{color:C.text}}>verified your payment</b>. The store will review and confirm your order shortly. You can track it anytime under <b style={{color:C.text}}>Orders</b>.</div>
+          <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,marginBottom:20,maxWidth:320}}>Thank you! Cashfree has <b style={{color:C.text}}>verified your payment</b> and your order is now <b style={{color:C.text}}>Confirmed</b>. The store will update it when shipped and delivered.</div>
           {/* Care-guide reminder — tailored to what was purchased */}
           {placed&&(()=>{
             const cats=new Set((placed.items||[]).map(i=>i.category));
@@ -12934,7 +12934,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               <img src={o.paymentProof} alt="payment proof" style={{width:"100%",maxHeight:260,objectFit:"contain",display:"block"}}/>
             </button>
           )}
-          {(o.status==="Payment Review"||o.status==="Awaiting Payment")&&(
+          {o.gateway!=="cashfree"&&(o.status==="Payment Review"||o.status==="Awaiting Payment")&&(
             rejectConfirm?(
               <div style={{background:"#fee2e2",borderRadius:12,padding:"12px",border:`1.5px solid ${C.danger}`}}>
                 <div style={{fontSize:12.5,fontWeight:700,color:C.danger,marginBottom:10,textAlign:"center"}}>Reject this payment &amp; cancel the order? This can't be undone.</div>
@@ -12954,7 +12954,9 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             </div>
             )
           )}
-          {verified&&<div style={{fontSize:11.5,color:C.success,fontWeight:600,marginTop:8}}>Payment verified — order confirmed &amp; moved to processing.</div>}
+          {o.gateway==="cashfree"&&o.testPayment&&<div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,marginTop:8}}>Sandbox test payment — excluded from fulfilment.</div>}
+          {o.gateway==="cashfree"&&!o.testPayment&&verified&&<div style={{fontSize:11.5,color:C.success,fontWeight:600,marginTop:8}}>Cashfree verified this payment and confirmed the order automatically.</div>}
+          {o.gateway!=="cashfree"&&verified&&<div style={{fontSize:11.5,color:C.success,fontWeight:600,marginTop:8}}>Payment verified — order confirmed &amp; moved to processing.</div>}
         </div>
 
         {proofZoom&&o.paymentProof&&(
