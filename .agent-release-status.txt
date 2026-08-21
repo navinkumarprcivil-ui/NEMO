@@ -1,25 +1,36 @@
 Admin release verification
-commit=2d05e10b33893f88f6c8af8cc8e77771216c7d45
+commit=6b224c01082a9fa8252147c35fb63b4af12cc7b5
 baseline_tests_exit=0
 baseline_failed_tests:
 patch_exit=0
 release patch applied
-diag_positions= -1 -1 -1
-diag_insights_Overall= False
-diag_insights_Today= False
-diag_insights_Most_Viewed= False
-diag_insights_Most_Added_to_Cart= False
-diag_insights_Top_Searches= False
-diag_dashboard_Abandoned_Carts= False
-diag_policy_Dead-on-Arrival_cl= True
-diag_policy_Unused_accessories= True
-diag_policy_Confirm_Cashfree_r= False
-diag_policy_Customers_will_no_= True
-tests_exit=1
+tests_exit=0
 patched_failed_tests:
-not ok 103 - admin analytics are collapsible, include today data and omit abandoned carts
-not ok 104 - policy and confirmation safeguards match the current store rules
-npm_exit=99
+npm_exit=1
+npm error code EUSAGE
+npm error
+npm error The `npm ci` command can only install with an existing package-lock.json or
+npm error npm-shrinkwrap.json with lockfileVersion >= 1. Run an install with npm@5 or
+npm error later to generate a package-lock.json file, then try again.
+npm error
+npm error Clean install a project
+npm error
+npm error Usage:
+npm error npm ci
+npm error
+npm error Options:
+npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+npm error [--no-bin-links] [--no-fund] [--dry-run]
+npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+npm error
+npm error aliases: clean-install, ic, install-clean, isntall-clean
+npm error
+npm error Run "npm help ci" for more info
+npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-08-21T19_31_19_399Z-debug-0.log
 compile_exit=99
 cloudflare_build_exit=99
 RESULT=FAIL
