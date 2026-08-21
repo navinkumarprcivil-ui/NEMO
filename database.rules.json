@@ -4,15 +4,15 @@
     ".write": false,
     "products": {
       ".read": true,
-      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".write": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/products').val() === true)))",
       "$id": {
         "stockCount": {
-          ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (newData.val() <= data.val() && newData.val() >= data.val() - 100))",
+          ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/products').val() === true))) || (newData.val() <= data.val() && newData.val() >= data.val() - 100))",
           ".validate": "newData.isNumber() && newData.val() >= 0"
         },
         "variantStock": {
           "$vid": {
-            ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (newData.val() <= data.val() && newData.val() >= data.val() - 100))",
+            ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (!data.exists() || ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/products').val() === true))) || (newData.val() <= data.val() && newData.val() >= data.val() - 100))",
             ".validate": "newData.isNumber() && newData.val() >= 0"
           }
         }
@@ -20,15 +20,15 @@
     },
     "guides": {
       ".read": true,
-      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+      ".write": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/guides').val() === true)))"
     },
     "settings": {
       ".read": true,
-      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/settings').val() === true && newData.child('adminSetupHash').val() === data.child('adminSetupHash').val() && newData.child('coAdminUid').val() === data.child('coAdminUid').val() && newData.child('coAdminPermissions').val() === data.child('coAdminPermissions').val()))"
     },
     "media": {
       ".read": true,
-      ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')"
+      ".write": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && (root.child('adminAccess/permissions/products').val() === true || root.child('adminAccess/permissions/guides').val() === true))))"
     },
     "settingsPrivate": {
       ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
@@ -128,7 +128,7 @@
       ".read": true,
       "$pid": {
         "$rid": {
-          ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
+          ".write": "auth != null && ( ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/reviews').val() === true))) || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
           ".validate": "!newData.exists() || (newData.hasChild('rating') && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5)",
           "comment": {
             ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 1000)"
@@ -147,7 +147,7 @@
     "experienceReviews": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+        ".write": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/reviews').val() === true))",
         ".validate": "!newData.exists() || (newData.hasChild('service') && newData.hasChild('packing') && newData.child('service').isNumber() && newData.child('packing').isNumber())",
         "improve": {
           ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 1000)"
@@ -161,61 +161,61 @@
       }
     },
     "orders": {
-      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".read": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && (root.child('adminAccess/permissions/orders').val() === true || root.child('adminAccess/permissions/dashboard').val() === true))))",
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
+        ".read": "auth != null && (auth.uid === $uid || ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && (root.child('adminAccess/permissions/orders').val() === true || root.child('adminAccess/permissions/dashboard').val() === true)))))",
         "$oid": {
-          ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (auth.uid === $uid && newData.exists()) )",
+          ".write": "auth != null && ( ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true))) || (auth.uid === $uid && newData.exists()) )",
           "id": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "orderNo": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "placedAt": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "userUid": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "total": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "fee": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "amountDue": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "couponDiscount": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "referralDiscount": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "referralCode": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "earnedReferralCode": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "referralUsageCounted": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "loyaltyDiscount": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "loyaltyCoinsUsed": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || !data.exists() || newData.val() === data.val()"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || !data.exists() || newData.val() === data.val()"
           },
           "loyaltyRefunded": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (!data.exists() && newData.val() !== true) || (data.exists() && newData.val() === data.val())"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || (!data.exists() && newData.val() !== true) || (data.exists() && newData.val() === data.val())"
           },
           "status": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (!data.exists() && newData.val() === 'Awaiting Payment') || (data.exists() && (newData.val() === data.val() || (data.val() === 'Awaiting Payment' && (newData.val() === 'Payment Review' || newData.val() === 'Cancelled')) || (data.val() === 'Payment Review' && newData.val() === 'Cancelled')))"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || (!data.exists() && newData.val() === 'Awaiting Payment') || (data.exists() && (newData.val() === data.val() || (data.val() === 'Awaiting Payment' && (newData.val() === 'Payment Review' || newData.val() === 'Cancelled')) || (data.val() === 'Payment Review' && newData.val() === 'Cancelled')))"
           },
           "paymentStatus": {
-            ".validate": "auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || ((newData.val() !== 'Verified' && newData.val() !== 'Paid') || (data.exists() && newData.val() === data.val()))"
+            ".validate": "(auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)) || ((newData.val() !== 'Verified' && newData.val() !== 'Paid') || (data.exists() && newData.val() === data.val()))"
           }
         }
       }
@@ -227,15 +227,15 @@
       }
     },
     "abandonedCarts": {
-      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".read": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)))",
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
-        ".write": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
+        ".read": "auth != null && (auth.uid === $uid || ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true))))",
+        ".write": "auth != null && (auth.uid === $uid || ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true))))",
         ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber())"
       }
     },
     "interest": {
-      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".read": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/dashboard').val() === true)))",
       "$pid": {
         ".read": true,
         "$uid": {
@@ -244,15 +244,15 @@
       }
     },
     "requests": {
-      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".read": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/requests').val() === true)))",
       "$id": {
-        ".write": "auth != null && (!data.exists() || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))"
+        ".write": "auth != null && (!data.exists() || ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/requests').val() === true))))"
       }
     },
     "showcase": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('id').val() === $id && newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists()) || (data.exists() && auth.uid === data.child('userUid').val() && data.child('approved').val() === false && (!newData.exists() || (newData.child('id').val() === $id && newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists()))) || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now && !newData.exists()) )",
+        ".write": "auth != null && ( ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/reviews').val() === true))) || (!data.exists() && newData.child('id').val() === $id && newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists()) || (data.exists() && auth.uid === data.child('userUid').val() && data.child('approved').val() === false && (!newData.exists() || (newData.child('id').val() === $id && newData.child('userUid').val() === auth.uid && newData.child('approved').val() === false && !newData.child('approvedAt').exists() && !newData.child('expiresAt').exists()))) || (data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now && !newData.exists()) )",
         "imgData": {
           ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 700000)"
         },
@@ -290,7 +290,7 @@
       }
     },
     "analytics": {
-      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".read": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/dashboard').val() === true)))",
       "total": {
         ".write": "auth != null",
         ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
@@ -331,8 +331,8 @@
     },
     "loyalty": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))",
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (auth.uid === $uid && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= (data.exists() ? data.child('points').val() : 0)) )"
+        ".read": "auth != null && (auth.uid === $uid || ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/wallets').val() === true))))",
+        ".write": "auth != null && ( ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/wallets').val() === true))) || (auth.uid === $uid && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= (data.exists() ? data.child('points').val() : 0)) )"
       }
     },
     "restock": {
@@ -358,16 +358,16 @@
       }
     },
     "visitorLog": {
-      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+      ".read": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/dashboard').val() === true)))",
       "$day": {
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!newData.exists() && data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )",
+        ".write": "auth != null && ( ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/dashboard').val() === true))) || (!newData.exists() && data.child('expiresAt').isNumber() && data.child('expiresAt').val() < now) )",
         "expiresAt": {
           ".write": "auth != null",
           ".validate": "newData.isNumber()"
         },
         "u": {
           "$uid": {
-            ".write": "auth != null && ($uid === auth.uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
+            ".write": "auth != null && ($uid === auth.uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/dashboard').val() === true)))",
             ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length <= 60)"
           }
         }
@@ -376,7 +376,7 @@
     "testimonials": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
+        ".write": "auth != null && ( ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/reviews').val() === true))) || (!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && data.child('uid').val() === auth.uid) )",
         ".validate": "!newData.exists() || (newData.hasChild('uid') && newData.hasChild('text'))",
         "text": {
           ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 400)"
@@ -417,6 +417,45 @@
         ".read": "auth != null && (auth.uid === $uid || auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2')",
         ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
         ".validate": "!newData.exists() || (newData.child('uid').val() === $uid && newData.child('current').isNumber() && newData.child('best').isNumber())"
+      }
+    },
+    "adminAccess": {
+      ".read": "auth != null && (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || auth.uid === root.child('adminAccess/coAdminUid').val())",
+      ".write": "auth != null && auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'",
+      "coAdminUid": {
+        ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 128)"
+      },
+      "permissions": {
+        "orders": {
+          ".validate": "newData.isBoolean()"
+        },
+        "dashboard": {
+          ".validate": "newData.isBoolean()"
+        },
+        "products": {
+          ".validate": "newData.isBoolean()"
+        },
+        "wallets": {
+          ".validate": "newData.isBoolean()"
+        },
+        "reviews": {
+          ".validate": "newData.isBoolean()"
+        },
+        "requests": {
+          ".validate": "newData.isBoolean()"
+        },
+        "guides": {
+          ".validate": "newData.isBoolean()"
+        },
+        "settings": {
+          ".validate": "newData.isBoolean()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      "$other": {
+        ".validate": false
       }
     }
   }

@@ -12,10 +12,44 @@ const C = {
 const STORE_NAME     = "Nemo";
 const PRICE_FONT     = "'Plus Jakarta Sans',sans-serif"; // prices / amounts (weight 800)
 const ADMIN_UID      = "cI2HmMt6FdR7fO7uUnugH85GeZt2"; // your Google account — must match Firebase rules
-const ADMIN_UID_2    = ""; // OPTIONAL co-admin (your helper). Paste their Google UID here, then also add it in database.rules.json + Firebase console. Leave "" if unused.
-const ADMIN_UIDS     = [ADMIN_UID, ADMIN_UID_2].filter(Boolean); // everyone allowed admin access
-let RUNTIME_CO_ADMIN = ""; // optional co-admin UID entered in Admin → Settings (kept in sync from settings.coAdminUid)
-function isAdminUid(uid){ return !!uid && (ADMIN_UIDS.indexOf(uid)!==-1 || (!!RUNTIME_CO_ADMIN && uid===RUNTIME_CO_ADMIN)); }
+const ADMIN_SECTION_KEYS=["orders","dashboard","products","wallets","reviews","requests","guides","settings"];
+const DEFAULT_CO_ADMIN_PERMISSIONS={orders:false,dashboard:false,products:false,wallets:false,reviews:false,requests:false,guides:false,settings:false};
+let RUNTIME_ADMIN_ACCESS={coAdminUid:"",permissions:{...DEFAULT_CO_ADMIN_PERMISSIONS}};
+function isMainAdminUid(uid){ return !!uid && uid===ADMIN_UID; }
+function isCoAdminUid(uid){ return !!uid && !!RUNTIME_ADMIN_ACCESS.coAdminUid && uid===RUNTIME_ADMIN_ACCESS.coAdminUid; }
+function isAdminUid(uid){ return isMainAdminUid(uid)||isCoAdminUid(uid); }
+function canAdminSection(section,uid=(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||""){
+  if(isMainAdminUid(uid)) return true;
+  return isCoAdminUid(uid)&&RUNTIME_ADMIN_ACCESS.permissions&&RUNTIME_ADMIN_ACCESS.permissions[section]===true;
+}
+function cleanAdminAccess(raw){
+  raw=raw&&typeof raw==="object"?raw:{};
+  const permissions={...DEFAULT_CO_ADMIN_PERMISSIONS};
+  ADMIN_SECTION_KEYS.forEach(k=>{ permissions[k]=raw.permissions&&raw.permissions[k]===true; });
+  return {coAdminUid:String(raw.coAdminUid||"").trim(),permissions};
+}
+async function refreshAdminAccess(){
+  if(!FB_OK||!FB_DB||!FB_AUTH||!FB_AUTH.currentUser) return RUNTIME_ADMIN_ACCESS;
+  try{
+    const s=await FB_DB.ref("adminAccess").get();
+    RUNTIME_ADMIN_ACCESS=cleanAdminAccess(s&&s.val());
+  }catch(e){
+    if(isMainAdminUid(FB_AUTH.currentUser.uid)) RUNTIME_ADMIN_ACCESS=cleanAdminAccess(null);
+  }
+  return RUNTIME_ADMIN_ACCESS;
+}
+async function saveAdminAccess(raw){
+  if(!FB_OK||!FB_DB||!FB_AUTH||!isMainAdminUid(FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)) throw new Error("main-admin-required");
+  const access=cleanAdminAccess(raw);
+  await FB_DB.ref("adminAccess").set(access);
+  RUNTIME_ADMIN_ACCESS=access;
+  return access;
+}
+async function adminPasswordDigest(value){
+  const bytes=new TextEncoder().encode("nemo-admin-v1:"+String(value||""));
+  const hash=await crypto.subtle.digest("SHA-256",bytes);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
 const BUSINESS_WA    = "919360921030"; // ← change to your WhatsApp number
 const BUSINESS_EMAIL = "nemoaquastore@gmail.com"; // store email — used for order alerts + admin OTP when Settings email is blank
 const SECRET_TAPS    = 10;             // tap logo this many times to open admin
@@ -1973,15 +2007,21 @@ async function loadSettings(){
   const r=await dbGet("nemo-settings"); return r?normalizeSettings({...DEFAULT_SETTINGS,...JSON.parse(r)}):{...DEFAULT_SETTINGS};
 }
 async function saveSettings(s){
-  await dbSet("nemo-settings",JSON.stringify(s));   // local cache keeps the whole thing (admin's own device)
+  await dbSet("nemo-settings",JSON.stringify(s));
   if(FB_OK){
     const {pub,priv,bank}=splitSettings(s);
-    await fbSetObj("settings",pub);
-    await fbSetObj("settingsPrivate",priv);
-    await fbSetObj("settingsBank",bank);
-    // One-time cleanup: these used to be written into the public node, so a store that saved
-    // settings before this change still has them sitting there readable. Clear them out.
-    try{ await Promise.all(NON_PUBLIC_SETTING_KEYS.map(k=>FB_DB.ref("settings/"+k).remove())); }catch(e){}
+    if(isMainAdminUid(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)){
+      await fbSetObj("settings",pub);
+      await fbSetObj("settingsPrivate",priv);
+      await fbSetObj("settingsBank",bank);
+      try{ await Promise.all(NON_PUBLIC_SETTING_KEYS.map(k=>FB_DB.ref("settings/"+k).remove())); }catch(e){}
+    }else if(canAdminSection("settings")){
+      // Firebase compares protected security keys with their existing values, so a co-admin
+      // can update ordinary store settings but cannot alter the password or role assignment.
+      const safePub={...pub};
+      delete safePub.adminSetupHash; delete safePub.coAdminUid; delete safePub.coAdminPermissions;
+      await FB_DB.ref("settings").update(safePub);
+    }
   }
 }
 
@@ -5307,48 +5347,45 @@ function MiniCountdown({endsAt,compact=false}){
 function OfferBanners({settings,orders=[]}){
   const list=usableCoupons(settings,orders,"welcome");
   const [copied,setCopied]=useState("");
-  if(!list.length) return null;
+  const [open,setOpen]=useState(false);
+  const promoDay=()=>{ try{return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());}catch(e){return new Date().toISOString().slice(0,10);} };
+  useEffect(()=>{
+    if(!list.length) return;
+    const day=promoDay();
+    try{
+      if(localStorage.getItem("nemo-promo-popup-day-v1")===day) return;
+      localStorage.setItem("nemo-promo-popup-day-v1",day);
+    }catch(e){}
+    const timer=setTimeout(()=>setOpen(true),220);
+    return()=>clearTimeout(timer);
+  },[list.map(c=>c.id).join("|")]);
+  if(!list.length||!open) return null;
+  const close=()=>setOpen(false);
   const copy=(code)=>{ try{ navigator.clipboard.writeText(code); }catch(e){} setCopied(code); setTimeout(()=>setCopied(""),1600); };
   return(
-    <>
-      {list.map(c=>{
-        const bg=c.bg||"#7c3aed";
-        const worth = c.type==="coins" ? `${c.value} reward coins`
-                    : c.type==="percent" ? `${c.value}% off${c.maxDiscount>0?` (up to ₹${c.maxDiscount})`:""}`
-                    : `₹${c.value} off`;
-        return(
-          /* Centred rather than the old left-aligned row. An offer is a headline, not a
-             list item: the emoji sits above the wording, the amount is the biggest thing
-             on it, and the code and its Copy button sit together underneath instead of
-             the code drifting left while the button hugged the far edge. */
-          <div key={c.id} className="fade-rise" style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:18,padding:"18px 16px",marginBottom:14,textAlign:"center",boxShadow:`0 8px 22px ${bg}33`}}>
-            <div style={{fontSize:30,lineHeight:1}}>{c.emoji||"🎉"}</div>
-            <div style={{fontSize:13,fontWeight:800,color:"rgba(255,255,255,.92)",marginTop:6,letterSpacing:.3}}>
-              {c.name||"Special offer"}
+    <div onClick={close} role="presentation" style={{position:"fixed",inset:0,zIndex:4200,background:"rgba(15,23,42,.56)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
+      <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Today's promotions" className="fade-rise" style={{position:"relative",width:"min(92vw,430px)",maxHeight:"82vh",overflowY:"auto",background:C.card,borderRadius:22,padding:"18px",boxShadow:"0 24px 70px rgba(15,23,42,.32)"}}>
+        <button className="press" onClick={close} aria-label="Close promotion" style={{position:"absolute",right:10,top:9,width:36,height:36,borderRadius:18,border:`1px solid ${C.border}`,background:"rgba(255,255,255,.94)",fontSize:20,fontWeight:800,color:C.text,zIndex:2}}>×</button>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,fontSize:18,color:C.text,paddingRight:38,marginBottom:12}}>Today at Nemo</div>
+        {list.map(c=>{
+          const bg=c.bg||"#7c3aed";
+          const worth=c.type==="coins"?`${c.value} reward coins`:c.type==="percent"?`${c.value}% off${c.maxDiscount>0?` (up to ₹${c.maxDiscount})`:""}`:`₹${c.value} off`;
+          return(
+            <div key={c.id} style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:18,padding:"18px 16px",marginBottom:12,textAlign:"center",boxShadow:`0 8px 22px ${bg}33`}}>
+              <div style={{fontSize:30,lineHeight:1}}>{c.emoji||"🎉"}</div>
+              <div style={{fontSize:13,fontWeight:800,color:"rgba(255,255,255,.92)",marginTop:6,letterSpacing:.3}}>{c.name||"Special offer"}</div>
+              {c.value>0&&<div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"white",lineHeight:1.15,marginTop:2}}>{worth}</div>}
+              {(c.minOrder>0||c.firstOrderOnly)&&<div style={{fontSize:11.5,color:"rgba(255,255,255,.85)",marginTop:4}}>{c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}</div>}
+              {c.code&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:11,flexWrap:"wrap"}}>
+                <div style={{background:"rgba(255,255,255,.2)",borderRadius:8,padding:"5px 14px",border:"1px dashed rgba(255,255,255,.6)"}}><span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{c.code}</span></div>
+                <button className="press" onClick={()=>copy(c.code)} style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 13px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied===c.code?"✓ Copied":"Copy"}</button>
+              </div>}
             </div>
-            {c.value>0&&(
-              <div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"white",lineHeight:1.15,marginTop:2}}>{worth}</div>
-            )}
-            {(c.minOrder>0||c.firstOrderOnly)&&(
-              <div style={{fontSize:11.5,color:"rgba(255,255,255,.85)",marginTop:4}}>
-                {c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}
-              </div>
-            )}
-            {c.code&&(
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:11,flexWrap:"wrap"}}>
-                <div style={{background:"rgba(255,255,255,.2)",borderRadius:8,padding:"5px 14px",border:"1px dashed rgba(255,255,255,.6)"}}>
-                  <span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{c.code}</span>
-                </div>
-                <button className="press" onClick={()=>copy(c.code)}
-                  style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 13px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-                  {copied===c.code?"✓ Copied":"Copy"}
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </>
+          );
+        })}
+        <div style={{fontSize:10.5,color:C.textSub,textAlign:"center"}}>Shown once per day. Tap outside this card or × to close.</div>
+      </div>
+    </div>
   );
 }
 
@@ -6592,7 +6629,6 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
 
 function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, reviewedSet=[], onCancelled, onCancelPayment, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
   const [openId,setOpenId]=useState(null); // which order is expanded (list shows summaries; details open on tap)
-  const [stageFilter,setStageFilter]=useState("Orders Placed");
   // Re-add the exact option that was bought (the 10" net, not whichever size happens to be first).
   const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){
     const vs=productVariants(prod);
@@ -6613,9 +6649,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
       (user.phone && normalizePhone(o.address?.phone)===normalizePhone(user.phone))
     )
   );
-  const orderStages=["Orders Placed","Shipped","Delivered","Past Orders"];
-  const stageCounts=Object.fromEntries(orderStages.map(s=>[s,myOrders.filter(o=>customerOrderStage(o)===s).length]));
-  const visibleOrders=myOrders.filter(o=>customerOrderStage(o)===stageFilter);
+  const visibleOrders=myOrders;
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const doaStatusText={
     "Requested":"Received — please send your unboxing video on WhatsApp so we can review it.",
@@ -6656,17 +6690,6 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
           <span style={{fontSize:18,color:C.textSub}}>›</span>
         </button>
-        {myOrders.length>0&&(
-          <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:5,marginBottom:14,WebkitOverflowScrolling:"touch"}}>
-            {orderStages.map(s=>{
-              const on=stageFilter===s;
-              return <button key={s} className="press" onClick={()=>{setStageFilter(s);setOpenId(null);}}
-                style={{position:"relative",flexShrink:0,borderRadius:20,border:`1.5px solid ${on?C.primary:C.border}`,background:on?C.primary:"white",color:on?"white":C.textSub,padding:"8px 12px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                {s}{stageCounts[s]>0&&<span style={{marginLeft:6,background:on?"rgba(255,255,255,.22)":C.accentLight,color:on?"white":C.primary,borderRadius:10,padding:"1px 6px",fontSize:10}}>{stageCounts[s]}</span>}
-              </button>;
-            })}
-          </div>
-        )}
         {myOrders.length===0?(
           <div style={{textAlign:"center",padding:"60px 20px",color:C.textSub}}>
             <div style={{fontSize:64,marginBottom:14}}>📦</div>
@@ -6676,8 +6699,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
         ):(
           <>
-          <div style={{fontSize:12,color:C.textSub,fontWeight:600,marginBottom:12}}>{visibleOrders.length} {stageFilter.toLowerCase()}</div>
-          {visibleOrders.length===0&&<div style={{textAlign:"center",padding:"36px 16px",color:C.textSub,fontSize:13}}>No {stageFilter.toLowerCase()}.</div>}
+          <div style={{fontSize:12,color:C.textSub,fontWeight:600,marginBottom:12}}>{visibleOrders.length} order{visibleOrders.length===1?"":"s"}</div>
           {visibleOrders.map(o=>{
             const open=openId===o.id;
             const names=(o.items||[]).map(i=>i.name).join(", ");
@@ -7148,7 +7170,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.1c296a81";
+const APP_BUILD = "v90.51d80000";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -9433,7 +9455,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         )}
 
         {/* Reviews tab */}
-        {tab==="reviews"&&(
+        {tab==="reviews"&&canAdminSection("reviews",adminUid)&&(
           <div className="fade-in">
             {/* Success banner */}
             {submitted&&(
@@ -11374,975 +11396,55 @@ function BottomNav({page,nav,cartCount,ordersCount=0}){
 }
 
 /* ═══════════════════ ADMIN LOGIN ═══════════════════ */
-function AdminLogin({onSuccess,onBack,onAdminSignIn}){
+function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
+  const [password,setPassword]=useState("");
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState("");
+  const configured=String(settings.adminSetupHash||"").trim();
 
-  /* A client-side password hash is still a downloadable credential. Admin entry therefore
-     relies only on the configured Firebase Google UID, which is also what the database rules
-     enforce. Returning admins go straight through once Firebase restores their session. */
   useEffect(()=>{
-    let live=true;
-    (async()=>{ await waitForFirebase(8000); if(live&&isAdminSignedIn()) onSuccess(); })();
-    return()=>{live=false;};
+    try{ if(sessionStorage.getItem("nemo-admin-unlocked-v1")==="1") onSuccess(); }catch(e){}
   },[]);
 
-  const submit=async()=>{
+  const unlock=async()=>{
+    if(!configured){ setMsg("Admin password has not been set yet. Use the main Google account once, then set it in Admin Security."); return; }
+    if(!password){ setMsg("Enter the admin password."); return; }
+    setBusy(true); setMsg("");
+    try{
+      const digest=await adminPasswordDigest(password);
+      if(digest!==configured){ setMsg("Incorrect admin password."); return; }
+      try{ sessionStorage.setItem("nemo-admin-unlocked-v1","1"); }catch(e){}
+      onSuccess();
+    }finally{ setBusy(false); }
+  };
+
+  const bootstrap=async()=>{
     setBusy(true); setMsg("");
     try{
       const u=await onAdminSignIn?.();
-      if(u&&isAdminUid(u.uid)) onSuccess();
-      else if(u) setMsg("This Google account is not configured as an admin.");
+      if(u) await refreshAdminAccess();
+      if(u&&isMainAdminUid(u.uid)){
+        try{ sessionStorage.setItem("nemo-admin-unlocked-v1","1"); }catch(e){}
+        onSuccess();
+      }else if(u) setMsg("Only the main admin can initialise the Admin password.");
     }finally{ setBusy(false); }
   };
 
   return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100%",background:C.bg,padding:"24px",position:"relative"}}>
-      <button className="press" onClick={onBack} style={{position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
+      <button className="press" onClick={onBack} style={{position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44}}>←</button>
       <div style={{fontSize:56,marginBottom:14}}>🔐</div>
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:6}}>Admin Access</div>
-      <div style={{fontSize:13.5,color:C.textSub,marginBottom:28,textAlign:"center",lineHeight:1.55}}>Sign in with the Google account configured as the store admin.</div>
-
-      <div style={{width:"100%",maxWidth:320}}>
-        <button className="press" onClick={submit} disabled={busy}
-          style={{width:"100%",background:busy?"#9ca3af":C.primary,color:"white",
-            border:"none",borderRadius:14,padding:"16px",
-            fontSize:15,fontWeight:700,
-            fontFamily:"'Plus Jakarta Sans',sans-serif",
-            transition:"background .2s"}}>
-          {busy?"Opening Google…":"Continue with Google →"}
-        </button>
-        {msg&&<div style={{fontSize:12.5,color:C.danger,fontWeight:650,textAlign:"center",marginTop:12,lineHeight:1.5}}>{msg}</div>}
-        <div style={{fontSize:11.5,color:C.textSub,textAlign:"center",marginTop:16,lineHeight:1.55}}>No admin password is stored in this website or browser bundle.</div>
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════ ADMIN MEDIA UPLOADER ═══════════════════ */
-function MediaUploader({label,accept,preview,previewType,onChange,onClear,note,fit="cover"}){
-  const ref=useRef(null);
-  const [drag,setDrag]=useState(false);
-  return(
-    <div style={{marginBottom:20}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>{label}</div>
-      {preview?(
-        <div style={{position:"relative",borderRadius:14,overflow:"hidden",border:`1.5px solid ${C.border}`,background:fit==="contain"?"#0c2b30":"transparent"}}>
-          {previewType==="video"
-            ?<video src={preview} autoPlay loop muted playsInline style={{width:"100%",maxHeight:fit==="contain"?340:180,objectFit:fit,display:"block"}}/>
-            :<img src={preview} alt="" style={{width:"100%",maxHeight:fit==="contain"?340:180,objectFit:fit,display:"block"}}/>}
-          <button className="press" onClick={onClear}
-            style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,.5)",border:"none",borderRadius:"50%",width:32,height:32,color:"white",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-          <div style={{position:"absolute",bottom:8,left:8,background:"rgba(0,0,0,.5)",color:"white",fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:12}}>
-            {previewType==="video"?"▶ Preview":"📷 Preview"}
-          </div>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:7}}>Admin</div>
+      <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.6,maxWidth:380,marginBottom:18}}>The password unlocks the Admin workspace. Google sign-in is still required inside Admin before Firebase orders or changes can be accessed.</div>
+      {configured?(
+        <div style={{width:"min(100%,360px)"}}>
+          <input autoFocus type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock();}} placeholder="Admin password" aria-label="Admin password" style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"12px 14px",fontSize:14,outline:"none",marginBottom:10}}/>
+          <button className="press" onClick={unlock} disabled={busy} style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px 16px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{busy?"Checking…":"Unlock Admin"}</button>
         </div>
       ):(
-        <div onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
-          onDrop={e=>{e.preventDefault();setDrag(false);onChange(e.dataTransfer.files[0]);}}
-          onClick={()=>ref.current?.click()}
-          style={{border:`2px dashed ${drag?C.primary:C.border}`,borderRadius:14,padding:"28px 16px",textAlign:"center",cursor:"pointer",background:drag?C.accentLight:"transparent",transition:"all .2s"}}>
-          <div style={{fontSize:32,marginBottom:8}}>{previewType==="video"?"🎬":"📷"}</div>
-          <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Drop {previewType==="video"?"video / GIF":"photo"} here</div>
-          <div style={{fontSize:12,color:C.textSub,marginBottom:12}}>or tap to browse</div>
-          <span style={{background:C.primary,color:"white",borderRadius:10,padding:"7px 18px",fontSize:12,fontWeight:700}}>Choose File</span>
-          <input ref={ref} type="file" accept={accept} style={{display:"none"}} onChange={e=>onChange(e.target.files[0])}/>
-        </div>
+        <button className="press" onClick={bootstrap} disabled={busy} style={{background:"white",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px 16px",fontSize:12.5,fontWeight:800,color:C.text}}>{busy?"Signing in…":"Sign in with main Google to set password"}</button>
       )}
-      {note&&<div style={{fontSize:11,color:C.textSub,marginTop:6,lineHeight:1.5}}>ℹ {note}</div>}
-    </div>
-  );
-}
-
-/* ═══════════════════ ADMIN PRODUCT FORM ═══════════════════ */
-/* Drag-to-select trimmer for a product clip. The window is capped at CLIP_MAX_SEC, so the
-   handles physically cannot select more than 15 seconds — there is no "too long" error to hit.
-   Dragging inside the window slides the whole selection; the handles resize it. */
-function VideoTrimmer({file,onCancel,onDone}){
-  const url=useMemo(()=>URL.createObjectURL(file),[file]);
-  useEffect(()=>()=>URL.revokeObjectURL(url),[url]);
-  const vidRef=useRef(null), barRef=useRef(null), dragRef=useRef(null);
-  const [dur,setDur]=useState(0);
-  const [range,setRange]=useState({a:0,b:CLIP_MAX_SEC});
-  const [now,setNow]=useState(0);
-  const [busy,setBusy]=useState(false);
-  const [pct,setPct]=useState(0);
-  const [pass,setPass]=useState(1);
-  const [err,setErr]=useState("");
-  const len=Math.max(0.5,range.b-range.a);
-
-  const onMeta=e=>{
-    const d=e.currentTarget.duration||0;
-    setDur(d);
-    setRange({a:0,b:Math.min(CLIP_MAX_SEC,d||CLIP_MAX_SEC)});
-  };
-  // Keep the preview inside the selection so what plays is exactly what will be saved.
-  const onTime=e=>{
-    const t=e.currentTarget.currentTime;
-    if(t<range.a-0.1||t>range.b){ e.currentTarget.currentTime=range.a; }
-    setNow(t);
-  };
-  const seek=t=>{ const v=vidRef.current; if(v){ v.currentTime=Math.max(0,Math.min(dur,t)); } };
-
-  const posFromEvent=e=>{
-    const bar=barRef.current; if(!bar||!dur) return null;
-    const r=bar.getBoundingClientRect();
-    const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
-    return Math.max(0,Math.min(1,x/r.width))*dur;
-  };
-  const startDrag=(mode)=>e=>{
-    e.preventDefault(); e.stopPropagation();
-    dragRef.current={mode,grab:posFromEvent(e),a:range.a,b:range.b};
-  };
-  const moveDrag=e=>{
-    const d=dragRef.current; if(!d) return;
-    const t=posFromEvent(e); if(t==null) return;
-    if(d.mode==="a"){
-      const a=Math.max(0,Math.min(t,d.b-0.5));
-      setRange({a,b:Math.min(d.b, a+CLIP_MAX_SEC)});
-      seek(a);
-    } else if(d.mode==="b"){
-      const b=Math.min(dur,Math.max(t,d.a+0.5));
-      setRange({a:Math.max(d.a, b-CLIP_MAX_SEC),b});
-      seek(Math.max(0,b-0.4));
-    } else {
-      const width=d.b-d.a;
-      let a=d.a+(t-d.grab);
-      a=Math.max(0,Math.min(a,dur-width));
-      setRange({a,b:a+width});
-      seek(a);
-    }
-  };
-  const endDrag=()=>{ dragRef.current=null; };
-  useEffect(()=>{
-    const mv=e=>moveDrag(e), up=()=>endDrag();
-    window.addEventListener("pointermove",mv); window.addEventListener("pointerup",up);
-    window.addEventListener("touchmove",mv,{passive:false}); window.addEventListener("touchend",up);
-    return ()=>{ window.removeEventListener("pointermove",mv); window.removeEventListener("pointerup",up);
-      window.removeEventListener("touchmove",mv); window.removeEventListener("touchend",up); };
-  });
-
-  const use=async()=>{
-    if(busy) return;
-    setBusy(true); setErr(""); setPct(0);
-    try{
-      const blob=await exportClipUnderSize(url,range.a,Math.min(range.b,range.a+CLIP_MAX_SEC),CLIP_MAX_BYTES,
-        {onProgress:p=>setPct(Math.round(p*100)), onPass:n=>setPass(n)});
-      if(!blob||!blob.size) throw new Error("Nothing was recorded — try a shorter selection");
-      onDone(blob);
-    }catch(e){
-      setErr((e&&e.message)||"Couldn't process this video");
-      setBusy(false);
-    }
-  };
-
-  const pctOf=t=>dur?Math.max(0,Math.min(100,(t/dur)*100)):0;
-  const handle={position:"absolute",top:-4,width:16,height:"calc(100% + 8px)",background:C.primary,borderRadius:6,cursor:"ew-resize",touchAction:"none",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(0,0,0,.25)"};
-  return(
-    <Portal>
-      <div style={{position:"fixed",inset:0,background:"rgba(6,40,43,.72)",zIndex:9400,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:"0"}}>
-        <div className="slide-up" style={{width:"100%",maxWidth:560,background:C.card,borderRadius:"22px 22px 0 0",padding:"16px 16px calc(16px + env(safe-area-inset-bottom))",maxHeight:"94vh",overflowY:"auto"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>Trim the clip</div>
-            <button className="press" onClick={onCancel} disabled={busy}
-              style={{background:"none",border:"none",fontSize:20,color:C.textSub,cursor:"pointer",lineHeight:1}}>✕</button>
-          </div>
-          <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:12}}>
-            Drag the blue handles to pick up to <b>{CLIP_MAX_SEC} seconds</b>. Whatever the file size, it is compressed to fit — and the sound is removed.
-          </div>
-          <video ref={vidRef} src={url} onLoadedMetadata={onMeta} onTimeUpdate={onTime} muted playsInline controls
-            style={{width:"100%",maxHeight:"38vh",background:"#000",borderRadius:14,display:"block"}}/>
-          <div ref={barRef} onPointerDown={startDrag("move")}
-            style={{position:"relative",height:44,margin:"16px 8px 8px",borderRadius:10,background:"#e2e8f0",touchAction:"none",cursor:"grab"}}>
-            <div style={{position:"absolute",left:pctOf(range.a)+"%",width:(pctOf(range.b)-pctOf(range.a))+"%",top:0,bottom:0,background:"rgba(14,165,233,.22)",border:`2px solid ${C.primary}`,borderRadius:10}}/>
-            <div style={{position:"absolute",left:pctOf(now)+"%",top:-3,bottom:-3,width:2,background:C.coral,borderRadius:2}}/>
-            <div onPointerDown={startDrag("a")} style={{...handle,left:`calc(${pctOf(range.a)}% - 8px)`}}><span style={{color:"#fff",fontSize:11}}>⋮</span></div>
-            <div onPointerDown={startDrag("b")} style={{...handle,left:`calc(${pctOf(range.b)}% - 8px)`}}><span style={{color:"#fff",fontSize:11}}>⋮</span></div>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,color:C.textSub,fontWeight:700,margin:"0 8px 14px"}}>
-            <span>{fmtClock(range.a)}</span>
-            <span style={{color:len>CLIP_MAX_SEC+0.05?C.danger:C.primary}}>{len.toFixed(1)}s selected</span>
-            <span>{fmtClock(dur)}</span>
-          </div>
-          {err&&<div style={{fontSize:12,color:C.danger,fontWeight:700,marginBottom:10}}>{err}</div>}
-          {busy&&(
-            <div style={{marginBottom:10}}>
-              <div style={{height:8,background:C.bg,borderRadius:99,overflow:"hidden"}}>
-                <div style={{height:"100%",width:pct+"%",background:C.primary,transition:"width .2s"}}/>
-              </div>
-              <div style={{fontSize:11.5,color:C.textSub,marginTop:6,fontWeight:600}}>Processing the clip in real time — {pct}%{pass>1?` · compressing further (pass ${pass})`:""}</div>
-            </div>
-          )}
-          <div style={{display:"flex",gap:10}}>
-            <button className="press" onClick={onCancel} disabled={busy}
-              style={{flex:1,padding:"13px",borderRadius:14,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textSub,fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
-            <button className="press" onClick={use} disabled={busy}
-              style={{flex:2,padding:"13px",borderRadius:14,border:"none",background:C.primary,color:"#fff",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:busy?.7:1}}>
-              {busy?"Processing…":"Use this clip"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Portal>
-  );
-}
-function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},products=[]}){
-  const isEdit=!!product;
-  const [form,setForm]=useState({
-    name:product?.name||"",
-    category:product?.category||CATEGORIES[0],
-    price:product?.price||"",
-    stockCount:product?.stockCount ?? DEFAULT_STOCK,
-    discountPct:product?.discountPct ?? 0,
-    offerEndsAt:product?.offerEndsAt ? new Date(product.offerEndsAt).toISOString().slice(0,16) : "",
-    tag:product?.tag||"",
-    desc:product?.desc||"",
-    comingSoon:!!product?.comingSoon,
-    gstApplicable:!!product?.gstApplicable,
-    hsn:product?.hsn||"",
-    gstRate:(product?.gstRate==null?"":String(product.gstRate)),
-    variantLabelText:product?.variantLabelText||"",
-    packagingWeight:product?.packagingWeight||"",
-    returnEligible:!!product?.returnEligible,
-    suggestSpecialDelivery:!!product?.suggestSpecialDelivery,
-    suggestedPacking:product?.suggestedPacking||"carton_special",
-    suggestedPackingTN:product?.suggestedPackingTN||product?.suggestedPacking||"carton_special",
-    suggestedPackingOther:product?.suggestedPackingOther||product?.suggestedPacking||"thermacol_special",
-    careTankSize:product?.care?.tankSize||"",
-    careTemp:product?.care?.temp||"",
-    carePh:product?.care?.ph||"",
-    careDiet:product?.care?.diet||"",
-    careTemperament:product?.care?.temperament||"",
-    careLevel:product?.care?.level||"",
-    careAdultSize:product?.care?.adultSize||"",
-    careTankMates:product?.care?.tankMates||"",
-  });
-  // Gallery: images [{key,src,b64?}], one video {key,src,b64?,tooLarge?}
-  const initImgs=(product?._mediaImgs||[]).map((src,i)=>({key:(product.media?.filter(m=>m.type!=="video")[i]?.key)||uid("mi"),src,existing:true}));
-  const [images,setImages]=useState(initImgs);
-  const [video,setVideo]=useState(product?._mediaVid?{key:(product.media?.find(m=>m.type==="video")?.key)||uid("mv"),src:product._mediaVid,existing:true}:null);
-  const [saving,setSaving]=useState(false);
-  const [trimFile,setTrimFile]=useState(null);   // video waiting to be trimmed
-  const [delConfirm,setDelConfirm]=useState(false);
-  const [busyNote,setBusyNote]=useState("");
-  const MAX_IMAGES=4;
-  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
-
-  // Product options (sizes / capacities / wattages / pack weights) — editable. Seeded ONLY from
-  // what's saved on the product, then padded to a SINGLE blank row: auto-seeding the 5 fish types
-  // meant a new product (which starts in the Live Fish category) carried them into whatever
-  // category you switched it to. One blank row is a starting point, not content — it's dropped at
-  // save unless you name it, so a product with no options stays a plain single-price item.
-  // A Live Fish product with no rows still shows customers the standard pair/trio set, because
-  // productVariants() falls back to it — and "Use the standard types" materialises them to edit.
-  const blankVariant=()=>({ id:uid("v"), label:"", price:Number(product?.price)||"", stock:null, packagingWeight:null, soldOut:false });
-  const seedVariants=()=>{
-    const src = product?.variants&&product.variants.length ? product.variants : null;
-    if(!src) return [blankVariant()];
-    const base = Number(product?.price)||0;
-    const vstock = product?.variantStock||{};
-    return src.map(v=>({ id:v.id||uid("v"), sku:v.sku||"", label:v.label,
-      price:(typeof v.price==="number"?v.price:Math.round(base*(v.priceMul||1))),
-      stock:(typeof vstock[v.id]==="number"?vstock[v.id]:null),
-      packagingWeight:(v.packagingWeight??null),   // was dropped here, losing per-option shipping weight on edit
-      soldOut:!!v.soldOut }));
-  };
-  // "Has the admin actually filled anything in?" — drives the hints that only make sense
-  // before any real option exists.
-  const anyNamedVariant=()=>variants.some(v=>String(v.label||"").trim());
-  /* ── Options override the common fields ───────────────────────────────────────────────
-     That is already the rule everywhere the store reads a product: variantBasePrice,
-     variantPackagingWeight and variantStockOf each look at the chosen option first and only
-     fall back to the product when the option has nothing of its own. The form used to hide
-     that — the common Price and Packing Weight boxes stayed editable and looked authoritative
-     even once every option carried its own number, so typing in them changed nothing a
-     customer would ever see.
-
-     `variantCoverage` says how far the options have taken a field over, and the form uses it
-     to get out of the way: "all" retires the common box to a read-only summary of what the
-     options say, "some" keeps it editable but labels it as the fallback it actually is. */
-  const filledVal=x=>x!=null&&String(x).trim()!=="";
-  const namedVariants=()=>variants.filter(v=>String(v.label||"").trim());
-  const variantCoverage=key=>{
-    const rows=namedVariants();
-    if(!rows.length) return "none";
-    const n=rows.filter(v=>filledVal(v[key])).length;
-    return n===0 ? "none" : (n===rows.length ? "all" : "some");
-  };
-  /* Spread of a numeric field across the named options — what the retired common box shows
-     in place of an input. */
-  const variantRange=key=>{
-    const nums=namedVariants().filter(v=>filledVal(v[key])).map(v=>Number(v[key])||0);
-    if(!nums.length) return null;
-    return { min:Math.min(...nums), max:Math.max(...nums), n:nums.length };
-  };
-  const [variants,setVariants]=useState(seedVariants);
-  const setVar=(id,key,val)=>setVariants(prev=>prev.map(v=>v.id===id?{...v,[key]:val}:v));
-  const addVariant=()=>setVariants(prev=>[...prev,{id:uid("v"),label:"",price:Number(form.price)||0,packagingWeight:null,soldOut:false}]);
-  const addFishDefaults=()=>{
-    const base=Number(form.price)||0;
-    setVariants(DEFAULT_FISH_VARIANTS.map(v=>({id:uid("v"),label:v.label,price:Math.round(base*(v.priceMul||1)),packagingWeight:null,soldOut:!!v.soldOut})));
-  };
-  const removeVariant=(id)=>setVariants(prev=>prev.filter(v=>v.id!==id));
-
-  // Ranked against the name and category as they are being typed. Recomputed
-  // only when one of those actually changes — the master is small, but this
-  // renders on every keystroke in the form otherwise.
-  const hsnSuggestions=useMemo(
-    ()=>suggestHsnCodes(readHsnMaster(settings),{name:form.name,category:form.category}),
-    [settings,form.name,form.category]
-  );
-  // Shown read-only: assigned on the first save and never changed after, so
-  // there is nothing here to edit — only to read off and type into inventory.
-  const shownSku=product?.sku||"";
-
-  const addImages=async(fileList)=>{
-    const files=[...fileList].slice(0,MAX_IMAGES-images.length);
-    if(!files.length){ showToast(`Up to ${MAX_IMAGES} photos`,"error"); return; }
-    const added=[]; let bad=0;
-    for(let i=0;i<files.length;i++){
-      const file=files[i];
-      // A big PNG straight off a phone camera takes a moment to decode + re-encode, so name
-      // the file being worked on instead of leaving a vague "Processing…" on screen.
-      setBusyNote(`Processing photo ${i+1} of ${files.length} — ${fmtSize(file.size)}…`);
-      try{ const b64=await compressImage(file); added.push({key:uid("mi"),src:b64,b64}); }catch(e){ bad++; console.warn("compressImage",e&&e.message); }
-    }
-    setImages(prev=>[...prev,...added]);
-    // A photo that fails to decode used to vanish silently — say so instead.
-    setBusyNote(bad?`⚠ ${bad} photo${bad>1?"s":""} couldn't be read — try a JPG or PNG`:"");
-  };
-  const removeImage=(key)=>setImages(prev=>prev.filter(i=>i.key!==key));
-  const moveImage=(key,dir)=>setImages(prev=>{ const i=prev.findIndex(x=>x.key===key); const j=i+dir; if(j<0||j>=prev.length)return prev; const next=[...prev]; [next[i],next[j]]=[next[j],next[i]]; return next; });
-
-  /* Any video the phone produces goes through the trimmer: pick up to 15s, and what comes back
-     is a small, silent clip. Only a device with no MediaRecorder/captureStream falls back to
-     taking the file as-is, and there the old size limit still applies. */
-  const handleVid=async file=>{
-    setBusyNote("");
-    // Belt and braces: `accept` is a hint, and some pickers ignore it.
-    if(!looksLikeVideo(file)){
-      const what=(file.type||"").split("/")[0];
-      setBusyNote(`⚠ "${file.name}" isn't a video${what?` — that's ${what==="image"?"a photo":`a ${what} file`}`:""}. Pick a clip instead.`);
-      return;
-    }
-    if(canTrimVideo()){ setTrimFile(file); return; }
-    const url=URL.createObjectURL(file);
-    if(file.size>5*1024*1024){ setVideo({key:uid("mv"),src:url,tooLarge:true}); setBusyNote(`⚠ Video ${fmtSize(file.size)} — this device can't trim clips, so pick one under 5MB`); }
-    else { const b64=await fileToBase64(file); setVideo({key:uid("mv"),src:url,b64}); setBusyNote(`✓ Video ${fmtSize(file.size)} ready`); }
-  };
-  const acceptClip=async blob=>{
-    setTrimFile(null);
-    try{
-      const b64=await fileToBase64(blob);
-      const url=URL.createObjectURL(blob);
-      // The encoder targets CLIP_MAX_BYTES, so this only trips on a pathological source.
-      const tooLarge=blob.size>CLIP_MAX_BYTES;
-      setVideo({key:uid("mv"),src:url,b64:tooLarge?undefined:b64,tooLarge});
-      setBusyNote(tooLarge
-        ? `⚠ Clip still ${fmtSize(blob.size)} — pick a shorter selection`
-        : `✓ Clip ${fmtSize(blob.size)} ready · silent, loops on the product page`);
-    }catch(e){ setBusyNote("⚠ Couldn't read the trimmed clip — try again"); }
-  };
-
-  const handleSave=async()=>{
-    if(saving) return;                       // ignore repeat taps while a save is already running
-    if(!form.name.trim()){showToast("Product name required","error");return;}
-    if(!form.price||isNaN(form.price)||Number(form.price)<=0){showToast("Enter a valid price","error");return;}
-    setSaving(true);
-    try{ await saveProduct(); }
-    catch(e){
-      // Without this the spinner used to turn forever on any failure, with nothing on screen
-      // to say what went wrong.
-      console.error("save product failed",e);
-      setBusyNote("");
-      showToast("Couldn't save — "+((e&&e.message)||"please try again"),"error");
-    }
-    finally{ setSaving(false); }             // the spinner ALWAYS clears, success or not
-  };
-
-  const saveProduct=async()=>{
-    const id=product?.id||uid();
-    // Assigned once and kept for life — see makeProductSku. An existing product
-    // that predates Product IDs gets one here, on its next save.
-    const sku=product?.sku || makeProductSku({name:form.name,category:form.category}, products);
-    const newImgCount=images.filter(im=>im.b64).length;   // only freshly-added photos need uploading
-    let uploaded=0;
-    // Persist any newly-added media items.
-    // Major-ecommerce pattern: bytes -> Storage (CDN), only the short URL + thumbUrl ride on the
-    // product record, so the catalog renders from one `products` read with no per-image DB lookups.
-    const media=new Array(images.length);
-    const prevMedia=product?.media||[];
-    const thumbPatch={};
-    if(newImgCount) setBusyNote(`Uploading ${newImgCount} photo${newImgCount>1?"s":""}…`);
-    // The photos go up together rather than one after another. They are independent objects at
-    // their own Storage paths, so uploading them in turn just stacked one full round trip per
-    // photo onto every save — the slowest part of saving a product with new pictures. Results
-    // are written back by index, so gallery order never depends on which upload finishes first.
-    await Promise.all(images.map(async(im,idx)=>{
-      const isFirst=idx===0;
-      const prev=prevMedia.find(m=>m.key===im.key)||{};
-      const entry={key:im.key,type:"image"};
-      if(im.b64){
-        // Only the FIRST image needs a catalog thumbnail (that's all the grid shows).
-        const r=await persistImage(im.key, im.b64, isFirst);
-        if(r.url) entry.url=r.url;
-        if(r.url_thumb) entry.thumbUrl=r.url_thumb;
-        if(r.thumbData){ entry.thumb=1; thumbPatch["thumb-"+im.key]=r.thumbData; }
-        setBusyNote(`Uploaded ${++uploaded} of ${newImgCount} photo${newImgCount>1?"s":""}…`);
-      } else {
-        // Untouched existing image — carry its embedded URL/thumb forward.
-        if(prev.url) entry.url=prev.url;
-        if(prev.thumbUrl){ entry.thumbUrl=prev.thumbUrl; entry.thumb=1; }
-        else if(prev.thumb) entry.thumb=1;
-      }
-      media[idx]=entry;
-    }));
-    // Guarantee the FIRST image has a thumbnail — even if it's an existing image just moved into
-    // first place (its thumb may not have been generated yet). This is what the catalog grid uses.
-    {
-      const firstEntry=media.find(m=>m.type!=="video");
-      if(firstEntry && !firstEntry.thumb && !firstEntry.thumbUrl && images[0] && images[0].src){
-        setBusyNote("Making the catalog thumbnail…");
-        const t=await makeThumbFromAny(images[0].src);
-        if(t){ await saveMediaItem(firstEntry.key+"_thumb", t); firstEntry.thumb=1; thumbPatch["thumb-"+firstEntry.key]=t; }
-      }
-    }
-    if(video && !video.tooLarge){
-      const prevV=prevMedia.find(m=>m.key===video.key)||{};
-      const entry={key:video.key,type:"video"};
-      if(video.b64){ setBusyNote("Uploading video…"); const r=await persistImage(video.key, video.b64, false); if(r.url) entry.url=r.url; }
-      else if(prevV.url) entry.url=prevV.url;
-      media.push(entry);
-    }
-    // Clean up removed media items (were on the product, now gone)
-    const keptKeys=new Set(media.map(m=>m.key));
-    (product?.media||[]).forEach(m=>{ if(!keptKeys.has(m.key)){ delMediaItem(m.key); delMediaItem(m.key+"_thumb"); } });
-
-    const firstImg=images.find(i=>i.src)?.src || "";
-    // Options and their stock, built together so the two always agree. Unnamed rows are dropped,
-    // so the default blank row never becomes an option. `variantStock` is only written when at
-    // least one option has a number in it — leave them all blank and the product keeps the single
-    // shared pool it has always used.
-    const savedVariantFields=(()=>{
-      const rows=variants.filter(v=>String(v.label||"").trim());
-      if(!rows.length) return { variants:null, variantStock:null };
-      const list=rows.map((v,i)=>({
-        id:v.id,
-        // Frozen on first save, like the product's own. A variant keeps its code
-        // even if the rows above it are deleted.
-        sku:v.sku||variantSkuCode(v.id,i),
-        label:v.label.trim(),
-        // An option's own price wins; a blank one inherits the common price. It used to be
-        // coerced straight to 0 — clearing the box silently put the option on sale for free.
-        price:Math.max(0,Math.round(Number(filledVal(v.price)?v.price:form.price)||0)),
-        // Left blank on purpose: shipping reads the common weight when an option has none,
-        // so storing null here is what keeps that fallback alive.
-        packagingWeight:(v.packagingWeight===""||v.packagingWeight==null)?null:Math.max(0,Number(v.packagingWeight)||0),
-        soldOut:!!v.soldOut,
-      }));
-      const anyStock=rows.some(v=>v.stock!=null&&v.stock!=="");
-      const stockMap=anyStock?rows.reduce((m,v)=>{ m[v.id]=Math.max(0,parseInt(v.stock)||0); return m; },{}):null;
-      return { variants:list, variantStock:stockMap };
-    })();
-    const saved={id,sku,name:form.name,category:form.category,tag:form.tag,desc:form.desc,
-      // Options are the truth once they all carry a price, so the product's own price follows
-      // them down to the cheapest — the same rule stockCount has always used. It stays a real
-      // number rather than being dropped because it is still the fallback for any option added
-      // later with its price left blank, and what a legacy read path quotes.
-      price:savedVariantFields.variants && savedVariantFields.variants.length && variantCoverage("price")==="all"
-        ? Math.min(...savedVariantFields.variants.map(v=>v.price))
-        : Number(form.price),
-      stockCount:savedVariantFields.variantStock
-        ? Object.values(savedVariantFields.variantStock).reduce((a,b)=>a+b,0)   // options are the truth; the product total follows them
-        : Math.max(0,parseInt(form.stockCount)||0),
-      discountPct:Math.min(100,Math.max(0,parseInt(form.discountPct)||0)),
-      offerEndsAt:form.offerEndsAt?new Date(form.offerEndsAt).toISOString():null,
-      comingSoon:!!form.comingSoon,
-      gstApplicable:!!form.gstApplicable,
-      hsn:String(form.hsn||"").trim(),
-      gstRate:(form.gstApplicable&&String(form.gstRate).trim()!=="")?Number(form.gstRate):null,
-      packagingWeight:Number(form.packagingWeight)||0,
-      returnEligible: form.category==="Accessories" ? !!form.returnEligible : false,
-      suggestSpecialDelivery:!!form.suggestSpecialDelivery,
-      suggestedPacking:form.suggestedPacking||"carton_special",
-      suggestedPackingTN:form.suggestedPackingTN||"carton_special",
-      suggestedPackingOther:form.suggestedPackingOther||"thermacol_special",
-      care:{ tankSize:form.careTankSize.trim(), temp:form.careTemp.trim(), ph:form.carePh.trim(), diet:form.careDiet.trim(),
-             temperament:form.careTemperament.trim(), level:form.careLevel.trim(), adultSize:form.careAdultSize.trim(), tankMates:form.careTankMates.trim() },
-      media,
-      rating:product?.rating||0,reviews:product?.reviews||0,
-      variantLabelText:form.variantLabelText.trim(),
-      ...savedVariantFields,
-      createdAt:product?.createdAt||new Date().toISOString()};
-    // Build a cache patch so the UI shows new media immediately
-    const cachePatch={};
-    images.forEach(im=>{ if(im.src) cachePatch["m-"+im.key]=im.src; });
-    Object.assign(cachePatch,thumbPatch);
-    if(video&&!video.tooLarge&&video.src) cachePatch["m-"+video.key]=video.b64||video.src;
-    setBusyNote("Saving product…");
-    await onSave(saved, cachePatch);
-    setBusyNote("");
-  };
-
-  const fld=(label,key,type="text",ph="",opts={})=>(
-    <div style={{marginBottom:16}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>{label}</div>
-      {opts.textarea
-        ?<textarea value={form[key]} onChange={e=>f(key,e.target.value)} rows={4} placeholder={ph} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,resize:"vertical",outline:"none",lineHeight:1.6,background:"white"}}/>
-        :<input type={type} value={form[key]} onChange={e=>f(key,e.target.value)} placeholder={ph} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
-      }
-    </div>
-  );
-
-  return(
-    <div className="slide-up">
-      <div className="admin-head" style={{background:C.adminBg,padding:"52px 16px 16px",display:"flex",alignItems:"center",gap:12}}>
-        <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:44,height:44,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>←</button>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:"white"}}>{isEdit?"Edit Product":"Add Product"}</div>
-      </div>
-      <div className="dt-read" style={{padding:"20px 16px 100px"}}>
-        {fld("Product Name","name","text","e.g. Betta Splendens")}
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Category</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            {CATEGORIES.map(cat=>(
-              <button key={cat} className="press" onClick={()=>f("category",cat)}
-                style={{padding:"8px 14px",borderRadius:20,border:`1.5px solid ${form.category===cat?C.primary:C.border}`,background:form.category===cat?C.primary:"transparent",color:form.category===cat?"white":C.textSub,fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",gap:5}}>
-                {CAT_META[cat].emoji} {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          {(()=>{
-            // Every option priced → the common box has nothing left to say, so it becomes a
-            // read-only summary of what the options charge. Some priced → it stays editable,
-            // because it is what the unpriced ones fall back to.
-            const cov=variantCoverage("price");
-            const r=variantRange("price");
-            if(cov==="all"&&r) return(
-              <div>
-                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Price (₹)</div>
-                <div style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,background:C.bg,color:C.textSub,fontFamily:PRICE_FONT,fontWeight:700}}>
-                  {r.min===r.max?`₹${r.min}`:`₹${r.min} – ₹${r.max}`}
-                </div>
-                <div style={{fontSize:11,color:C.textSub,marginTop:4}}>Set per option below — each option's own price is what customers pay.</div>
-              </div>
-            );
-            return(
-              <div>
-                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Price (₹)</div>
-                <input type="number" value={form.price} onChange={e=>f("price",e.target.value)} placeholder="350" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
-                {cov==="some"&&<div style={{fontSize:11,color:C.textSub,marginTop:4}}>Used only by options with no price of their own.</div>}
-              </div>
-            );
-          })()}
-          {(()=>{
-            // Once options carry their own counts, they ARE the stock — the product total is
-            // their sum, so editing it here would just be overwritten. Show the sum instead.
-            const perOption=variants.filter(v=>String(v.label||"").trim()&&v.stock!=null&&v.stock!=="");
-            if(perOption.length){
-              // Once ANY option carries a count, the options own the stock — and an option
-              // left blank saves as 0, i.e. sold out. Worth saying out loud rather than
-              // letting it be discovered as a product that won't sell.
-              const blank=namedVariants().length-perOption.length;
-              return(
-              <div>
-                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Stock Count</div>
-                <div style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,background:C.bg,color:C.textSub,fontFamily:PRICE_FONT,fontWeight:700}}>
-                  {perOption.reduce((a,v)=>a+(parseInt(v.stock)||0),0)}
-                </div>
-                <div style={{fontSize:11,color:C.textSub,marginTop:4}}>Total across your options — set each one's stock below.</div>
-                {blank>0&&<div style={{fontSize:11,color:C.danger,fontWeight:700,marginTop:3,lineHeight:1.4}}>⚠ {blank} option{blank>1?"s have":" has"} no stock set and will save as 0 (sold out).</div>}
-              </div>
-              );
-            }
-            return(
-              <div>
-                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Stock Count</div>
-                <input type="number" value={form.stockCount} onChange={e=>f("stockCount",e.target.value)} placeholder="10" min="0" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
-                <div style={{fontSize:11,color:C.textSub,marginTop:4}}>Customers can order up to this many (max {MAX_PER_ORDER}).</div>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* Offer / discount */}
-        <div style={{background:"#fff7ed",borderRadius:14,padding:"14px",marginBottom:16,border:`1px solid #fed7aa`}}>
-          <div style={{fontSize:12,fontWeight:800,color:"#c2410c",textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>⚡ Offer &amp; Discount</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:12}}>
-            <div>
-              <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Discount %</div>
-              <input type="number" value={form.discountPct} onChange={e=>f("discountPct",e.target.value)} placeholder="0" min="0" max="100" style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
-            </div>
-            <div>
-              <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Offer ends (optional)</div>
-              <input type="datetime-local" value={form.offerEndsAt} onChange={e=>f("offerEndsAt",e.target.value)} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
-            </div>
-          </div>
-          {Number(form.discountPct)>0&&form.price&&(
-            <div style={{fontSize:12,color:"#c2410c",fontWeight:700,marginTop:10}}>
-              Sale price: ₹{Math.round(Number(form.price)*(1-Number(form.discountPct)/100))} <span style={{textDecoration:"line-through",color:C.textSub,fontWeight:500}}>₹{form.price}</span>
-              {form.offerEndsAt&&" · countdown shows on Home"}
-            </div>
-          )}
-        </div>
-        {fld("Tag / Badge","tag","text","e.g. Popular, New Arrival, Sale")}
-
-        {/* Product ID — the join between this catalogue and the physical stock kept
-            in the analytics app. Read-only on purpose: it is assigned once and then
-            printed on labels and typed into inventory, so an edit here would orphan
-            the stock behind it. */}
-        <div style={{background:"#f0fdf4",borderRadius:12,padding:"12px 14px",marginBottom:16,border:"1px solid #bbf7d0"}}>
-          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:4}}>🏷 Product ID</div>
-          {shownSku?(
-            <>
-              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                <code style={{fontSize:14,fontWeight:800,letterSpacing:.5,color:"#065f46",background:"white",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px"}}>{shownSku}</code>
-                <button type="button" className="press" onClick={()=>{ try{ navigator.clipboard.writeText(shownSku); showToast("Product ID copied"); }catch(e){} }}
-                  style={{background:"white",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",fontSize:11.5,fontWeight:700,color:"#065f46",cursor:"pointer"}}>Copy</button>
-              </div>
-              {variants.filter(v=>String(v.label||"").trim()).length>0&&(
-                <div style={{marginTop:10}}>
-                  <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>One ID per option — use these in inventory</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                    {variants.filter(v=>String(v.label||"").trim()).map((v,i)=>(
-                      <div key={v.id} style={{display:"flex",gap:8,alignItems:"baseline",fontSize:11.5}}>
-                        <code style={{fontWeight:800,color:"#065f46"}}>{shownSku}-{v.sku||variantSkuCode(v.id,i)}</code>
-                        <span style={{color:C.textSub}}>{v.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>New options get their ID when you save.</div>
-                </div>
-              )}
-            </>
-          ):(
-            <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5}}>Generated when you save — one for the product and one for each option. Use it in the analytics app's inventory so stock follows the right item.</div>
-          )}
-        </div>
-
-        <label style={{display:"flex",alignItems:"center",gap:10,background:"#eef9fa",borderRadius:12,padding:"12px 14px",marginBottom:16,cursor:"pointer",userSelect:"none",border:`1px solid ${C.border}`}}>
-          <input type="checkbox" checked={!!form.comingSoon} onChange={e=>f("comingSoon",e.target.checked)} style={{width:18,height:18,accentColor:C.accent,flexShrink:0}}/>
-          <div>
-            <div style={{fontSize:13,fontWeight:700,color:C.text}}>🔜 Mark as "Coming Soon"</div>
-            <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>Shows a Coming Soon badge + "Interested" button instead of Add. Track demand before stocking.</div>
-          </div>
-        </label>
-
-        {/* GST is decided per product, never store-wide — live fish are sold without claiming
-            GST, dry goods have their own HSN and rate. Off by default so nothing claims tax
-            by accident; once ticked, the HSN and rate entered here are what the tax invoice,
-            the credit note and the GSTR-1 export all use for this product's lines. */}
-        <div style={{background:"#f5f3ff",borderRadius:12,padding:"12px 14px",marginBottom:16,border:"1px solid #ddd6fe"}}>
-          <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",userSelect:"none"}}>
-            <input type="checkbox" checked={!!form.gstApplicable} onChange={e=>f("gstApplicable",e.target.checked)} style={{width:18,height:18,accentColor:"#7c3aed",flexShrink:0,marginTop:1}}/>
-            <div>
-              <div style={{fontSize:13,fontWeight:700,color:C.text}}>🧾 Claim GST on this product</div>
-              <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>Leave OFF for live fish and anything you don't claim GST on — those lines carry no tax at all and are billed as a Bill of Supply.</div>
-            </div>
-          </label>
-          {form.gstApplicable&&(
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}>
-              {/* Pick from what this store has already used, ranked against this
-                  product's name and category. Empty on the very first GST product —
-                  the master only holds codes actually used here, never a guess. */}
-              {hsnSuggestions.length>0&&(
-                <div style={{gridColumn:"1 / -1"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Use a code from your HSN master</div>
-                  <select value="" onChange={e=>{
-                      const pick=hsnSuggestions[Number(e.target.value)];
-                      if(!pick) return;
-                      f("hsn",pick.hsn); f("gstRate",String(pick.rate));
-                    }}
-                    style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none",background:"white"}}>
-                    <option value="">Choose a saved HSN…</option>
-                    {hsnSuggestions.slice(0,12).map((s,i)=>(
-                      <option key={s.hsn+"|"+s.rate} value={i}>
-                        {s.hsn} @ {s.rate}%{s.label?` — ${s.label}`:""}{s.score>=6?"  ★":""}
-                      </option>
-                    ))}
-                  </select>
-                  <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.45}}>★ marks codes you've used on {form.category}. Manage the full list in Settings → GST &amp; HSN.</div>
-                </div>
-              )}
-              <div>
-                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>HSN code</div>
-                <input value={form.hsn} onChange={e=>f("hsn",e.target.value)} placeholder="e.g. 2309"
-                  style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${form.hsn?C.border:"#fca5a5"}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none"}}/>
-              </div>
-              <div>
-                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>GST rate %</div>
-                <input type="number" min="0" max="28" step="0.5" value={form.gstRate} onChange={e=>f("gstRate",e.target.value)} placeholder="e.g. 18"
-                  style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${String(form.gstRate).trim()?C.border:"#fca5a5"}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none"}}/>
-              </div>
-              {(!form.hsn||!String(form.gstRate).trim())&&(
-                <div style={{gridColumn:"1 / -1",fontSize:11,color:"#b91c1c",fontWeight:600,lineHeight:1.45}}>⚠ Enter both the HSN and the rate — without them this product bills with no GST.</div>
-              )}
-              <div style={{gridColumn:"1 / -1",fontSize:10.5,color:C.textSub,lineHeight:1.45}}>Prices are treated as GST-inclusive. Shipping follows the biggest item in the order, so an order of no-GST goods carries no GST on delivery either.</div>
-            </div>
-          )}
-        </div>
-
-        {/* #15 — return eligibility, admin-only, off by default, accessories only */}
-        {form.category==="Accessories"&&(
-          <label style={{display:"flex",alignItems:"flex-start",gap:10,background:"#fff7ed",borderRadius:12,padding:"12px 14px",marginBottom:16,cursor:"pointer",userSelect:"none",border:"1px solid #fed7aa"}}>
-            <input type="checkbox" checked={!!form.returnEligible} onChange={e=>f("returnEligible",e.target.checked)} style={{width:18,height:18,accentColor:"#ea580c",flexShrink:0,marginTop:1}}/>
-            <div>
-              <div style={{fontSize:13,fontWeight:700,color:C.text}}>↩️ Eligible for return if damaged</div>
-              <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>Only if you tick this can a customer raise a damaged-item return for this accessory (within your return window). After you approve, receive &amp; verify it, you can issue a part refund or wallet coins for just this item. Off by default; customers never see this setting.</div>
-            </div>
-          </label>
-        )}
-
-        {/* Product options — sizes, capacities, wattages, pack weights. Available to every
-            category; a product with no rows here simply behaves as a single-price item. */}
-        {(()=>{
-          const isFish=form.category==="Live Fish";
-          const hint={
-            "Live Fish":'e.g. "1 Pair — Male & Female"',
-            "Accessories":'e.g. "6 inch", "1200 L/hr", "100W", "2ft · White · 18W"',
-            "Feed":'e.g. "100g pack", "500g pack", "1kg tub"',
-            "Plants":'e.g. "Single stem", "Bunch of 5", "Potted"',
-            "Tanks":'e.g. "1ft", "2ft", "3ft"',
-          }[form.category]||'e.g. "Small", "Medium", "Large"';
-          return(
-          <div style={{background:"#eef9fa",borderRadius:14,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-              <div style={{fontSize:12,fontWeight:800,color:C.primary,textTransform:"uppercase",letterSpacing:.8}}>{isFish?"🐠 Live Fish Types":"🧩 Options / Sizes"}</div>
-              <span style={{fontSize:11,color:C.textSub}}>{variants.length} option{variants.length!==1?"s":""}</span>
-            </div>
-            <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.45}}>
-              Optional. Add a row per variation and the customer picks one on the product page — each row has its own <b>price</b>, <b>stock</b> and <b>packing weight</b>. Leave this empty for a plain single-price product. {hint}
-              <div style={{marginTop:6,color:C.primaryDark,fontWeight:600}}>Anything you set here <b>overrides the common fields above</b>. A box left blank falls back to the common value — except stock, where a blank counts as 0.</div>
-            </div>
-            {anyNamedVariant()&&(
-              <div style={{marginBottom:12}}>
-                <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>HEADING SHOWN TO CUSTOMERS</div>
-                <input value={form.variantLabelText} onChange={e=>f("variantLabelText",e.target.value)}
-                  placeholder={isFish?"Choose Type":"e.g. Size / Capacity / Wattage / Pack Size"}
-                  style={{width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white"}}/>
-              </div>
-            )}
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {variants.map((v,idx)=>(
-                <div key={v.id} style={{background:"white",borderRadius:12,padding:"10px",border:`1px solid ${C.border}`}}>
-                  <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
-                    <input value={v.label} onChange={e=>setVar(v.id,"label",e.target.value)} placeholder="e.g. 1 Pair — Male & Female"
-                      style={{flex:1,borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white"}}/>
-                    <button className="press" onClick={()=>removeVariant(v.id)} title="Remove"
-                      style={{flexShrink:0,width:30,height:30,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
-                    <div>
-                      <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>PRICE</div>
-                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}}>
-                        <span style={{fontSize:13,color:C.textSub,fontWeight:700}}>₹</span>
-                        <input type="number" min="0" value={v.price} onChange={e=>setVar(v.id,"price",e.target.value)} placeholder="0"
-                          style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>STOCK</div>
-                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="How many of this option you have. Sells down on its own; the product's total is the sum of these.">
-                        <input type="number" min="0" step="1" value={v.stock??""} onChange={e=>setVar(v.id,"stock",e.target.value===''?null:Math.max(0,parseInt(e.target.value)||0))} placeholder="0"
-                          style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>PACKING WT</div>
-                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="Packing weight for this option (kg) — used for shipping. Customers never see it.">
-                        <input type="number" step="0.05" min="0" value={v.packagingWeight??""} onChange={e=>setVar(v.id,"packagingWeight",e.target.value===''?null:Number(e.target.value))} placeholder="0.20"
-                          style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
-                        <span style={{fontSize:12,color:C.textSub,fontWeight:700,whiteSpace:"nowrap"}}>kg</span>
-                      </div>
-                    </div>
-                  </div>
-                  <button className="press" onClick={()=>setVar(v.id,"soldOut",!v.soldOut)}
-                    style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${v.soldOut?C.danger:C.border}`,background:v.soldOut?"#fee2e2":"transparent",color:v.soldOut?C.danger:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                    {v.soldOut?"Sold out":"In stock"}
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button className="press" onClick={addVariant}
-              style={{width:"100%",marginTop:10,background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              ＋ Add {isFish?"a type":"an option"}
-            </button>
-            {isFish&&!anyNamedVariant()&&(
-              <button className="press" onClick={addFishDefaults}
-                style={{width:"100%",marginTop:8,background:"transparent",border:"none",color:C.textSub,padding:"6px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
-                Use the standard pair / trio types
-              </button>
-            )}
-          </div>
-          );
-        })()}
-
-        {fld("Description","desc","text","Describe the product…",{textarea:true})}
-
-        {/* Care info — shown on the product page (Live Fish & Plants) */}
-        {(form.category==="Live Fish"||form.category==="Plants")&&(()=>{
-          const careRows=[
-            ["careTankSize","Min tank size","e.g. 40 L / 10 gal"],
-            ["careTemp","Water temp","e.g. 24–28 °C"],
-            ["carePh","pH range","e.g. 6.5–7.5"],
-            ["careAdultSize","Adult size","e.g. 6 cm"],
-            ["careTemperament","Temperament","e.g. Peaceful"],
-            ["careLevel","Care level","e.g. Beginner"],
-            ["careDiet","Diet","e.g. Omnivore — flakes, frozen"],
-            ["careTankMates","Good tank mates","e.g. Tetras, rasboras, corydoras"],
-          ];
-          return(
-            <div style={{background:"#f0fbfc",borderRadius:14,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:12,fontWeight:800,color:C.primary,textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>🐠 Care Info</div>
-              <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.45}}>Optional — shown as a care guide on the product page. Helps customers buy the right fish &amp; cuts DOA complaints. Leave blank to hide.</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                {careRows.map(([k,label,ph])=>(
-                  <div key={k} style={{gridColumn:k==="careTankMates"?"1 / -1":"auto"}}>
-                    <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>{label}</div>
-                    <input value={form[k]} onChange={e=>f(k,e.target.value)} placeholder={ph}
-                      style={{width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white",boxSizing:"border-box"}}/>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Packaging weight + special delivery suggestion */}
-        {form.category==="Live Fish" ? (
-          /* Live fish weight is set per-variant (type-wise) above. Admin recommends a packing here. */
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5,textTransform:"uppercase"}}>recommended packing by location</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <div>
-                <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>📍 Inside Tamil Nadu</div>
-                <select value={form.suggestedPackingTN||"carton_special"} onChange={e=>f("suggestedPackingTN",e.target.value)}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                  {PACKING_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>🚚 Outside TN (Others)</div>
-                <select value={form.suggestedPackingOther||"thermacol_special"} onChange={e=>f("suggestedPackingOther",e.target.value)}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                  {PACKING_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
-                </select>
-              </div>
-            </div>
-            <div style={{fontSize:10,color:C.textSub,marginTop:5,lineHeight:1.5}}>The matching option is shown as <b>“Recommended”</b> at checkout based on the customer's pincode. For distant zones pick a <b>Thermacol</b> (insulated) option to keep the <b>Live Arrival Guarantee</b>. Thermacol adds a weight-based charge (set in Settings).</div>
-          </div>
-        ) : (
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          {(()=>{
-            // Shipping already reads the option's weight first and only falls back here, so
-            // once every option carries one this box is dead weight — show what the options
-            // say instead of an input that changes nothing.
-            const cov=variantCoverage("packagingWeight");
-            const r=variantRange("packagingWeight");
-            const kg=x=>`${Number(x).toFixed(2)} kg`;
-            if(cov==="all"&&r) return(
-              <div>
-                <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5}}>packaging weight (kg)</div>
-                <div style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,background:C.bg,color:C.textSub,fontFamily:PRICE_FONT,fontWeight:700}}>
-                  {r.min===r.max?kg(r.min):`${kg(r.min)} – ${kg(r.max)}`}
-                </div>
-                <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Set per option below — shipping uses each option's own weight.</div>
-              </div>
-            );
-            return(
-              <div>
-                <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5}}>packaging weight (kg)</div>
-                <input type="number" step="0.1" min="0" value={form.packagingWeight} onChange={e=>f("packagingWeight",e.target.value)} placeholder="e.g. 0.2"
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
-                <div style={{fontSize:10,color:C.textSub,marginTop:3}}>
-                  {cov==="some"?"Used only by options with no weight of their own.":"Weight of product + packaging in kg, used for shipping."}
-                </div>
-              </div>
-            );
-          })()}
-          <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-start",paddingTop:4}}>
-            <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",userSelect:"none"}}>
-              <input type="checkbox" checked={!!form.suggestSpecialDelivery} onChange={e=>f("suggestSpecialDelivery",e.target.checked)} style={{width:16,height:16,accentColor:C.primary,flexShrink:0,marginTop:2}}/>
-              <div>
-                <div style={{fontSize:11,fontWeight:700,color:C.text}}>suggest premium delivery</div>
-                <div style={{fontSize:10,color:C.textSub,marginTop:2,lineHeight:1.4}}>Highlight Premium Delivery option at checkout for this product.</div>
-              </div>
-            </label>
-          </div>
-        </div>
-        )}
-
-        {/* Photos — up to 4, from device */}
-        <div style={{marginBottom:16}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8}}>Photos <span style={{color:C.primary}}>({images.length}/{MAX_IMAGES})</span></div>
-            <div style={{fontSize:11,color:C.textSub}}>First photo = main image</div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-            {images.map((im,idx)=>(
-              <div key={im.key} style={{position:"relative",aspectRatio:"1",borderRadius:12,overflow:"hidden",border:`1.5px solid ${idx===0?C.primary:C.border}`,background:C.bg}}>
-                <img src={im.src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                {idx===0&&<span style={{position:"absolute",top:3,left:3,background:C.primary,color:"white",fontSize:8,fontWeight:800,padding:"2px 5px",borderRadius:6}}>MAIN</span>}
-                <button onClick={()=>removeImage(im.key)} style={{position:"absolute",top:3,right:3,width:20,height:20,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:12,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-                {idx>0&&<button onClick={()=>moveImage(im.key,-1)} style={{position:"absolute",bottom:3,left:3,width:20,height:20,borderRadius:6,background:"rgba(255,255,255,.92)",color:C.primary,border:"none",fontSize:12,fontWeight:800,cursor:"pointer",lineHeight:1}}>←</button>}
-                {idx<images.length-1&&<button onClick={()=>moveImage(im.key,1)} style={{position:"absolute",bottom:3,right:3,width:20,height:20,borderRadius:6,background:"rgba(255,255,255,.92)",color:C.primary,border:"none",fontSize:12,fontWeight:800,cursor:"pointer",lineHeight:1}}>→</button>}
-              </div>
-            ))}
-            {images.length<MAX_IMAGES&&(
-              <label style={{aspectRatio:"1",borderRadius:12,border:`1.5px dashed ${C.primary}`,background:C.accentLight,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",color:C.primary}}>
-                <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{addImages(e.target.files);e.target.value="";}}/>
-                <span style={{fontSize:24,lineHeight:1}}>＋</span>
-                {/* "Photo", not "Add". This tile is image-only, and the video
-                    control is further down the form — labelled "Add" it reads as
-                    the way to add any media, so a video file shows up greyed out
-                    in the picker with nothing explaining why. */}
-                <span style={{fontSize:10,fontWeight:700,marginTop:2}}>Photo</span>
-              </label>
-            )}
-          </div>
-        </div>
-
-        {/* Video */}
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Video <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
-          <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginBottom:8}}>Pick any video off your phone, any size — you'll drag to select up to <b>{CLIP_MAX_SEC} seconds</b>. It's compressed to fit, the sound is removed, and it loops silently on the product page.</div>
-          {video?(
-            <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:`1.5px solid ${C.border}`,background:"#000"}}>
-              <video src={video.src} controls playsInline style={{width:"100%",maxHeight:200,display:"block"}}/>
-              <button onClick={()=>{setVideo(null);setBusyNote("");}} style={{position:"absolute",top:6,right:6,width:26,height:26,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:15,cursor:"pointer"}}>×</button>
-              {video.tooLarge&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(220,38,38,.9)",color:"white",fontSize:10,fontWeight:700,padding:"4px 8px",textAlign:"center"}}>Too large to save — won't persist</div>}
-            </div>
-          ):(
-            <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:12,border:`1.5px dashed ${C.border}`,background:C.bg,padding:"16px",cursor:"pointer",color:C.textSub,fontSize:13,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              <input type="file" accept={VIDEO_ACCEPT} style={{display:"none"}} onChange={e=>{if(e.target.files[0])handleVid(e.target.files[0]);e.target.value="";}}/>
-              🎬 Add a short video
-            </label>
-          )}
-          {trimFile&&<VideoTrimmer file={trimFile} onCancel={()=>setTrimFile(null)} onDone={acceptClip}/>}
-        </div>
-        {/* While saving, the progress rides on the button itself — no need to repeat it here. */}
-        {busyNote&&!saving&&<div style={{fontSize:12,color:busyNote.startsWith("⚠")?C.danger:C.textSub,fontWeight:600,marginBottom:12,marginTop:-4}}>{busyNote}</div>}
-
-        <button className="press" onClick={handleSave} disabled={saving}
-          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?.7:1}}>
-          {/* Naming the current step makes a slow photo upload read as progress, not a hang. */}
-          {saving?<><Spinner/> {busyNote||"Saving…"}</>:isEdit?"💾 Save Changes":"✓ Add Product"}
-        </button>
-        {isEdit&&!delConfirm&&(
-          <button className="press" onClick={()=>setDelConfirm(true)} style={{width:"100%",background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:16,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🗑 Delete Product</button>
-        )}
-        {delConfirm&&(
-          <div style={{background:"#fee2e2",borderRadius:16,padding:"16px",border:`1.5px solid ${C.danger}`}}>
-            <div style={{fontSize:14,fontWeight:700,color:C.danger,marginBottom:12,textAlign:"center"}}>Delete "{product.name}"?</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <button className="press" onClick={()=>setDelConfirm(false)} style={{padding:"12px",borderRadius:12,border:`1px solid ${C.border}`,background:"white",color:C.text,fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
-              <button className="press" onClick={()=>onDelete(product.id)} style={{padding:"12px",borderRadius:12,border:"none",background:C.danger,color:"white",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, Delete</button>
-            </div>
-          </div>
-        )}
-      </div>
+      {msg&&<div style={{marginTop:12,maxWidth:380,textAlign:"center",fontSize:11.5,color:msg.toLowerCase().includes("incorrect")||msg.toLowerCase().includes("only")?C.danger:C.textSub,lineHeight:1.5}}>{msg}</div>}
     </div>
   );
 }
@@ -13310,6 +12412,12 @@ function AdminExitConfirm({onStay,onLeave}){
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
 function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onDeleteGuides,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTankMonthlyAward,totmVotes={},tankMonthKey=totmMonthOf(Date.now()),testimonials=[],onDeleteTestimonial,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
+
+  const adminUid=(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||"";
+  const allowedTabs=ADMIN_SECTION_KEYS.filter(k=>canAdminSection(k,adminUid));
+  useEffect(()=>{
+    if(ADMIN_SECTION_KEYS.includes(tab)&&!canAdminSection(tab,adminUid)&&allowedTabs.length) setTab(allowedTabs[0]);
+  });
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
     const warn=(e)=>{ e.preventDefault(); e.returnValue=""; return ""; };
@@ -13611,7 +12719,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
         {/* Tab bar */}
         <div style={{display:"flex",background:"rgba(0,0,0,.2)",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-          {["orders","dashboard","products","wallets","reviews","requests","guides","settings"].map(t=>(
+          {allowedTabs.map(t=>(
             <button key={t} className="press" onClick={()=>setTab(t)}
               style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
               {t==="orders"?"📋 Orders":t==="dashboard"?"📊 Dashboard":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
@@ -13644,6 +12752,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
       )}
 
+      {FB_OK&&FB_AUTH?.currentUser&&!isAdminUid(FB_AUTH.currentUser.uid)&&(
+        <div style={{margin:"14px 16px 0",background:"#f0fdf4",border:"1px solid #86efac",borderRadius:14,padding:"14px",fontSize:12,color:"#14532d",lineHeight:1.55}}>
+          <b>New co-admin Google UID</b><br/>
+          <code style={{display:"inline-block",marginTop:6,fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:5,padding:"3px 7px"}}>{FB_AUTH.currentUser.uid}</code>
+          <button className="press" onClick={()=>navigator.clipboard?.writeText(FB_AUTH.currentUser.uid)} style={{display:"block",marginTop:9,background:"#16a34a",color:"white",border:"none",borderRadius:8,padding:"7px 13px",fontSize:11,fontWeight:800}}>📋 Copy UID</button>
+          <div style={{marginTop:7}}>Copy this UID, then sign back in with the main admin account and assign its permissions in Admin Security.</div>
+        </div>
+      )}
       {!isAdminSignedIn()&&(
         <div style={{margin:"14px 16px 0",background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:14,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
@@ -13660,7 +12776,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── DASHBOARD TAB (analytics — separated from order management, #9) ── */}
-      {tab==="dashboard"&&(
+      {tab==="dashboard"&&canAdminSection("dashboard",adminUid)&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
           {/* The Analytics card used to sit here. It moved to the header, next
               to Store, so it is reachable from every tab instead of only this
@@ -14024,7 +13140,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
       )}
       {/* ── ORDERS TAB (order management only) ── */}
-      {tab==="orders"&&(
+      {tab==="orders"&&canAdminSection("orders",adminUid)&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
           {/* Search orders by number / name / phone — top of the tab so it's always reachable */}
           <div style={{position:"relative",marginBottom:10}}>
@@ -14148,7 +13264,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── PRODUCTS TAB ── */}
-      {tab==="products"&&(
+      {tab==="products"&&canAdminSection("products",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {/* Full-width twin of the header's "+ Add". The header one sits right under the phone's
               status bar, which is a cramped place to aim at — this one is always easy to hit. */}
@@ -14224,7 +13340,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── REQUESTS TAB ── */}
-      {tab==="requests"&&(
+      {tab==="requests"&&canAdminSection("requests",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {requests.length===0?(
             <div style={{textAlign:"center",padding:"50px 0",color:C.textSub}}>
@@ -14301,7 +13417,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── GUIDES TAB ── */}
-      {tab==="guides"&&(
+      {tab==="guides"&&canAdminSection("guides",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {guideFormOpen?(
             <GuideForm guide={editGuide} imgSrc={editGuide?mediaCache["img-"+editGuide.id]:null}
@@ -14346,7 +13462,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── WALLETS TAB ── */}
-      {tab==="wallets"&&(
+      {tab==="wallets"&&canAdminSection("wallets",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div>
@@ -14421,7 +13537,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── SETTINGS TAB ── */}
-      {tab==="settings"&&(
+      {tab==="settings"&&canAdminSection("settings",adminUid)&&(
         <div>
           {(()=>{
             const current=tankMonthKey, previous=previousTotmMonth(Date.now());
@@ -14565,7 +13681,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
 
 /* ═══════════════════ ADMIN SETTINGS PANEL ═══════════════════ */
 function SettingsPanel({settings,onSave,products=[]}){
-  const [f,setF]=useState({...DEFAULT_SETTINGS,...settings});
+  const [f,setF]=useState({...DEFAULT_SETTINGS,...settings,coAdminUid:RUNTIME_ADMIN_ACCESS.coAdminUid||settings.coAdminUid||"",coAdminPermissions:{...DEFAULT_CO_ADMIN_PERMISSIONS,...RUNTIME_ADMIN_ACCESS.permissions}});
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const [logoNote,setLogoNote]=useState("");
   const [sigNote,setSigNote]=useState("");
@@ -14576,6 +13692,19 @@ function SettingsPanel({settings,onSave,products=[]}){
   const [sec,setSec]=useState("store"); // settings are split into pages; this is the active one
   const [secOpen,setSecOpen]=useState(false); // every settings group starts collapsed
   const adminOk=isAdminSignedIn();
+  const mainAdminOk=isMainAdminUid(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid);
+  const [newAdminPassword,setNewAdminPassword]=useState("");
+  const [confirmAdminPassword,setConfirmAdminPassword]=useState("");
+  const changeAdminPassword=async()=>{
+    if(!mainAdminOk){ setPwMsg("Only the main admin can change the Admin password."); return; }
+    if(newAdminPassword.length<6){ setPwMsg("Use at least 6 characters for the Admin password."); return; }
+    if(newAdminPassword!==confirmAdminPassword){ setPwMsg("The two passwords do not match."); return; }
+    const adminSetupHash=await adminPasswordDigest(newAdminPassword);
+    const nf={...f,adminSetupHash};
+    setF(nf); await onSave(nf);
+    setNewAdminPassword(""); setConfirmAdminPassword("");
+    setPwMsg("✓ Admin password updated. It will be required the next time Admin is unlocked.");
+  };
   // Live daily-promo usage (today) — refreshed on mount so admin sees "X of N used today"
   const [promoToday,setPromoToday]=useState({coupon:0,referral:0});
   useEffect(()=>{ let on=true; Promise.all([promoUsageCount("coupon"),promoUsageCount("referral")]).then(([c,r])=>{ if(on) setPromoToday({coupon:c,referral:r}); }); return ()=>{on=false;}; },[]);
@@ -14812,7 +13941,7 @@ function SettingsPanel({settings,onSave,products=[]}){
       </Collapsible>
 
       {/* Admin security */}
-      <Collapsible icon="🔐" title="Admin Security">
+      {mainAdminOk&&(<Collapsible icon="🔐" title="Admin Security">
 
         <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Google-only admin access</div>
         <div style={{background:adminOk?"#ecfdf5":"#fff7ed",border:`1px solid ${adminOk?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:adminOk?"#166534":"#9a3412",lineHeight:1.55}}>
@@ -14829,42 +13958,29 @@ function SettingsPanel({settings,onSave,products=[]}){
           )}
         </div>
 
-        {/* ── Change Admin Google Account ── */}
-        <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:14}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:10}}>🔄 Change Admin Google Account</div>
-          <div style={{background:"#f0f9ff",border:`1px solid #bae6fd`,borderRadius:10,padding:"11px 13px",marginBottom:10,fontSize:12,color:"#0c4a6e",lineHeight:1.6}}>
-            <b>Currently configured admin UID(s):</b><br/>
-            {ADMIN_UIDS.map(u=>(<code key={u} style={{fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:4,padding:"2px 6px",display:"inline-block",marginTop:4,marginRight:4}}>{u}</code>))}
+                <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:14}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:9}}>🔑 Admin password</div>
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginBottom:9}}>This password only unlocks the Admin workspace. Firebase still requires the authorised Google account for protected data.</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <input type="password" value={newAdminPassword} onChange={e=>setNewAdminPassword(e.target.value)} placeholder="New password" aria-label="New admin password" style={{minWidth:0,border:`1.5px solid ${C.border}`,borderRadius:9,padding:"9px 10px"}}/>
+            <input type="password" value={confirmAdminPassword} onChange={e=>setConfirmAdminPassword(e.target.value)} placeholder="Confirm password" aria-label="Confirm admin password" style={{minWidth:0,border:`1.5px solid ${C.border}`,borderRadius:9,padding:"9px 10px"}}/>
           </div>
-          {/* Optional co-admin — a helper account that can also open the admin panel. */}
-          <div style={{marginBottom:12}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:6}}>🤝 Co-admin Google UID (optional)</div>
-            <input value={f.coAdminUid||""} onChange={e=>set("coAdminUid",e.target.value.trim())}
-              placeholder="Paste your helper's Google UID"
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:12.5,fontFamily:"monospace",outline:"none",background:"white"}}/>
-            <div style={{fontSize:10.5,color:C.textSub,marginTop:5,lineHeight:1.55}}>Lets a second person open Admin. You must <b>also</b> add this UID to <code style={{fontSize:10,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 4px"}}>database.rules.json</code> + the Firebase console so their changes sync to the cloud. Save Settings after pasting.</div>
-          </div>
-          {FB_OK && FB_AUTH?.currentUser && !isAdminUid(FB_AUTH.currentUser.uid) && (
-            <div style={{background:"#f0fdf4",border:`1px solid #86efac`,borderRadius:10,padding:"11px 13px",marginBottom:10,fontSize:12,color:"#14532d",lineHeight:1.6}}>
-              <b>✓ New account UID (signed in now):</b><br/>
-              <code style={{fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:4,padding:"2px 6px",display:"inline-block",marginTop:4}}>{FB_AUTH.currentUser.uid}</code>
-              <button className="press" onClick={()=>navigator.clipboard?.writeText(FB_AUTH.currentUser.uid)}
-                style={{display:"block",marginTop:8,background:"#16a34a",color:"white",border:"none",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-                📋 Copy New UID
-              </button>
-            </div>
-          )}
-          <div style={{background:C.bg,borderRadius:10,padding:"12px 13px",fontSize:11.5,color:C.textSub,lineHeight:1.85}}>
-            <b style={{color:C.text,display:"block",marginBottom:4}}>Steps to switch to a new Gmail account:</b>
-            1. Sign in above (Admin panel banner) with your new Gmail<br/>
-            2. Copy the "New account UID" shown in the green box above<br/>
-            3. In <code style={{fontSize:10.5,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 5px"}}>app.jsx</code> line 14, replace the UID inside <code style={{fontSize:10.5,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 5px"}}>ADMIN_UID="..."</code><br/>
-            4. In <code style={{fontSize:10.5,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 5px"}}>database_rules.json</code>, replace all occurrences of the old UID with the new one<br/>
-            5. Push to GitHub → Vercel will redeploy automatically<br/>
-            6. In Firebase Console → Realtime Database → Rules, paste the updated <code style={{fontSize:10.5,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 5px"}}>database_rules.json</code> and click Publish
-          </div>
+          <button className="press" onClick={changeAdminPassword} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:9,padding:"8px 13px",fontSize:11.5,fontWeight:800}}>Save Admin password</button>
         </div>
-      </Collapsible>
+        <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:14}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>🤝 Co-admin access</div>
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginBottom:9}}>Paste the UID copied after the helper signs in with Google. Saving here activates database access; no source-code or Firebase-console edit is required.</div>
+          <input value={f.coAdminUid||""} onChange={e=>set("coAdminUid",e.target.value.trim())} placeholder="Co-admin Google UID" aria-label="Co-admin Google UID" style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:9,padding:"9px 10px",fontFamily:"monospace",fontSize:11.5}}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginTop:10}}>
+            {[['orders','📋 Orders'],['dashboard','📊 Dashboard'],['products','📦 Products'],['wallets','👛 Wallets'],['reviews','⭐ Reviews'],['requests','📨 Requests'],['guides','📖 Guides'],['settings','⚙️ Settings']].map(([key,label])=>(
+              <label key={key} style={{display:"flex",alignItems:"center",gap:7,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 9px",fontSize:11.5,fontWeight:700,color:C.text}}>
+                <input type="checkbox" checked={!!(f.coAdminPermissions&&f.coAdminPermissions[key])} onChange={e=>set("coAdminPermissions",{...DEFAULT_CO_ADMIN_PERMISSIONS,...(f.coAdminPermissions||{}),[key]:e.target.checked})}/>{label}
+              </label>
+            ))}
+          </div>
+          <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.55,marginTop:8}}>A co-admin cannot edit this UID, these permissions, or the Admin password. Disabled sections are hidden and Firebase rejects direct access.</div>
+        </div>
+</Collapsible>)}
 
       {/* Data & Backup */}
       <Collapsible icon="💾" title="Data & Backup">
@@ -16438,10 +15554,11 @@ function NemoStore(){
 
   const saveSettingsHandler=async(s)=>{
     if(lifetimeReferralLimit(s)!==lifetimeReferralLimit(settings)) await snapshotExistingReferralProfiles(orders,settings);
-    setSettings(s); RUNTIME_CO_ADMIN=(s&&s.coAdminUid||"").trim(); await saveSettings(s); showToast("Settings saved");
+    if(isMainAdminUid(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)){
+      try{ await saveAdminAccess({coAdminUid:s.coAdminUid||"",permissions:s.coAdminPermissions||{}}); }catch(e){ showToast("Could not save co-admin access","error"); return; }
+    }
+    setSettings(s); await saveSettings(s); showToast("Settings saved");
   };
-  // Keep the runtime co-admin UID in sync so an entered helper account also unlocks admin (cloud writes still gated by Firebase rules).
-  useEffect(()=>{ RUNTIME_CO_ADMIN=((settings&&settings.coAdminUid)||"").trim(); },[settings.coAdminUid]);
 
   /* ── Scrolling must never edit a value ────────────────────────────────────────
      A focused number field swallows the wheel and steps itself, so a shopper who
@@ -16658,14 +15775,13 @@ function NemoStore(){
   // from the local value after a short grace period even if Firebase is slow/blocked.
   useEffect(()=>{ const t=setTimeout(()=>setSettingsReady(true), 650); return()=>clearTimeout(t); },[]);
 
-  /* Keep the cinematic loader over the app until the shared data needed by the home screen
-     and every customer page is ready. The wallet is included deliberately: previously the
-     cached shell dismissed the splash first and the coin total visibly changed afterward. */
+  /* First paint uses the cached storefront as soon as products + settings are ready. Wallet
+     balance refreshes in the background; it must never hold a returning customer behind splash. */
   useEffect(()=>{
-    if(loading||!hydrated||!settingsReady||!walletReady) return;
+    if(loading||!hydrated||!settingsReady) return;
     try{ window.__nemoBootReady=true; }catch(e){}
     revealStore();
-  },[loading,hydrated,settingsReady,walletReady]);
+  },[loading,hydrated,settingsReady]);
 
   const deepLinkRef = useRef((()=>{ try{ return new URLSearchParams(window.location.search).get("p")||""; }catch(e){ return ""; } })());
   useEffect(()=>{
@@ -17061,8 +16177,9 @@ function NemoStore(){
       if(u){
         const usr={...u,keep:true};
         setUser(usr); saveUser(usr);
-        if(isAdminUid(u.uid)){ showToast("✓ Admin signed in — changes will now sync"); }
-        else{ showToast("Signed in, but this isn't the admin account"); }
+        await refreshAdminAccess();
+        if(isAdminUid(u.uid)){ showToast("✓ Admin signed in — permitted sections are available"); }
+        else{ showToast("Signed in — copy this account UID to add it as a co-admin"); }
         setTimeout(()=>{ loadOrders().then(o=>o&&setOrders(o)); loadInterestCounts().then(setInterestCounts); },400);
         return u;
       }
@@ -17955,13 +17072,11 @@ function NemoStore(){
     const uid=userKey(user);
     if(!uid){ setWalletPts(0); setWalletReady(true); return; }
     let alive=true;
-    setWalletReady(false);
     const cached=loadLoyaltyLocal(uid);
+    setWalletReady(true);
     setWalletPts(cached.points||0);
-    /* If Firebase is unavailable, do not strand an offline customer behind the splash. Six
-       seconds gives the async SDK and authenticated wallet read time to complete on a slow
-       phone, then accepts the cached balance as the best available result. */
-    const fallback=setTimeout(()=>{ if(alive) setWalletReady(true); },6000);
+    // Cached balance is already painted; Firebase now refreshes it without delaying first paint.
+    const fallback=setTimeout(()=>{},0);
     // Provision the permanent referral profile now, freezing today's unlock threshold for
     // this customer so later admin changes affect only profiles created afterwards.
     if(settings.referralEnabled!==false) ensureReferralProfile(uid,settings).catch(()=>{});
@@ -18026,7 +17141,7 @@ function NemoStore(){
         {page==="about"    &&<AboutPage nav={nav} goBack={goBack} settings={settings}/>} 
         {page==="contact"  &&<ContactPage nav={nav} goBack={goBack} settings={settings}/>} 
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
-        {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} onAdminSignIn={adminGoogleSignIn}/>}
+        {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} onAdminSignIn={adminGoogleSignIn} settings={settings}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{const ok=await deleteShowcasePhoto(id);if(ok)setShowcase(s=>s.filter(x=>x.id!==id));else showToast("Couldn't remove that submission — verify admin sign-in","error");}} onApproveShowcase={handleApproveShowcase} onTankMonthlyAward={handleTankMonthlyAward} totmVotes={totmVotes} tankMonthKey={activeTankMonth} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onDeleteGuides={deleteGuidesHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>

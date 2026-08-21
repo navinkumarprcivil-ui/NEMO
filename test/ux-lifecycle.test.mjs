@@ -13,11 +13,10 @@ test('new reviews require an explicit star choice', () => {
   assert.doesNotMatch(app, /Tap to review your product/i);
 });
 
-test('customer orders use four simple lifecycle groups', () => {
-  assert.match(app, /const orderStages=\["Orders Placed","Shipped","Delivered","Past Orders"\]/);
-  assert.match(app, /function customerOrderStage\(/);
-  assert.match(app, /category==="Accessories"\) \? 3 : 1/);
-  assert.match(app, /!\[['"]Shipped['"],['"]Delivered['"]\]\.includes\(o\.status\)/);
+test('customer orders are the original single list, without lifecycle tabs', () => {
+  const customer = app.slice(app.indexOf('function OrderHistoryPage('), app.indexOf('function OrderTrackingBar('));
+  assert.match(customer, /const visibleOrders=myOrders/);
+  assert.doesNotMatch(customer, /orderStages|stageFilter|customerOrderStage\(o\)===/);
 });
 
 test('admin orders use the requested lifecycle and claim filters', () => {
