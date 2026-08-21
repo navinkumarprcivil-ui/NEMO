@@ -4,12 +4,13 @@ on:
   push:
     branches:
       - agent/admin-permissions-release
+      - main
 
 permissions:
   contents: write
 
 concurrency:
-  group: admin-release-patch
+  group: admin-release-patch-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -18,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/admin-permissions-release
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
       - name: Apply requested release changes
         run: python3 scripts/apply-admin-release.py
@@ -39,5 +40,5 @@ jobs:
             echo "No release changes to commit"
           else
             git commit -m "Complete admin permissions release [skip ci]"
-            git push origin HEAD:agent/admin-permissions-release
+            git push origin HEAD:${{ github.ref_name }}
           fi
