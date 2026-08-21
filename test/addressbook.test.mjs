@@ -3,11 +3,9 @@
  *
  *   node --test test/addressbook.test.mjs
  *
- * These are privacy tests, not convenience tests. The "Deliver to" picker at checkout, and the
- * address shown again on the payment step, are both rendered from this book. An admin session
- * holds EVERY customer's orders in the same `orders` state a shopper's own session uses, so the
- * seeding step is one array away from filing strangers' names, phones and street addresses into
- * a local book — where they look exactly like the customer's own saved cards.
+ * Only addresses the customer explicitly saves may appear. Past orders are not an address book:
+ * importing them makes a deleted address reappear and stores data the customer never opted to
+ * save for future orders.
  *
  * The rules are plain functions over localStorage with no React in them, so they are lifted out
  * of app.jsx and run directly against a stub, the way the other suites here do it.
@@ -34,7 +32,7 @@ function load() {
     removeItem: k => store.delete(k),
   };
   const M = new Function("localStorage", addrCode + cacheCode + `
-    return {seedAddressBook,purgeForeignAddrEntries,loadAddrBook,saveAddrBook,localOrders,addrFingerprint};`)(localStorage);
+    return {loadSavedAddresses,purgeForeignAddrEntries,loadAddrBook,saveAddrBook,localOrders,addrFingerprint};`)(localStorage);
   return { ...M, store };
 }
 
@@ -46,52 +44,28 @@ const order = (uid, street, extra = {}) => ({
   ...extra,
 });
 
-test("another customer's order never becomes a pickable address", () => {
+test("past orders never become saved addresses", () => {
   const M = load();
-  const book = M.seedAddressBook(ME, [order(ME, "12 My Street"), order(THEM, "99 Their Lane")]);
-  const streets = book.map(a => a.address);
-  assert.ok(streets.includes("12 My Street"), "the customer's own address should seed");
-  assert.ok(!streets.includes("99 Their Lane"), "another customer's address must never appear");
-  assert.equal(book.length, 1);
+  M.store.set("nemo-orders", JSON.stringify([order(ME, "12 My Street"), order(THEM, "99 Their Lane")]));
+  assert.deepEqual(M.loadSavedAddresses(ME), []);
 });
 
-test("an all-customers array (what the admin panel holds) seeds nothing but the admin's own", () => {
-  const M = load();
-  const everyone = [order(THEM, "1 A Rd"), order("uid-c", "2 B Rd"), order("uid-d", "3 C Rd")];
-  assert.deepEqual(M.seedAddressBook(ME, everyone), [], "no foreign address may be filed");
-  // and the same array for the admin's own uid still yields only their row
-  const withMine = [...everyone, order(ME, "4 Mine Rd")];
-  assert.deepEqual(M.seedAddressBook(ME, withMine).map(a => a.address), ["4 Mine Rd"]);
-});
-
-test("an order with no owner is skipped rather than trusted", () => {
-  const M = load();
-  const orphan = order(ME, "5 Orphan Rd"); delete orphan.userUid;
-  assert.deepEqual(M.seedAddressBook(ME, [orphan]), []);
-});
-
-test("books poisoned before the fix are cleaned once, keeping what the customer typed", () => {
+test("legacy order-derived rows are always removed, while explicitly saved rows remain", () => {
   const M = load();
   M.saveAddrBook(ME, [
     { id: "a1", address: "9 Stranger Way", pincode: "600001", phone: "1", fromOrder: true },
     { id: "a2", address: "12 My Street",   pincode: "636001", phone: "2", fromOrder: false },
   ]);
-  M.purgeForeignAddrEntries(ME);
-  const after = M.loadAddrBook(ME);
+  const after = M.loadSavedAddresses(ME);
   assert.deepEqual(after.map(a => a.address), ["12 My Street"], "order-derived rows go, typed rows stay");
-
-  // The clean runs once: a legitimately re-seeded row survives a later call.
-  const reseeded = M.seedAddressBook(ME, [order(ME, "7 Rightful Rd")]);
-  assert.ok(reseeded.some(a => a.address === "7 Rightful Rd"));
-  M.purgeForeignAddrEntries(ME);
-  assert.ok(M.loadAddrBook(ME).some(a => a.address === "7 Rightful Rd"), "must not re-purge");
 });
 
-test("seeding twice does not duplicate the same place", () => {
+test("deleting a saved address keeps it deleted", () => {
   const M = load();
-  const mine = [order(ME, "12 My Street")];
-  M.seedAddressBook(ME, mine);
-  assert.equal(M.seedAddressBook(ME, mine).length, 1);
+  M.saveAddrBook(ME, [{id:"a1",address:"12 My Street",pincode:"636001",phone:"9000000000",fromOrder:false}]);
+  M.saveAddrBook(ME, []);
+  M.store.set("nemo-orders", JSON.stringify([order(ME, "12 My Street")]));
+  assert.deepEqual(M.loadSavedAddresses(ME), []);
 });
 
 test("a shared order cache holding more than one owner is discarded, not shown", () => {

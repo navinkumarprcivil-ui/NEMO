@@ -17,6 +17,18 @@ test('checkout keeps only the requested Special Request label', () => {
   assert.doesNotMatch(app, /Order Summary \/ Special Requests?/);
 });
 
+test('saved addresses and WhatsApp updates are explicit opt-ins', () => {
+  assert.match(app, />📍 Saved Address</);
+  assert.match(app, />Save this address for future orders</);
+  assert.match(app, />Update me on WhatsApp</);
+  assert.match(app, /addr\.waUpdates&&inp\("WhatsApp Number"/);
+  assert.match(app, /if\(onSaveAddress&&saveForLater&&!addrEditId\)/);
+  assert.match(app, /setSavedAddresses\(loadSavedAddresses\(uk\)\)/);
+  assert.doesNotMatch(app, /FROM A PAST ORDER/);
+  assert.doesNotMatch(app, /Addresses from past orders reappear/);
+  assert.doesNotMatch(app, /seedAddressBook/);
+});
+
 test('the order review prompt links products and no longer asks for an order experience review', () => {
   const reviewBlock = app.slice(app.indexOf('function ProductReviewPrompt('), app.indexOf('function OrderReferralCode('));
   assert.match(reviewBlock, /Review your product/);

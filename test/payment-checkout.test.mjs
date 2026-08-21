@@ -46,6 +46,20 @@ test('customer checkout has no manual proof or payment-link fallback', () => {
   assert.match(app, /const outcome=await payWithGateway\(order\);/);
 });
 
+test('checkout uses the compact Cashfree copy and actions', () => {
+  assert.match(app, /placing\?"Checking stock…":"Place Order"/);
+  assert.match(app, />Complete payment</);
+  assert.match(app, /UPI · Cards · Netbanking · Wallets · Auto-verified/);
+  assert.match(app, /Pay later/);
+  assert.match(app, /Cancel payment/);
+  assert.match(app, />＋ Add more items</);
+  assert.match(app, />✏ Edit Address</);
+  assert.doesNotMatch(app, /Prepaid order — pay/);
+  assert.doesNotMatch(app, /You'll complete payment on the next step/);
+  assert.doesNotMatch(app, /You can still adjust quantities/);
+  assert.doesNotMatch(app, /I'll pay later — go to Orders/);
+});
+
 test('verified production payments confirm orders automatically', () => {
   assert.match(payments, /paymentStatus: sandbox \? 'Test Paid' : 'Verified'/);
   assert.match(payments, /status: sandbox \? 'Payment Review' : 'Confirmed'/);
