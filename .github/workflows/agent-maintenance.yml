@@ -16,22 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect auth and routing anchors
+      - name: Inspect persistence before release patch
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
           lines=Path('app.jsx').read_text(errors='replace').splitlines()
-          terms=['isAdminUid','isAdminSignedIn','ADMIN_UID','RUNTIME_CO_ADMIN','<AdminLogin','AdminLogin ','<AdminHub','AdminHub ','function SettingsPanel','<SettingsPanel','walletReady','setWalletReady']
-          def safe(s):
-            s=re.sub(r'([A-Za-z0-9_]*(?:Pass|pass|Hash|hash|Secret|secret)[A-Za-z0-9_]*\s*[:=]\s*)["\'][^"\']+["\']',r'\1"<redacted>"',s)
-            return s
-          for term in terms:
+          for term in ['async function saveSettings','function saveSettings','function OfferBanners','function OrderHistoryPage']:
             hits=[i for i,l in enumerate(lines) if term.lower() in l.lower()]
-            print(f'\n## {term}: {[i+1 for i in hits[:30]]}')
-            for i in hits[:12]:
-              for n in range(max(0,i-5),min(len(lines),i+9)): print(f'{n+1:05d}: {safe(lines[n])}')
+            print(f'\n## {term}: {[i+1 for i in hits]}')
+            for i in hits[:3]:
+              for n in range(max(0,i-5),min(len(lines),i+90)): print(f'{n+1:05d}: {lines[n]}')
               print('---')
           PY
       - name: Baseline tests
