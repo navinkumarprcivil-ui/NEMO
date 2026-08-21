@@ -3,13 +3,13 @@ name: Apply admin release
 on:
   push:
     branches:
-      - main
+      - agent/finalize-admin-release
 
 permissions:
   contents: write
 
 concurrency:
-  group: admin-release-patch-main
+  group: admin-release-patch-final
   cancel-in-progress: true
 
 jobs:
@@ -18,17 +18,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: agent/finalize-admin-release
           fetch-depth: 0
-      - name: Correct current Settings anchors
+      - name: Correct release patch anchors
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p=Path('scripts/apply-admin-release.py')
           s=p.read_text()
-          s=s.replace("app.find('<Collapsible title=\"Admin Security\"')", "app.find('title=\"Admin Security\"')")
-          s=s.replace("app.find('<Collapsible title=\"Data & Backup\"', sec_start)", "app.find('title=\"Data & Backup\"', sec_start)")
+          s=s.replace(
+              'sec_start = app.find(\'<Collapsible title="Admin Security"\')',
+              'sec_title = app.find(\'title="Admin Security"\')\nsec_start = app.rfind(\'<Collapsible\', 0, sec_title) if sec_title >= 0 else -1'
+          )
+          s=s.replace(
+              'next_card = app.find(\'<Collapsible title="Data & Backup"\', sec_start)',
+              'next_title = app.find(\'title="Data & Backup"\', sec_start)\nnext_card = app.rfind(\'<Collapsible\', 0, next_title) if next_title >= 0 else -1'
+          )
+          s=s.replace(
+              'assert.match(app,/mainAdminOk&&\\(<Collapsible title="Admin Security"/);',
+              'assert.match(app,/mainAdminOk&&\\(<Collapsible[^>]*title="Admin Security"/);'
+          )
           p.write_text(s)
           PY
       - name: Apply requested release changes
@@ -47,10 +57,10 @@ jobs:
         run: |
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add -- app.jsx database.rules.json index.html test/ux-lifecycle.test.mjs test/admin-access-release.test.mjs
           if git diff --cached --quiet; then
             echo "No release changes to commit"
           else
             git commit -m "Complete admin permissions release [skip ci]"
-            git push origin HEAD:main
+            git push origin HEAD:agent/finalize-admin-release
           fi
