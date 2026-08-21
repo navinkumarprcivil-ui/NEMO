@@ -2573,6 +2573,20 @@ function previousTotmMonth(ms){
   const [year,month]=totmMonthOf(ms).split("-").map(Number), d=new Date(Date.UTC(year,month-2,1));
   return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0");
 }
+/* Admin reward reminder window, always calculated in IST. It starts on the final calendar day
+   and stays available through the first seven days of the next month, so opening Admin a day
+   late does not silently miss the task. Both sides of midnight refer to the SAME reward month. */
+function adminRewardReminderPeriod(ms=Date.now()){
+  const d=new Date(ms+IST_OFFSET_MS), year=d.getUTCFullYear(), month=d.getUTCMonth(), day=d.getUTCDate();
+  const lastDay=new Date(Date.UTC(year,month+1,0)).getUTCDate();
+  const current=year+"-"+String(month+1).padStart(2,"0");
+  if(day===lastDay) return {month:current,phase:"month-end"};
+  if(day<=7){
+    const prev=new Date(Date.UTC(year,month-1,1));
+    return {month:prev.getUTCFullYear()+"-"+String(prev.getUTCMonth()+1).padStart(2,"0"),phase:"follow-up"};
+  }
+  return null;
+}
 function totmMonthLabel(ym){
   if(!ym) return "";
   const [y,m]=String(ym).split("-").map(Number);
@@ -7123,7 +7137,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.678b9fd0";
+const APP_BUILD = "v90.03622c78";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -13373,6 +13387,31 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   // Monthly "download your report" reminder — stamped in localStorage once you export (or dismiss) each month.
   const [exportDone,setExportDone]=useState(()=>{try{return localStorage.getItem("nemo-export-month")===monthKey();}catch(e){return true;}});
   const stampExport=()=>{try{localStorage.setItem("nemo-export-month",monthKey());}catch(e){}setExportDone(true);};
+  /* Month-end reward reminder lives INSIDE Admin. The last-day alert remains available for the
+     first week of the next month and is dismissed per reward month, not per device date. */
+  const [rewardClock,setRewardClock]=useState(Date.now());
+  const [rewardDismissedMonth,setRewardDismissedMonth]=useState(()=>{try{return localStorage.getItem("nemo-admin-rewards-dismissed")||"";}catch(e){return "";}});
+  useEffect(()=>{ const id=setInterval(()=>setRewardClock(Date.now()),15*60*1000); return ()=>clearInterval(id); },[]);
+  const rewardPeriod=adminRewardReminderPeriod(rewardClock);
+  const rewardReminder=!!(rewardPeriod&&rewardDismissedMonth!==rewardPeriod.month);
+  const dismissRewardReminder=()=>{
+    if(!rewardPeriod) return;
+    try{ localStorage.setItem("nemo-admin-rewards-dismissed",rewardPeriod.month); }catch(e){}
+    setRewardDismissedMonth(rewardPeriod.month);
+  };
+  // If device notifications are already allowed, mirror the in-admin card once. Never prompt
+  // for permission here: the visible card and tab badge remain the guaranteed reminder.
+  useEffect(()=>{
+    if(!rewardReminder||!rewardPeriod) return;
+    const key="nemo-admin-reward-notif-"+rewardPeriod.month;
+    try{
+      if(localStorage.getItem(key)==="1") return;
+      if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
+        sendLocalNotif("Nemo Admin · Month-end rewards",`Check Tank Showcase and streak rewards for ${totmMonthLabel(rewardPeriod.month)}.`);
+        localStorage.setItem(key,"1");
+      }
+    }catch(e){}
+  },[rewardReminder,rewardPeriod&&rewardPeriod.month]);
   const [catFilter,setCatFilter]=useState("All");
   const [prodQ,setProdQ]=useState("");
   const [prodShown,setProdShown]=useState(PAGE);
@@ -13516,6 +13555,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
      publish themselves, so they are never in this queue.) */
   const nowMod=Date.now();
   const pendingModeration=showcase.filter(s=>!showcaseApproved(s)&&!showcaseExpired(s,nowMod)).length;
+  const settingsAlertCount=pendingModeration+(rewardReminder?1:0);
   const totalReviews=Object.values(allReviews).reduce((s,r)=>s+r.length,0);
   const stats=[{l:"Products",v:products.length,i:"📦"},{l:"Orders",v:orders.length,i:"🛒"},{l:"New",v:orders.filter(o=>o.status==="Placed").length,i:"🔔"},{l:"Reviews",v:totalReviews||"—",i:"⭐"}];
 
@@ -13571,11 +13611,31 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               {t==="orders"&&newOrderCount>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{newOrderCount}</span>}
               {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":attnProds.some(p=>(p.stockCount??DEFAULT_STOCK)<=0)?"#dc2626":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Products needing restock — tap Products to see which">{stockAlertCount}</span>}
               {t==="requests"&&unseenRequests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Product requests you haven't opened yet">{unseenRequests.length}</span>}
-              {t==="settings"&&pendingModeration>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Tank photos / testimonials waiting for your approval">{pendingModeration}</span>}
+              {t==="settings"&&settingsAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title={rewardReminder?"Month-end rewards need review": "Tank photos waiting for approval"}>{settingsAlertCount}</span>}
             </button>
           ))}
         </div>
       </div>
+
+      {/* In-admin month-end reminder. It is visible even when browser notifications are blocked. */}
+      {rewardReminder&&rewardPeriod&&(
+        <div style={{margin:"14px 16px 0",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:14,padding:"14px 15px",color:"white",boxShadow:"0 8px 24px rgba(79,70,229,.2)"}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:9,marginBottom:9}}>
+            <span style={{fontSize:20}}>🔔</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800}}>{rewardPeriod.phase==="month-end"?"Month-end reward check":`${totmMonthLabel(rewardPeriod.month)} rewards`}</div>
+              <div style={{fontSize:11.5,opacity:.9,lineHeight:1.5,marginTop:2}}>{rewardPeriod.phase==="month-end"?"Check the reward switches now. Review winners after the month closes.":"Review the completed month and issue any enabled rewards."}</div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:10}}>
+            {[{label:"Tank vote",on:tankVoteRewardOn(settings)},{label:"Streak",on:tankStreakRewardOn(settings)}].map(x=><span key={x.label} style={{fontSize:10.5,fontWeight:800,background:x.on?"rgba(34,197,94,.28)":"rgba(244,63,94,.3)",border:`1px solid ${x.on?"rgba(134,239,172,.7)":"rgba(254,202,202,.65)"}`,borderRadius:20,padding:"4px 9px"}}>{x.label}: {x.on?"ON":"OFF"}</span>)}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:8}}>
+            <button className="press" onClick={()=>setTab("settings")} style={{background:"white",color:"#4f46e5",border:"none",borderRadius:10,padding:"9px 12px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Review rewards</button>
+            <button className="press" onClick={dismissRewardReminder} style={{background:"rgba(255,255,255,.16)",color:"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"9px 13px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Dismiss</button>
+          </div>
+        </div>
+      )}
 
       {!isAdminSignedIn()&&(
         <div style={{margin:"14px 16px 0",background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:14,padding:"14px"}}>

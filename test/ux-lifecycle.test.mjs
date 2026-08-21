@@ -51,3 +51,13 @@ test('performance safeguards avoid rendering distant product rows and disable to
   assert.match(app, /@media\(hover:none\),\(pointer:coarse\)/);
   assert.match(app, /decoding="async" loading=\{loading\}/);
 });
+
+test('month-end rewards create an in-admin notification and settings badge', () => {
+  const block = app.slice(app.indexOf('function AdminHub('), app.indexOf('function SettingsPanel('));
+  assert.match(block, /Month-end reward check/);
+  assert.match(block, /Review rewards/);
+  assert.match(block, /Tank vote/);
+  assert.match(block, /Streak/);
+  assert.match(block, /settingsAlertCount/);
+  assert.match(block, /nemo-admin-rewards-dismissed/);
+});
