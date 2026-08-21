@@ -19,6 +19,7 @@ const PAYMENT_HOSTS = new Set([
   'www.nemoaquastore.in',
   'nemoaquastore.in',
 ]);
+const CASHFREE_ORDER_WINDOW_MS = 20 * 60 * 1000;
 const publicSite = req => {
   const configured = String(process.env.PUBLIC_SITE_URL || 'https://www.nemoaquastore.in').replace(/\/$/, '');
   const host = String(req.headers.host || req.headers['x-forwarded-host'] || '').split(',')[0].trim().split(':')[0].toLowerCase();
@@ -92,12 +93,19 @@ export default async function handler(req, res) {
 
     const cashfreeOrderId = String(order.gateway === 'cashfree' && order.gatewayOrderId || cashfreeOrderIdFor(orderId));
     let gatewayOrder = null;
+    let paymentDeadline = deadline;
     if (order.gateway === 'cashfree' && order.gatewayOrderId) {
       gatewayOrder = await fetchCashfreeOrder(cashfreeOrderId);
+      const gatewayDeadline = Date.parse(String(gatewayOrder?.order_expiry_time || ''));
+      if (Number.isFinite(gatewayDeadline)) paymentDeadline = Math.max(paymentDeadline || 0, gatewayDeadline);
     } else {
       const site = publicSite(req);
       const returnUrl = `${site}/?payment_return=cashfree&order_id=${encodeURIComponent(orderId)}`;
       const notifyUrl = `${site}/api/pay-webhook`;
+      // Cashfree production rejects an expiry that is 15 minutes or less away. Start a fresh
+      // 20-minute reservation when checkout opens and persist the same deadline on the Nemo
+      // order, so stock cannot auto-release while the gateway can still accept payment.
+      paymentDeadline = Math.max(deadline || 0, Date.now() + CASHFREE_ORDER_WINDOW_MS);
       const body = {
         order_id: cashfreeOrderId,
         order_amount: amount,
@@ -109,7 +117,7 @@ export default async function handler(req, res) {
           customer_phone: phone,
         },
         order_meta: { return_url: returnUrl, notify_url: notifyUrl },
-        order_expiry_time: new Date(deadline || (Date.now() + 10 * 60 * 1000)).toISOString(),
+        order_expiry_time: new Date(paymentDeadline).toISOString(),
         order_note: `Nemo order ${String(order.orderNo || orderId)}`.slice(0, 200),
       };
       try {
@@ -131,6 +139,7 @@ export default async function handler(req, res) {
         gateway: 'cashfree',
         gatewayMode: cashfreeMode(),
         gatewayOrderId: cashfreeOrderId,
+        paymentDeadline,
         gatewayCreatedAt: order.gatewayCreatedAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }),

@@ -68,7 +68,7 @@ const CAT_META = {
 const CATEGORIES  = Object.keys(CAT_META);
 const ORDER_STATUSES = ["Payment Review","Confirmed","Shipped","Delivered"]; // post-payment progress
 const ALL_STATUSES   = ["Awaiting Payment","Payment Review","Confirmed","Shipped","Delivered","Cancelled"];
-const PAY_WINDOW_MIN = 10; // minutes a customer has to pay before auto-cancel
+const PAY_WINDOW_MIN = 20; // Cashfree requires order expiry to be more than 15 minutes
 const DEFAULT_STOCK  = 10;
 const MAX_PER_ORDER  = 10;
 // ── Returns / self-cancel policy helpers ──────────────────────────────
@@ -7080,7 +7080,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.61d3e73c";
+const APP_BUILD = "v90.8612ce86";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -10469,7 +10469,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
     }
     /* NOBODY is emailed here — not the owner, not the customer. An order at this point is only
        "Awaiting Payment": the customer may cancel on the very next screen, or simply walk away
-       and let the ten-minute window close it. Mail sent now is mail about an order that in a
+       and let the payment window close it. Mail sent now is mail about an order that in a
        good number of cases never existed, and the customer is still sitting in front of the
        payment screen, so it tells them nothing they cannot see. Both copies go from
        submitPayment, when there is a payment to write about. */

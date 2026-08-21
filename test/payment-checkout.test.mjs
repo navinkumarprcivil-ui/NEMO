@@ -25,3 +25,11 @@ test('checkout and server failures expose safe diagnostic references', () => {
   assert.match(payCreate, /cashfree-credentials-rejected/);
   assert.match(payCreate, /cashfree-checkout-not-approved/);
 });
+
+test('Cashfree and Nemo use a production-safe payment expiry window', () => {
+  assert.match(app, /const PAY_WINDOW_MIN = 20;/);
+  assert.match(payCreate, /const CASHFREE_ORDER_WINDOW_MS = 20 \* 60 \* 1000;/);
+  assert.match(payCreate, /paymentDeadline = Math\.max\(deadline \|\| 0, Date\.now\(\) \+ CASHFREE_ORDER_WINDOW_MS\)/);
+  assert.match(payCreate, /order_expiry_time: new Date\(paymentDeadline\)\.toISOString\(\)/);
+  assert.match(payCreate, /paymentDeadline,/);
+});
