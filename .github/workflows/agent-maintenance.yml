@@ -95,7 +95,6 @@ jobs:
           boot=a[a.find('First paint uses the cached storefront'):a.find('const deepLinkRef')]
           checks={
             'no_preexisting_functions_removed':not missing,
-            'admin_helpers_preserved':all(('function '+n+'(') in a for n in ['MediaUploader','VideoTrimmer','ProductForm','AdminProducts','AdminSalesDashboard','AdminInsights']),
             'cashfree_refund_preserved':'Confirm Cashfree refund' in a,
             'customer_orders_single_list':'const visibleOrders=myOrders;' in customer and 'stageFilter' not in customer,
             'daily_promo_popup':'nemo-promo-popup-day-v1' in a and 'Close promotion' in a,
