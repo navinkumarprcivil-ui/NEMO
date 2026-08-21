@@ -26,7 +26,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Correct current Settings anchors
+      - name: Correct release-script anchors
         shell: bash
         run: |
           python3 - <<'PY'
@@ -35,6 +35,7 @@ jobs:
           s=p.read_text()
           s=s.replace("app.find('<Collapsible title=\"Admin Security\"')", "app.find('title=\"Admin Security\"')")
           s=s.replace("app.find('<Collapsible title=\"Data & Backup\"', sec_start)", "app.find('title=\"Data & Backup\"', sec_start)")
+          s=s.replace("r'const SPLASH_MAX_MS\\\\s*=\\\\s*12000'", "r'const SPLASH_MAX_MS\\s*=\\s*12000'")
           p.write_text(s)
           PY
       - name: Apply requested release changes
