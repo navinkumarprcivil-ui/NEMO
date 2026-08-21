@@ -1,0 +1,62 @@
+name: Agent maintenance
+
+on:
+  push:
+    branches:
+      - agent/admin-permissions-release
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect targeted implementation areas
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          targets = {
+              "app.jsx": [
+                  "coAdminUid", "adminPassHash", "settingsPrivate", "AdminHub",
+                  "AdminAccess", "adminUnlocked", "googleSignIn", "customerOrderStage",
+                  "WhyNemoPopup", "promotion", "promo", "banner", "fadeSplash",
+                  "nemoBoot", "bootReady", "adminTab", "OrdersPage"
+              ],
+              "database.rules.json": ["coAdminUid", "settingsPrivate", "orders", "products", "wallet", "reviews", "requests", "guides"],
+              "index.html": ["fadeSplash", "nemoBoot", "splash", "app.js"]
+          }
+
+          def redact(line):
+              line = re.sub(r'([A-Za-z0-9_]*(?:Pass|pass|Hash|hash|Secret|secret)[A-Za-z0-9_]*\s*[:=]\s*)["\'][^"\']+["\']', r'\1"<redacted>"', line)
+              line = re.sub(r'(["\'](?:adminPassHash|password|secret)["\']\s*:\s*)["\'][^"\']+["\']', r'\1"<redacted>"', line)
+              return line
+
+          for filename, terms in targets.items():
+              p = Path(filename)
+              if not p.exists():
+                  continue
+              lines = p.read_text(errors="replace").splitlines()
+              print(f"\n===== {filename} =====")
+              seen = set()
+              for term in terms:
+                  hits = [i for i, line in enumerate(lines) if term.lower() in line.lower()]
+                  if not hits:
+                      continue
+                  print(f"\n--- TERM: {term} ({len(hits)} hits) ---")
+                  for i in hits[:14]:
+                      lo, hi = max(0, i-5), min(len(lines), i+6)
+                      key=(lo,hi)
+                      if key in seen:
+                          continue
+                      seen.add(key)
+                      for n in range(lo, hi):
+                          print(f"{n+1:06d}: {redact(lines[n])}")
+                      print("...")
+          PY
+      - name: Baseline tests
+        run: node --test test/*.test.mjs
