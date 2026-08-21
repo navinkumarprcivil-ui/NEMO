@@ -1,9 +1,20 @@
 Admin release verification
-commit=e11432a2d0d6f33bb1a6613b20ade3e3faa65942
+commit=2d05e10b33893f88f6c8af8cc8e77771216c7d45
 baseline_tests_exit=0
 baseline_failed_tests:
 patch_exit=0
 release patch applied
+diag_positions= -1 -1 -1
+diag_insights_Overall= False
+diag_insights_Today= False
+diag_insights_Most_Viewed= False
+diag_insights_Most_Added_to_Cart= False
+diag_insights_Top_Searches= False
+diag_dashboard_Abandoned_Carts= False
+diag_policy_Dead-on-Arrival_cl= True
+diag_policy_Unused_accessories= True
+diag_policy_Confirm_Cashfree_r= False
+diag_policy_Customers_will_no_= True
 tests_exit=1
 patched_failed_tests:
 not ok 103 - admin analytics are collapsible, include today data and omit abandoned carts
