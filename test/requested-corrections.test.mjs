@@ -29,9 +29,9 @@ test('saved addresses and WhatsApp updates are explicit opt-ins', () => {
   assert.doesNotMatch(app, /seedAddressBook/);
 });
 
-test('the order review prompt links products and no longer asks for an order experience review', () => {
+test('the order review prompt links products and asks customers to share a review', () => {
   const reviewBlock = app.slice(app.indexOf('function ProductReviewPrompt('), app.indexOf('function OrderReferralCode('));
-  assert.match(reviewBlock, /Review your product/);
+  assert.match(reviewBlock, /Share review/);
   assert.match(reviewBlock, /onWriteReview\(prod\)/);
   assert.doesNotMatch(reviewBlock, /service|packing|shipping|experience/i);
   assert.doesNotMatch(app, /How was your order|Rate your order|Experience Feedback/);
