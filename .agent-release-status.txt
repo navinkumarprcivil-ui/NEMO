@@ -1,0 +1,31 @@
+Nemo final admin release verification
+source_commit=ac712b07569c5e5ecaffe08b30d4f5ee6da8cb2c
+baseline_tests_exit=0
+patch_exit=0
+release patch applied
+invariants_exit=1
+no_preexisting_functions_removed=False
+admin_sales_dashboard_preserved=True
+admin_insights_preserved=True
+admin_products_preserved=False
+cashfree_refund_confirmation_preserved=True
+customer_order_tabs_removed=True
+daily_promo_popup=True
+password_admin_login=True
+eight_admin_sections=True
+coadmin_permissions_ui=True
+admin_access_rules=True
+splash_max_4s=True
+wallet_not_boot_gate=True
+analytics_exports_preserved=True
+free_delivery_setting_preserved=True
+packaging_brackets_preserved=True
+start_fresh_absent=True
+missing_functions=MediaUploader,ProductForm,VideoTrimmer
+baseline_app_size=1264447
+patched_app_size=1202515
+tests_exit=99
+npm_exit=99
+compile_exit=99
+cloudflare_build_exit=99
+RESULT=FAIL
