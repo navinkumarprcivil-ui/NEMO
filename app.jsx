@@ -84,7 +84,26 @@ function isReturnableItem(it){
   return it.category==="Accessories" && it.returnEligible===true;
 }
 function orderHasReturnable(o){ return (((o&&o.items)||[]).some(isReturnableItem)); }
+/* Customer order retention is category-aware: accessories stay in Delivered for the full
+   3-day return window; fish and every other category move to Past Orders after 24 hours. A
+   mixed order keeps the longer window so an accessory is never hidden early. */
+function orderRetentionDays(o){
+  return ((o&&o.items)||[]).some(it=>it&&it.category==="Accessories") ? 3 : 1;
+}
 function deliveredAtOf(o){ return o&&(o.deliveredAt||(o.status==="Delivered"?o.updatedAt:null)||null); }
+function orderIsPast(o,now=Date.now()){
+  if(!o) return false;
+  if(o.closed||o.status==="Cancelled") return true;
+  if(o.status!=="Delivered") return false;
+  const base=deliveredAtOf(o), t=base&&new Date(base).getTime();
+  return !!(t&&!isNaN(t)&&now>=t+orderRetentionDays(o)*86400000);
+}
+function customerOrderStage(o,now=Date.now()){
+  if(orderIsPast(o,now)) return "Past Orders";
+  if(o&&o.status==="Delivered") return "Delivered";
+  if(o&&o.status==="Shipped") return "Shipped";
+  return "Orders Placed";
+}
 /* An order the customer walked away from: cancelled by their own press, or auto-cancelled
    because the payment window ran out. Nothing shipped, nothing charged, nobody left to act —
    so it is noise in a list of orders, and it is hidden from the customer's order page and
@@ -119,7 +138,7 @@ function successfulSpend(orders){
 }
 function returnWindowOpen(o){
   const base=deliveredAtOf(o); if(!base) return false;
-  return (Date.now()-new Date(base).getTime()) <= RETURN_WINDOW_DAYS*86400000;
+  return (Date.now()-new Date(base).getTime()) <= orderRetentionDays(o)*86400000;
 }
 /* When a DOA claim can be raised: from the moment the order is paid, until 24 hours after it
    was delivered.
@@ -464,6 +483,7 @@ const GST_UNREG_RE=/\s*We are currently a small enterprise not registered under 
    SUPPLY — which is most live-fish orders. Wording that promised a Tax Invoice on every order
    would be a different false statement from the one being removed. */
 const GST_REG_TERM=" We are registered under GST (our GSTIN is shown on your bill). Where GST applies to an item, the price shown is inclusive of it and your bill is issued as a GST Tax Invoice; items we do not charge GST on are billed as a Bill of Supply.";
+const RETURN_POLICY_V2="Live fish and plants are final sale after safe delivery. Dead-on-Arrival claims require one continuous unboxing video sent on WhatsApp within 2 hours of delivery; the claim must be raised within 24 hours. Approved DOA claims cover the affected fish value only, as either a refund or reward coins; shipping is not refundable. Unused accessories and equipment in original, undamaged packaging may be returned within 3 days of delivery. Return shipping is paid by the customer unless the item arrived damaged or incorrect. Returned dry-goods refunds are issued within 5–7 working days after inspection. Customers cannot cancel after payment confirmation, and store cancellation is unavailable after shipment.";
 function applyGstTerms(text,gstin){
   const t=String(text||"");
   if(!String(gstin||"").trim()) return t;          // genuinely unregistered — the notice stands
@@ -481,6 +501,9 @@ function normalizeSettings(s){
   }
   if(/vote for the same tank more than once per day/i.test(String(fixed.tankRewardRules||""))){
     fixed={...fixed,tankRewardRules:String(fixed.tankRewardRules).replace(/vote for the same tank more than once per day/gi,"vote more than once for the same tank image")};
+  }
+  if(/NO RETURNS & NO REPLACEMENTS once live fish/i.test(String(fixed.returnPolicy||""))){
+    fixed={...fixed,returnPolicy:RETURN_POLICY_V2};
   }
   if(fixed.shippingRates) return {...fixed, shippingRates: normalizeShippingRates(fixed.shippingRates)};
   return fixed;
@@ -1780,7 +1803,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
   liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video and, if the claim is approved, you choose either a refund of the affected fish value or the same value as reward coins. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nApproved reward coins are added to your Nemo wallet. Approved refunds are returned through the applicable payment method. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
-  returnPolicy:"NO RETURNS & NO REPLACEMENTS once live fish or plants have been received in good condition — all livestock sales are final on safe delivery. The only cover for transit loss is the Live Arrival Guarantee (DOA) above, which is one-time and limited to the cost of the fish. Live fish & plants are non-returnable and non-refundable once delivered safely. For an approved DOA claim, the customer chooses either a refund of the affected fish value or the same value as reward coins; no item needs to be returned. Unused accessories & equipment in original, undamaged packaging may be returned within 3 days of delivery; return shipping is paid by the customer unless the item arrived damaged or incorrect, and refunds for returned dry goods are issued within 5–7 working days after we receive and inspect the item. Orders cannot be cancelled once payment is confirmed.",
+  returnPolicy:RETURN_POLICY_V2,
   acclimatizationTips:"1. Float the sealed bag in your tank for 15–20 min to match temperature.\n2. Open the bag and add a little tank water every 5 min for 20–30 min.\n3. Gently net the fish into your tank — avoid pouring bag water in.\n4. Keep lights off for a few hours to reduce stress.\n5. Wait 24 hours before the first feeding.",
   returnAddress:"", returnAddress1Label:"", returnAddress2:"", returnAddress2Label:"",
   returnCloseDays: 3,          // days after delivery to auto-close an order (return window)
@@ -3121,17 +3144,29 @@ function _akey(s){ return String(s||"").replace(/[.#$\[\]\/ -]/g,"_").slice(0,8
 function trackEvent(type,key){
   if(!FB_OK||typeof firebase==="undefined")return;
   const t=_akey(type),k=_akey(key); if(!t||!k)return;
-  try{ FB_DB.ref("analytics/events/"+t+"/"+k).set(firebase.database.ServerValue.increment(1)); }catch(e){}
+  const dk="_d"+istDayKey().replace(/-/g,"")+"__"+k;
+  try{
+    FB_DB.ref("analytics/events/"+t+"/"+k).set(firebase.database.ServerValue.increment(1));
+    FB_DB.ref("analytics/events/"+t+"/"+dk).set(firebase.database.ServerValue.increment(1));
+  }catch(e){}
 }
 function trackSearch(term){
   if(!FB_OK||typeof firebase==="undefined")return;
   const t=String(term||"").trim().toLowerCase(); if(t.length<2)return;
-  try{ FB_DB.ref("analytics/search/"+_akey(t)).set(firebase.database.ServerValue.increment(1)); }catch(e){}
+  const k=_akey(t), dk="_d"+istDayKey().replace(/-/g,"")+"__"+k;
+  try{
+    FB_DB.ref("analytics/search/"+k).set(firebase.database.ServerValue.increment(1));
+    FB_DB.ref("analytics/search/"+dk).set(firebase.database.ServerValue.increment(1));
+  }catch(e){}
 }
 function trackFunnel(step){
   if(!FB_OK||typeof firebase==="undefined")return;
   const s=_akey(step); if(!s)return;
-  try{ FB_DB.ref("analytics/funnel/"+s).set(firebase.database.ServerValue.increment(1)); }catch(e){}
+  const dk="_d"+istDayKey().replace(/-/g,"")+"__"+s;
+  try{
+    FB_DB.ref("analytics/funnel/"+s).set(firebase.database.ServerValue.increment(1));
+    FB_DB.ref("analytics/funnel/"+dk).set(firebase.database.ServerValue.increment(1));
+  }catch(e){}
 }
 /* Optional Google Analytics 4 — only loads if the admin set a Measurement ID (G-XXXX) in Settings. */
 let GA_DONE=false;
@@ -3177,6 +3212,11 @@ function careDue(tank){
   if(!base) return {due:true,days:0,never:true};
   const days=Math.floor((Date.now()-base)/864e5);
   return {due:days>=CARE_INTERVAL_DAYS,days,never:false,nextAt:base+CARE_INTERVAL_DAYS*864e5};
+}
+function careWeekKey(now=Date.now()){
+  const d=new Date(now); d.setHours(0,0,0,0);
+  const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day);
+  return d.toISOString().slice(0,10);
 }
 function careChangeLitres(tank,heavy){ return Math.round((Number(tank&&tank.litres)||0)*(heavy?35:25)/100); }
 async function googleSignIn(){
@@ -4936,6 +4976,18 @@ input:focus,textarea:focus,select:focus{border-color:#0ea5e9 !important;box-shad
 /* Images fade in once decoded instead of snapping in (set data-loaded after onLoad) */
 img.smooth-img{opacity:0;transition:opacity .35s ease;}
 img.smooth-img[data-loaded="1"]{opacity:1;}
+/* Let the browser skip layout/paint work for product rows that are far below the viewport.
+   The intrinsic size prevents the scroll thumb from jumping while those rows wake up. */
+.home-body>.prod-grid,.home-body>.reveal,.prod-grid>.lift{content-visibility:auto;contain-intrinsic-size:auto 360px;}
+/* Touch devices cannot use hover. Avoid compositing every product image and running decorative
+   loops there; this keeps scrolling responsive in the Android WebView without changing desktop. */
+@media(hover:none),(pointer:coarse){
+  .lift,.lift img{transition:none;}
+  .lift:hover,.lift:active{transform:none;box-shadow:none;}
+  .lift:hover img{transform:none;}
+  .aurora-layer,.float-soft,.countdown-cell,.festival-pulse,.glow-btn::after,
+  .betta-fish,.betta-tail,.betta-fin-top,.betta-fin-bot,.bub-1,.bub-2,.bub-3{animation:none!important;}
+}
 /* Respect users who prefer less motion — disable decorative loops & transitions */
 @media(prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;}
@@ -4978,7 +5030,7 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
   .home-hero .hero-sub{font-size:14px !important;text-align:left !important;letter-spacing:.2px;}
   /* Desktop: surface the left-slide category sidebar from inside the banner, just above the quote */
   .home-hero .hero-browse{display:inline-flex !important;}
-  .home-search{max-width:560px;margin-left:0 !important;margin-right:auto !important;margin-top:-28px !important;}
+  .home-search{max-width:560px;margin-left:0 !important;margin-right:auto !important;margin-top:10px !important;}
   .home-body{padding-left:40px !important;padding-right:40px !important;}
   .sheet-overlay{align-items:center !important;padding:24px !important;}
   .sheet-panel{border-radius:20px !important;max-width:460px !important;}
@@ -5483,7 +5535,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
       {showUpload&&(
         <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text}}>📸 {minePending?"Update pending photos":mineApproved?"Submit replacement photos":contest?"Enter Tank of the Month":"Share your aquarium"}</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text}}>📸 {minePending?"Update pending photos":mineApproved?"Submit replacement photos":"Customer Tank Showcase"}</div>
             <button type="button" className="press" disabled={!anyReward} onClick={()=>{if(anyReward)setRulesOpen(true);}}
               title={anyReward?"View customer tank reward rules":"Both monthly rewards are off"}
               style={{background:anyReward?"#eff6ff":C.bg,color:anyReward?C.primary:C.textSub,border:`1px solid ${anyReward?C.accent:C.border}`,borderRadius:20,padding:"5px 10px",fontSize:10.5,fontWeight:800,flexShrink:0,cursor:anyReward?"pointer":"not-allowed",opacity:anyReward?1:.65}}>Rules</button>
@@ -5498,7 +5550,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
           </div>
           {streakReward&&streak&&(
             <div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>
-              🔥 This month: <b>{Number(monthlyStreak&&monthlyStreak.current)||0} day{Number(monthlyStreak&&monthlyStreak.current)===1?"":"s"}</b> · best {Number(monthlyStreak&&monthlyStreak.best)||0}{Number(settings.tankMinStreak||settings.tankUploadStreakTarget)>0?` · eligibility ${Number(settings.tankMinStreak||settings.tankUploadStreakTarget)} days`:""}. Only approved daily shares count; the monthly streak resets on day 1.
+              🔥 <b>{Number(monthlyStreak&&monthlyStreak.current)||0}-day streak</b> · Best {Number(monthlyStreak&&monthlyStreak.best)||0}
             </div>
           )}
           {preview.length>0&&(
@@ -5620,17 +5672,18 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
 /* ═══════════════════ TESTIMONIALS ═══════════════════ */
 function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
   const [text,setText]=useState("");
-  const [rating,setRating]=useState(5);
+  const [rating,setRating]=useState(0);
   const [busy,setBusy]=useState(false);
   const [note,setNote]=useState("");
   const mine=user&&(testimonials||[]).find(t=>t.uid&&t.uid===userKey(user));
   const submit=async()=>{
     const body=text.trim();
+    if(!rating){ setNote("⚠ Please select a star rating."); return; }
     if(body.length<4){ setNote("⚠ Please write a few words."); return; }
     setBusy(true); setNote("");
     const t={ id:"ts-"+Date.now()+"-"+Math.random().toString(36).slice(2,6),
       uid:userKey(user)||"", name:(user.name||"Customer").slice(0,40), text:body.slice(0,280),
-      rating:Number(rating)||5, createdAt:new Date().toISOString() };
+      rating:Number(rating), createdAt:new Date().toISOString() };
     try{ await onSubmit(t); setText(""); setNote("🎉 Thanks — your testimonial is live!"); }
     catch(e){ setNote("⚠ Couldn't reach our server — please check your connection and try again."); }
     setBusy(false);
@@ -5666,7 +5719,7 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
           <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}! It's live on our home page.</div>
         ):(
           <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:8}}>Share your experience</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:8}}>Share review</div>
             <div style={{display:"flex",gap:4,marginBottom:8}}>
               {[1,2,3,4,5].map(s=>(
                 <button key={s} onClick={()=>setRating(s)} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,padding:0,lineHeight:1,color:s<=rating?"#f59e0b":"#d1d5db"}}>★</button>
@@ -5677,7 +5730,7 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
             {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:C.success,fontWeight:600,marginBottom:6}}>{note}</div>}
             <button className="press" onClick={submit} disabled={busy}
               style={{width:"100%",background:busy?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              {busy?"Posting…":"Post Testimonial 💬"}
+              {busy?"Posting…":"Share Review"}
             </button>
           </div>
         )
@@ -5757,6 +5810,16 @@ function StatusBadge({status}){
   const m={"Awaiting Payment":{c:"#b45309",bg:"#fef3c7",icon:"⏳"},"Payment Review":{c:"#7c3aed",bg:"#ede9fe",icon:"🔎"},Placed:{c:"#1d4ed8",bg:"#dbeafe",icon:"📋"},Confirmed:{c:"#15803d",bg:"#dcfce7",icon:"✅"},Shipped:{c:"#c2410c",bg:"#fff7ed",icon:"🚚"},Delivered:{c:"#15803d",bg:"#dcfce7",icon:"🎉"},Cancelled:{c:"#b91c1c",bg:"#fee2e2",icon:"✕"}};
   const s=m[status]||m.Placed;
   return <span style={{fontSize:10,fontWeight:700,color:s.c,background:s.bg,padding:"3px 10px",borderRadius:20}}>{s.icon} {status}</span>;
+}
+function CustomerStageBadge({order}){
+  const stage=customerOrderStage(order);
+  const m={
+    "Orders Placed":{c:"#1d4ed8",bg:"#dbeafe",icon:"📦"},
+    Shipped:{c:"#c2410c",bg:"#fff7ed",icon:"🚚"},
+    Delivered:{c:"#15803d",bg:"#dcfce7",icon:"✓"},
+    "Past Orders":{c:"#475569",bg:"#f1f5f9",icon:"🗂️"},
+  }[stage];
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:m.bg,color:m.c,borderRadius:20,padding:"4px 10px",fontSize:10.5,fontWeight:800,whiteSpace:"nowrap"}}>{m.icon} {stage}</span>;
 }
 function CategoryPills({selected,onSelect,all,counts}){
   const list=all?["All",...CATEGORIES]:CATEGORIES;
@@ -6232,7 +6295,7 @@ function ProductReviewPrompt({order, products=[], mediaCache={}, reviewedSet=[],
   if(!prodItems.length) return null;
   return(
     <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-      <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:6}}>✍️ Review your product{prodItems.length>1?"s":""}</div>
+      <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:6}}>✍️ Share review</div>
       {prodItems.map(({prod,item})=>{
         const m=CAT_META[item.category]||CAT_META["Live Fish"];
         const already=reviewedSet.includes(prod.id);
@@ -6250,7 +6313,6 @@ function ProductReviewPrompt({order, products=[], mediaCache={}, reviewedSet=[],
           </button>
         );
       })}
-      <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.4}}>Tap a product to review it on its public product page.</div>
     </div>
   );
 }
@@ -6372,7 +6434,7 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
       {!open?(
         <button className="press" onClick={()=>setOpen(true)}
           style={{background:"none",border:"none",padding:0,color:C.textSub,fontSize:11,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
-          Item arrived damaged? Request a return / replacement →
+          Return/Replacement
         </button>
       ):(
         <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"13px"}}>
@@ -6505,6 +6567,7 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
 
 function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, reviewedSet=[], onCancelled, onCancelPayment, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
   const [openId,setOpenId]=useState(null); // which order is expanded (list shows summaries; details open on tap)
+  const [stageFilter,setStageFilter]=useState("Orders Placed");
   // Re-add the exact option that was bought (the 10" net, not whichever size happens to be first).
   const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){
     const vs=productVariants(prod);
@@ -6525,6 +6588,9 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
       (user.phone && normalizePhone(o.address?.phone)===normalizePhone(user.phone))
     )
   );
+  const orderStages=["Orders Placed","Shipped","Delivered","Past Orders"];
+  const stageCounts=Object.fromEntries(orderStages.map(s=>[s,myOrders.filter(o=>customerOrderStage(o)===s).length]));
+  const visibleOrders=myOrders.filter(o=>customerOrderStage(o)===stageFilter);
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const doaStatusText={
     "Requested":"Received — please send your unboxing video on WhatsApp so we can review it.",
@@ -6565,6 +6631,17 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
           <span style={{fontSize:18,color:C.textSub}}>›</span>
         </button>
+        {myOrders.length>0&&(
+          <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:5,marginBottom:14,WebkitOverflowScrolling:"touch"}}>
+            {orderStages.map(s=>{
+              const on=stageFilter===s;
+              return <button key={s} className="press" onClick={()=>{setStageFilter(s);setOpenId(null);}}
+                style={{position:"relative",flexShrink:0,borderRadius:20,border:`1.5px solid ${on?C.primary:C.border}`,background:on?C.primary:"white",color:on?"white":C.textSub,padding:"8px 12px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                {s}{stageCounts[s]>0&&<span style={{marginLeft:6,background:on?"rgba(255,255,255,.22)":C.accentLight,color:on?"white":C.primary,borderRadius:10,padding:"1px 6px",fontSize:10}}>{stageCounts[s]}</span>}
+              </button>;
+            })}
+          </div>
+        )}
         {myOrders.length===0?(
           <div style={{textAlign:"center",padding:"60px 20px",color:C.textSub}}>
             <div style={{fontSize:64,marginBottom:14}}>📦</div>
@@ -6574,8 +6651,9 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
         ):(
           <>
-          <div style={{fontSize:12,color:C.textSub,fontWeight:600,marginBottom:12}}>{myOrders.length} order{myOrders.length!==1?"s":""}</div>
-          {myOrders.map(o=>{
+          <div style={{fontSize:12,color:C.textSub,fontWeight:600,marginBottom:12}}>{visibleOrders.length} {stageFilter.toLowerCase()}</div>
+          {visibleOrders.length===0&&<div style={{textAlign:"center",padding:"36px 16px",color:C.textSub,fontSize:13}}>No {stageFilter.toLowerCase()}.</div>}
+          {visibleOrders.map(o=>{
             const open=openId===o.id;
             const names=(o.items||[]).map(i=>i.name).join(", ");
             const nItems=(o.items||[]).length;
@@ -6593,12 +6671,12 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     <div style={{fontSize:11,color:C.textSub}}>{fmtDate(o.placedAt)} · {nItems} item{nItems!==1?"s":""} · ₹{o.amountDue??(o.total+o.fee)}</div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
-                    <StatusBadge status={o.status}/>
+                    <CustomerStageBadge order={o}/>
                     <span style={{fontSize:11,fontWeight:800,color:C.primary}}>{open?"Hide ▲":"Details ▾"}</span>
                   </div>
                 </div>
                 {isDelivered&&needsProductReview&&!open&&(
-                  <div style={{marginTop:8,fontSize:11.5,fontWeight:800,color:"#f59e0b"}}>★★★★★ <span style={{color:C.primary}}>Tap to review your products →</span></div>
+                  <div style={{marginTop:8,fontSize:11.5,fontWeight:800,color:C.primary}}>☆ Share review →</div>
                 )}
               </button>
               {open&&(<div style={{marginTop:12}}>
@@ -6678,7 +6756,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               {o.shippingReward&&(
                 <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"11px 13px"}}>
                   <div style={{fontSize:12.5,fontWeight:800,color:"#15803d",marginBottom:3}}>🎁 Shipping refund — ₹{o.shippingReward.amount} added to your wallet!</div>
-                  <div style={{fontSize:11.5,color:"#166534",lineHeight:1.55}}>Your parcel cost us less than you paid for shipping, so we've credited the difference to your 👛 wallet. Redeem it at checkout on any future order.</div>
+                  <div style={{fontSize:11.5,color:"#166534",lineHeight:1.55}}>Extra shipping paid was returned to your wallet.</div>
                 </div>
               )}
               {/* Bill button */}
@@ -7045,7 +7123,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.347a66e2";
+const APP_BUILD = "v90.678b9fd0";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7798,6 +7876,19 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
     if(tank.tempC) out.push({i:"🌡️",t:`Check the heater holds ${tank.tempC}°C`,s:"A stuck heater is the fastest way to lose a tank."});
     return out;
   },[tank,report,verdict]);
+  const weekKey=careWeekKey();
+  const checkedJobs=(tank.careChecks&&tank.careChecks[weekKey])||[];
+  const toggleJob=(i)=>{
+    const next=checkedJobs.includes(i)?checkedJobs.filter(x=>x!==i):[...checkedJobs,i];
+    const patch={...tank,careChecks:{...(tank.careChecks||{}),[weekKey]:next}};
+    if(weekly.length&&next.length===weekly.length) patch.lastCareAt=new Date().toISOString();
+    persist(patch);
+  };
+  const clearTank=()=>{
+    if(!window.confirm("Clear all My Tank details and saved readings? This cannot be undone.")) return;
+    persist({...BLANK_TANK}); setTest({nh3:"",no2:"",no3:"",ph:""}); setEditing(true); setSavedNote("Cleared");
+    setTimeout(()=>setSavedNote(""),1800);
+  };
 
   /* ── Heater sizing ── */
   const [roomT,setRoomT]=useState("");
@@ -7867,7 +7958,10 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
         <div style={card}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>🏠 {saved?(tank.name||"My Tank"):"Create your tank"}</div>
-            {saved&&<button className="press" onClick={()=>setEditing(v=>!v)} style={{background:"none",border:"none",color:C.accent,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{editing?"▲ Done":"✏ Edit"}</button>}
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              {(saved||editing)&&<button className="press" onClick={clearTank} style={{background:"none",border:"none",color:C.danger,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Clear</button>}
+              {saved&&<button className="press" onClick={()=>setEditing(v=>!v)} style={{background:"none",border:"none",color:C.accent,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{editing?"▲ Done":"✏ Edit"}</button>}
+            </div>
           </div>
           {!saved&&!editing&&<div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:10}}>Save it once — every tool below then uses it instead of asking again.</div>}
 
@@ -7919,22 +8013,6 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                   ))}
                 </div>
               </div>
-              <div style={{marginBottom:4}}>
-                <div style={lbl}>Tank photo — optional</div>
-                <div style={{display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:64,height:48,borderRadius:10,background:"#f1f5f9",border:`1px solid ${C.border}`,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:C.textSub}}>
-                    {tank.photo?<img src={tank.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:"none"}
-                  </div>
-                  <label className="press" style={{display:"inline-block",background:C.accentLight,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:10,padding:"8px 13px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                    Choose photo
-                    <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
-                      const f=e.target.files&&e.target.files[0]; if(!f) return;
-                      try{ setF("photo",await compressImage(f,700,0.8)); }catch(err){}
-                    }}/>
-                  </label>
-                  {tank.photo&&<button className="press" onClick={()=>setF("photo","")} style={{background:"none",border:"none",color:C.danger,fontSize:12,fontWeight:700,cursor:"pointer"}}>Remove</button>}
-                </div>
-              </div>
               {waterL>0&&(
                 <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginTop:12,fontSize:12.5,lineHeight:1.6,color:C.text}}>
                   💧 <b>{waterL} L</b> of water ({usGal(waterL)} US gal · {ukGal(waterL)} UK gal){fullL!==waterL?` — the tank itself holds ${fullL} L`:""}.<br/>
@@ -7948,7 +8026,6 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
 
           {saved&&!editing&&(
             <div style={{display:"flex",gap:12,alignItems:"center"}}>
-              {tank.photo&&<img src={tank.photo} alt="" style={{width:74,height:56,objectFit:"cover",borderRadius:10,flexShrink:0,border:`1px solid ${C.border}`}}/>}
               <div style={{fontSize:12.5,color:C.text,lineHeight:1.7}}>
                 <b>{tank.litres} L</b> usable{tank.lengthCm?` · ${tank.lengthCm} cm long`:""}<br/>
                 <span style={{color:C.textSub}}>
@@ -8012,7 +8089,6 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
               style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
               Save today's readings
             </button>
-            <div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>Leave any box empty if you didn't test it — nothing is invented from a blank.</div>
 
             {tests.length>0&&(
               <div style={{marginTop:16}}>
@@ -8097,10 +8173,10 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             {tank.remind&&<div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.45}}>You'll be reminded when you open the app and the week is up — we can't wake a closed phone yet.</div>}
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {weekly.map((w,i)=>(
-                <div key={i} style={{display:"flex",gap:10,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px"}}>
-                  <span style={{fontSize:16,flexShrink:0}}>{w.i}</span>
-                  <div><div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{w.t}</div><div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:2}}>{w.s}</div></div>
-                </div>
+                <label key={i} style={{display:"flex",gap:10,alignItems:"flex-start",background:checkedJobs.includes(i)?"#ecfdf5":"#f8fafc",border:`1px solid ${checkedJobs.includes(i)?"#a7f3d0":C.border}`,borderRadius:12,padding:"10px 12px",cursor:"pointer"}}>
+                  <input type="checkbox" checked={checkedJobs.includes(i)} onChange={()=>toggleJob(i)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
+                  <div><div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{w.i} {w.t}</div><div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:2}}>{w.s}</div></div>
+                </label>
               ))}
             </div>
           </div>
@@ -8219,7 +8295,6 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
               <button className="press" onClick={()=>persist({...tank,stock:[]})} style={{marginTop:8,background:"none",border:"none",color:C.textSub,fontSize:12,fontWeight:700,textDecoration:"underline",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Clear the plan</button>
             </div>
           )}
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:12,lineHeight:1.5}}>General guidance — individual fish vary, and a tank that suits one shop's stock may not suit another's. Ask us about your exact setup.</div>
         </div>
 
         {/* ══ HEATER ══ */}
@@ -11004,12 +11079,12 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
               <div style={{fontSize:12,fontWeight:700,color:ex.expired?"#b91c1c":"#9a3412",lineHeight:1.45}}>
                 {ex.expired
                   ? `These coins lapsed on ${ds} from inactivity. Place an order to start earning again!`
-                  : `Your ${points} coins expire on ${ds}— use them at checkout before they're gone!`}
+                  : `Your ${points} coins expire on ${ds}.`}
               </div>
             </div>
           );
         })()}
-        <div style={{maxHeight:"50vh",overflowY:"auto"}}>
+        <div className="wallet-log-scroll" style={{maxHeight:"min(48vh,420px)",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}}>
           {hist.length===0?(
             <div style={{padding:"30px 22px",textAlign:"center",color:C.textSub,fontSize:12.5,lineHeight:1.6}}>No coin activity yet.<br/>Coins from successful delivered orders and approved rewards will show here.</div>
           ):hist.map((h,i)=>{
@@ -11193,7 +11268,7 @@ function WhyNemoPopup({open,onClose,nav}){
 }
 
 /* ═══════════════════ DESKTOP TOP NAV (shown ≥1000px) ═══════════════════ */
-function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0}){
+function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0,ordersCount=0}){
   const links=[{id:"home",label:"Home"},{id:"shop",label:"Shop"},{id:"guides",label:"Care Guides"},{id:"tools",label:"Aqua Tools"},{id:"request",label:"Request"}];
   const active=page==="detail"?"shop":page==="checkout"?"cart":page==="auth"?"orders":page;
   const [walletOpen,setWalletOpen]=useState(false);
@@ -11213,7 +11288,9 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
         <button key={l.id} className="desk-link" onClick={()=>nav(l.id)} style={linkStyle(active===l.id)}>{l.label}</button>
       ))}
       <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
-        <button className="desk-link" onClick={()=>nav("orders")} style={linkStyle(active==="orders")}>📦 Orders</button>
+        <button className="desk-link" onClick={()=>nav("orders")} style={{...linkStyle(active==="orders"),position:"relative",fontWeight:800}}>📦 Orders
+          {ordersCount>0&&<span className="cart-pop" style={{position:"absolute",top:-6,right:-5,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>{ordersCount>99?"99+":ordersCount}</span>}
+        </button>
         {user&&settings.loyaltyEnabled!==false&&(
           <button className="press" onClick={()=>setWalletOpen(true)} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your coins & history"}
             style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,color:C.primary,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
@@ -11236,7 +11313,7 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
 }
 
 /* ═══════════════════ BOTTOM NAV ═══════════════════ */
-function BottomNav({page,nav,cartCount}){
+function BottomNav({page,nav,cartCount,ordersCount=0}){
   const tabs=[{id:"home",label:"Home",icon:"🏠"},{id:"shop",label:"Shop",icon:"🛍️"},{id:"orders",label:"Orders",icon:"📦"},{id:"cart",label:"Cart",icon:"🛒"}];
   const active=page==="home"?"home":page==="shop"||page==="detail"?"shop":page==="orders"||page==="auth"?"orders":page==="cart"||page==="checkout"?"cart":"home";
   return(
@@ -11253,6 +11330,11 @@ function BottomNav({page,nav,cartCount}){
                 {t.id==="cart"&&cartCount>0&&(
                   <span key={cartCount} className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
                     {cartCount>99?"99+":cartCount}
+                  </span>
+                )}
+                {t.id==="orders"&&ordersCount>0&&(
+                  <span className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
+                    {ordersCount>99?"99+":ordersCount}
                   </span>
                 )}
               </div>
@@ -12310,14 +12392,15 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
       )}
       <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
         {/* Top products */}
-        <div style={{flex:"1 1 calc(50% - 5px)",minWidth:160,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
-          <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>🏆 TOP SELLERS</div>
-          {d.top.length?d.top.map((t,i)=>(
-            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:7}}>
-              <span style={{fontSize:12,color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{i+1}. {t.name}</span>
-              <span style={{fontSize:11,fontWeight:800,color:C.primary,flexShrink:0}}>{t.qty}× · {inr(t.rev)}</span>
-            </div>
-          )):<div style={{fontSize:11.5,color:C.textSub}}>No paid orders yet.</div>}
+        <div style={{flex:"1 1 calc(50% - 5px)",minWidth:160}}>
+          <Collapsible title="Top Sellers" icon="🏆">
+            {d.top.length?d.top.map((t,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:7}}>
+                <span style={{fontSize:12,color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{i+1}. {t.name}</span>
+                <span style={{fontSize:11,fontWeight:800,color:C.primary,flexShrink:0}}>{t.qty}× · {inr(t.rev)}</span>
+              </div>
+            )):<div style={{fontSize:11.5,color:C.textSub}}>No paid orders yet.</div>}
+          </Collapsible>
         </div>
         {/* Low stock */}
         <div style={{flex:"1 1 calc(50% - 5px)",minWidth:160,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
@@ -12336,65 +12419,47 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
 
 /* ═══════════════════ ADMIN BEHAVIOUR INSIGHTS ═══════════════════ */
 function AdminInsights({stats, products=[]}){
+  const [mode,setMode]=useState("overall");
   if(!stats) return null;
-  const f=stats.funnel||{}, ev=stats.events||{}, srch=stats.search||{};
+  const prefix="_d"+istDayKey().replace(/-/g,"")+"__";
+  const selected=obj=>Object.fromEntries(Object.entries(obj||{}).flatMap(([k,v])=>{
+    if(mode==="today") return k.startsWith(prefix)?[[k.slice(prefix.length),v]]:[];
+    return k.startsWith("_d")?[]:[[k,v]];
+  }));
+  const f=selected(stats.funnel), rawEv=stats.events||{};
+  const ev={view:selected(rawEv.view),addcart:selected(rawEv.addcart)};
+  const srch=selected(stats.search);
   const nameOf=id=>{ const p=products.find(x=>x.id===id); return p?p.name:id; };
   const views=Number(f.view||0), add=Number(f.addcart||0), chk=Number(f.checkout||0), ord=Number(f.order||0), paid=Number(f.paid||0);
-  const hasData = views||add||ord||Object.keys(ev).length||Object.keys(srch).length;
+  const hasData=views||add||ord||Object.keys(ev.view).length||Object.keys(ev.addcart).length||Object.keys(srch).length;
   const steps=[["👁 Product views",views,"#0e7490"],["🛒 Added to cart",add,"#1d4ed8"],["💳 Reached checkout",chk,"#7c3aed"],["📦 Orders placed",ord,"#b45309"],["✅ Paid",paid,"#15803d"]];
-  const maxV=Math.max(1,views,add,chk,ord,paid);
-  const pct=(a,b)=>b>0?Math.round((a/b)*100):0;
+  const maxV=Math.max(1,views,add,chk,ord,paid), pct=(a,b)=>b>0?Math.round((a/b)*100):0;
   const top=(obj,n)=>Object.entries(obj||{}).map(([k,v])=>({k,v:Number(v)||0})).sort((a,b)=>b.v-a.v).slice(0,n);
   const list=(items,renderName)=>items.length?items.map((it,i)=>(
     <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:7}}>
       <span style={{fontSize:12,color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{i+1}. {renderName(it.k)}</span>
       <span style={{fontSize:11,fontWeight:800,color:C.primary,flexShrink:0}}>{it.v}</span>
     </div>
-  )):<div style={{fontSize:11.5,color:C.textSub}}>No data yet — it builds as customers browse.</div>;
+  )):<div style={{fontSize:11.5,color:C.textSub}}>No {mode==="today"?"activity today":"data yet"}.</div>;
   return(
-    <div style={{marginBottom:14}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-        <span style={{fontSize:18}}>🔬</span>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text}}>Customer Insights</span>
+    <Collapsible title="Customer Insights" icon="🔬" subtitle="Funnel, products and searches">
+      <div style={{display:"flex",justifyContent:"flex-end",gap:6,marginBottom:10}}>
+        {[['overall','Overall'],['today','Today']].map(([k,l])=><button key={k} className="press" onClick={()=>setMode(k)}
+          style={{border:`1px solid ${mode===k?C.primary:C.border}`,background:mode===k?C.primary:"white",color:mode===k?"white":C.textSub,borderRadius:18,padding:"6px 11px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>)}
       </div>
-      {!hasData?(
-        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",fontSize:12,color:C.textSub,lineHeight:1.6}}>
-          Collecting data… As customers view products, search, add to cart and check out, you'll see a conversion funnel, top products and top searches here. <b>Note:</b> publish the updated database rules in Firebase for this to record across devices (see the note I sent).
-        </div>
-      ):(<>
-        {/* Conversion funnel */}
-        <div className="glass" style={{borderRadius:16,padding:"14px",marginBottom:12}}>
-          <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:10,letterSpacing:.3}}>CONVERSION FUNNEL (all-time)</div>
-          {steps.map(([lbl,v,col],i)=>(
-            <div key={i} style={{marginBottom:9}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,marginBottom:3}}><span style={{color:C.text,fontWeight:700}}>{lbl}</span><span style={{color:C.textSub,fontWeight:700}}>{v}</span></div>
-              <div style={{height:8,background:"#e2e8f0",borderRadius:6,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${Math.max(2,(v/maxV)*100)}%`,background:col,borderRadius:6,transition:"width .5s ease"}}/>
-              </div>
-            </div>
-          ))}
-          <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
-            <span style={{fontSize:11,fontWeight:800,color:"#1d4ed8",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:20,padding:"4px 11px"}}>Add-to-cart {pct(add,views)}%</span>
-            <span style={{fontSize:11,fontWeight:800,color:"#7c3aed",background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:20,padding:"4px 11px"}}>Checkout {pct(chk,add)}%</span>
-            <span style={{fontSize:11,fontWeight:800,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:20,padding:"4px 11px"}}>View→Paid {pct(paid,views)}%</span>
-          </div>
-        </div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
-          <div style={{flex:"1 1 calc(50% - 5px)",minWidth:150,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
-            <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>👁 MOST VIEWED</div>
-            {list(top(ev.view,6),nameOf)}
-          </div>
-          <div style={{flex:"1 1 calc(50% - 5px)",minWidth:150,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
-            <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>🛒 MOST ADDED TO CART</div>
-            {list(top(ev.addcart,6),nameOf)}
-          </div>
-          <div style={{flex:"1 1 100%",background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
-            <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>🔍 TOP SEARCHES</div>
-            {list(top(srch,10),k=>k.replace(/_/g," "))}
-          </div>
-        </div>
+      {!hasData?<div style={{fontSize:12,color:C.textSub,lineHeight:1.6,padding:"8px 0"}}>No {mode==="today"?"activity recorded today":"customer activity recorded yet"}.</div>:(<>
+        <Collapsible title={`Conversion Funnel · ${mode==="today"?"Today":"Overall"}`} icon="📊">
+          {steps.map(([lbl,v,col],i)=><div key={i} style={{marginBottom:9}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,marginBottom:3}}><span style={{color:C.text,fontWeight:700}}>{lbl}</span><span style={{color:C.textSub,fontWeight:700}}>{v}</span></div>
+            <div style={{height:8,background:"#e2e8f0",borderRadius:6,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,(v/maxV)*100)}%`,background:col,borderRadius:6}}/></div>
+          </div>)}
+          <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}><span style={{fontSize:11,fontWeight:800,color:"#1d4ed8"}}>Cart {pct(add,views)}%</span><span style={{fontSize:11,fontWeight:800,color:"#7c3aed"}}>Checkout {pct(chk,add)}%</span><span style={{fontSize:11,fontWeight:800,color:"#15803d"}}>Paid {pct(paid,views)}%</span></div>
+        </Collapsible>
+        <Collapsible title="Most Viewed" icon="👁">{list(top(ev.view,6),nameOf)}</Collapsible>
+        <Collapsible title="Most Added to Cart" icon="🛒">{list(top(ev.addcart,6),nameOf)}</Collapsible>
+        <Collapsible title="Top Searches" icon="🔍">{list(top(srch,10),k=>k.replace(/_/g," "))}</Collapsible>
       </>)}
-    </div>
+    </Collapsible>
   );
 }
 
@@ -12463,6 +12528,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
     if(typed===null) return;                      // cancelled the prompt
     const amt=Number(typed);
     if(!(amt>0)){ showToast("Enter an amount greater than zero","error"); return; }
+    if(!window.confirm(`Confirm Cashfree refund of ₹${amt} for ${o.orderNo||orderId(o.id)}?\n\nThis cannot be undone.`)) return;
     setRefundBusy(true);
     try{
       const r=await refundViaGateway(o, amt, "Refund for order "+(o.orderNo||""));
@@ -12797,7 +12863,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                 <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>Everything delivered safely and no DOA is pending. It will <b>auto-close</b> on the date below (once the return window ends), or you can close it now.</div>
                 {(()=>{
                   const base=deliveredAtOf(o);
-                  const days=Number(settings.returnCloseDays!=null?settings.returnCloseDays:3);
+                  const days=orderRetentionDays(o);
                   const def=o.autoCloseAt?new Date(o.autoCloseAt):(base?new Date(new Date(base).getTime()+Math.max(0,days)*86400000):null);
                   const val=def?new Date(def.getTime()-def.getTimezoneOffset()*60000).toISOString().slice(0,10):"";
                   return (
@@ -13109,8 +13175,8 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           </div>
         )}
 
-        {/* Cancellation & Refund */}
-        <div style={{background:C.card,borderRadius:16,padding:"16px",marginTop:14,border:`1px solid ${o.status==="Cancelled"?"#fecaca":C.border}`}}>
+        {/* Cancellation & Refund — never offered once a parcel has shipped. */}
+        {!['Shipped','Delivered'].includes(o.status)&&<div style={{background:C.card,borderRadius:16,padding:"16px",marginTop:14,border:`1px solid ${o.status==="Cancelled"?"#fecaca":C.border}`}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>✕ Cancellation &amp; Refund</div>
           {o.status==="Cancelled"?(
             <>
@@ -13161,7 +13227,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               </button>
             </>
           )}
-        </div>
+        </div>}
 
         {/* Delete this order (also removes its payment screenshot) */}
         {onDeleteOrder&&(
@@ -13552,14 +13618,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               ones signed in with Google. Anonymous browsing stays anonymous — there is no name
               to show — so the two numbers will not match, and the note says so rather than
               leaving the admin to wonder. */}
-          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-              <span style={{fontSize:16}}>👥</span>
-              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Who Visited</span>
-              <span style={{fontSize:10,color:C.textSub,fontWeight:600}}>last {VISITOR_LOG_DAYS} days</span>
-              <button className="press" onClick={reloadVisitorLog} title="Refresh"
-                style={{marginLeft:"auto",background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>↻</button>
-            </div>
+          <Collapsible title="Who Visited" icon="👥" subtitle={`Last ${VISITOR_LOG_DAYS} days`}>
+            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button className="press" onClick={reloadVisitorLog} title="Refresh"
+              style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>↻ Refresh</button></div>
             {visitorLog===null ? (
               <div style={{fontSize:12,color:C.textSub}}>Loading…</div>
             ) : !visitorLog.length ? (
@@ -13630,7 +13691,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   style={{marginLeft:6,background:"none",border:"none",padding:0,color:C.danger,fontSize:10,fontWeight:800,textDecoration:"underline",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Erase now</button>
               )}
             </div>
-          </div>
+          </Collapsible>
           {/* Behaviour insights — funnel, most viewed/added, top searches */}
           <AdminInsights stats={visitStats} products={products}/>
           {/* ── Moved here from the Orders tab ────────────────────────────────────────────
@@ -13638,40 +13699,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               order list, so opening Orders meant scrolling past six cards to reach the thing
               the tab is named after. They are reference and maintenance, not order handling,
               which makes the dashboard where they belong. Orders now opens on the list. */}
-          {/* ── Abandoned carts — shoppers who left items behind; nudge them on WhatsApp ── */}
-          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:abandonedCarts.length?12:6}}>
-              <span style={{fontSize:16}}>🛒</span>
-              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Abandoned Carts</span>
-              {abandonedCarts.length>0&&<span style={{marginLeft:"auto",background:C.coral,color:"white",borderRadius:20,padding:"2px 9px",fontSize:11,fontWeight:800}}>{abandonedCarts.length}</span>}
-            </div>
-            {!abandonedCarts.length ? (
-              <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.5}}>No open carts right now. When a signed-in shopper leaves items behind, they appear here with a one-tap WhatsApp nudge.</div>
-            ) : abandonedCarts.map(c=>{
-              const mins=Math.max(1,Math.round((Date.now()-(c.updatedAt||0))/60000));
-              const ago = mins<60?`${mins}m ago` : mins<1440?`${Math.round(mins/60)}h ago` : `${Math.round(mins/1440)}d ago`;
-              const names=(c.items||[]).map(i=>`${i.qty}× ${i.name}`).join(", ");
-              const first=c.name?c.name.split(" ")[0]:"there";
-              const msg=`Hi ${first}! 👋 You left ${c.count} item${c.count!==1?"s":""} in your Nemo Aqua Store cart — ${names}. They're still available 🐠 Complete your order here: https://www.nemoaquastore.in/ — reply here if you need any help!`;
-              const wa = c.phone ? `https://wa.me/91${c.phone}?text=${encodeURIComponent(msg)}` : null;
-              return (
-                <div key={c.uid} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 12px",marginBottom:8}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
-                    <span style={{fontWeight:800,fontSize:13.5,color:C.text}}>{c.name||"Customer"}</span>
-                    <span style={{fontSize:11,color:C.textSub,whiteSpace:"nowrap"}}>{ago}</span>
-                  </div>
-                  <div style={{fontSize:11.5,color:C.textSub,marginTop:2}}>{c.phone?`📱 +91 ${c.phone}`:c.email?`✉️ ${c.email}`:"no contact"} · {c.count} item{c.count!==1?"s":""} · ₹{Number(c.value||0).toLocaleString("en-IN")}</div>
-                  <div style={{fontSize:12,color:C.text,marginTop:6,lineHeight:1.45}}>{names}</div>
-                  <div style={{display:"flex",gap:8,marginTop:10}}>
-                    {wa
-                      ? <a href={wa} target="_blank" rel="noopener" style={{flex:1,textAlign:"center",background:"#25965a",color:"white",borderRadius:10,padding:"9px 12px",fontSize:12.5,fontWeight:800,textDecoration:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Nudge on WhatsApp</a>
-                      : <span style={{flex:1,textAlign:"center",background:"#f1f5f9",color:C.textSub,borderRadius:10,padding:"9px 12px",fontSize:12,fontWeight:700}}>No phone — email {c.email||"n/a"}</span>}
-                    <button className="press" onClick={()=>onDismissAbandoned&&onDismissAbandoned(c.uid)} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 12px",fontSize:12.5,fontWeight:700,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Dismiss</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
           {/* DOA insights — loss patterns by species × zone × season */}
           <DoaInsights orders={orders}/>
           {/* Payment destination — Cashfree credentials live only on the Worker. */}
@@ -14219,23 +14246,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:16}}>
               + Add Care Guide / Poster
             </button>
-            {/* Says plainly that the page is showing built-in samples rather than the store's
-                own guides. Without this the owner sees three tidy articles and concludes their
-                library is fine — while every poster they ever uploaded is missing. */}
-            {guides.length>0&&guides.every(isSampleGuide)&&(
-              <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"11px 13px",marginBottom:14,fontSize:11.5,color:"#9a3412",lineHeight:1.55}}>
-                ⚠ <b>These are sample guides, not yours.</b> Your own guides aren't loading, so what
-                the page is showing is the app's built-in examples. They carry no posters, which is
-                why your uploads look missing. Your posters are stored separately from the guides
-                that show them — scan below, they are very likely still there.
-                <button className="press" onClick={()=>onDeleteGuides(guides.filter(isSampleGuide).map(g=>g.id))}
-                  style={{display:"block",marginTop:9,background:"#fff",color:"#9a3412",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-                  Remove the {guides.filter(isSampleGuide).length} sample guide{guides.filter(isSampleGuide).length!==1?"s":""} from my store
-                </button>
-              </div>
-            )}
-            <PosterRecovery products={products} requests={requests} guides={guides} showcase={showcase}
-              onRestore={onSaveGuide} showToast={showToast}/>
             {guides.length===0?(
               <div style={{textAlign:"center",padding:"40px 0",color:C.textSub}}>
                 <div style={{fontSize:48,marginBottom:14}}>📖</div>
@@ -14518,6 +14528,7 @@ function SettingsPanel({settings,onSave,products=[]}){
   const [cacheMsg,setCacheMsg]=useState("");
   const [cacheBusy,setCacheBusy]=useState(false);
   const [sec,setSec]=useState("store"); // settings are split into pages; this is the active one
+  const [secOpen,setSecOpen]=useState(false); // every settings group starts collapsed
   const adminOk=isAdminSignedIn();
   // Live daily-promo usage (today) — refreshed on mount so admin sees "X of N used today"
   const [promoToday,setPromoToday]=useState({coupon:0,referral:0});
@@ -14638,13 +14649,14 @@ function SettingsPanel({settings,onSave,products=[]}){
       {/* Settings are split into pages for ease — pick a section */}
       <div style={{display:"flex",gap:8,overflowX:"auto",marginBottom:16,paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
         {[["store","🏪 Store"],["payship","🚚 Payments & Shipping"],["hsn","🧾 GST & HSN"],["promos","🎁 Promotions"],["content","📄 Content"],["emails","🔐 Email & Security"]].map(([k,label])=>(
-          <button key={k} className="press" onClick={()=>setSec(k)}
-            style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${sec===k?C.primary:C.border}`,background:sec===k?C.primary:"white",color:sec===k?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap",cursor:"pointer"}}>
-            {label}
+          <button key={k} className="press" onClick={()=>{if(sec===k)setSecOpen(v=>!v);else{setSec(k);setSecOpen(true);}}}
+            aria-expanded={sec===k&&secOpen}
+            style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${sec===k&&secOpen?C.primary:C.border}`,background:sec===k&&secOpen?C.primary:"white",color:sec===k&&secOpen?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap",cursor:"pointer"}}>
+            {label} {sec===k&&secOpen?"▴":"▾"}
           </button>
         ))}
       </div>
-      {sec==="store"&&(<>
+      {secOpen&&sec==="store"&&(<>
       {/* WhatsApp */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:14}}>💬 WhatsApp Notifications</div>
@@ -14717,7 +14729,7 @@ function SettingsPanel({settings,onSave,products=[]}){
       </div>
 
       </>)}
-      {sec==="emails"&&(<>
+      {secOpen&&sec==="emails"&&(<>
       {/* Customer confirmation emails (EmailJS) */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📧 Customer Confirmation Emails</div>
@@ -14869,7 +14881,7 @@ function SettingsPanel({settings,onSave,products=[]}){
       </div>
 
       </>)}
-      {sec==="content"&&(<>
+      {secOpen&&sec==="content"&&(<>
       {/* About & Policies content */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>📄 About &amp; Policies</div>
@@ -14885,7 +14897,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           {area("Address 1 — full address","returnAddress")}
           {field("Address 2 — short name (optional)","returnAddress2Label","e.g. Chennai Warehouse")}
           {area("Address 2 — full address (optional)","returnAddress2")}
-          {field("Auto-close orders after (days from delivery)","returnCloseDays","3","Once this many days pass after delivery — with no open DOA/return — the order closes itself. You can still close any order early, or set a custom date per order.")}
+          <div style={{fontSize:11.5,color:C.textSub,background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",lineHeight:1.5}}>Orders close automatically after delivery: <b>3 days</b> when accessories are included; <b>1 day</b> for fish and all other orders. Open DOA or return requests keep the order active.</div>
         </div>
         {area("Acclimatization Guide","acclimatizationTips")}
         {area("Terms & Conditions","termsPolicy")}
@@ -14927,7 +14939,7 @@ function SettingsPanel({settings,onSave,products=[]}){
       </div>
 
       </>)}
-      {sec==="payship"&&(<>
+      {secOpen&&sec==="payship"&&(<>
       {/* Payment */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💳 Online Payment</div>
@@ -15151,7 +15163,7 @@ function SettingsPanel({settings,onSave,products=[]}){
       </div>
 
       </>)}
-      {sec==="hsn"&&(<>
+      {secOpen&&sec==="hsn"&&(<>
       {/* ── HSN master ──────────────────────────────────────────────────────
           The list of HSN codes and rates this store actually uses. It fills
           itself in: list a product with GST claimed and its code lands here,
@@ -15248,7 +15260,7 @@ function SettingsPanel({settings,onSave,products=[]}){
       </div>
       </>)}
 
-      {sec==="promos"&&(<>
+      {secOpen&&sec==="promos"&&(<>
       {/* Coupon codes */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🎟 Coupons &amp; Offer Banners</div>
@@ -15335,7 +15347,10 @@ function SettingsPanel({settings,onSave,products=[]}){
                 <label style={chk}><input type="checkbox" checked={!!c.showOnWelcome} onChange={e=>upd({showOnWelcome:e.target.checked})} style={{width:16,height:16,accentColor:C.primary}}/> Show as home banner</label>
               </div>
 
-              <button className="press" onClick={()=>set("coupons",(f.coupons||[]).filter((_,j)=>j!==i))}
+              <button className="press" onClick={()=>{
+                const name=c.name||c.code||"this offer";
+                if(window.confirm(`Delete ${name}?\n\nCustomers will no longer be able to use or see it.`)) set("coupons",(f.coupons||[]).filter((_,j)=>j!==i));
+              }}
                 style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:9,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                 Remove this offer
               </button>
@@ -16258,7 +16273,11 @@ function RequestPage({nav,goBack,user,onSubmit,myRequests}){
         <div style={{position:"absolute",top:-30,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.1)"}}/>
         <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Request a Product</div>
-        <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>Looking for a rare or <b>exotic fish</b>, a specific plant, or gear we don't stock? Tell us what you want — we specialise in sourcing exotic &amp; hard-to-find fish on request and will arrange it for you.</div>
+        <div style={{fontSize:13,opacity:.9,lineHeight:1.55,maxWidth:340}}>
+          Rare fish, plants or special gear?<br/>
+          Tell us what you need.<br/>
+          <b>We source hard-to-find products.</b>
+        </div>
       </div>
       <div className="dt-read" style={{padding:"20px 16px 100px"}}>
         <div style={{marginBottom:16}}>
@@ -16343,7 +16362,7 @@ function NemoStore(){
   const [hydrated,setHydrated]     = useState(()=>{ try{ return !!localProducts(); }catch(e){ return false; } });
   const [orders,setOrders]         = useState([]);
   const [requests,setRequests]     = useState([]);
-  const [guides,setGuides]         = useState(DEFAULT_GUIDES);
+  const [guides,setGuides]         = useState([]);
   const [settings,setSettings]     = useState(DEFAULT_SETTINGS);
   const [settingsReady,setSettingsReady] = useState(false);
   const [user,setUser]             = useState(null);
@@ -16500,8 +16519,8 @@ function NemoStore(){
       const local=(localGuidesData()||[]).filter(g=>g&&!g.sample);
       if(local.length){ await saveGuides(local); gds=local; }
     }
-    const finalGds=(gds&&gds.length)?gds:null;
-    if(finalGds) setGuides(finalGds);
+    const finalGds=(gds||[]).filter(g=>g&&!isSampleGuide(g));
+    setGuides(finalGds);
     // ONE hydrateMedia call with all cloud data (was called twice: once for prods, once for guides)
     const syncedProds=finalProds||(localProducts()||DEFAULT_PRODUCTS).map(normalizeProduct);
     const syncedGds=finalGds||(localGuidesData()||[]);
@@ -16542,7 +16561,7 @@ function NemoStore(){
       setProducts(prods);
       setOrders(localOrders());
       const reqs=localRequests(); setRequests(reqs);
-      const guideList=localGuidesData()||DEFAULT_GUIDES; setGuides(guideList);
+      const guideList=(localGuidesData()||[]).filter(g=>g&&!isSampleGuide(g)); setGuides(guideList);
       setSettings(localSettingsData());
       // Caching is now reliable (media lives in IndexedDB, so localStorage no longer fills up
       // and silently drops settings writes). So a cached settings blob is trustworthy — reveal
@@ -17654,7 +17673,7 @@ function NemoStore(){
   const orderCloseDueAt=(o)=>{
     if(o.autoCloseAt) return new Date(o.autoCloseAt).getTime();
     const base=deliveredAtOf(o); if(!base) return 0;
-    const days=Number(settings.returnCloseDays!=null?settings.returnCloseDays:RETURN_WINDOW_DAYS);
+    const days=orderRetentionDays(o);
     return new Date(base).getTime()+Math.max(0,days)*86400000;
   };
 
@@ -17677,11 +17696,19 @@ function NemoStore(){
     sweep();
     const t=setInterval(sweep,30000);
     return()=>clearInterval(t);
-  },[orders,settings.returnCloseDays]);
+  },[orders]);
 
   const cartCount=useMemo(()=>cart.reduce((s,i)=>s+i.qty,0),[cart]);
   const cartTotal=useMemo(()=>cart.reduce((s,i)=>s+i.price*i.qty,0),[cart]);
   const cartMap=useMemo(()=>{ const m={}; cart.forEach(i=>{m[i.id]=(m[i.id]||0)+i.qty;}); return m; },[cart]);
+  const priorityOrderCount=useMemo(()=>{
+    if(!user) return 0;
+    const uk=userKey(user);
+    return orders.filter(o=>!cancelledByCustomer(o)&&customerOrderStage(o)!=="Past Orders"&&(
+      (o.userUid&&uk&&o.userUid===uk)||(user.uid&&o.userUid===user.uid)||
+      (user.phone&&normalizePhone(o.address?.phone)===normalizePhone(user.phone))
+    )).length;
+  },[orders,user]);
   const isAdminPage=["admin-login","admin"].includes(page);
   const [miniOpen,setMiniOpen]=useState(false);
   useEffect(()=>{ if(cart.length===0) setMiniOpen(false); },[cart.length]); // auto-close when cart empties
@@ -17813,8 +17840,10 @@ function NemoStore(){
     const cb=ref.on("value",s=>{
       if(!alive) return;
       const v=s&&s.val();
-      const list=v?Object.values(v).filter(g=>g&&g.id):[];
-      if(!list.length||sameCatalog(last,list)) return;
+      const raw=v?Object.values(v).filter(g=>g&&g.id):[];
+      const list=raw.filter(g=>!isSampleGuide(g));
+      if(isAdminSignedIn()) raw.filter(isSampleGuide).forEach(g=>{ try{ FB_DB.ref("guides/"+g.id).remove(); }catch(e){} });
+      if(sameCatalog(last,list)) return;
       last=list;
       try{ dbSet("nemo-guides",JSON.stringify(list)); }catch(e){}
       hydrateMedia(localProducts()||[], localRequests(), list);
@@ -17964,7 +17993,7 @@ function NemoStore(){
       {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
       {adminExitAsk&&<AdminExitConfirm onStay={()=>setAdminExitAsk(false)} onLeave={()=>{setAdminExitAsk(false);nav("home");}}/>}
       {!isAdminPage&&<WhyNemoPopup open={whyOpen} onClose={()=>setWhyOpen(false)} nav={nav}/>}
-      {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap} walletPts={walletPts}/>}
+      {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap} walletPts={walletPts} ordersCount={priorityOrderCount}/>} 
       {/* overscrollBehavior:contain stops a flick that reaches the end of this list from
           chaining out to the document and dragging the pinned bottom nav with it. */}
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
@@ -18021,7 +18050,7 @@ function NemoStore(){
           </button>
         );
       })()}
-      {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount}/>}
+      {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount} ordersCount={priorityOrderCount}/>} 
       {!isAdminPage&&<MiniCart open={miniOpen} onClose={()=>setMiniOpen(false)} cart={cart} total={cartTotal} updateQty={updateQty} nav={nav} settings={settings} products={products} mediaCache={mediaCache}/>}
     </div>
   );
