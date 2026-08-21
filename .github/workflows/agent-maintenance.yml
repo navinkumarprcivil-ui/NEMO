@@ -71,7 +71,12 @@ jobs:
             TESTS=99
           fi
           echo "tests_exit=$TESTS" >> .agent-release-status.txt
-          if [ -f /tmp/tests.log ]; then tail -n 160 /tmp/tests.log >> .agent-release-status.txt; fi
+          if [ -f /tmp/tests.log ]; then
+            echo "failed_tests:" >> .agent-release-status.txt
+            grep '^not ok' /tmp/tests.log >> .agent-release-status.txt || true
+            echo "test_summary:" >> .agent-release-status.txt
+            grep -E '^# (tests|pass|fail|cancelled|skipped|todo)' /tmp/tests.log >> .agent-release-status.txt || true
+          fi
 
           if [ "$PATCH" -eq 0 ] && [ "$TESTS" -eq 0 ]; then
             npm ci > /tmp/npm.log 2>&1
