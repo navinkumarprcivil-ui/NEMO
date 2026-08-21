@@ -32,16 +32,11 @@ jobs:
           echo "Admin release verification" >> .agent-release-status.txt
           echo "commit=$(git rev-parse HEAD)" >> .agent-release-status.txt
 
-          node - <<'JS' >> .agent-release-status.txt
-          const fs=require('fs'); const app=fs.readFileSync('app.jsx','utf8');
-          function diag(label,src){ console.log('baseline_'+label+'='+src); }
-          const a=app.indexOf('function AdminInsights('), p=app.indexOf('function AdminProducts('), d=app.indexOf('function AdminSalesDashboard(');
-          const insights=app.slice(a,p), dashboard=app.slice(d,a);
-          diag('insights_positions',`${a},${p},${d}`);
-          for(const x of ['Overall','Today','Most Viewed','Most Added to Cart','Top Searches']) diag('insights_'+x.replaceAll(' ','_'),insights.includes(x));
-          diag('dashboard_abandoned',dashboard.includes('Abandoned Carts'));
-          for(const x of ['Dead-on-Arrival claims require one continuous unboxing video sent on WhatsApp within 2 hours','Unused accessories and equipment in original, undamaged packaging may be returned within 3 days','Confirm Cashfree refund','Customers will no longer be able to use or see it']) diag('policy_'+x.slice(0,16).replaceAll(' ','_'),app.includes(x));
-          JS
+          node --test test/*.test.mjs > /tmp/baseline-tests.log 2>&1
+          BASELINE=$?
+          echo "baseline_tests_exit=$BASELINE" >> .agent-release-status.txt
+          echo "baseline_failed_tests:" >> .agent-release-status.txt
+          grep '^not ok' /tmp/baseline-tests.log >> .agent-release-status.txt || true
 
           python3 - <<'PY'
           from pathlib import Path
@@ -76,28 +71,14 @@ jobs:
           cat /tmp/patch.log >> .agent-release-status.txt
 
           if [ "$PATCH" -eq 0 ]; then
-            node - <<'JS' >> .agent-release-status.txt
-            const fs=require('fs'); const app=fs.readFileSync('app.jsx','utf8');
-            function diag(label,src){ console.log('patched_'+label+'='+src); }
-            const a=app.indexOf('function AdminInsights('), p=app.indexOf('function AdminProducts('), d=app.indexOf('function AdminSalesDashboard(');
-            const insights=app.slice(a,p), dashboard=app.slice(d,a);
-            diag('insights_positions',`${a},${p},${d}`);
-            for(const x of ['Overall','Today','Most Viewed','Most Added to Cart','Top Searches']) diag('insights_'+x.replaceAll(' ','_'),insights.includes(x));
-            diag('dashboard_abandoned',dashboard.includes('Abandoned Carts'));
-            for(const x of ['Dead-on-Arrival claims require one continuous unboxing video sent on WhatsApp within 2 hours','Unused accessories and equipment in original, undamaged packaging may be returned within 3 days','Confirm Cashfree refund','Customers will no longer be able to use or see it']) diag('policy_'+x.slice(0,16).replaceAll(' ','_'),app.includes(x));
-            JS
             node --test test/*.test.mjs > /tmp/tests.log 2>&1
             TESTS=$?
           else
             TESTS=99
           fi
           echo "tests_exit=$TESTS" >> .agent-release-status.txt
-          if [ -f /tmp/tests.log ]; then
-            echo "failed_tests:" >> .agent-release-status.txt
-            grep '^not ok' /tmp/tests.log >> .agent-release-status.txt || true
-            echo "test_summary:" >> .agent-release-status.txt
-            grep -E '^# (tests|pass|fail|cancelled|skipped|todo)' /tmp/tests.log >> .agent-release-status.txt || true
-          fi
+          echo "patched_failed_tests:" >> .agent-release-status.txt
+          if [ -f /tmp/tests.log ]; then grep '^not ok' /tmp/tests.log >> .agent-release-status.txt || true; fi
 
           if [ "$PATCH" -eq 0 ] && [ "$TESTS" -eq 0 ]; then
             npm ci > /tmp/npm.log 2>&1
