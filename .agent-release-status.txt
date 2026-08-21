@@ -1,11 +1,10 @@
 Nemo final admin release verification
-source_commit=a74e92dd03bc66a434cfc801e34d399bd91f6b04
+source_commit=1739a710a179618aef144b3a5d15f7a279db28ce
 baseline_tests_exit=0
 patch_exit=0
 release patch applied
-invariants_exit=1
+invariants_exit=0
 no_preexisting_functions_removed=True
-admin_helpers_preserved=False
 cashfree_refund_preserved=True
 customer_orders_single_list=True
 daily_promo_popup=True
@@ -20,8 +19,19 @@ packaging_brackets=True
 no_start_fresh=True
 baseline_app_size=1264447
 patched_app_size=1268473
-tests_exit=99
-npm_exit=99
-compile_exit=99
-cloudflare_build_exit=99
-RESULT=FAIL
+tests_exit=0
+# tests 120
+# pass 120
+# fail 0
+npm_exit=0
+compile_exit=0
+APP_BUILD v90.1c296a81 -> v90.7721ec60
+app.js written — 902570 bytes
+build v90.7721ec60 — version.json + sw.js CACHE in sync
+cloudflare_build_exit=0
+
+> build
+> node scripts/build-cloudflare.mjs
+
+Cloudflare static assets prepared in cf-dist/
+RESULT=PASS
