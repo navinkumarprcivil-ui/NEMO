@@ -33,3 +33,13 @@ test('Cashfree and Nemo use a production-safe payment expiry window', () => {
   assert.match(payCreate, /order_expiry_time: new Date\(paymentDeadline\)\.toISOString\(\)/);
   assert.match(payCreate, /paymentDeadline,/);
 });
+
+test('customer checkout has no manual proof or payment-link fallback', () => {
+  assert.doesNotMatch(app, /razorpayLink/);
+  assert.doesNotMatch(app, /Tap to upload screenshot/);
+  assert.doesNotMatch(app, /Submit Payment & Confirm Order/);
+  assert.doesNotMatch(app, /Enter your payment reference and attach a screenshot/);
+  assert.match(app, /Cashfree integrated checkout/);
+  assert.match(app, /Retry secure payment/);
+  assert.match(app, /verified payment status returned by Cashfree/);
+});
