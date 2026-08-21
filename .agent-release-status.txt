@@ -1,12 +1,13 @@
 Admin release verification
-commit=a5cdcf0518a80d7ab2cd8d38ecfd8ea892685269
+commit=e11432a2d0d6f33bb1a6613b20ade3e3faa65942
+baseline_tests_exit=0
+baseline_failed_tests:
 patch_exit=0
 release patch applied
 tests_exit=1
-failed_tests:
+patched_failed_tests:
 not ok 103 - admin analytics are collapsible, include today data and omit abandoned carts
 not ok 104 - policy and confirmation safeguards match the current store rules
-test_summary:
 npm_exit=99
 compile_exit=99
 cloudflare_build_exit=99
