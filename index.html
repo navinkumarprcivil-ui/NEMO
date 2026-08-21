@@ -208,15 +208,17 @@
 <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <!-- Babel is loaded LAZILY by the app loader below — only on the first visit (to compile once).
      Repeat visits use the cached compiled code and never download/run Babel. -->
-<!-- Firebase (Realtime Database + Auth) — async so a slow/blocked CDN never hangs the app -->
-<script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-<script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-<script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
-<script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
-<!-- App Check. These tags are async and land in any order, so tryInitFirebase()
-     waits briefly for this one before it touches the database — activating after
-     the first request would leave that request unattested. -->
-<script async src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
+<!-- Firebase compat extensions require firebase-app to execute first. `async` let Auth,
+     Database or Storage win that race and crash before the core SDK existed, leaving the
+     storefront with a cached customer profile but no authenticated Firebase session.
+     `defer` keeps the splash non-blocking while preserving this dependency order. -->
+<script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
+<!-- App Check executes after the core, Auth and Database compat modules. tryInitFirebase()
+     still waits briefly for it before making the first authenticated request. -->
+<script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
 <!-- EmailJS (customer confirmation emails) -->
 <script async src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
