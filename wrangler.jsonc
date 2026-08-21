@@ -23,7 +23,7 @@
   },
   "vars": {
     "PUBLIC_SITE_URL": "https://www.nemoaquastore.in",
-    "CASHFREE_ENV": "sandbox"
+    "CASHFREE_ENV": "production"
   },
   "secrets": {
     "required": [
