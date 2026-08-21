@@ -328,6 +328,8 @@ function effectivePrice(p, discountPct){
 const DEFAULT_SHIPPING_RATES = {
   basePackagingKg: 0.5,        // base box/material weight added to every dry-goods order
   liveBasePackagingKg: 0.5,    // base box/oxygen-bag weight added to every live-fish order
+  basePackagingByWeight: {},   // optional per-item-weight overrides; falls back to basePackagingKg
+  liveBasePackagingByWeight: {}, // optional per-item-weight overrides; falls back to liveBasePackagingKg
   dryGoods: {
     "Up to 500g":{ TN:60,  SouthIndia:80,  CentralIndia:100, NorthIndia:120 },
     "500g-1kg":  { TN:80,  SouthIndia:100, CentralIndia:120, NorthIndia:150 },
@@ -660,7 +662,7 @@ function parcelWeightBracket(cart, r){
   const dry=(cart||[]).filter(i=>i.category!=="Live Fish");
   const fishWt=fish.reduce((s,i)=>s+(Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2)*i.qty,0);
   const dryWt=dry.reduce((s,i)=>s+(Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.1)*i.qty,0);
-  const base=fish.length?Number(r.liveBasePackagingKg!=null?r.liveBasePackagingKg:(r.basePackagingKg??0.5)):(Number(r.basePackagingKg)||0.5);
+  const base=basePackagingWeight(r,fish.length?"live":"dry",fishWt+dryWt);
   return getWeightBracket(fishWt+dryWt+base);
 }
 /* Live fish uses the same 5-tier weight brackets as dry goods so rates are directly comparable */
@@ -677,6 +679,17 @@ function getWeightBracket(kg){
   if(kg<=2)  return "1-2kg";
   if(kg<=5)  return "2-5kg";
   return "5-10kg";
+}
+function basePackagingWeight(r,kind,itemKg){
+  r=r||DEFAULT_SHIPPING_RATES;
+  const live=kind==="live";
+  const map=(live?r.liveBasePackagingByWeight:r.basePackagingByWeight)||{};
+  const value=map[getWeightBracket(Math.max(0,Number(itemKg)||0))];
+  if(value===0||value) return Math.max(0,Number(value)||0);
+  const legacy=live
+    ? (r.liveBasePackagingKg!=null?r.liveBasePackagingKg:(r.basePackagingKg??0.5))
+    : (r.basePackagingKg??0.5);
+  return Math.max(0,Number(legacy)||0);
 }
 /* ─────────── Live-fish packing options (customer chooses one at checkout) ───────────
    Two independent layers fold into 4 named options:
@@ -725,7 +738,7 @@ function thermacolFeeFor(cart, packingKey, settings){
   if(!fishItems.length) return 0;
   const r=settings.shippingRates||DEFAULT_SHIPPING_RATES;
   const fishWt=fishItems.reduce((s,i)=>s+(Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2)*i.qty,0);
-  const liveBase=Number(r.liveBasePackagingKg!=null?r.liveBasePackagingKg:(r.basePackagingKg??0.5));
+  const liveBase=basePackagingWeight(r,"live",fishWt);
   return thermacolCharge(getLiveFishWeightBracket(fishWt+liveBase), settings);
 }
 /* Zones live fish are NOT delivered to when the admin restriction is on. */
@@ -770,7 +783,7 @@ function shippingBreakdown(cart, zone, opts, settings){
       const wt = Number(i.variantPackagingWeight != null ? i.variantPackagingWeight : i.packagingWeight) || 0.2;
       return s + wt * i.qty;
     },0);
-    const liveBase = Number(r.liveBasePackagingKg != null ? r.liveBasePackagingKg : (r.basePackagingKg ?? 0.5));
+    const liveBase = basePackagingWeight(r,"live",fishWt);
     const bracket = getLiveFishWeightBracket(fishWt + liveBase);
     courier += (r.liveFish?.[bracket]?.[zone]||0);
     if(packing.box==="thermacol") thermacol += thermacolCharge(bracket, settings);
@@ -779,8 +792,8 @@ function shippingBreakdown(cart, zone, opts, settings){
   if(dryItems.length){
     // Per-option weight wins when the product has options (a 1kg feed pack vs a 100g one),
     // falling back to the product's own packing weight.
-    const wt = dryItems.reduce((s,i)=>s+((Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.1)*i.qty),0)+(Number(r.basePackagingKg)||0.5);
-    const bracket = getWeightBracket(wt);
+    const itemWt = dryItems.reduce((s,i)=>s+((Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.1)*i.qty),0);
+    const bracket = getWeightBracket(itemWt+basePackagingWeight(r,"dry",itemWt));
     courier += (r.dryGoods?.[bracket]?.[zone]||0);
     // Standard (base) packing — carton box / courier bag. Only when no live fish already drives the box.
     if(!fishItems.length) carton += cartonCharge(bracket, settings);
@@ -2862,24 +2875,6 @@ async function deleteTestimonial(id){
   try{ const r=await dbGet("nemo-testimonials"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-testimonials",JSON.stringify(arr.filter(x=>x.id!==id))); }catch(e){}
   return cloudOk;
 }
-/* ── Admin "Start Fresh": bulk-clear every customer submission ──
-   The parent nodes (showcase/testimonials/requests) have no .write rule, so a whole-node
-   .remove() is denied — we must remove each child id individually (the Google admin is
-   allowed to). We clear the local cache too, then re-read the cloud and return how many
-   entries STILL remain: 0 means a clean wipe; >0 means this browser isn't signed in as the
-   admin Google account (those entries are protected and can't be removed without it). */
-async function clearAllCloudNode(node, localKey){
-  if(FB_OK){
-    try{ const s=await withTimeout(FB_DB.ref(node).get(),6000); const v=s&&s.val(); if(v){ for(const k of Object.keys(v)){ try{ await FB_DB.ref(node+"/"+k).remove(); }catch(e){} } } }catch(e){}
-  }
-  try{ await dbSet(localKey,"[]"); }catch(e){}
-  if(!FB_OK) return 0;
-  try{ const s=await withTimeout(FB_DB.ref(node).get(),6000); const v=s&&s.val(); return v?Object.keys(v).length:0; }catch(e){ return 0; }
-}
-async function clearAllShowcase(){ return clearAllCloudNode("showcase","nemo-showcase"); }
-async function clearAllTestimonials(){ return clearAllCloudNode("testimonials","nemo-testimonials"); }
-async function clearAllRequestsCloud(){ return clearAllCloudNode("requests","nemo-requests"); }
-
 /* ── Go-live reset — wipe every order placed during testing ────────────────────────────
    One-time tool for the switch from test stage to live trading: it removes the orders and
    everything the store derived from them, so day one starts from a genuinely empty book
@@ -4318,7 +4313,7 @@ function generateInvoiceHTML(order, settings, opts){
   const pkgKg=(()=>{
     const r=(s.shippingRates||{});
     const w=items.reduce((a,it)=>a+((Number(it.variantPackagingWeight!=null?it.variantPackagingWeight:it.packagingWeight)||0)*(Number(it.qty)||0)),0);
-    const base=Number(items.some(it=>it.isLiveFish||it.category==="Live Fish")?(r.liveBasePackagingKg??r.basePackagingKg??0.5):(r.basePackagingKg??0.5))||0;
+    const base=basePackagingWeight(r,items.some(it=>it.isLiveFish||it.category==="Live Fish")?"live":"dry",w);
     const tot=w+base;
     return tot>0?tot.toFixed(2)+" kg (approx.)":"";
   })();
@@ -7153,7 +7148,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.6f4d19cd";
+const APP_BUILD = "v90.1c296a81";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7838,9 +7833,3219 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   /* ── The verdict ── */
   const report=useMemo(()=>{
     if(!stock.length) return null;
-    const perSpecies=stock.map(({key,qty}
-... 233626 bytes omitted ...
-{l:"City",v:`${addr.city} — ${addr.pincode}`}].map((r,i)=>(
+    const perSpecies=stock.map(({key,qty})=>({key,qty,issues:speciesIssues(key,qty,tank)}));
+    const pairs=[];
+    for(let i=0;i<stock.length;i++) for(let j=i+1;j<stock.length;j++){
+      const issues=pairIssues(stock[i].key,stock[j].key);
+      if(issues.length) pairs.push({a:stock[i].key,b:stock[j].key,issues});
+    }
+    const load=loadReport(stock,tank);
+    const tankLvl=tankIssues(tank,stock);
+    const all=[...tankLvl,...perSpecies.flatMap(s=>s.issues),...pairs.flatMap(p=>p.issues)];
+    if(load.level==="over") all.push({v:V_BAD,r:"Too much fish for this volume once everything is fully grown."});
+    else if(load.level==="full") all.push({v:V_COND,r:"This fills the tank to its comfortable limit — strong filtration and steady water changes required."});
+    else if(load.level==="unknown") all.push({v:V_INFO,r:"Tank volume unknown, so the waste load cannot be judged."});
+    const worst=all.length?Math.max(...all.map(i=>i.v)):V_OK;
+    const missing=[];
+    if(!tank.litres) missing.push("tank volume");
+    if(!tank.lengthCm) missing.push("tank length");
+    if(!tank.tempC) missing.push("target temperature");
+    if(!tank.cycled) missing.push("cycling status");
+    if(!tank.filter) missing.push("filter");
+    const confidence = missing.length===0?"High" : missing.length<=2?"Medium":"Low";
+    return {perSpecies,pairs,load,worst,missing,confidence,tankLvl};
+  },[stock,tank]);
+
+  /* ── Water tests ── */
+  const [test,setTest]=useState({nh3:"",no2:"",no3:"",ph:""});
+  const [logOpen,setLogOpen]=useState(false);
+  const tests=waterLog(tank);
+  const verdict=waterVerdict(tank);
+  const saveTest=()=>{
+    const row={at:new Date().toISOString()};
+    let any=false;
+    WATER_PARAMS.forEach(pm=>{ const v=numOrNull(test[pm.k]); if(v!=null){ row[pm.k]=v; any=true; } });
+    if(!any) return;
+    persist({...tank,tests:[row,...tests].slice(0,WATER_LOG_MAX)});
+    setTest({nh3:"",no2:"",no3:"",ph:""});
+  };
+  // Oldest-left, newest-right, and only the readings that were actually entered.
+  const seriesFor=pm=>tests.slice(0,12).reverse()
+    .map(t=>({at:t.at,v:numOrNull(t[pm.k])})).filter(p=>p.v!=null);
+
+  /* ── Weekly jobs, straight off the profile ── */
+  const due=careDue(tank);
+  const [perm,setPerm]=useState(()=>typeof Notification!=="undefined"?Notification.permission:"default");
+  const markCareDone=()=>{ persist({...tank,lastCareAt:new Date().toISOString()}); };
+  const toggleRemind=()=>{
+    if(tank.remind){ persist({...tank,remind:false}); return; }
+    if(perm==="granted"){ persist({...tank,remind:true}); return; }
+    requestNotifPerm(ok=>{ setPerm(ok?"granted":"denied"); persist({...tank,remind:ok}); });
+  };
+  const weekly=useMemo(()=>{
+    if(!tank.litres) return [];
+    const l=Number(tank.litres)||0, out=[];
+    const heavy=(report&&(report.load.level==="full"||report.load.level==="over"))
+      ||(verdict&&(verdict.level==="serious"||verdict.level==="watch"));
+    /* A starting point, not a prescription. How much water a tank needs out depends on its
+       stocking, its species and — above all — what the test kit says this week, so the figure
+       is offered as somewhere to begin and the reading is what moves it. */
+    const pct=heavy?35:25;
+    out.push({i:"💧",t:`Change about ${Math.round(l*pct/100)} L (${pct}%) — a starting amount`,
+      s:"Adjust it from your readings: more if nitrate is climbing or the tank is heavily stocked, less for a lightly stocked or planted tank. Match the temperature and dechlorinate before it goes in."});
+    if(tank.cycled==="no"||tank.cycled==="cycling") out.push({i:"🧫",t:"Test ammonia & nitrite",s:"Daily while cycling. Both must read zero before any fish go in."});
+    else out.push({i:"🧫",t:"Test ammonia, nitrite & nitrate",s:"The readings set the water change, not the calendar. Log them below and the advice follows them."});
+    /* Rinsing on a schedule is how people wash their filter's bacteria down the sink. The
+       weekly job is to LOOK at it; cleaning is what you do when the flow tells you to. */
+    out.push({i:"🌀",t:"Check the filter flow",s:"Rinse the media only when flow has dropped or it is visibly clogged — and then only in water taken out of the tank, never under the tap. Cleaning it on a schedule strips the bacteria doing the work."});
+    if(tank.tempC) out.push({i:"🌡️",t:`Check the heater holds ${tank.tempC}°C`,s:"A stuck heater is the fastest way to lose a tank."});
+    return out;
+  },[tank,report,verdict]);
+  const weekKey=careWeekKey();
+  const checkedJobs=(tank.careChecks&&tank.careChecks[weekKey])||[];
+  const toggleJob=(i)=>{
+    const next=checkedJobs.includes(i)?checkedJobs.filter(x=>x!==i):[...checkedJobs,i];
+    const patch={...tank,careChecks:{...(tank.careChecks||{}),[weekKey]:next}};
+    if(weekly.length&&next.length===weekly.length) patch.lastCareAt=new Date().toISOString();
+    persist(patch);
+  };
+  const clearTank=()=>{
+    if(!window.confirm("Clear all My Tank details and saved readings? This cannot be undone.")) return;
+    persist({...BLANK_TANK}); setTest({nh3:"",no2:"",no3:"",ph:""}); setEditing(true); setSavedNote("Cleared");
+    setTimeout(()=>setSavedNote(""),1800);
+  };
+
+  /* ── Heater sizing ── */
+  const [roomT,setRoomT]=useState("");
+  const heater=useMemo(()=>{
+    const target=Number(tank.tempC)||0, room=Number(roomT)||0, l=Number(tank.litres)||0;
+    if(!(target&&room&&l)) return null;
+    const lift=target-room;
+    if(lift<=0) return {none:true,lift};
+    // ~1 W per litre per 5 °C of lift, floored at a sane smallest heater.
+    const w=Math.max(25,Math.ceil(l*(lift/5)/25)*25);
+    return {w,lift,split:l>200,hot:room>=target-1};
+  },[tank.tempC,tank.litres,roomT]);
+
+  /* ── Filter sizing ── */
+  const filterRec=useMemo(()=>{
+    const l=Number(tank.litres)||0; if(!l) return null;
+    const lvl=report?report.load.level:"unknown";
+    const mult = lvl==="over"?[6,8] : lvl==="full"?[5,7] : lvl==="comfortable"?[4,6] : [4,5];
+    const heavy=report?report.load.heavy:[];
+    return {lo:Math.round(l*mult[0]),hi:Math.round(l*mult[1]),heavy,lvl};
+  },[tank.litres,report]);
+
+  /* ── Ask Nemo ── */
+  const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
+  const askNemo=()=>{
+    const lines=[`Hi Nemo — please check my tank plan.`,``];
+    lines.push(`Tank: ${tank.name||"My Tank"} · ${tank.type} · ${tank.litres||"?"} L${tank.lengthCm?` · ${tank.lengthCm} cm long`:""}`);
+    if(tank.tempC) lines.push(`Target temperature: ${tank.tempC}°C`);
+    if(tank.filter) lines.push(`Filter: ${tank.filter}`);
+    lines.push(`Cycled: ${tank.cycled||"not sure"}`);
+    lines.push(``,`Fish I am planning:`);
+    stock.forEach(({key,qty})=>lines.push(`• ${qty} × ${SPECIES[key].n} (${SPECIES[key].sci})`));
+    const warn=report?[...report.tankLvl,...report.perSpecies.flatMap(s=>s.issues),...report.pairs.flatMap(p=>p.issues)].filter(i=>i.v===V_BAD||i.v===V_COND):[];
+    if(warn.length){ lines.push(``,`Warnings the planner gave me:`); warn.slice(0,8).forEach(w=>lines.push(`- ${w.r}`)); }
+    lines.push(``,`Can you tell me if this works?`);
+    openWA(ownerWA,encodeURIComponent(lines.join("\n")));
+  };
+
+  /* ── shared styles ── */
+  const card={background:C.card,borderRadius:20,padding:"18px 16px",marginBottom:16,border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.06)"};
+  const H=({children})=><div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>{children}</div>;
+  const lbl={fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5};
+  const fld={width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"#f8fafc"};
+  const numIn=(val,set,ph)=>(<input type="number" inputMode="decimal" min="0" value={val} placeholder={ph} onChange={e=>set(e.target.value)} style={{...fld,textAlign:"center"}}/>);
+  const chip=(on)=>({flexShrink:0,padding:"8px 13px",borderRadius:20,border:`1.5px solid ${on?C.primary:C.border}`,background:on?C.primary:"transparent",color:on?"#fff":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"});
+
+  const applyVolume=()=>{
+    persist({...tank,litres:usableL||waterL,lengthCm:Math.round(dimsCm.l)});
+    setSavedNote("✓ Saved to My Tank");
+    setTimeout(()=>setSavedNote(""),2500);
+  };
+
+  return(
+    <div className="slide-up">
+      <div className="vh-head" style={{background:"linear-gradient(180deg,#f1f9fe 0%,#ffffff 100%)",padding:"52px 16px 18px",borderRadius:"0 0 28px 28px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <button className="press" onClick={goBack} style={{background:"none",border:"none",fontSize:20,color:C.textSub,cursor:"pointer"}}>←</button>
+          <div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>🧪 Aqua Tools</div>
+            <div style={{fontSize:12,color:C.textSub}}>Plan it. Cycle it. Keep it healthy.</div>
+          </div>
+        </div>
+      </div>
+      <div className="dt-read" style={{padding:"18px 16px 110px"}}>
+
+        {/* ══ MY TANK ══ */}
+        <div style={card}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>🏠 {saved?(tank.name||"My Tank"):"Create your tank"}</div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              {(saved||editing)&&<button className="press" onClick={clearTank} style={{background:"none",border:"none",color:C.danger,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Clear</button>}
+              {saved&&<button className="press" onClick={()=>setEditing(v=>!v)} style={{background:"none",border:"none",color:C.accent,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{editing?"▲ Done":"✏ Edit"}</button>}
+            </div>
+          </div>
+          {!saved&&!editing&&<div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:10}}>Save it once — every tool below then uses it instead of asking again.</div>}
+
+          {(editing||!saved)&&(
+            <>
+              <div style={{marginBottom:12}}>
+                <div style={lbl}>Tank name</div>
+                <input value={tank.name} onChange={e=>setF("name",e.target.value)} placeholder="Living room tank" style={fld}/>
+              </div>
+              <div style={{marginBottom:12}}>
+                <div style={lbl}>Type</div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  {[["tropical","Tropical"],["coldwater","Coldwater"],["pond","Pond"],["marine","Marine"]].map(([k,l])=>(
+                    <button key={k} className="press" onClick={()=>setF("type",k)} style={chip(tank.type===k)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{marginBottom:12}}>
+                <div style={lbl}>Shape</div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  {[["rect","Rectangular"],["cube","Cube"],["cyl","Cylinder"],["bow","Bow-front"]].map(([k,l])=>(
+                    <button key={k} className="press" onClick={()=>setF("shape",k)} style={chip(tank.shape===k)}>{l}</button>
+                  ))}
+                  <button className="press" onClick={()=>setF("unit",tank.unit==="cm"?"in":"cm")} style={{...chip(false),marginLeft:"auto"}}>{tank.unit==="cm"?"cm ⇄ inches":"inches ⇄ cm"}</button>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:tank.shape==="cyl"?"1fr 1fr":"1fr 1fr 1fr",gap:8,marginBottom:8}}>
+                {tank.shape==="cyl"
+                  ? <>{numIn(tank.l,v=>setF("l",v),`Diameter ${tank.unit}`)}{numIn(tank.h,v=>setF("h",v),`Height ${tank.unit}`)}</>
+                  : <>{numIn(tank.l,v=>setF("l",v),`Length ${tank.unit}`)}{numIn(tank.w,v=>setF("w",v),`Width ${tank.unit}`)}{numIn(tank.h,v=>setF("h",v),`Height ${tank.unit}`)}</>}
+              </div>
+              <div style={{marginBottom:12}}>
+                <div style={lbl}>Actual water height ({tank.unit}) — optional</div>
+                {numIn(tank.waterH,v=>setF("waterH",v),`Water line, not the rim`)}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                <div><div style={lbl}>Filter</div><input value={tank.filter} onChange={e=>setF("filter",e.target.value)} placeholder="Sponge / HOB 500 L-h" style={fld}/></div>
+                <div><div style={lbl}>Heater</div><input value={tank.heater} onChange={e=>setF("heater",e.target.value)} placeholder="100 W" style={fld}/></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                <div><div style={lbl}>Target temp °C</div>{numIn(tank.tempC,v=>setF("tempC",v),"26")}</div>
+                <div><div style={lbl}>Set up on</div><input type="date" value={tank.setUpOn} onChange={e=>setF("setUpOn",e.target.value)} style={fld}/></div>
+              </div>
+              <div style={{marginBottom:12}}>
+                <div style={lbl}>Cycled?</div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  {[["yes","Yes — 0 ammonia & nitrite"],["cycling","Still cycling"],["no","Not started"]].map(([k,l])=>(
+                    <button key={k} className="press" onClick={()=>setF("cycled",k)} style={chip(tank.cycled===k)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              {waterL>0&&(
+                <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginTop:12,fontSize:12.5,lineHeight:1.6,color:C.text}}>
+                  💧 <b>{waterL} L</b> of water ({usGal(waterL)} US gal · {ukGal(waterL)} UK gal){fullL!==waterL?` — the tank itself holds ${fullL} L`:""}.<br/>
+                  Usable after substrate &amp; décor: <b style={{color:C.primary}}>~{usableL} L</b> — plan stocking on that figure.
+                  <button className="press" onClick={applyVolume} style={{display:"block",marginTop:9,background:C.primary,color:"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Save to My Tank</button>
+                  {savedNote&&<div style={{fontSize:11,color:C.success,fontWeight:700,marginTop:6}}>{savedNote}</div>}
+                </div>
+              )}
+            </>
+          )}
+
+          {saved&&!editing&&(
+            <div style={{display:"flex",gap:12,alignItems:"center"}}>
+              <div style={{fontSize:12.5,color:C.text,lineHeight:1.7}}>
+                <b>{tank.litres} L</b> usable{tank.lengthCm?` · ${tank.lengthCm} cm long`:""}<br/>
+                <span style={{color:C.textSub}}>
+                  {({tropical:"Tropical",coldwater:"Coldwater",pond:"Pond",marine:"Marine"})[tank.type]}
+                  {tank.tempC?` · ${tank.tempC}°C`:""}
+                  {tank.cycled?` · ${({yes:"cycled",cycling:"cycling",no:"not cycled"})[tank.cycled]}`:""}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ══ WHAT THE WATER SAYS ══ */}
+        {/* Above "This week" on purpose: detectable ammonia or nitrite is something to do
+            today, and a card that waits for the weekly slot is a card that arrives too late. */}
+        {verdict&&(()=>{
+          const L=WATER_LEVELS[verdict.level];
+          return(
+            <div style={{...card,background:L.bg,border:`1.5px solid ${L.bd}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <span style={{fontSize:17}}>{L.icon}</span>
+                <span style={{fontSize:10,fontWeight:800,letterSpacing:.6,textTransform:"uppercase",color:L.c}}>{L.label}</span>
+                <span style={{marginLeft:"auto",fontSize:10.5,color:C.textSub}}>{fmtDate(latestTest(tank).at)}</span>
+              </div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:L.c,marginBottom:4}}>{verdict.title}</div>
+              <div style={{fontSize:12,color:C.text,lineHeight:1.55,marginBottom:verdict.dos.length?10:0}}>{verdict.why}</div>
+              {verdict.dos.map((d,i)=>(
+                <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:5}}>
+                  <span style={{fontSize:11,color:L.c,fontWeight:800,flexShrink:0,lineHeight:1.6}}>{i+1}</span>
+                  <div style={{fontSize:12,color:C.text,lineHeight:1.55}}>{d}</div>
+                </div>
+              ))}
+              {verdict.level!=="good"&&(
+                <button className="press" onClick={markCareDone}
+                  style={{width:"100%",marginTop:8,background:L.c,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  ✓ Done — I've made this change
+                </button>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ══ WATER TESTS ══ */}
+        {tank.litres>0&&(
+          <div style={card}>
+            <H>🧫 Water tests</H>
+            <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:12}}>
+              Enter what your kit reads. The advice above follows these numbers, and the charts show whether it worked.
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:7,marginBottom:9}}>
+              {WATER_PARAMS.map(pm=>(
+                <div key={pm.k}>
+                  <div style={{fontSize:9.5,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.4,marginBottom:4,textAlign:"center"}}>{pm.n}</div>
+                  <input type="number" inputMode="decimal" min="0" step={pm.step} value={test[pm.k]}
+                    onChange={e=>setTest(t=>({...t,[pm.k]:e.target.value}))} placeholder="—"
+                    style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 4px",fontSize:13.5,outline:"none",background:"#f8fafc",textAlign:"center"}}/>
+                </div>
+              ))}
+            </div>
+            <button className="press" onClick={saveTest}
+              style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              Save today's readings
+            </button>
+
+            {tests.length>0&&(
+              <div style={{marginTop:16}}>
+                {WATER_PARAMS.map(pm=>{
+                  const pts=seriesFor(pm);
+                  if(!pts.length) return null;
+                  return(
+                    <div key={pm.k} style={{marginBottom:12}}>
+                      <div style={{display:"flex",alignItems:"baseline",gap:7,marginBottom:2}}>
+                        <span style={{width:9,height:9,borderRadius:3,background:pm.color,flexShrink:0}}/>
+                        <span style={{fontSize:12,fontWeight:800,color:C.text}}>{pm.n}</span>
+                        <span style={{fontSize:10.5,color:C.textSub}}>
+                          {pm.k==="ph"?`safe ${pm.lo}–${pm.hi}`:pm.hi>0?`safe under ${pm.hi} ${pm.unit}`:`must read 0 ${pm.unit}`}
+                        </span>
+                      </div>
+                      <WaterChart param={pm} points={pts}/>
+                    </div>
+                  );
+                })}
+                {/* The table view. The chart hues sit under 3:1 against white, so every number
+                    is also readable here in plain text. */}
+                <button className="press" onClick={()=>setLogOpen(v=>!v)}
+                  style={{background:"none",border:"none",color:C.accent,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",padding:0}}>
+                  {logOpen?"▲ Hide the readings":`▾ All ${tests.length} reading${tests.length===1?"":"s"}`}
+                </button>
+                {logOpen&&(
+                  <div style={{marginTop:9,overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+                      <thead>
+                        <tr style={{color:C.textSub}}>
+                          <th style={{textAlign:"left",padding:"5px 6px",fontWeight:700}}>Date</th>
+                          {WATER_PARAMS.map(pm=><th key={pm.k} style={{textAlign:"right",padding:"5px 6px",fontWeight:700,whiteSpace:"nowrap"}}>{pm.n}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tests.map((t,i)=>(
+                          <tr key={i} style={{borderTop:`1px solid ${C.border}`}}>
+                            <td style={{padding:"6px",color:C.textSub,whiteSpace:"nowrap"}}>{fmtDate(t.at)}</td>
+                            {WATER_PARAMS.map(pm=>{
+                              const v=numOrNull(t[pm.k]);
+                              const bad=v!=null&&(pm.k==="ph"?(v<pm.lo||v>pm.hi):v>pm.hi);
+                              return <td key={pm.k} style={{padding:"6px",textAlign:"right",fontWeight:bad?800:600,color:bad?"#b45309":C.text}}>{v==null?"—":v}</td>;
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ THIS WEEK ══ */}
+        {weekly.length>0&&(
+          <div style={card}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>🗓️ This week</div>
+              {perm!=="denied"&&(
+                <button className="press" onClick={toggleRemind} role="switch" aria-checked={!!tank.remind}
+                  aria-label={tank.remind?"Turn off weekly tank reminders":"Turn on weekly tank reminders"}
+                  style={{display:"flex",alignItems:"center",gap:7,background:tank.remind?"#dcfce7":C.accentLight,border:`1px solid ${tank.remind?"#86efac":C.border}`,borderRadius:10,padding:"6px 11px",fontSize:11,fontWeight:700,color:tank.remind?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  <span>{tank.remind?"🔔":"🔕"}</span><span>Remind me</span>
+                  <span style={{width:24,height:14,borderRadius:99,background:tank.remind?"#22c55e":"#cbd5e1",position:"relative",flexShrink:0,transition:"background .2s ease"}}>
+                    <span style={{position:"absolute",top:2,left:tank.remind?12:2,width:10,height:10,borderRadius:"50%",background:"#fff",transition:"left .2s ease"}}/>
+                  </span>
+                </button>
+              )}
+            </div>
+            <div style={{background:due.due?"#fff7ed":"#ecfdf5",border:`1px solid ${due.due?"#fed7aa":"#a7f3d0"}`,borderRadius:12,padding:"10px 12px",marginBottom:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:150,fontSize:12,fontWeight:700,color:due.due?"#9a3412":"#15803d",lineHeight:1.45}}>
+                {due.never?"No care logged yet — start the clock when you next do the jobs below."
+                 :due.due?`Due now — ${due.days} day${due.days===1?"":"s"} since the last one.`
+                 :`Done ${due.days===0?"today":due.days===1?"yesterday":`${due.days} days ago`} · next in ${CARE_INTERVAL_DAYS-due.days} day${CARE_INTERVAL_DAYS-due.days===1?"":"s"}.`}
+              </div>
+              <button className="press" onClick={markCareDone}
+                style={{background:due.due?C.primary:"#fff",color:due.due?"#fff":C.primary,border:due.due?"none":`1.5px solid ${C.primary}`,borderRadius:10,padding:"8px 13px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",flexShrink:0}}>
+                ✓ Done today
+              </button>
+            </div>
+            {tank.remind&&<div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.45}}>You'll be reminded when you open the app and the week is up — we can't wake a closed phone yet.</div>}
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {weekly.map((w,i)=>(
+                <label key={i} style={{display:"flex",gap:10,alignItems:"flex-start",background:checkedJobs.includes(i)?"#ecfdf5":"#f8fafc",border:`1px solid ${checkedJobs.includes(i)?"#a7f3d0":C.border}`,borderRadius:12,padding:"10px 12px",cursor:"pointer"}}>
+                  <input type="checkbox" checked={checkedJobs.includes(i)} onChange={()=>toggleJob(i)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
+                  <div><div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{w.i} {w.t}</div><div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:2}}>{w.s}</div></div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══ FISH COMMUNITY PLANNER ══ */}
+        <div style={card}>
+          <H>🐠 Fish Community Planner</H>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:12}}>
+            Say how many of each fish you want. Compatibility depends on the numbers, not just the species.
+          </div>
+
+          {stock.length>0&&(
+            <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:12}}>
+              {stock.map(({key,qty})=>{
+                const S=SPECIES[key];
+                return(
+                  <div key={key} style={{display:"flex",alignItems:"center",gap:10,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px"}}>
+                    <span style={{fontSize:17,flexShrink:0}}>{S.e}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{S.n} {S.big&&<span style={{fontSize:9,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"2px 7px",marginLeft:4}}>LARGE — {S.size} CM</span>}</div>
+                      <div style={{fontSize:10.5,color:C.textSub,fontStyle:"italic"}}>{S.sci} · adult {S.size} cm</div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:9,background:"#fff",borderRadius:10,padding:"3px 9px",border:`1.5px solid ${C.border}`,flexShrink:0}}>
+                      <button className="press" onClick={()=>setQty(key,qty-1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>−</button>
+                      <span style={{fontSize:13,fontWeight:700,minWidth:16,textAlign:"center"}}>{qty}</span>
+                      <button className="press" onClick={()=>setQty(key,qty+1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>+</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <button className="press" onClick={()=>setPickOpen(v=>!v)} style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",marginBottom:pickOpen?12:0}}>
+            {pickOpen?"▲ Close the fish list":"＋ Add fish"}
+          </button>
+
+          {pickOpen&&SPECIES_GROUPS.map(g=>{
+            const keys=Object.keys(SPECIES).filter(k=>SPECIES[k].grp===g.k);
+            if(!keys.length) return null;
+            return(
+              <div key={g.k} style={{marginBottom:12}}>
+                <div style={{...lbl,marginTop:4}}>{g.label}</div>
+                {g.k==="pond"&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:8,lineHeight:1.5}}>Pond fish, not aquarium fish. Koi need a large, deep pond — OATA advises substantially more depth than a tank can offer.</div>}
+                {g.k==="invert"&&<div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Judged separately from fish: "can live together" is not the same as "will not be eaten".</div>}
+                <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                  {keys.map(k=>{
+                    const S=SPECIES[k], on=stockOf(k)>0;
+                    return(
+                      <button key={k} className="press" onClick={()=>setQty(k,on?0:Math.max(1,S.school))} style={chip(on)} title={S.sci}>
+                        {S.e} {S.n}{S.big?" ⚠":""}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {report&&(
+            <div style={{marginTop:14}}>
+              <div style={{background:VERDICT[report.worst].bg,border:`1.5px solid ${VERDICT[report.worst].bd}`,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+                <div style={{fontSize:14,fontWeight:800,color:VERDICT[report.worst].c}}>{VERDICT[report.worst].icon} {VERDICT[report.worst].t}</div>
+                <div style={{fontSize:11.5,color:C.textSub,marginTop:4,lineHeight:1.55}}>
+                  Confidence: <b style={{color:C.text}}>{report.confidence}</b>
+                  {report.missing.length>0&&<> — still missing {report.missing.join(", ")}.</>}
+                </div>
+              </div>
+
+              {report.tankLvl.length>0&&(
+                <div style={{marginBottom:9}}>
+                  <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>🏠 {tank.name||"This tank"}</div>
+                  {report.tankLvl.map((it,i)=>(
+                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                      <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
+                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {report.perSpecies.map(({key,qty,issues})=>issues.length>0&&(
+                <div key={key} style={{marginBottom:9}}>
+                  <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>{SPECIES[key].e} {qty} × {SPECIES[key].n}</div>
+                  {issues.map((it,i)=>(
+                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                      <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
+                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+
+              {report.pairs.map((p,i)=>(
+                <div key={i} style={{marginBottom:9}}>
+                  <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>{SPECIES[p.a].n} × {SPECIES[p.b].n}</div>
+                  {p.issues.map((it,j)=>(
+                    <div key={j} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                      <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
+                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+
+              {report.worst===V_OK&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>Nothing in this mix conflicts. Add fish a few at a time so the filter can keep up.</div>}
+
+              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:11.5,lineHeight:1.6,color:C.text,marginTop:6}}>
+                🪣 <b>Waste load:</b> {({light:"light — room to add more later",comfortable:"comfortable for this volume",full:"at the comfortable limit",over:"beyond what this volume supports",unknown:"needs the tank volume to judge"})[report.load.level]}
+                {report.load.heavy.length>0&&<> · heavy-waste species here: {report.load.heavy.join(", ")}.</>}
+              </div>
+
+              <button className="press" onClick={askNemo} style={{width:"100%",marginTop:12,background:"#25D366",color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                💬 Ask Nemo about this plan
+              </button>
+              <button className="press" onClick={()=>persist({...tank,stock:[]})} style={{marginTop:8,background:"none",border:"none",color:C.textSub,fontSize:12,fontWeight:700,textDecoration:"underline",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Clear the plan</button>
+            </div>
+          )}
+        </div>
+
+        {/* ══ HEATER ══ */}
+        <div style={card}>
+          <H>🌡️ Heater Guide</H>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:10}}>
+            Wattage depends on how far the heater has to lift the water above the room, not on volume alone.
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+            <div><div style={lbl}>Room temp °C</div>{numIn(roomT,setRoomT,"28")}</div>
+            <div><div style={lbl}>Target water °C</div>{numIn(tank.tempC,v=>setF("tempC",v),"26")}</div>
+          </div>
+          {!tank.litres&&<div style={{fontSize:11.5,color:C.textSub}}>Set your tank volume above to size a heater.</div>}
+          {heater&&heater.none&&(
+            <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:"#92400e"}}>
+              🔥 Your room already sits at or above the target. A heater would rarely switch on — and in a hot spell the risk is <b>overheating</b>, not cold. Watch for water above {Number(tank.tempC)+2}°C, keep the surface moving, and consider a fan across the surface rather than a heater.
+            </div>
+          )}
+          {heater&&!heater.none&&(
+            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:C.text}}>
+              🌡️ About <b style={{color:C.primary}}>{heater.w} W</b> to hold {tank.tempC}°C in a {roomT}°C room ({heater.lift}°C lift).
+              {heater.split&&<> Over 200 L, two smaller heaters at opposite ends beat one large one — and a single failure cannot cook or chill the tank.</>}
+              {heater.hot&&<> Your room is close to the target, so it will rarely run.</>}
+            </div>
+          )}
+        </div>
+
+        {/* ══ FILTER ══ */}
+        <div style={card}>
+          <H>🌀 Filter Guide</H>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:10}}>
+            A recommended range, not a guaranteed safe figure — what the filter holds matters more than the number on the box.
+          </div>
+          {!filterRec&&<div style={{fontSize:11.5,color:C.textSub}}>Set your tank volume above to size a filter.</div>}
+          {filterRec&&(
+            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:C.text}}>
+              🌀 Aim for <b style={{color:C.primary}}>{filterRec.lo}–{filterRec.hi} L/h</b> on a {tank.litres} L tank
+              {filterRec.lvl!=="unknown"&&<> at your planned stocking ({filterRec.lvl}).</>}
+              {filterRec.heavy.length>0&&<> Heavy-waste species in the plan ({filterRec.heavy.join(", ")}) push you to the top of that range.</>}
+              <div style={{fontSize:11,color:C.textSub,marginTop:6}}>Planted tanks tolerate the lower end; bare tanks with big fish need the upper. Rated flow is measured with an empty filter — assume 30% less once it holds media.</div>
+            </div>
+          )}
+        </div>
+
+        <button className="cta" onClick={()=>nav("shop")}
+          style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textTransform:"uppercase",letterSpacing:".05em",cursor:"pointer"}}>
+          Shop fish, tanks &amp; gear →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,onShowcaseVote,totmVotes={},tankPreviousWinners=null,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true}){
+  const featured=[...products].sort(byAvailabilityThen()).slice(0,6);
+  const [menuOpen,setMenuOpen]=useState(false);
+  const [walletOpen,setWalletOpen]=useState(false);
+  const [recent,setRecent]=useState(()=>loadRecentSearches());
+  const related=useMemo(()=>relatedProducts(products,recent,null,6),[products,recent]);
+  const recentlyViewed=useMemo(()=>loadRecentlyViewed().map(id=>products.find(p=>p.id===id)).filter(Boolean).slice(0,10),[products]);
+  // Live search suggestions — match name/category as the customer types
+  const suggestions=useMemo(()=>{
+    const q=(query||"").trim();
+    if(q.length<1) return [];
+    return products.filter(p=>smartMatch(q,p)).slice(0,6);
+  },[query,products]);
+  const [suggOpen,setSuggOpen]=useState(false);
+  const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
+  const walletWarn=!!(wexp&&(wexp.expiringSoon||wexp.expired));
+  const handleRecent=(r)=>{
+    if(r===null){ clearRecentSearches(); setRecent([]); return; }
+    setMenuOpen(false); setQuery(r); nav("shop");
+  };
+  const offer = products.find(p=>activeDiscount(p)>0 && p.offerEndsAt);
+  const offerStock = offer ? (offer.stockCount ?? DEFAULT_STOCK) : 0;
+  // Offer Zone — every product currently on offer (discount set, in stock, offer not expired).
+  const offerProducts = products.filter(p=>!p.comingSoon && activeDiscount(p)>0 && (p.stockCount??DEFAULT_STOCK)>0);
+  return(
+    <div className="slide-up">
+      <CategoryDrawer open={menuOpen} onClose={()=>setMenuOpen(false)} recent={recent} nav={nav} user={user} settings={settings} orders={orders}
+        onSelect={(cat)=>{ setMenuOpen(false); setCategory(cat); nav("shop"); }}
+        onRecent={handleRecent}/>
+      <WalletModal open={walletOpen} onClose={()=>setWalletOpen(false)} points={walletPts} user={user} settings={settings}/>
+      {/* Hero */}
+      <div className="home-hero" style={{background:"linear-gradient(180deg,#f1f9fe 0%,#ffffff 100%)",
+        padding:"34px 18px 22px",borderRadius:"0 0 28px 28px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-50,right:-40,width:180,height:180,borderRadius:"50%",border:"2px solid rgba(14,165,233,.10)"}}/>
+        <div style={{position:"absolute",top:40,right:50,width:70,height:70,borderRadius:"50%",border:"2px solid rgba(244,63,94,.10)"}}/>
+        <div style={{position:"absolute",bottom:-50,left:-40,width:160,height:160,borderRadius:"50%",background:"rgba(14,165,233,.05)"}}/>
+
+        {/* Hamburger — opens category drawer */}
+        <button className="press home-hero-chrome" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
+          style={{position:"absolute",top:46,left:16,width:40,height:40,borderRadius:14,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,cursor:"pointer",zIndex:3}}>
+          <span style={{width:17,height:2,background:C.text,borderRadius:2}}/>
+          <span style={{width:17,height:2,background:C.text,borderRadius:2}}/>
+          <span style={{width:17,height:2,background:C.text,borderRadius:2}}/>
+        </button>
+        {/* Account chip */}
+        <div className="home-hero-chrome" style={{position:"absolute",top:46,right:16,display:"flex",alignItems:"center",gap:8}}>
+          {user&&settings.loyaltyEnabled!==false&&(
+            <button className="press" onClick={()=>setWalletOpen(true)} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your coins & history"}
+              style={{position:"relative",display:"flex",alignItems:"center",gap:5,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",borderRadius:99,padding:"7px 12px",color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              <span style={{fontSize:14,lineHeight:1}}>👛</span>
+              <span style={{fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{walletPts}</span>
+              {walletWarn&&<span style={{position:"absolute",top:-5,right:-4,minWidth:16,height:16,padding:"0 3px",borderRadius:9,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid rgba(13,90,94,.9)"}}>⏳</span>}
+            </button>
+          )}
+          <button className="press" onClick={()=>nav("orders")}
+            style={{display:"flex",alignItems:"center",gap:7,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",borderRadius:99,padding:"6px 12px 6px 6px",color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+            <span style={{width:26,height:26,borderRadius:"50%",background:C.primary,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>
+              {user?(user.name||"U").charAt(0).toUpperCase():"👤"}
+            </span>
+            <span style={{fontSize:12,fontWeight:700}}>{user?(user.name||"").split(" ")[0]||"Account":"Sign in"}</span>
+          </button>
+        </div>
+
+        {/* Real Nemo logo — secret tap target. marginTop clears the absolute account/wallet chip on mobile so the logo never overlaps Sign in. */}
+        {/* onPointerDown, not onClick: ten taps in the same spot is exactly the gesture a
+            phone treats as repeated double-taps, and the browser swallows or delays the
+            clicks it thinks are zoom attempts — which is why the admin panel opened on a
+            desktop but was unreachable on a phone. touchAction:manipulation turns off
+            double-tap zoom on the logo so every tap counts. */}
+        <div onPointerDown={onSecretTap} className="home-hero-logo"
+          style={{display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",touchAction:"manipulation",WebkitTapHighlightColor:"transparent",marginBottom:9,marginTop:39}}>
+          <div style={{width:"min(205px,62%)",aspectRatio:"600 / 311",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:"100%",height:"100%",objectFit:"contain",filter:"drop-shadow(0 6px 14px rgba(0,0,0,.28))"}}/>
+          </div>
+        </div>
+
+        {/* Browse categories — opens the left-slide category sidebar (icon only; shown on desktop, just above the quote). On mobile the top-left hamburger already does this. */}
+        <button className="press hero-browse" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
+          style={{display:"none",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:4,width:46,height:46,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",borderRadius:16,color:C.text,cursor:"pointer",marginBottom:18}}>
+          <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
+          <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
+          <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
+        </button>
+        {/* Tagline */}
+        <div className="hero-tagline" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(23px,6vw,38px)",fontWeight:800,letterSpacing:"-0.03em",color:C.text,lineHeight:1.1,marginBottom:5,textWrap:"balance",textAlign:"center"}}>
+          {settings.heroHeadline||"Bring Colour to Your Life"}
+        </div>
+        <div className="hero-sub" style={{fontSize:13.5,fontWeight:500,color:C.textSub,marginBottom:0,textAlign:"center"}}>
+          {settings.heroSub||"Quality Fishes · Plants · Accessories"}
+        </div>
+      </div>
+
+      {/* Search bar — type inline; Enter or the icon opens Shop with your query */}
+      <div className="home-search" style={{padding:"0 16px",marginTop:-18,marginBottom:16,position:"relative",zIndex:2}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,background:C.card,borderRadius:16,padding:"14px 16px",border:`1.5px solid ${C.border}`,boxShadow:"0 8px 24px rgba(11,110,114,.12)",position:"relative"}}>
+          <button onClick={()=>nav("shop")} aria-label="Search" style={{background:"none",border:"none",padding:0,fontSize:18,cursor:"pointer",lineHeight:1}}>🔍</button>
+          <input type="text" placeholder="Search fish, plants, accessories…"
+            value={query} onChange={e=>{setQuery(e.target.value);setSuggOpen(true);}}
+            onFocus={()=>setSuggOpen(true)} onBlur={()=>setTimeout(()=>setSuggOpen(false),160)}
+            onKeyDown={e=>{if(e.key==="Enter"){setSuggOpen(false);nav("shop");}}}
+            style={{border:"none",background:"transparent",outline:"none",flex:1,fontSize:14}}/>
+          {query&&(
+            <button onClick={()=>setQuery("")} className="press" aria-label="Clear search"
+              style={{flexShrink:0,background:"none",border:"none",color:C.textSub,fontSize:18,lineHeight:1,cursor:"pointer",padding:"0 2px"}}>✕</button>
+          )}
+          {query&&(
+            <button onClick={()=>{setSuggOpen(false);nav("shop");}} className="press"
+              style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 13px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Go</button>
+          )}
+          {/* Live search suggestions — tap a match to jump straight to the product */}
+          {suggOpen&&query.trim()&&suggestions.length>0&&(
+            <div className="sugg-drop" style={{position:"absolute",top:"calc(100% + 8px)",left:0,right:0,background:C.card,borderRadius:14,border:`1px solid ${C.border}`,boxShadow:"0 14px 34px rgba(11,110,114,.18)",overflow:"hidden",zIndex:40}}>
+              {suggestions.map(p=>{
+                const img=getCardImg(p,mediaCache);
+                const cm=CAT_META[p.category]||CAT_META["Live Fish"];
+                return(
+                  <button key={p.id} className="press" onMouseDown={e=>e.preventDefault()}
+                    onClick={()=>{setRecent(addRecentSearch(p.name));setSuggOpen(false);nav("detail",p);}}
+                    style={{display:"flex",alignItems:"center",gap:11,width:"100%",padding:"9px 12px",background:"none",border:"none",borderBottom:`1px solid ${C.border}`,cursor:"pointer",textAlign:"left"}}>
+                    <div style={{width:42,height:42,borderRadius:9,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${cm.c1},${cm.c2})`}}>
+                      {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:22}}>{cm.emoji}</span>}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+                      <div style={{fontSize:11,color:C.textSub}}>{p.category}</div>
+                    </div>
+                    {/* Option products are quoted from their cheapest option, same as the cards below */}
+                    <div style={{flexShrink:0,textAlign:"right"}}>
+                      {hasMultiOptions(p)&&<div style={{fontSize:9.5,color:C.textSub,fontWeight:700,lineHeight:1.1}}>Starts from</div>}
+                      <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{hasMultiOptions(p)?variantFromPrice(p):effectivePrice(p)}</div>
+                    </div>
+                  </button>
+                );
+              })}
+              <button className="press" onMouseDown={e=>e.preventDefault()} onClick={()=>{setSuggOpen(false);nav("shop");}}
+                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",padding:"11px 12px",background:C.bg,border:"none",cursor:"pointer",color:C.primary,fontWeight:800,fontSize:12.5,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                See all results for "{query.trim()}" →
+              </button>
+            </div>
+          )}
+        </div>
+        {recent.length>0&&(
+          <div style={{display:"flex",alignItems:"center",gap:7,overflowX:"auto",marginTop:10,paddingBottom:2,WebkitOverflowScrolling:"touch"}}>
+            <span style={{fontSize:11,color:C.textSub,fontWeight:700,flexShrink:0}}>Recent:</span>
+            {recent.slice(0,6).map(r=>(
+              <button key={r} className="press" onClick={()=>{setQuery(r);nav("shop");}}
+                style={{flexShrink:0,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:600,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",whiteSpace:"nowrap"}}>
+                {r}
+              </button>
+            ))}
+            <button className="press" onClick={()=>handleRecent(null)} title="Clear your recent searches"
+              style={{flexShrink:0,background:"rgba(255,255,255,.16)",border:"1px solid rgba(255,255,255,.3)",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,color:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",whiteSpace:"nowrap"}}>
+              ✕ Clear
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="home-body" style={{padding:"0 16px 100px"}}>
+        {/* Seasonal / festival banner */}
+
+        {/* First-order welcome coupon */}
+        {settingsReady&&<OfferBanners settings={settings} orders={orders}/>}
+
+        {/* Food re-order reminder */}
+        <FoodReorderBanner orders={orders} products={products} addToCart={addToCart} nav={nav}/>
+
+        <TankShowcaseSection mode="gallery" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit} onVote={onShowcaseVote} votes={totmVotes} previousWinners={tankPreviousWinners}/>
+
+        {/* Categories */}
+        {/* Recently viewed — replaces the old category grid */}
+        {recentlyViewed.length>0&&(
+        <div className="js-reveal" style={{marginBottom:24}}>
+          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+            <span style={{fontSize:18}}>🕒</span>
+            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Recently Viewed</span>
+          </div>
+          <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
+            {recentlyViewed.map(p=>(
+              <div key={p.id} style={{flexShrink:0,width:150}}>
+                <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
+                  onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
+                  isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
+              </div>
+            ))}
+          </div>
+        </div>
+        )}
+
+        {/* Offer Zone — lists only products that are currently on offer */}
+        {offerProducts.length>0&&(
+          <div style={{marginBottom:26,background:"linear-gradient(135deg,#fff1ee,#ffe8e3)",border:`1.5px solid ${C.coral}`,borderRadius:20,padding:"16px 14px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+              <span style={{display:"flex",alignItems:"center",gap:7}}>
+                <span style={{fontSize:20}}>🔥</span>
+                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Offer Zone</span>
+                <span style={{background:C.coral,color:"#fff",fontSize:10.5,fontWeight:800,padding:"2px 8px",borderRadius:20}}>{offerProducts.length}</span>
+              </span>
+              <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.coral,fontWeight:700,background:"none",border:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View All →</button>
+            </div>
+            <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+              {offerProducts.map(p=>(
+                <ProductCard key={p.id} product={p} imgSrc={getCardImg(p,mediaCache)}
+                  onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
+                  isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Related to your recent searches */}
+        {related.length>0&&(
+          <div style={{marginBottom:26}}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+              <span style={{fontSize:18}}>✨</span>
+              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Based on Your Searches</span>
+            </div>
+            <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
+              {related.map(p=>(
+                <div key={p.id} style={{flexShrink:0,width:150}}>
+                  <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
+                    onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
+                    isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Featured */}
+        <div className="js-reveal" style={{marginBottom:26}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Featured</span>
+            <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.accent,fontWeight:700,background:"none",border:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View All →</button>
+          </div>
+          {!hydrated ? <SkeletonGrid n={6}/> : (
+          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+            {featured.map(p=>(
+              <ProductCard key={p.id} product={p} imgSrc={getCardImg(p,mediaCache)}
+                onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
+                isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
+            ))}
+          </div>
+          )}
+        </div>
+
+        {/* Customer Tank Showcase */}
+
+        {/* Free delivery banner — only shown when admin has set a threshold */}
+        {Number(settings.freeDeliveryThreshold) > 0 && (
+        <div style={{background:`linear-gradient(135deg,${C.accent},${C.primary})`,borderRadius:20,padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",color:"white",marginBottom:14}}>
+          <div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Free Delivery</div>
+            <div style={{fontSize:12,opacity:.88,marginBottom:12}}>On orders above ₹{settings.freeDeliveryThreshold}</div>
+            <button className="press" onClick={()=>nav("shop")} style={{background:"white",color:C.primary,border:"none",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Shop Now</button>
+          </div>
+          <div style={{fontSize:60,userSelect:"none"}}>🚚</div>
+        </div>
+        )}
+
+        {/* Care Guides + Request */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:14}}>
+          <button className="press" onClick={()=>nav("guides")}
+            style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,border:"none",borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white"}}>
+            <span style={{fontSize:28}}>📖</span>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,lineHeight:1.2}}>Care Guides</div>
+            <div style={{fontSize:11,opacity:.85,lineHeight:1.4}}>Tips &amp; guides for a healthy tank</div>
+          </button>
+          <button className="press" onClick={()=>nav("request")}
+            style={{background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+            <span style={{fontSize:28}}>🦄</span>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.2}}>Exotic Fish or Any Product on Request</div>
+            <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Rare fish or any product? We'll source it for you</div>
+          </button>
+        </div>
+
+        {/* Aqua Tools — compatibility checker & tank calculators */}
+        <button className="press" onClick={()=>nav("tools")}
+          style={{width:"100%",marginTop:12,background:"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:18,padding:"16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white",boxShadow:"0 8px 24px rgba(14,165,233,.22)"}}>
+          <span style={{fontSize:32,flexShrink:0}}>🧪</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:15,fontWeight:800,lineHeight:1.2}}>Aqua Tools — free tank planner</div>
+            <div style={{fontSize:11.5,opacity:.9,marginTop:2,lineHeight:1.4}}>Fish compatibility checker · tank volume · heater &amp; filter size · stocking guide</div>
+          </div>
+          <span style={{fontSize:18,opacity:.85}}>→</span>
+        </button>
+
+        {/* Share your tank (upload form) + Testimonials — moved to the bottom of the home page */}
+        <div style={{marginTop:28}}>
+          <TankShowcaseSection mode="upload" showcase={showcase} user={user} settings={settings} onSubmit={onShowcaseSubmit} onVote={onShowcaseVote} votes={totmVotes} previousWinners={tankPreviousWinners}/>
+        </div>
+        {settings.testimonialsEnabled!==false&&<TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>}
+
+        {/* Pincode serviceability checker */}
+        <PincodeChecker settings={settings}/>
+
+        {/* ── Site footer (desktop only — on mobile these links live in the side menu) ── */}
+        <div className="home-footer" style={{margin:"28px -16px 0",background:C.card,borderTop:`3px solid ${C.primary}`,padding:"26px 18px 22px"}}>
+          {/* Brand + tagline */}
+          <div style={{marginBottom:22}}>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>{STORE_NAME} Aqua Store</div>
+            <div style={{fontSize:12,color:C.textSub,marginTop:3,lineHeight:1.5,maxWidth:300}}>{settings.tagline||"Hand-picked healthy fish, live plants & quality accessories — delivered with care across India."}</div>
+          </div>
+
+          {/* Footer columns — responsive auto-fit grid: spreads into columns on desktop, stacks neatly on mobile */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"26px 20px",marginBottom:22,borderTop:`1px solid ${C.border}`,paddingTop:22}}>
+            {/* Shop */}
+            <div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Shop</div>
+              {CATEGORIES.map(cat=>(
+                <button key={cat} className="press" onClick={()=>{setCategory(cat);nav("shop");}}
+                  style={{display:"flex",alignItems:"center",gap:7,background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
+                  <span style={{fontSize:14}}>{CAT_META[cat].emoji}</span>{cat}
+                </button>
+              ))}
+            </div>
+            {/* Company */}
+            <div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Company</div>
+              {[
+                {label:"About Us",to:"about"},
+                {label:"Care Guides",to:"guides"},
+                {label:"Request a Product",to:"request"},
+                {label:"Track My Orders",to:"orders"},
+              ].map(l=>(
+                <button key={l.label} className="press" onClick={()=>nav(l.to)}
+                  style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
+                  {l.label}
+                </button>
+              ))}
+            </div>
+            {/* Policies */}
+            <div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Policies</div>
+              {[
+                {label:"Live Guarantee",to:"policy-guarantee"},
+                {label:"Cancellations, Returns & Refunds",to:"policy-returns",href:"/cancellations-returns-refunds"},
+                {label:"Terms & Conditions",to:"policy-terms"},
+                {label:"Privacy Policy",to:"policy-privacy"},
+                {label:"Contact Us",to:"contact",href:"/contact-us"},
+              ].map(l=>(
+                <a key={l.label} className="press" href={l.href||"#"} onClick={e=>{e.preventDefault();nav(l.to);}}
+                  style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",cursor:"pointer",width:"100%",textDecoration:"none"}}>
+                  {l.label}
+                </a>
+              ))}
+            </div>
+            {/* Contact */}
+            <div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Contact Us</div>
+              {settings.storeAddress&&(
+                <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>📍</span><span>{settings.storeAddress}</span></div>
+              )}
+              {settings.storeHours&&(
+                <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>🕒</span><span>{settings.storeHours}</span></div>
+              )}
+              {settings.ownerWhatsapp&&(
+                <a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
+                  style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",marginBottom:8}}>
+                  <span style={{fontSize:14}}>💬</span> +{settings.ownerWhatsapp.replace(/\D/g,"")}
+                </a>
+              )}
+              <a href={`mailto:${settings.orderEmail||BUSINESS_EMAIL}`}
+                style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:C.accent,textDecoration:"none",wordBreak:"break-all"}}>
+                <span style={{fontSize:14}}>✉️</span> {settings.orderEmail||BUSINESS_EMAIL}
+              </a>
+            </div>
+            {/* Follow Us */}
+            {(settings.instagramUrl||settings.facebookUrl||settings.ownerWhatsapp)&&(
+              <div>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Follow Us</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {settings.instagramUrl&&(<a href={settings.instagramUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#c13584",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>📷 Instagram</a>)}
+                  {settings.facebookUrl&&(<a href={settings.facebookUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#1877f2",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>👍 Facebook</a>)}
+                  {settings.ownerWhatsapp&&(<a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>💬 WhatsApp</a>)}
+                </div>
+              </div>
+            )}
+            {/* Get the App — the whole column drops out for visitors who already have it */}
+            <PlayAppBlock medium="footer" note="Shop and track your orders from your phone."
+              headingStyle={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}
+              noteStyle={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:4}}
+              badgeStyle={{marginLeft:-9}}/>
+            {/* Secure Payment */}
+            <div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Secure Payment</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {["UPI","VISA","Mastercard","RuPay"].map(b=>(
+                  <span key={b} style={{fontSize:11,fontWeight:800,letterSpacing:.3,color:C.textSub,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 11px"}}>{b}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={{fontSize:10.5,color:C.textSub,opacity:.75,lineHeight:1.5}}>© {new Date().getFullYear()} {STORE_NAME} Aqua Store. All rights reserved.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════ SHOP PAGE ═══════════════════ */
+function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,addToCart,cartMap,favorites=[],onFav,interestedSet=[],onInterest,restockSet=[],onRestock,hydrated=true}){
+  // Render a window of cards and grow it as the shopper reaches the end. Drawing the whole
+  // catalogue at once cost a 215ms hitch at 300 products (it scales with the count); this keeps
+  // the grid's cost flat while still feeling like one continuous list.
+  const PAGE=24;
+  const [shown,setShown]=useState(PAGE);
+  const moreRef=useRef(null);
+  const [sort,setSort]=useState("relevance");
+  const [availability,setAvailability]=useState("all");
+  useEffect(()=>{ setShown(PAGE); },[query,category,sort,availability]);
+  // Grow the window when the "show more" marker scrolls into view.
+  useEffect(()=>{
+    const el=moreRef.current;
+    if(!el || typeof IntersectionObserver==="undefined") return;
+    const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)) setShown(n=>n+PAGE); },{rootMargin:"400px 0px"});
+    io.observe(el);
+    return ()=>io.disconnect();
+  },[shown,query,category,sort,availability]);
+  const [recent,setRecent]=useState(()=>loadRecentSearches());
+  // Record the search term once the user stops typing
+  useEffect(()=>{ const q=(query||"").trim(); if(q.length<2) return; const t=setTimeout(()=>{setRecent(addRecentSearch(q)); trackSearch(q);},900); return ()=>clearTimeout(t); },[query]);
+  const priceCap = useRef(Math.max(2500, ...products.map(p=>p.price))).current;
+  const [priceMax,setPriceMax]=useState(priceCap);
+  const [sheet,setSheet]=useState(false);
+
+  let list = products.filter(p=>{
+    if(category!=="All" && p.category!==category) return false;
+    if(query && !smartMatch(query,p)) return false;
+    const stk = productStockTotal(p);
+    if(availability==="instock" && stk<=0) return false;
+    if(availability==="limited" && (stk<=0 || stk>3)) return false;
+    if(effectivePrice(p) > priceMax) return false;
+    return true;
+  });
+  list = [...list].sort(byAvailabilityThen((a,b)=>{
+    if(sort==="price-asc")  return effectivePrice(a)-effectivePrice(b);
+    if(sort==="price-desc") return effectivePrice(b)-effectivePrice(a);
+    if(sort==="name")       return a.name.localeCompare(b.name);
+    if(sort==="rating")     return (b.rating||0)-(a.rating||0);
+    if(sort==="new")        return (b.createdAt||"").localeCompare(a.createdAt||"");
+    return 0;
+  }));
+
+  const activeFilters = (availability!=="all"?1:0) + (priceMax<priceCap?1:0) + (sort!=="relevance"?1:0);
+
+  // Live per-category result counts (reflect the current search term)
+  const catCounts=useMemo(()=>{
+    const q=(query||"").trim();
+    const match=p=>!q||smartMatch(q,p);
+    const m={All:0}; CATEGORIES.forEach(c=>m[c]=0);
+    products.forEach(p=>{ if(match(p)){ m.All++; if(m[p.category]!=null) m[p.category]++; } });
+    return m;
+  },[products,query]);
+
+  return(
+    <div className="slide-up">
+      <div className="vh-head shop-bar" style={{background:C.card,padding:"52px 14px 10px",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,flexShrink:0}}>Shop</div>
+          <div style={{display:"flex",alignItems:"center",background:C.bg,borderRadius:12,padding:"8px 12px",gap:8,flex:1,minWidth:0,border:`1.5px solid ${C.border}`}}>
+            <span style={{fontSize:15}}>🔍</span>
+            <input type="text" placeholder="Search…" value={query} onChange={e=>setQuery(e.target.value)}
+              style={{border:"none",background:"transparent",outline:"none",flex:1,fontSize:13,minWidth:0}}/>
+            {query&&<button className="press" onClick={()=>setQuery("")} style={{background:"none",border:"none",fontSize:15,color:C.textSub}}>✕</button>}
+          </div>
+          <button className="press" onClick={()=>setSheet(true)}
+            style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,background:activeFilters>0?C.primary:C.card,border:`1.5px solid ${activeFilters>0?C.primary:C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:activeFilters>0?"white":C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+            Filter &amp; Sort{activeFilters>0&&<span style={{background:"rgba(255,255,255,.25)",borderRadius:10,padding:"1px 6px",fontSize:10}}>{activeFilters}</span>}
+          </button>
+        </div>
+        <CategoryPills selected={category} onSelect={setCategory} all counts={catCounts}/>
+      </div>
+      <div style={{padding:"14px 16px 100px"}}>
+        {!query&&recent.length>0&&(
+          <div style={{marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontSize:12,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Recent searches</span>
+              <button className="press" onClick={()=>{clearRecentSearches();setRecent([]);}} style={{background:"none",border:"none",color:C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Clear</button>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {recent.map(r=>(
+                <button key={r} className="press" onClick={()=>setQuery(r)}
+                  style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"7px 13px",fontSize:12.5,fontWeight:600,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  🔍 {r}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {hydrated&&<div style={{fontSize:12,color:C.textSub,fontWeight:500,marginBottom:14}}>
+          {list.length} product{list.length!==1?"s":""}{category!=="All"?` in ${category}`:""}{query?` for "${query}"`:""}
+        </div>}
+        {!hydrated?(<SkeletonGrid n={8}/>):list.length===0?(
+          <div style={{textAlign:"center",padding:"50px 20px",color:C.textSub}}>
+            <div style={{fontSize:52,marginBottom:14}}>🌊</div>
+            <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No products found</div>
+            <div style={{fontSize:12}}>Try adjusting your filters</div>
+          </div>
+        ):(
+          <>
+          <div className="prod-grid js-stagger" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+            {list.slice(0,shown).map(p=>(
+              <div key={p.id}>
+                <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
+                  onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
+                  isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
+                <RestockBtn product={p} user={null} restockSet={restockSet} onSubscribe={onRestock}/>
+              </div>
+            ))}
+          </div>
+          {/* Reaching this loads the next batch. The button is the fallback for browsers with
+              no IntersectionObserver, and for anyone who'd rather tap than scroll. */}
+          {list.length>shown&&(
+            <div ref={moreRef} style={{padding:"18px 0 4px",textAlign:"center"}}>
+              <button className="press" onClick={()=>setShown(n=>n+PAGE)}
+                style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:99,padding:"11px 22px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                Show more ({list.length-shown} left)
+              </button>
+            </div>
+          )}
+          </>
+        )}
+        {/* Related products — keyword matches outside the current result set */}
+        {query.trim()&&(()=>{
+          const inList=new Set(list.map(p=>p.id));
+          const rel=relatedProducts(products,[query],null,8).filter(p=>!inList.has(p.id));
+          if(!rel.length) return null;
+          return(
+            <div style={{marginTop:28}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+                <span style={{fontSize:18}}>✨</span>
+                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,color:C.text}}>You might also like</span>
+              </div>
+              <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
+                {rel.map(p=>(
+                  <div key={p.id} style={{flexShrink:0,width:150}}>
+                    <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
+                      onPress={p=>nav("detail",p)} onAdd={addToCart} inCart={cartMap[p.id]||0}
+                      isFav={favorites.includes(p.id)} onFav={onFav} isInterested={interestedSet.includes(p.id)} onInterest={onInterest}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+      <SortFilterSheet open={sheet} onClose={()=>setSheet(false)}
+        sort={sort} setSort={setSort}
+        priceMax={priceMax} priceCap={priceCap} setPriceMax={setPriceMax}
+        availability={availability} setAvailability={setAvailability}
+        onClear={()=>{setSort("relevance");setPriceMax(priceCap);setAvailability("all");}}
+        count={list.length}/>
+    </div>
+  );
+}
+
+/* ═══════════════════ DETAIL PAGE ═══════════════════ */
+/* Pincode → delivery-zone & ETA estimate on the product page */
+function DeliveryEstimate({settings={}}){
+  const [pin,setPin]=useState("");
+  const ETA={TN:"1–2 days",SouthIndia:"2–4 days",CentralIndia:"3–5 days",NorthIndia:"4–6 days"};
+  const zone=/^\d{6}$/.test(pin)?pincodeToZone(pin):null;
+  return(
+    <div style={{margin:"18px 0 0",padding:"13px 14px",background:C.card,borderRadius:14,border:`1px solid ${C.border}`}}>
+      <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>🚚 Check delivery to your area</div>
+      <div style={{display:"flex",gap:8}}>
+        <input value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" placeholder="Enter 6-digit pincode"
+          style={{flex:1,boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13.5,outline:"none",background:"white",fontFamily:"monospace"}}/>
+      </div>
+      {pin.length===6&&(zone?(
+        <div style={{marginTop:9,fontSize:12,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
+          ✓ Delivers to <b>{ZONE_LABELS[zone]}</b> · Estimated <b>{ETA[zone]||"3–6 days"}</b>. Live fish ship on selected days for safe transit.
+        </div>
+      ):(
+        <div style={{marginTop:9,fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
+          Pincode not recognised — please message us on WhatsApp to confirm delivery & timing.
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Frequently bought together — complementary in-stock items + add-all */
+function FrequentlyBought({base, products=[], addToCart, mediaCache={}, nav}){
+  const fbt=useMemo(()=>{
+    const pool=products.filter(x=>x.id!==base.id && !x.comingSoon && (x.stockCount??DEFAULT_STOCK)>0);
+    const prefer = (base.category==="Live Fish"||base.category==="Plants") ? ["Feed","Accessories","Tanks"] : ["Accessories","Feed","Tanks"];
+    const score=x=>{ const i=prefer.indexOf(x.category); return i<0?0:(prefer.length-i); };
+    return [...pool].sort((a,b)=>score(b)-score(a)||(b.ratingAvg||0)-(a.ratingAvg||0)).slice(0,3);
+  },[products,base.id]);
+  if(fbt.length<2) return null;
+  const total=fbt.reduce((s,x)=>s+effectivePrice(x),0)+effectivePrice(base);
+  return(
+    <div style={{margin:"18px 0 0"}}>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>🧰 Frequently bought together</div>
+      <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch"}}>
+        {fbt.map(x=>{ const img=getCardImg(x,mediaCache); const m=CAT_META[x.category]||CAT_META["Live Fish"]; return(
+          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:120,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"8px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            <div style={{height:74,borderRadius:9,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:6}}>
+              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:30}}>{m.emoji}</span>}
+            </div>
+            <div style={{fontSize:11.5,fontWeight:700,color:C.text,lineHeight:1.3,height:30,overflow:"hidden"}}>{x.name}</div>
+            <div style={{fontFamily:PRICE_FONT,fontSize:13,fontWeight:800,color:C.primary,marginTop:2}}>₹{effectivePrice(x)}</div>
+          </button>
+        );})}
+      </div>
+      <button className="press" onClick={()=>{ fbt.forEach(x=>addToCart(x,1)); }}
+        style={{marginTop:8,width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        ＋ Add these {fbt.length} to cart
+      </button>
+    </div>
+  );
+}
+
+/* Recently viewed rail on the product page */
+function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
+  const items=useMemo(()=>loadRecentlyViewed().filter(id=>id!==currentId).map(id=>products.find(p=>p.id===id)).filter(Boolean).slice(0,8),[products,currentId]);
+  if(items.length<2) return null;
+  return(
+    <div style={{margin:"22px 0 0"}}>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>👀 Recently viewed</div>
+      <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch"}}>
+        {items.map(x=>{ const img=getCardImg(x,mediaCache); const m=CAT_META[x.category]||CAT_META["Live Fish"]; return(
+          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:108,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"7px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            <div style={{height:66,borderRadius:9,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:5}}>
+              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:26}}>{m.emoji}</span>}
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:C.text,lineHeight:1.3,height:28,overflow:"hidden"}}>{x.name}</div>
+            <div style={{fontFamily:PRICE_FONT,fontSize:12.5,fontWeight:800,color:C.primary,marginTop:2}}>₹{effectivePrice(x)}</div>
+          </button>
+        );})}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════ MEDIA LIGHTBOX — fullscreen open · pinch/scroll zoom · pan · swipe ═══════════════════ */
+function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
+  const [scale,setScale] = useState(1);
+  const [tx,setTx]       = useState(0);
+  const [ty,setTy]       = useState(0);
+  const stageRef = useRef(null);
+  const ptrs     = useRef(new Map());
+  const g        = useRef({mode:null,sx:0,sy:0,stx:0,sty:0,dist:0,sscale:1,moved:0,lastTap:0,tapZoomAt:0});
+  const cur      = slides[index]||{};
+  const isVideo  = cur.type==="video";
+  const reset = ()=>{ setScale(1); setTx(0); setTy(0); };
+  useEffect(()=>{ reset(); },[index]);
+  // Opening is a click on the photo underneath, and a double-click there sends a second click
+  // straight through to this backdrop — which would shut the viewer the instant it appeared.
+  const openedAt = useRef(Date.now());
+  const closeT   = useRef(null);
+  useEffect(()=>()=>{ if(closeT.current) clearTimeout(closeT.current); },[]);
+  /* Tap the backdrop to close — but hold that decision briefly, because the first tap of a
+     double-tap is indistinguishable from a lone one until the second arrives. Without the wait
+     the viewer closed on tap one and double-tap-to-zoom could never fire. (The stage captures
+     the pointer, so a click's target is the stage even when the photo was under the cursor —
+     which is why "only close on backdrop clicks" was never actually limiting anything.) */
+  const stageClick=()=>{
+    if(scale>1.05) return;                              // zoomed: taps belong to pan / zoom-out
+    if(Date.now()-openedAt.current<400) return;         // still settling in from opening
+    // A double-tap just zoomed (or un-zoomed): the click that completes it must not also close.
+    // Checked against a timestamp rather than g.mode, because pointerup clears mode before the
+    // click event ever runs — which is exactly how this slipped through the first time.
+    if(Date.now()-(g.current.tapZoomAt||0)<450){
+      if(closeT.current){ clearTimeout(closeT.current); closeT.current=null; }
+      return;
+    }
+    if(closeT.current) clearTimeout(closeT.current);
+    closeT.current=setTimeout(()=>{
+      closeT.current=null;
+      if(Date.now()-(g.current.tapZoomAt||0)<450) return;   // a second tap landed while we waited
+      onClose();
+    },300);
+  };
+  const go = dir => setIndex(i => (i+dir+slides.length)%slides.length);
+  const clamp = (sc,x,y)=>{
+    const el=stageRef.current; if(!el) return [x,y];
+    const r=el.getBoundingClientRect();
+    const mx=Math.max(0,(r.width*(sc-1))/2), my=Math.max(0,(r.height*(sc-1))/2);
+    return [Math.max(-mx,Math.min(mx,x)), Math.max(-my,Math.min(my,y))];
+  };
+  useEffect(()=>{
+    const onKey=e=>{ if(e.key==="Escape")onClose(); else if(e.key==="ArrowRight")go(1); else if(e.key==="ArrowLeft")go(-1); };
+    window.addEventListener("keydown",onKey);
+    return ()=>window.removeEventListener("keydown",onKey);
+  },[slides.length]);
+  const down = e=>{
+    if(isVideo) return;
+    ptrs.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(ptrs.current.size===1){
+      const now=Date.now();
+      if(now-g.current.lastTap<300){
+        if(scale>1.05){ reset(); }
+        else{
+          const el=stageRef.current, r=el.getBoundingClientRect(), ns=2.6;
+          const ox=e.clientX-(r.left+r.width/2), oy=e.clientY-(r.top+r.height/2);
+          const [nx,ny]=clamp(ns,-ox*(ns-1),-oy*(ns-1));
+          setScale(ns); setTx(nx); setTy(ny);
+        }
+        g.current.mode="tapped"; g.current.tapZoomAt=Date.now(); g.current.lastTap=0; return;
+      }
+      g.current.lastTap=now;
+      g.current.mode = scale>1.05?"pan":"swipe";
+      g.current.sx=e.clientX; g.current.sy=e.clientY; g.current.stx=tx; g.current.sty=ty; g.current.moved=0;
+    } else if(ptrs.current.size===2){
+      const [a,b]=[...ptrs.current.values()];
+      g.current.mode="pinch"; g.current.dist=Math.hypot(a.x-b.x,a.y-b.y)||1; g.current.sscale=scale; g.current.stx=tx; g.current.sty=ty;
+    }
+    try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
+  };
+  const move = e=>{
+    if(!ptrs.current.has(e.pointerId)) return;
+    ptrs.current.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    const m=g.current;
+    if(m.mode==="pinch" && ptrs.current.size>=2){
+      const [a,b]=[...ptrs.current.values()];
+      const ns=Math.max(1,Math.min(4, m.sscale*(Math.hypot(a.x-b.x,a.y-b.y)/m.dist)));
+      const [nx,ny]=clamp(ns,m.stx,m.sty); setScale(ns); setTx(nx); setTy(ny);
+    } else if(m.mode==="pan"){
+      const [nx,ny]=clamp(scale, m.stx+(e.clientX-m.sx), m.sty+(e.clientY-m.sy)); setTx(nx); setTy(ny);
+    } else if(m.mode==="swipe"){
+      m.moved=e.clientX-m.sx; setTx(m.moved*0.55);
+    }
+  };
+  const up = e=>{
+    const m=g.current;
+    ptrs.current.delete(e.pointerId);
+    if(m.mode==="swipe"){ if(m.moved<-55) go(1); else if(m.moved>55) go(-1); else setTx(0); }
+    if(ptrs.current.size===0){ m.mode=null; }
+    else if(ptrs.current.size===1){
+      const [only]=[...ptrs.current.values()];
+      m.mode = scale>1.05?"pan":"swipe"; m.sx=only.x; m.sy=only.y; m.stx=tx; m.sty=ty; m.moved=0;
+    }
+  };
+  useEffect(()=>{
+    const el=stageRef.current; if(!el) return;
+    const onWheel=e=>{
+      if(isVideo) return;
+      e.preventDefault();            // keep the page behind from scrolling while the viewer is open
+      if(!e.ctrlKey) return;         // plain scroll does nothing; trackpad-pinch / Ctrl+wheel zooms
+      const ns=Math.max(1,Math.min(4, scale*(e.deltaY<0?1.12:0.9)));
+      if(ns<=1.02){ reset(); return; }
+      const [nx,ny]=clamp(ns, tx*(ns/scale), ty*(ns/scale)); setScale(ns); setTx(nx); setTy(ny);
+    };
+    el.addEventListener("wheel", onWheel, {passive:false});
+    return ()=>el.removeEventListener("wheel", onWheel);
+  },[isVideo,scale,tx,ty]);
+  const zoomBy = f => {
+    const ns=Math.max(1,Math.min(4, scale*f));
+    if(ns<=1.02){ reset(); return; }
+    const [nx,ny]=clamp(ns, tx*(ns/scale), ty*(ns/scale)); setScale(ns); setTx(nx); setTy(ny);
+  };
+  const iconBtn={display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.16)",border:"none",color:"#fff",cursor:"pointer",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"};
+  return(
+    <Portal>
+      <div className="fade-in" style={{position:"fixed",inset:0,zIndex:9500,background:"rgba(3,10,14,.97)",touchAction:"none",userSelect:"none",overscrollBehavior:"contain"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"calc(env(safe-area-inset-top,0px) + 12px) 14px 12px",zIndex:4,pointerEvents:"none"}}>
+          <span style={{color:"#fff",fontSize:12.5,fontWeight:700,background:"rgba(255,255,255,.14)",padding:"6px 13px",borderRadius:20,backdropFilter:"blur(8px)"}}>
+            {isVideo?"▶ Video":(index+1)+" / "+slides.length}
+          </span>
+          <button className="press" onClick={onClose} aria-label="Close" style={{...iconBtn,pointerEvents:"auto",width:42,height:42,borderRadius:"50%",fontSize:20}}>✕</button>
+        </div>
+        <div ref={stageRef} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+          onClick={stageClick}
+          style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",cursor:scale>1.05?"grab":"default"}}>
+          {isVideo
+            ? <video src={cur.src} controls autoPlay muted loop playsInline preload="auto" style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+            : <img src={cur.src} alt={name} draggable={false}
+                style={{width:"100%",height:"100%",objectFit:"contain",transform:"translate("+tx+"px,"+ty+"px) scale("+scale+")",transition:g.current.mode?"none":"transform .28s cubic-bezier(.22,1,.36,1)",willChange:"transform"}}/>}
+        </div>
+        {slides.length>1&&(<>
+          <button className="press" onClick={()=>go(-1)} aria-label="Previous" style={{...iconBtn,position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>‹</button>
+          <button className="press" onClick={()=>go(1)} aria-label="Next" style={{...iconBtn,position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>›</button>
+        </>)}
+        {slides.length>1&&(
+          <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 26px)",left:0,right:0,display:"flex",justifyContent:"center",gap:6,zIndex:3}}>
+            {slides.map((s,i)=>(
+              <button key={i} className="press" onClick={()=>setIndex(i)} aria-label={"Go to slide "+(i+1)}
+                style={{width:i===index?22:8,height:8,borderRadius:20,border:"none",padding:0,cursor:"pointer",background:i===index?"#fff":"rgba(255,255,255,.45)",transition:"width .2s"}}/>
+            ))}
+          </div>
+        )}
+        {!isVideo&&(
+          <div style={{position:"absolute",left:12,bottom:"calc(env(safe-area-inset-bottom,0px) + 22px)",display:"flex",flexDirection:"column",gap:8,zIndex:3}}>
+            <button className="press" onClick={()=>zoomBy(1.5)} disabled={scale>=4} aria-label="Zoom in" style={{...iconBtn,width:42,height:42,borderRadius:12,fontSize:22,opacity:scale>=4?0.4:1}}>+</button>
+            <button className="press" onClick={()=>zoomBy(1/1.5)} disabled={scale<=1.02} aria-label="Zoom out" style={{...iconBtn,width:42,height:42,borderRadius:12,fontSize:24,opacity:scale<=1.02?0.4:1}}>−</button>
+          </div>
+        )}
+        <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 6px)",left:0,right:0,textAlign:"center",color:"rgba(255,255,255,.5)",fontSize:10.5,fontWeight:600,letterSpacing:.3,pointerEvents:"none",zIndex:3}}>
+          {isVideo?"":"Use + / −, double-tap or pinch to zoom · swipe to browse"}
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
+  const [qty,setQty]           = useState(1);
+  const [selVarId,setSelVarId] = useState(null);
+  const [tab,setTab]           = useState("desc");
+  const [reviews,setReviews]   = useState([]);
+  const [loadingRev,setLoadingRev] = useState(true);
+  const [showForm,setShowForm] = useState(false);
+  const [submitted,setSubmitted]= useState(false);
+  const [slide,setSlide]       = useState(0); // active gallery slide
+  const [justAdded,setJustAdded] = useState(false);
+  const [photoZoom,setPhotoZoom] = useState(null); // review photo lightbox src
+  const [lightbox,setLightbox] = useState(-1); // product gallery lightbox — active slide index (-1 = closed)
+  const galRef                 = useRef(null); // the hero scroller, so the arrows can drive it
+
+  useEffect(()=>{
+    setLoadingRev(true);
+    setReviews([]);
+    setShowForm(false);
+    setSubmitted(false);
+    pushRecentlyViewed(p.id);
+    trackEvent("view",p.id); trackFunnel("view");
+    loadReviews(p.id).then(r=>{ setReviews(r); setLoadingRev(false); if((r.length||0)!==(p.reviewCount||0)) onReviewsChanged && onReviewsChanged(p.id, r); });
+    setSlide(0);
+    // The scroller is reused across products, so without this it keeps the previous product's
+    // offset — landing on photo 3 of a product while the dots say 1.
+    if(galRef.current) galRef.current.scrollLeft=0;
+    // Auto-open the review form when the customer tapped "Rate" from their orders
+    if(autoReview && user && hasPurchased(orders, user, p.id)){ setTab("reviews"); setShowForm(true); }
+  },[p.id]);
+
+  // Build ordered slides: images first, then video
+  const slides = [
+    ...media.images.map(src=>({type:"image",src})),
+    ...(media.video?[{type:"video",src:media.video}]:[]),
+  ];
+
+  /* Tapping the photo opens it full screen, straight away — zooming belongs to the full-screen
+     viewer, where double-tap and pinch do it. Nothing here reacts to a double-tap. */
+  const openPhoto=i=>setLightbox(i);
+
+  /* Step the hero gallery. Scrolling the container (rather than tracking an index ourselves)
+     keeps the arrows, the swipe gesture and the dots reading from one source of truth — the
+     onScroll handler updates `slide` either way. */
+  const goSlide=(dir)=>{
+    const el=galRef.current; if(!el) return;
+    const i=Math.min(slides.length-1,Math.max(0,slide+dir));
+    if(i===slide) return;
+    setSlide(i);
+    const left=i*el.clientWidth;
+    if(el.scrollTo) el.scrollTo({left,behavior:"smooth"}); else el.scrollLeft=left;
+  };
+  /* Prev/next arrow over the hero. Dimmed and inert at either end, so the shopper can see
+     where they are in the set without counting dots. */
+  const galArrow=(dir,side,label,glyph)=>{
+    const off = dir<0 ? slide<=0 : slide>=slides.length-1;
+    return(
+      <button className="press" onClick={()=>goSlide(dir)} disabled={off} aria-label={label}
+        style={{position:"absolute",top:150,transform:"translateY(-50%)",[side]:12,width:38,height:38,borderRadius:"50%",
+          background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:22,lineHeight:1,
+          paddingBottom:3,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2,
+          opacity:off?.28:1,cursor:off?"default":"pointer",transition:"opacity .18s"}}>{glyph}</button>
+    );
+  };
+
+  if(!p)return null;
+  const m   = CAT_META[p.category]||CAT_META["Live Fish"];
+  const variants = productVariants(p);
+  // Prefer the option the shopper picked; otherwise the first one that's actually available.
+  // Falling back to variants[0] regardless (as this used to) meant a product whose options were
+  // ALL sold out still preselected one and sold it.
+  const selVar = variants ? (variants.find(v=>v.id===selVarId && !variantSoldOut(p,v)) || variants.find(v=>!variantSoldOut(p,v)) || variants[0]) : null;
+  const selOut = !!(selVar && variantSoldOut(p, selVar));
+  // Stock shown/enforced is the SELECTED option's when options carry their own counts.
+  const stk = selVar ? variantStockOf(p, selVar) : (p.stockCount ?? DEFAULT_STOCK);
+  const oos = productStockTotal(p)<=0 || selOut;
+  const onSale = activeDiscount(p)>0;
+  const baseEff = effectivePrice(p);
+  const unitPrice = selVar ? variantEffPrice(p, selVar) : baseEff;
+  const maxQty = Math.max(1, Math.min(stk, MAX_PER_ORDER));
+  // How many of THIS product + selected variant are already in the cart (same key format as addToCart)
+  const cartKey = p.id + (selVar?("|"+selVar.id):"");
+  const inCart = (cart.find(i=>i.key===cartKey)?.qty) || 0;
+  const canReview = user && hasPurchased(orders, user, p.id);
+
+  // Live rating from real reviews only
+  const avgRating = reviews.length ? reviews.reduce((s,r)=>s+r.rating,0)/reviews.length : 0;
+  const revCount  = reviews.length;
+
+  const handleNewReview=async(rev)=>{
+    const next=await appendReview(p.id,{...rev,uid:userKey(user)||""});
+    setReviews(next);
+    onReviewsChanged && onReviewsChanged(p.id, next);
+    onReviewed && onReviewed(p.id);
+    setShowForm(false);
+    setSubmitted(true);
+    setTimeout(()=>setSubmitted(false),3000);
+  };
+
+  return(
+    <div className="slide-up">
+      {/* Hero media gallery */}
+      <div style={{position:"relative",background:slides.length?"#000":`linear-gradient(155deg,${m.c1},${m.c2})`}}>
+        <div ref={galRef} style={{height:300,display:"flex",overflowX:"auto",scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch"}}
+          onScroll={e=>{ const i=Math.round(e.target.scrollLeft/e.target.clientWidth); if(i!==slide)setSlide(i); }}>
+          {slides.length===0 && (
+            <div style={{minWidth:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:110,userSelect:"none"}}>{m.emoji}</span>
+            </div>
+          )}
+          {slides.map((s,i)=>(
+            <div key={i} onClick={()=>{ if(s.type==="image") openPhoto(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
+              {s.type==="video"
+                ? <video src={s.src} controls autoPlay muted loop playsInline preload="auto" style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+                : <SmoothImg src={s.src} alt={p.name} loading="eager" style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
+            </div>
+          ))}
+        </div>
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,.3) 0%,transparent 35%)",pointerEvents:"none"}}/>
+        {/* Same goBack the phone's own Back button runs, so this arrow — the one most people
+            actually tap — returns to the spot in the list they came from rather than the top
+            of it. Working down a long shop list and losing the place on every product opened
+            is what made browsing feel like starting over each time. */}
+        <button className="press" onClick={goBack}
+          style={{position:"absolute",top:50,left:16,background:"rgba(255,255,255,.2)",border:"1.5px solid rgba(255,255,255,.35)",borderRadius:12,width:40,height:40,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)"}}>←</button>
+        {slides.length>1&&galArrow(-1,"left","Previous photo","‹")}
+        {slides.length>1&&galArrow(1,"right","Next photo","›")}
+        {slides.length>1&&(
+          <div style={{position:"absolute",bottom:36,left:0,right:0,display:"flex",justifyContent:"center",gap:6,pointerEvents:"none"}}>
+            {slides.map((s,i)=>(
+              <div key={i} style={{width:i===slide?20:7,height:7,borderRadius:20,background:i===slide?"white":"rgba(255,255,255,.5)",transition:"width .2s"}}/>
+            ))}
+          </div>
+        )}
+        {slides[slide]&&slides[slide].type==="image"&&(
+          <button className="press" onClick={()=>openPhoto(slide)} aria-label="Open photo full screen"
+            style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
+        )}
+        {slides[slide]&&<span style={{position:"absolute",top:50,right:16,background:"rgba(0,0,0,.4)",color:"white",fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,backdropFilter:"blur(6px)"}}>
+          {slides[slide].type==="video"?"▶ Video":`📷 ${slide+1}/${slides.length}`}
+        </span>}
+      </div>
+
+      {/* Content */}
+      {/* The panel is pulled up 24px over the image, so its top padding has to clear that
+          before the category line gets any breathing room of its own. */}
+      <div style={{background:C.bg,borderRadius:"26px 26px 0 0",marginTop:-24,padding:"42px 20px 180px",minHeight:400}}>
+        {/* Title row */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+          <div style={{flex:1,paddingRight:12}}>
+            <div style={{fontSize:10,color:C.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:5}}>{p.category}</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,lineHeight:1.2}}>{p.name}</div>
+            <button className="press" onClick={()=>shareProduct(p)}
+              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:C.accentLight,border:`1px solid ${C.border}`,color:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zM18 22a3 3 0 100-6 3 3 0 000 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              Share
+            </button>
+            <button className="press" onClick={()=>onFav&&onFav(p)}
+              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,marginLeft:8,background:isFav?"#fff1ee":C.accentLight,border:`1px solid ${isFav?C.coral:C.border}`,color:isFav?C.coral:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              <span style={{fontSize:13,lineHeight:1}}>{isFav?"♥":"♡"}</span>{isFav?"Saved":"Save"}
+            </button>
+          </div>
+          <div style={{textAlign:"right",flexShrink:0}}>
+            <div style={{fontFamily:PRICE_FONT,fontSize:24,fontWeight:800,color:C.primary}}>₹{unitPrice}</div>
+            {onSale&&<div style={{fontSize:13,color:C.textSub,textDecoration:"line-through"}}>₹{selVar?variantBasePrice(p,selVar):p.price}</div>}
+            {/* A Coming Soon product isn't on sale yet, so a stock badge is misleading — it used
+                to read "In Stock" here while the bottom bar correctly said Coming Soon. Otherwise
+                this reflects what's actually buyable: 0 when the product (or the selected option)
+                is unavailable, rather than a leftover product-level number. */}
+            <div style={{marginTop:5}}>
+              {p.comingSoon
+                ? <span style={{fontSize:10,fontWeight:700,color:C.accent,background:C.accentLight,padding:"3px 9px",borderRadius:20}}>🔜 Coming Soon</span>
+                : <StockBadge stockCount={oos?0:stk}/>}
+            </div>
+          </div>
+        </div>
+
+        {/* Live rating row */}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:onSale&&p.offerEndsAt&&new Date(p.offerEndsAt).getTime()>Date.now()?10:20}}>
+          {revCount>0 ? (
+            <>
+              <ReviewStars value={Math.round(avgRating)} size={16}/>
+              <span style={{fontSize:14,fontWeight:700,color:C.text}}>{avgRating.toFixed(1)}</span>
+              <button className="press" onClick={()=>setTab("reviews")}
+                style={{fontSize:12,color:C.textSub,background:"none",border:"none",fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
+                ({revCount} review{revCount!==1?"s":""})
+              </button>
+            </>
+          ) : (
+            <>
+              <ReviewStars value={0} size={16}/>
+              <span style={{fontSize:13,color:C.textSub}}>No ratings yet — be the first to review</span>
+            </>
+          )}
+        </div>
+
+        {/* Flash sale countdown on detail page */}
+        {onSale&&p.offerEndsAt&&(
+          <MiniCountdown endsAt={p.offerEndsAt} compact={false}/>
+        )}
+
+        {/* Variant picker for Live Fish.
+            On a Coming Soon product the options are shown for reference only — passing no
+            addToCart drops the per-option +Add / stepper, which was the one place a product
+            that isn't on sale yet could still be put in the cart. */}
+        {variants && <VariantPicker product={p} variants={variants} selectedId={selVar?.id} onSelect={v=>setSelVarId(v.id)} cart={cart} addToCart={p.comingSoon?null:addToCart}/>}
+
+        {/* Restock alert for out-of-stock products */}
+        <RestockBtn product={p} user={user} restockSet={restockSet} onSubscribe={onRestock}/>
+
+        <div style={{display:"flex",gap:4,marginBottom:18,background:C.card,borderRadius:14,padding:4,border:`1px solid ${C.border}`}}>
+          {["desc","reviews"].map(t=>(
+            <button key={t} className="press" onClick={()=>setTab(t)}
+              style={{flex:1,padding:"9px 8px",borderRadius:11,border:"none",background:tab===t?C.primary:"transparent",color:tab===t?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",position:"relative"}}>
+              {t==="desc"?"Description":`Reviews`}
+              {t==="reviews"&&reviews.length>0&&<span style={{marginLeft:5,background:tab==="reviews"?"rgba(255,255,255,.25)":C.primary,color:"white",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:800}}>
+                {reviews.length}
+              </span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Description tab */}
+        {tab==="desc"&&(
+          <div className="fade-in">
+            {/* pre-wrap keeps the admin's own line breaks and blank lines — typing the description
+                as paragraphs or a bulleted list used to collapse into one run-on block. */}
+            <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.75,whiteSpace:"pre-wrap"}}>{p.desc}</div>
+            {(()=>{
+              const care=p.care||{};
+              const rows=[
+                ["🪣","Min tank size",care.tankSize],
+                ["🌡️","Water temp",care.temp],
+                ["💧","pH range",care.ph],
+                ["📏","Adult size",care.adultSize],
+                ["😊","Temperament",care.temperament],
+                ["⭐","Care level",care.level],
+                ["🍽️","Diet",care.diet],
+                ["🐟","Good tank mates",care.tankMates],
+              ].filter(r=>r[2]&&String(r[2]).trim());
+              if(!rows.length) return null;
+              return(
+                <div style={{marginTop:18,background:"#f0fbfc",borderRadius:16,padding:"14px 16px",border:`1px solid ${C.border}`}}>
+                  <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:10}}>🐠 Care Guide</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                    {rows.map(([icon,label,val],i)=>(
+                      <div key={label} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 0",borderTop:i?`1px solid ${C.border}`:"none"}}>
+                        <span style={{fontSize:15,flexShrink:0,lineHeight:1.3}}>{icon}</span>
+                        <span style={{fontSize:12.5,fontWeight:700,color:C.textSub,minWidth:118,flexShrink:0}}>{label}</span>
+                        <span style={{fontSize:12.5,fontWeight:600,color:C.text,lineHeight:1.4}}>{val}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{fontSize:10.5,color:C.textSub,marginTop:10,lineHeight:1.5,fontStyle:"italic"}}>Care details are a guide — conditions can vary by individual fish & tank.</div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Reviews tab */}
+        {tab==="reviews"&&(
+          <div className="fade-in">
+            {/* Success banner */}
+            {submitted&&(
+              <div style={{background:"#dcfce7",borderRadius:14,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,border:"1px solid #86efac"}}>
+                <span style={{fontSize:20}}>🎉</span>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Review submitted!</div>
+                  <div style={{fontSize:11,color:"#166534"}}>Thank you for sharing your feedback.</div>
+                </div>
+              </div>
+            )}
+
+            {/* Rating summary — only when there are real reviews */}
+            {reviews.length>0&&<RatingSummary reviews={reviews} avgRating={avgRating}/>}
+
+            {/* Write a review CTA — only verified purchasers */}
+            {!showForm&&!submitted&&(
+              canReview ? (
+                <button className="press" onClick={()=>setShowForm(true)}
+                  style={{width:"100%",background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:16,padding:"14px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"center",gap:10,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  <span style={{fontSize:20}}>✏️</span>
+                  <span style={{fontSize:14,fontWeight:700,color:C.accent}}>Write a Review</span>
+                </button>
+              ) : (
+                <div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+                  <span style={{fontSize:22}}>🔒</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:C.text,marginBottom:2}}>Only verified buyers can review</div>
+                    <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5}}>
+                      {user ? "Review unlocks once you've ordered & received this product." : "Sign in and purchase this product to leave a review."}
+                    </div>
+                    {!user&&<button className="press" onClick={goAuth} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 14px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>}
+                  </div>
+                </div>
+              )
+            )}
+
+            {/* Review form */}
+            {showForm&&<ReviewForm onSubmit={handleNewReview} onCancel={()=>setShowForm(false)} user={user} orderId={null} preset={autoReview?reviewPreset:0}/>}
+
+            {/* Reviews list */}
+            {loadingRev?(
+              <div style={{display:"flex",justifyContent:"center",padding:"24px"}}><Spinner/></div>
+            ):reviews.length===0?(
+              <div style={{textAlign:"center",padding:"32px 16px",color:C.textSub}}>
+                <div style={{fontSize:44,marginBottom:12}}>⭐</div>
+                <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No reviews yet</div>
+                <div style={{fontSize:13}}>Be the first to share your experience!</div>
+              </div>
+            ):(
+              reviews.map((r,i)=>(
+                <div key={r.id||i} className="fade-in" style={{background:C.card,borderRadius:16,padding:"14px 16px",marginBottom:10,border:`1px solid ${C.border}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      {/* Avatar circle */}
+                      <div style={{width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"white",flexShrink:0}}>
+                        {r.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:C.text,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                          {r.name}
+                          {r.verified!==false&&<span style={{fontSize:9,fontWeight:800,color:C.success,background:"#dcfce7",padding:"2px 7px",borderRadius:20,display:"inline-flex",alignItems:"center",gap:3}}>✓ Verified Buyer</span>}
+                        </div>
+                        <div style={{fontSize:10,color:C.textSub}}>{new Date(r.date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}</div>
+                      </div>
+                    </div>
+                    <ReviewStars value={r.rating} size={13}/>
+                  </div>
+                  <div style={{fontSize:13,color:C.textSub,lineHeight:1.65,paddingLeft:44}}>{r.comment}</div>
+                  {r.aspects&&(
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,paddingLeft:44,marginTop:7}}>
+                      {[["health","🐟 Condition"],["packing","📦 Packing"],["speed","🚚 Delivery"],["value","💰 Value"]].map(([k,label])=>r.aspects[k]?(
+                        <span key={k} style={{fontSize:10.5,fontWeight:700,color:C.textSub,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:20,padding:"3px 9px"}}>{label} <span style={{color:"#f59e0b"}}>{"★".repeat(r.aspects[k])}</span></span>
+                      ):null)}
+                    </div>
+                  )}
+                  {/* Customer photos */}
+                  {Array.isArray(r.photos)&&r.photos.length>0&&(
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingLeft:44,marginTop:10}}>
+                      {r.photos.map((src,j)=>(
+                        <button key={j} className="press" onClick={()=>setPhotoZoom(src)}
+                          style={{padding:0,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",width:72,height:72,cursor:"zoom-in",background:"none"}}>
+                          <img src={src} alt="" loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Goes well with — cross-sell complementary products */}
+        {(()=>{
+          const cross=crossSellProducts(p,products,6);
+          if(!cross.length) return null;
+          return(
+            <div style={{marginTop:26}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
+                <span style={{fontSize:18}}>🧩</span>
+                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Goes well with</span>
+              </div>
+              <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.45}}>{p.category==="Live Fish"?"Keep your new fish healthy — food, care & tank essentials.":"Pairs nicely with these."}</div>
+              <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
+                {cross.map(cp=>{
+                  const cm=CAT_META[cp.category]||CAT_META["Live Fish"];
+                  const cImg=getCardImg(cp,mediaCache);
+                  const cPrice=effectivePrice(cp);
+                  const cOnSale=activeDiscount(cp)>0;
+                  return(
+                    <div key={cp.id} style={{flexShrink:0,width:140,background:C.card,borderRadius:14,overflow:"hidden",border:`1px solid ${C.border}`}}>
+                      <button className="press" onClick={()=>nav("detail",cp)} style={{display:"block",width:"100%",padding:0,border:"none",background:"none",cursor:"pointer",textAlign:"left"}}>
+                        <div style={{height:96,background:`linear-gradient(135deg,${cm.c1},${cm.c2})`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+                          {cImg?<img src={cImg} alt={cp.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:34}}>{cm.emoji}</span>}
+                        </div>
+                        <div style={{padding:"8px 10px 2px"}}>
+                          <div style={{fontSize:9.5,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>{cp.category}</div>
+                          <div style={{fontSize:12.5,fontWeight:700,color:C.text,lineHeight:1.25,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",minHeight:31}}>{cp.name}</div>
+                        </div>
+                      </button>
+                      <div style={{padding:"0 10px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+                        <div style={{display:"flex",flexDirection:"column"}}>
+                          <span style={{fontSize:13,fontWeight:800,color:C.primary,fontFamily:PRICE_FONT}}>₹{cPrice}</span>
+                          {cOnSale&&<span style={{fontSize:10,color:C.textSub,textDecoration:"line-through"}}>₹{cp.price}</span>}
+                        </div>
+                        {cp.category!=="Live Fish"&&(()=>{
+                          const inC=cart.find(i=>i.key===cp.id);
+                          const q=inC?inC.qty:0;
+                          if(q<=0) return (
+                            <button className="press" onClick={()=>addToCart(cp,1)}
+                              style={{background:C.primary,color:"white",border:"none",borderRadius:9,width:32,height:32,fontSize:18,fontWeight:700,lineHeight:1,cursor:"pointer",flexShrink:0}}>+</button>
+                          );
+                          return (
+                            <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:9,flexShrink:0,overflow:"hidden"}}>
+                              <button className="press" onClick={()=>addToCart(cp,-1)} style={{background:"none",color:"white",border:"none",width:28,height:32,fontSize:19,fontWeight:800,lineHeight:1,cursor:"pointer"}}>−</button>
+                              <span style={{color:"white",fontSize:13,fontWeight:800,minWidth:18,textAlign:"center",fontFamily:PRICE_FONT}}>{q}</span>
+                              <button className="press" onClick={()=>addToCart(cp,1)} style={{background:"none",color:"white",border:"none",width:28,height:32,fontSize:18,fontWeight:800,lineHeight:1,cursor:"pointer"}}>+</button>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Delivery estimate, frequently-bought-together & recently viewed */}
+        {!p.comingSoon&&<DeliveryEstimate/>}
+        {!p.comingSoon&&<FrequentlyBought base={p} products={products} addToCart={addToCart} mediaCache={mediaCache} nav={nav}/>}
+        <RecentlyViewedRail currentId={p.id} products={products} mediaCache={mediaCache} nav={nav}/>
+        {/* Trust signals — reassurance right at the buy decision */}
+        {!p.comingSoon&&(
+          <div style={{margin:"22px 0 6px",padding:"14px 12px",background:C.card,borderRadius:16,border:`1px solid ${C.border}`}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+              {[["🛡️","Live Arrival","Guarantee"],["📦","Safe, breathable","Packing"],["🔒","Secure UPI /","Online Pay"]].map(([ic,a,b])=>(
+                <div key={a} style={{display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",gap:5}}>
+                  <span style={{fontSize:22,lineHeight:1}}>{ic}</span>
+                  <span style={{fontSize:10.5,fontWeight:700,color:C.text,lineHeight:1.3}}>{a}<br/>{b}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Sticky bottom bar */}
+      <div style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,
+        background:"rgba(255,255,255,.97)",backdropFilter:"blur(16px)",padding:"14px 20px",borderTop:`1px solid ${C.border}`,display:"flex",gap:12,alignItems:"center",zIndex:50}}>
+        {p.comingSoon ? (
+          <button className="press" onClick={()=>{if(!isInterested&&onInterest)onInterest(p);}} disabled={isInterested}
+            style={{flex:1,background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:14,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            {isInterested?"✓ We'll notify you when it's in!":"🔔 Coming Soon — I'm Interested"}
+          </button>
+        ) : inCart>0 ? (<>
+          {/* Already in cart — the stepper edits the cart quantity directly; no duplicate adds */}
+          <div style={{display:"flex",alignItems:"center",gap:14,background:C.bg,borderRadius:12,padding:"8px 14px",border:`1.5px solid ${C.border}`}}>
+            <button className="press" onClick={()=>addToCart(p,-1,selVar)} style={{background:"none",border:"none",fontSize:20,color:C.primary,fontWeight:700,lineHeight:1}}>−</button>
+            <span style={{fontSize:16,fontWeight:700,color:C.text,minWidth:18,textAlign:"center"}}>{inCart}</span>
+            <button className="press" onClick={()=>{if(inCart<maxQty)addToCart(p,1,selVar);}} disabled={inCart>=maxQty} style={{background:"none",border:"none",fontSize:20,color:inCart>=maxQty?C.textSub:C.primary,fontWeight:700,lineHeight:1,opacity:inCart>=maxQty?.5:1}}>+</button>
+          </div>
+          <button className="press" onClick={()=>nav("cart")}
+            style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:14,padding:"14px 12px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            ✓ In Cart · View Cart →
+          </button>
+        </>) : (<>
+        <div style={{display:"flex",alignItems:"center",gap:14,background:C.bg,borderRadius:12,padding:"8px 14px",border:`1.5px solid ${C.border}`}}>
+          <button className="press" onClick={()=>setQty(q=>Math.max(1,q-1))} style={{background:"none",border:"none",fontSize:20,color:C.primary,fontWeight:700,lineHeight:1}}>−</button>
+          <span style={{fontSize:16,fontWeight:700,color:C.text,minWidth:18,textAlign:"center"}}>{qty}</span>
+          <button className="press" onClick={()=>setQty(q=>Math.min(maxQty,q+1))} disabled={qty>=maxQty} style={{background:"none",border:"none",fontSize:20,color:qty>=maxQty?C.textSub:C.primary,fontWeight:700,lineHeight:1,opacity:qty>=maxQty?.5:1}}>+</button>
+        </div>
+        <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={e=>{if(!oos){addToCart(p,qty,selVar);flyToCart(e.clientX,e.clientY);}}} disabled={oos}
+          style={{flex:1,background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+          {oos?"Out of Stock":`Add to Cart · ₹${unitPrice*qty}`}
+        </button>
+        </>)}
+      </div>
+
+      {lightbox>=0&&slides[lightbox]&&(
+        <MediaLightbox slides={slides} index={lightbox} setIndex={setLightbox} onClose={()=>setLightbox(-1)} name={p.name}/>
+      )}
+      {photoZoom&&(
+        <Portal>
+        <div onClick={()=>setPhotoZoom(null)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <img src={photoZoom} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:10}}/>
+          <button className="press" onClick={()=>setPhotoZoom(null)} style={{position:"absolute",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22,cursor:"pointer"}}>×</button>
+        </div>
+        </Portal>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════ CART PAGE ═══════════════════ */
+/* Slide-in mini-cart — quick peek + checkout without leaving the page */
+function MiniCart({open,onClose,cart,total,updateQty,nav,settings={},products=[],mediaCache={}}){
+  const count=cart.reduce((s,i)=>s+i.qty,0);
+  const thr=Number(settings.freeDeliveryThreshold||0);
+  const left=thr>0?Math.max(0,thr-total):0;
+  return(
+    <Portal>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,23,42,.35)",backdropFilter:"blur(2px)",WebkitBackdropFilter:"blur(2px)",zIndex:4000,opacity:open?1:0,pointerEvents:open?"auto":"none",transition:"opacity .3s ease"}}/>
+      <div style={{position:"fixed",top:0,right:0,height:"100%",width:"min(390px,92vw)",background:"#ffffff",zIndex:4001,boxShadow:"-10px 0 44px rgba(15,23,42,.18)",transform:open?"translateX(0)":"translateX(106%)",transition:"transform .42s cubic-bezier(.22,1,.36,1)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"20px 18px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Your Cart ({count})</div>
+          <button className="press" onClick={onClose} aria-label="Close" style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:"50%",width:34,height:34,fontSize:18,color:C.text,cursor:"pointer"}}>×</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
+          {!cart.length?(
+            <div style={{textAlign:"center",color:C.textSub,padding:"50px 0",fontSize:14}}>Your cart is empty 🐠</div>
+          ):cart.map(item=>{
+            const m=CAT_META[item.category]||CAT_META["Live Fish"];
+            const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+            const cartImg=getCartLineImg(item,products,mediaCache);
+            const prod=lineProduct(item,products);
+            // Opening the product page has to close the drawer too, or the detail page
+            // renders underneath it.
+            const open=prod?()=>{ onClose(); nav("detail",prod); }:null;
+            return(
+              <div key={item.key} style={{display:"flex",gap:12,alignItems:"center",padding:"11px 0",borderBottom:`1px solid ${C.border}`}}>
+                <div role={open?"button":undefined} tabIndex={open?0:undefined} onClick={open||undefined}
+                  onKeyDown={open?(e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } }):undefined}
+                  aria-label={open?`View ${item.name}`:undefined}
+                  style={{display:"flex",gap:12,alignItems:"center",flex:1,minWidth:0,cursor:open?"pointer":"default"}}>
+                  <div style={{width:48,height:48,borderRadius:12,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,overflow:"hidden"}}>
+                    {cartImg?<img src={cartImg} alt={item.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:open?C.primaryDark:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</div>
+                    {item.variantLabel&&<div style={{fontSize:11,color:C.textSub}}>{item.variantLabel}</div>}
+                    <div style={{fontFamily:PRICE_FONT,fontSize:13,fontWeight:800,color:C.primary,marginTop:2}}>₹{item.price*item.qty}</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8,background:"#f8fafc",borderRadius:99,padding:"4px 9px",border:`1px solid ${C.border}`}}>
+                  <button className="press" onClick={()=>updateQty(item.key,-1)} style={{background:"none",border:"none",fontSize:16,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>−</button>
+                  <span style={{fontSize:13,fontWeight:700,minWidth:14,textAlign:"center"}}>{item.qty}</span>
+                  <button className="press" onClick={()=>{if(item.qty<maxAllowed)updateQty(item.key,1);}} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:16,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,cursor:item.qty>=maxAllowed?"default":"pointer",lineHeight:1}}>+</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {cart.length>0&&(
+          <div style={{padding:"14px 18px calc(16px + env(safe-area-inset-bottom))",borderTop:`1px solid ${C.border}`,background:"#fff"}}>
+            {thr>0&&left>0&&<div style={{fontSize:11.5,color:C.textSub,marginBottom:10,textAlign:"center"}}>Add <b style={{color:C.coral}}>₹{left}</b> more for free delivery 🚚</div>}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <span style={{fontSize:14,fontWeight:700,color:C.text}}>Subtotal</span>
+              <span style={{fontFamily:PRICE_FONT,fontSize:19,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button className="press" onClick={()=>{onClose();nav("cart");}} style={{flex:1,background:"#f8fafc",color:C.text,border:`1px solid ${C.border}`,borderRadius:99,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>View Cart</button>
+              <button className="cta" onClick={()=>{onClose();nav("checkout");}} style={{flex:1.4,background:C.coral,color:"white",border:"none",borderRadius:99,padding:"13px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textTransform:"uppercase",letterSpacing:".05em",cursor:"pointer"}}>Checkout →</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Portal>
+  );
+}
+
+function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={},orders=[]}){
+  if(!cart.length)return(
+    <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"20px",textAlign:"center"}}>
+      <div style={{fontSize:80,marginBottom:20}}>🛒</div>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Cart is empty</div>
+      <div style={{fontSize:13,color:C.textSub,marginBottom:24}}>Find something for your aquarium.</div>
+      <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px 32px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Start Shopping</button>
+    </div>
+  );
+  return(
+    <div className="slide-up">
+      <div className="vh-head dt-read" style={{padding:"52px 16px 100px"}}>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:20}}>My Cart ({cart.reduce((s,i)=>s+i.qty,0)})</div>
+        {(()=>{
+          const thr=Number(settings.freeDeliveryThreshold||0);
+          if(thr<=0) return null;
+          const left=Math.max(0,thr-total), done=left<=0, pct=Math.min(100,Math.round((total/thr)*100));
+          return(
+            <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:18}}>
+              <div style={{fontSize:13,fontWeight:700,color:done?C.success:C.text,marginBottom:9,display:"flex",alignItems:"center",gap:7}}>
+                <span style={{fontSize:16}}>{done?"🎉":"🚚"}</span>
+                {done?"You've unlocked FREE delivery!":<>Add <b style={{color:C.coral}}>₹{left}</b> more to unlock <b>free delivery</b></>}
+              </div>
+              <div style={{height:8,background:"#e9eef5",borderRadius:99,overflow:"hidden"}}>
+                <div style={{height:"100%",width:pct+"%",borderRadius:99,background:done?"linear-gradient(90deg,#34d399,#10b981)":`linear-gradient(90deg,${C.accent},${C.primary})`,transition:"width .5s cubic-bezier(.22,1,.36,1)"}}/>
+              </div>
+            </div>
+          );
+        })()}
+        {cart.map(item=>{
+          const m=CAT_META[item.category]||CAT_META["Live Fish"];
+          const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+          // The line item is a snapshot and carries no picture (storing one would bloat the
+          // saved cart), so look the photo up from the catalog by id. Falls back to the
+          // category tile for a product that has since been removed.
+          const cartImg=getCartLineImg(item,products,mediaCache);
+          const prod=lineProduct(item,products);
+          const open=prod?()=>nav("detail",prod):null;
+          return(
+            <div key={item.key} style={{background:C.card,borderRadius:18,padding:"14px",marginBottom:10,display:"flex",gap:14,alignItems:"center",border:`1px solid ${C.border}`}}>
+              {/* Thumbnail + name open the product page. A line whose product has since been
+                  removed from the catalogue stays as plain text — there's nothing to open. */}
+              <div role={open?"button":undefined} tabIndex={open?0:undefined} onClick={open||undefined}
+                onKeyDown={open?(e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } }):undefined}
+                aria-label={open?`View ${item.name}`:undefined}
+                style={{display:"flex",gap:14,alignItems:"center",flex:1,minWidth:0,cursor:open?"pointer":"default"}}>
+                <div style={{width:58,height:58,borderRadius:14,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,overflow:"hidden"}}>
+                  {cartImg?<img src={cartImg} alt={item.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13.5,fontWeight:700,color:open?C.primaryDark:C.text,marginBottom:2}}>{item.name}</div>
+                  <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>{item.variantLabel||item.category}</div>
+                  <div style={{fontFamily:PRICE_FONT,fontSize:15,fontWeight:800,color:C.primary,marginTop:5}}>₹{item.price*item.qty}</div>
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:12,background:C.bg,borderRadius:12,padding:"7px 12px",border:`1.5px solid ${C.border}`}}>
+                <button className="press" onClick={()=>updateQty(item.key,-1)} style={{background:"none",border:"none",fontSize:18,color:C.primary,fontWeight:700,lineHeight:1}}>−</button>
+                <span style={{fontSize:14,fontWeight:700,color:C.text,minWidth:16,textAlign:"center"}}>{item.qty}</span>
+                <button className="press" onClick={()=>updateQty(item.key,1)} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:18,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,lineHeight:1,opacity:item.qty>=maxAllowed?.5:1}}>+</button>
+              </div>
+            </div>
+          );
+        })}
+        <div style={{background:C.card,borderRadius:18,padding:"18px",marginTop:18,border:`1px solid ${C.border}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+            <span style={{fontSize:13,color:C.textSub}}>Subtotal</span>
+            <span style={{fontSize:13,fontWeight:700,color:C.text}}><AnimatedNumber value={total} prefix="₹"/></span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+            <span style={{fontSize:13,color:C.textSub}}>Shipping</span>
+            <span style={{fontSize:13,fontWeight:600,color:C.accent}}>Calculated at checkout</span>
+          </div>
+          <div style={{height:1,background:C.border,margin:"12px 0"}}/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:15,fontWeight:700,color:C.text}}>Subtotal (excl. shipping)</span>
+            <span style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
+          </div>
+        </div>
+        {settings.loyaltyEnabled!==false && (()=>{
+          const pph=Number(settings.loyaltyPointsPerHundred||10);
+          const val=Number(settings.loyaltyRedeemValue||1);
+          const pts=Math.floor((Number(total)||0)/100*pph);
+          const worth=Math.floor(pts*val);
+          if(worth<=0) return null;
+          return (
+            <div style={{background:"#ecfdf5",borderRadius:12,padding:"11px 14px",marginTop:10,fontSize:12.5,color:"#15803d",fontWeight:700,border:"1px solid #a7f3d0",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16}}>👛</span>
+              <span>Earn ₹{worth} in wallet coins after delivery.</span>
+            </div>
+          );
+        })()}
+        {/* ── How close they are to the next offer ──────────────────────────────
+            Directly above the checkout button, centred, because this is the last
+            thing a shopper reads before deciding whether the cart is finished. A
+            bar makes "₹649 more" a distance rather than a number, and once the
+            line is crossed the same strip turns green and says so — a threshold
+            you met in silence may as well not have existed. */}
+        {(()=>{
+          const n=nextDiscountNudge(total,settings,orders);
+          if(!n) return null;
+          const pct=Math.max(4,Math.min(100,Math.round(((Number(total)||0)/(n.minOrder||1))*100)));
+          const won=n.unlocked;
+          return (
+            <div style={{marginTop:14,textAlign:"center",background:won?"#ecfdf5":"#fff7ed",border:`1px solid ${won?"#a7f3d0":"#fed7aa"}`,borderRadius:14,padding:"13px 16px"}}>
+              <div style={{fontSize:13.5,fontWeight:800,color:won?"#15803d":"#9a3412",lineHeight:1.45,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                {won
+                  ? <>🎉 You've unlocked <span style={{color:C.coral}}>{n.off}</span></>
+                  : <>Add <span style={{fontFamily:PRICE_FONT,fontSize:16,color:C.coral}}>₹{n.need}</span> more to get <span style={{color:C.coral}}>{n.off}</span></>}
+              </div>
+              <div style={{height:7,borderRadius:99,background:won?"#a7f3d0":"#fde3c8",margin:"9px auto 0",overflow:"hidden",maxWidth:260}}>
+                <div style={{height:"100%",width:pct+"%",borderRadius:99,background:won?"#16a34a":C.coral,transition:"width .45s cubic-bezier(.22,1,.36,1)"}}/>
+              </div>
+              <div style={{fontSize:10.5,color:won?"#15803d":"#9a3412",opacity:.85,fontWeight:600,marginTop:6}}>
+                {won?<>Apply code <b>{n.code}</b> at checkout</>:<>on orders above ₹{n.minOrder} · code {n.code}</>}
+              </div>
+            </div>
+          );
+        })()}
+        <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={()=>nav("checkout")}
+          style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          Proceed to Checkout →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════ COLLAPSIBLE PANEL ═══════════════════
+   A titled strip that opens on tap. Long explanatory blocks — acclimatization steps, the
+   Live Arrival Guarantee, packing and collection notes — are worth having on the page but
+   are not worth a screenful each: stacked open they push the thing the customer came to do
+   (pay) below three scrolls of prose, and the prose stops being read at all.
+
+   Closed by default unless `open` says otherwise. Purely presentational: nothing inside is
+   unmounted, so anything that was reachable still is, one tap further. */
+function Collapsible({title, icon="", subtitle="", open=false, tone="plain", children}){
+  const [on,setOn]=useState(!!open);
+  const t = tone==="green" ? {bg:"#ecfdf5",bd:"#a7f3d0",fg:"#065f46",sub:"#047857"}
+          : tone==="amber" ? {bg:"#fff7ed",bd:"#fed7aa",fg:"#9a3412",sub:"#9a3412"}
+          :                  {bg:C.card,   bd:C.border,  fg:C.text,   sub:C.textSub};
+  return(
+    <div style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+      <button className="press" type="button" onClick={()=>setOn(v=>!v)} aria-expanded={on}
+        style={{display:"flex",alignItems:"center",gap:9,width:"100%",background:"none",border:"none",
+                padding:"12px 14px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        {icon&&<span style={{fontSize:17,flexShrink:0}}>{icon}</span>}
+        <span style={{flex:1,minWidth:0}}>
+          <span style={{display:"block",fontSize:13,fontWeight:800,color:t.fg,lineHeight:1.35}}>{title}</span>
+          {subtitle&&!on&&<span style={{display:"block",fontSize:11,color:t.sub,opacity:.85,marginTop:2,lineHeight:1.4}}>{subtitle}</span>}
+        </span>
+        <span style={{flexShrink:0,fontSize:13,color:t.sub,transition:"transform .25s cubic-bezier(.22,1,.36,1)",
+                      transform:on?"rotate(180deg)":"none",lineHeight:1}}>▾</span>
+      </button>
+      {on&&<div className="fade-in" style={{padding:"0 14px 13px"}}>{children}</div>}
+    </div>
+  );
+}
+
+/* ═══════════════════ PAYMENT PANEL (Cashfree checkout) ═══════════════════ */
+function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, compact=false}){
+  const grand = order.amountDue ?? (order.total+order.fee);
+  const [now,setNow]=useState(Date.now());
+  /* Asked of the server rather than inferred from editable storefront settings. */
+  const [gatewayOn,setGatewayOn]=useState(PAY_GATEWAY.ready&&PAY_GATEWAY.mode==="production");
+  const [gatewayMode,setGatewayMode]=useState(PAY_GATEWAY.mode||"");
+  const [gatewayChecking,setGatewayChecking]=useState(!PAY_GATEWAY.checked);
+  const [payBusy,setPayBusy]=useState(false);
+  const [payNote,setPayNote]=useState("");
+  useEffect(()=>{
+    let live=true;
+    setGatewayChecking(true);
+    payGatewayStatus().then(s=>{
+      if(!live)return;
+      setGatewayMode(s.mode||"");
+      // Sandbox is an owner test bench, never a payment option for real customers.
+      setGatewayOn(!!s.ready&&(s.mode==="production"||isAdminSignedIn()));
+    }).finally(()=>{if(live)setGatewayChecking(false);});
+    return()=>{live=false;};
+  },[]);
+  const retryGateway=async()=>{
+    setGatewayChecking(true); setPayNote("");
+    const s=await payGatewayStatus(true);
+    setGatewayMode(s.mode||"");
+    setGatewayOn(!!s.ready&&(s.mode==="production"||isAdminSignedIn()));
+    setGatewayChecking(false);
+  };
+  const payNow=async()=>{
+    setPayBusy(true); setPayNote("");
+    try{
+      const outcome=await payWithGateway(order);
+      if(outcome==="test-confirmed") setPayNote("✓ Sandbox test completed — no real money was charged. This is not a fulfilment order.");
+      else if(outcome==="redirected") setPayNote("Payment opened in a secure page. Check My Orders after completing it.");
+      else{
+        setPayNote("✓ Payment verified — your order is confirmed automatically.");
+        if(onVerified) onVerified(order);
+      }
+    }catch(e){
+      const m=String(e?.message||"");
+      console.error("Gateway payment failed",m);
+      if(m==="dismissed"&&onCheckoutCancelled){
+        setPayNote("Returning your items to the cart…");
+        await onCheckoutCancelled(order);
+      } else if(m==="dismissed") setPayNote("");
+      else if(m==="order-not-payable") setPayNote("⚠ This order has already been paid or cancelled.");
+      else if(m==="payment-window-closed") setPayNote("⚠ This payment window has expired. Please place the order again.");
+      else if(m==="valid-phone-required") setPayNote("⚠ Add a valid 10-digit Indian mobile number to the delivery address.");
+      else if(m==="sign-in-required"||m==="order-owner-mismatch") setPayNote("⚠ Your secure sign-in session has expired. Sign out, sign in with Google again, then retry payment.");
+      else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote("⚠ Secure payment is temporarily unavailable. Please retry shortly."); }
+      else if(m==="sandbox-admin-only"){ setGatewayOn(false); setPayNote("⚠ Secure payment is temporarily unavailable."); }
+      else if(m==="checkout-script-failed") setPayNote("⚠ Couldn't load the payment window — check your connection and try again.");
+      else if(m==="cashfree-checkout-not-approved") setPayNote("⚠ Cashfree checkout approval is not active yet. Nothing has been charged.");
+      else if(m==="cashfree-credentials-rejected") setPayNote("⚠ The payment service rejected its production credentials. Nothing has been charged.");
+      else if(m==="gateway-busy") setPayNote("⚠ Cashfree is temporarily busy. Nothing has been charged — please retry shortly.");
+      else if(m==="payment-session-failed") setPayNote("⚠ Cashfree couldn't create a payment session. Nothing has been charged. Reference: payment-session-failed.");
+      else if(m.startsWith("checkout-rejected:")) setPayNote("⚠ Cashfree rejected the checkout before it opened. Nothing has been charged. Reference: "+m.slice(18));
+      else setPayNote("⚠ Payment didn't go through. Nothing has been charged — please try again.");
+    }finally{ setPayBusy(false); }
+  };
+  const deadline=order.paymentDeadline||0;
+  const msLeft=Math.max(0,deadline-now);
+  const expired=deadline&&msLeft<=0;
+  const mm=String(Math.floor(msLeft/60000)).padStart(2,"0");
+  const ss=String(Math.floor((msLeft%60000)/1000)).padStart(2,"0");
+
+  useEffect(()=>{
+    if(!deadline)return;
+    const t=setInterval(()=>setNow(Date.now()),1000);
+    return()=>clearInterval(t);
+  },[deadline]);
+  useEffect(()=>{ if(expired&&order.status==="Awaiting Payment"&&onCancelled){ onCancelled(order); } },[expired]);
+
+  if(expired&&order.status!=="Awaiting Payment"){
+    // already handled / cancelled — show nothing special here
+  }
+
+  return(
+    <div style={{width:"100%",maxWidth:compact?"100%":360,margin:"0 auto"}}>
+      {/* Countdown */}
+      {deadline>0&&(
+        <div style={{background:expired?"#fee2e2":"#fff7ed",border:`1px solid ${expired?"#fca5a5":"#fed7aa"}`,borderRadius:14,padding:"12px 14px",marginBottom:14,textAlign:"center"}}>
+          {expired?(
+            <div style={{fontSize:12.5,color:"#b91c1c",fontWeight:700,lineHeight:1.5}}>⌛ Payment window closed. This order will be cancelled. Please place a new order.</div>
+          ):(
+            <>
+              <div style={{fontSize:11,color:"#9a3412",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>Pay within {PAY_WINDOW_MIN} minutes</div>
+              <div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"#c2410c",letterSpacing:1}}>{mm}:{ss}</div>
+              <div style={{fontSize:10.5,color:"#9a3412",marginTop:2}}>Auto-cancels when time ends</div>
+            </>
+          )}
+        </div>
+      )}
+
+      <div style={{background:C.card,border:`1.5px solid ${C.primary}`,borderRadius:18,padding:"18px"}}>
+        <div style={{textAlign:"center",marginBottom:14}}>
+          <div style={{fontSize:11,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}>Amount due</div>
+          <div style={{fontFamily:PRICE_FONT,fontSize:30,fontWeight:800,color:C.primary,lineHeight:1.1}}>₹{grand}</div>
+          <div style={{fontSize:11.5,color:C.textSub,marginTop:2}}>Order {order.orderNo}</div>
+        </div>
+
+        {/* ── Gateway path ──────────────────────────────────────────────────────
+            Present only once the server holds keys. One button, and then nothing
+            for the customer to do: no reference to copy out of their bank app, no
+            screenshot, no waiting a day or two for someone to look at it. The
+            payment records itself when Cashfree's webhook lands, which reaches this
+            screen through the live order listener. */}
+        {gatewayOn?(
+          <>
+            {gatewayMode==="sandbox"&&(
+              <div style={{background:"#fff7ed",border:"1.5px solid #fb923c",borderRadius:12,padding:"10px 12px",marginBottom:11,textAlign:"center"}}>
+                <div style={{fontSize:11.5,fontWeight:900,color:"#9a3412",letterSpacing:.35}}>CASHFREE SANDBOX · TEST MODE</div>
+                <div style={{fontSize:10.5,color:"#c2410c",marginTop:3,lineHeight:1.45}}>Owner testing only. No real money is charged and the order will not enter fulfilment.</div>
+              </div>
+            )}
+            <button className="press" onClick={payNow} disabled={payBusy||expired}
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:(payBusy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              <span style={{fontSize:18}}>💳</span>
+              {payBusy?"Opening secure payment…":expired?"Payment window closed":gatewayMode==="sandbox"?`Try Test Payment ₹${grand}`:`Pay ₹${grand} securely`}
+            </button>
+            <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:9,lineHeight:1.5}}>
+              {gatewayMode==="sandbox"
+                ?"Uses Cashfree's sandbox payment details. Cancel this test order afterwards to release its reserved stock."
+                :"UPI · Cards · Netbanking · Wallets · Auto-verified"}
+            </div>
+            {payNote&&<div style={{fontSize:12,fontWeight:700,marginTop:10,textAlign:"center",lineHeight:1.5,color:payNote[0]==="⚠"?C.danger:C.success}}>{payNote}</div>}
+          </>
+        ):(
+          <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px",textAlign:"center"}}>
+            <div style={{fontSize:12.5,color:"#9a3412",fontWeight:700,lineHeight:1.5}}>
+              {gatewayChecking?"Checking secure payment…":"⚠ Secure Cashfree payment is temporarily unavailable."}
+            </div>
+            {!gatewayChecking&&(
+              <button className="press" onClick={retryGateway}
+                style={{marginTop:10,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"10px 16px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                Retry secure payment
+              </button>
+            )}
+            {payNote&&<div style={{fontSize:11.5,color:C.danger,fontWeight:700,marginTop:9,lineHeight:1.45}}>{payNote}</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+/* ═══════════════════ SHIPPING RATES CHART ═══════════════════ */
+function ShippingRatesChart({settings={}}){
+  const r = settings.shippingRates || DEFAULT_SHIPPING_RATES;
+  const zones = ZONE_KEYS;
+  const tbl = (label, rows)=>(
+    <div style={{marginBottom:16}}>
+      <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>{label}</div>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <thead>
+            <tr style={{background:C.primary}}>
+              <th style={{padding:"6px 8px",color:"white",fontWeight:700,textAlign:"left",borderRadius:"8px 0 0 0"}}>Weight / Size</th>
+              {zones.map(z=><th key={z} style={{padding:"6px 8px",color:"white",fontWeight:700,textAlign:"right"}}>{ZONE_LABELS[z]}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(rows).map(([bracket,prices],i)=>(
+              <tr key={bracket} style={{background:i%2===0?"white":C.bg}}>
+                <td style={{padding:"5px 8px",color:C.text,fontWeight:600}}>{bracket}</td>
+                {zones.map(z=><td key={z} style={{padding:"5px 8px",color:C.text,textAlign:"right"}}>₹{prices[z]||0}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+  return(
+    <div style={{marginTop:12,padding:"0 2px"}}>
+      <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
+        Rates shown are approximate. Packaging weight is added using the item-weight bracket configured by the store. Actual charges are confirmed at dispatch.
+      </div>
+      {tbl("🐟 Dry Goods (Food, Accessories, Plants, Tanks)", r.dryGoods||{})}
+      {tbl("🐠 Live Fish Shipping (by total parcel weight)", r.liveFish||{})}
+    </div>
+  );
+}
+
+/* ═══════════════════ CHECKOUT PAGE (Phase 3+4) ═══════════════════ */
+const BLANK_ADDR={name:"",phone:"",whatsapp:"",address:"",city:"",pincode:"",state:"",stateCode:"",notes:"",summary:"",waUpdates:false};
+
+/* Two-stage exit-intent sheet shown when a customer with items tries to leave checkout. */
+function ExitIntentModal({savings=0, onStay, onLeave}){
+  const [stage,setStage]=useState(1);
+  const [reasons,setReasons]=useState([]);
+  const [other,setOther]=useState("");
+  const REASONS=["Found a better deal elsewhere","Facing technical issue on the website","Change my mind","Price issue","Others"];
+  const toggle=r=>setReasons(p=>p.includes(r)?p.filter(x=>x!==r):[...p,r]);
+  const overlay={position:"fixed",inset:0,background:"rgba(17,24,39,.55)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:4000};
+  const sheet={width:"100%",maxWidth:440,background:"#fff",borderRadius:"20px 20px 0 0",padding:"22px 20px calc(22px + env(safe-area-inset-bottom))",boxShadow:"0 -12px 40px rgba(0,0,0,.25)"};
+  const savingsBar=(emoji)=>savings>0?(
+    <div style={{background:"linear-gradient(90deg,#dcfce7,#bbf7d0)",borderRadius:12,padding:"10px 14px",marginBottom:18,fontSize:13,fontWeight:700,color:"#15803d",textAlign:"center"}}>{emoji} You might miss out on savings of <span style={{fontFamily:PRICE_FONT}}>₹{Math.round(savings)}</span></div>
+  ):null;
+  return(
+    <div style={overlay} onClick={onStay}>
+      <div className="slide-up" style={sheet} onClick={e=>e.stopPropagation()}>
+        {stage===1?(<>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:12}}>Are you sure you want to exit?</div>
+          {savingsBar("🐠")}
+          <button className="press" onClick={()=>setStage(2)} style={{width:"100%",background:"#fff",color:C.text,border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:10,cursor:"pointer"}}>Yes, exit checkout</button>
+          <button className="press" onClick={onStay} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>No, continue checkout</button>
+        </>):(<>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:8}}>Sorry to see you go…</div>
+          {savingsBar("🚚")}
+          <div style={{fontSize:13.5,fontWeight:700,color:C.text,marginBottom:12}}>What stopped you from completing your purchase?</div>
+          <div style={{display:"flex",flexDirection:"column",gap:11,marginBottom:14}}>
+            {REASONS.map(r=>(
+              <label key={r} style={{display:"flex",alignItems:"center",gap:10,fontSize:13.5,color:C.text,cursor:"pointer",userSelect:"none"}}>
+                <input type="checkbox" checked={reasons.includes(r)} onChange={()=>toggle(r)} style={{width:18,height:18,accentColor:C.primary}}/>
+                {r}
+              </label>
+            ))}
+          </div>
+          {reasons.includes("Others")&&(
+            <textarea value={other} onChange={e=>setOther(e.target.value)} rows={3} placeholder="Others (please specify)"
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",marginBottom:14,background:"#fff"}}/>
+          )}
+          <button className="press" onClick={()=>onLeave&&onLeave({reasons,other})} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Skip and exit</button>
+          <button className="press" onClick={onStay} style={{width:"100%",background:"none",color:C.textSub,border:"none",padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:4,cursor:"pointer"}}>← Continue checkout instead</button>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelPayment,updateQty,user,settings={},orders=[],products=[],mediaCache={},savedAddresses=[],onSaveAddress,onDeleteAddress}){
+  const [step,setStep]=useState(1);
+  useEffect(()=>{ trackFunnel("checkout"); },[]); // funnel: reached checkout
+  const [exitAsk,setExitAsk]=useState(false);
+  const savingsTotal=cart.reduce((s,i)=>s+Math.max(0,((Number(i.mrp)||i.price)-i.price))*i.qty,0);
+  /* The half-typed address survives a reload or a trip to another tab: it is restored here on
+     mount and written back on every change below. Without this, wandering off the checkout page
+     — to check a pincode, to answer a message — meant typing the whole address again. */
+  const addrUk=userKey(user);
+  const [addr,setAddr]=useState(()=>{
+    const draft=loadAddrDraft(addrUk);
+    const base={...BLANK_ADDR,name:user?.name||"",phone:user?.phone||""};
+    return draft?{...base,...draft}:base;
+  });
+  const [addrEditId,setAddrEditId]=useState(null);   // which saved card the form is editing, if any
+  const [saveForLater,setSaveForLater]=useState(false);
+  /* Explicitly saved addresses start as the picker. A new address stays checkout-only unless
+     the customer chooses "Save this address for future orders" below. */
+  const [addrFormOpen,setAddrFormOpen]=useState(false);
+  const showAddrForm = !savedAddresses.length || addrFormOpen;
+  /* Fill the most recent one in straight away, so "Use this" is already true and Continue
+     works on the first press. A half-typed draft from an earlier visit outranks it — that is
+     someone mid-way through an address they meant to type. */
+  const addrSeeded=useRef(false);
+  useEffect(()=>{
+    if(addrSeeded.current||!savedAddresses.length) return;
+    addrSeeded.current=true;
+    if(!addrIsBlank(addr)) return;
+    const a=savedAddresses[0];
+    setAddr(cur=>({...cur,name:a.name||cur.name,phone:a.phone||cur.phone,whatsapp:a.whatsapp||"",
+      address:a.address||"",city:a.city||"",pincode:a.pincode||"",state:a.state||"",stateCode:a.stateCode||""}));
+    setAddrEditId(a.id);
+  },[savedAddresses]);
+  useEffect(()=>{ saveAddrDraft(addrUk,addr); },[addr,addrUk]);
+  const hasLiveFish=cart.some(i=>i.category==="Live Fish");
+  const [errs,setErrs]=useState({});
+  /* Scroll the first unfilled mandatory field into view when Continue is pressed. The form is
+     longer than the screen, so a failed validation used to look like the button was simply
+     dead: the red borders were all below the fold with nothing to say so. This list is in DOM
+     order, which is also the order validate() checks in, so "first error" means the topmost. */
+  const fieldRefs=useRef({});
+  const ADDR_FIELD_ORDER=["name","phone","whatsapp","address","city","pincode"];
+  const [errFocus,setErrFocus]=useState("");
+  const focusFirstError=e=>{
+    const first=ADDR_FIELD_ORDER.find(k=>e[k]);
+    setErrFocus(first||"");
+    const el=first&&fieldRefs.current[first];
+    if(!el) return;
+    try{ el.scrollIntoView({behavior:"smooth",block:"center"}); }catch(err){ try{ el.scrollIntoView(); }catch(e2){} }
+    // Focus after the smooth scroll is under way; preventScroll stops the browser jumping the
+    // field to the top edge and undoing the centring.
+    setTimeout(()=>{ try{ el.focus({preventScroll:true}); }catch(err){ try{ el.focus(); }catch(e2){} } },340);
+  };
+  const [placed,setPlaced]=useState(null);
+  const [submitted,setSubmitted]=useState(false);
+  // If the cart empties while still choosing address/review, drop back to step 1 — but NEVER
+  // once an order has been placed (placing empties the cart, and the payment screen is step 3;
+  // bouncing here was creating duplicate orders + double-decrementing stock → false "sold out").
+  useEffect(()=>{ if(step>=2&&cart.length===0&&!placed) setStep(1); },[cart.length,step,placed]);
+  // Auto-fill the delivery State (and GST state code) from the pincode — the
+  // place of supply that decides CGST+SGST (inside TN) vs IGST on the invoice.
+  // A recognised pincode is authoritative; unknown pincodes keep any manual pick.
+  useEffect(()=>{
+    const d=pincodeToState(addr.pincode);
+    if(d) setAddr(a=>(a.stateCode===d.code?a:{...a,state:d.name,stateCode:d.code}));
+  },[addr.pincode]);
+  const [specialDelivery,setSpecialDelivery]=useState(false);
+  const packingZone=pincodeToZone(addr.pincode);
+  const suggestedPacking=suggestedPackingForCart(cart,packingZone);
+  const [packing,setPacking]=useState(()=>suggestedPackingForCart(cart,pincodeToZone(addr.pincode)));
+  const selPack=packingOpt(packing);
+  const [placing,setPlacing]=useState(false);
+  const [placeErr,setPlaceErr]=useState("");
+  const [couponCode,setCouponCode]=useState("");
+  const [couponApplied,setCouponApplied]=useState(null);
+  const [couponMsg,setCouponMsg]=useState({text:"",ok:false});
+  const [refInput,setRefInput]=useState("");
+  const [refApplied,setRefApplied]=useState(false);
+  const [refMsg,setRefMsg]=useState({text:"",ok:false});
+  const [useSameBilling,setUseSameBilling]=useState(true);
+  const [billing,setBilling]=useState({...BLANK_ADDR});
+  const [showRates,setShowRates]=useState(false);
+  const [showPackEdit,setShowPackEdit]=useState(false);
+  const [loyaltyPts,setLoyaltyPts]=useState(null);
+  const [loyaltyRedeemed,setLoyaltyRedeemed]=useState(false);
+  // Load loyalty points on mount
+  useEffect(()=>{
+    if(!user||!settings.loyaltyEnabled)return;
+    const uid=userKey(user);
+    if(!uid)return;
+    loadLoyalty(uid).then(d=>setLoyaltyPts(d.points||0));
+  },[]);
+  const loyaltyVal=Number(settings.loyaltyRedeemValue||1);
+  const loyaltyMin=Number(settings.loyaltyRedeemMin||100);
+  const walletMaxCoins=walletCoinCap(settings);
+  const walletMinOrder=Number(settings.walletMinOrder||0);
+  let loyaltyDiscount=(loyaltyRedeemed&&loyaltyPts>=loyaltyMin&&total>=walletMinOrder)?Math.floor(Math.min(loyaltyPts,walletMaxCoins)*loyaltyVal):0;
+  let loyaltyCoinsUsed=loyaltyDiscount>0?Math.min(loyaltyPts,walletMaxCoins):0;
+  // Dynamic shipping
+  const zone=pincodeToZone(addr.pincode);
+  const shipOpts = hasLiveFish ? {packing} : {special:specialDelivery};
+  const shippingFee=calcShipping(cart,zone,shipOpts,settings);
+  const shipBreak=shippingBreakdown(cart,zone,shipOpts,settings)||{courier:0,thermacol:0,carton:0,special:0,total:0,freeShip:false};
+  // Live Arrival Guarantee is FREE when the customer picks the recommended packing (or a safer/higher-rank one).
+  const guaranteeActive=hasLiveFish && selPack.rank >= packingOpt(suggestedPacking).rank;
+  // Charge for the packing currently selected — quoted in the folded packing header, so the
+  // fee is on screen without opening it. Null until the pincode names a zone to price against.
+  const packSelFee=zone?calcShipping(cart,zone,{packing},settings):null;
+  const lgPrice=0;
+  // A "coins" coupon pays in reward coins rather than money off, so it never touches the total.
+  const couponBen=couponApplied?couponBenefit(couponApplied,total):{discount:0,coins:0};
+  const couponCoins=couponBen.coins;
+  let couponDiscount=Math.min(couponBen.discount,total+lgPrice);
+  let refDiscount=refApplied?Math.min(Number(settings.referralDiscount??50),Math.max(0,total+lgPrice-couponDiscount)):0;
+  /* Coins may only pay for what is still left to pay. loyaltyDiscount was bounded by the
+     owner's per-order coin limit but never by the order itself, so a small order — especially
+     one already carrying a coupon — could swallow far more coins than it was worth: redeem 100
+     coins against ₹40 of remaining value and redeemPoints deducted all 100, the customer
+     losing 60 of them for nothing. Clamped to the remainder, on the same goods-only base the
+     coupon and referral already use, and only the coins that remainder consumes are charged. */
+  const payableByCoins=Math.max(0,total+lgPrice-couponDiscount-refDiscount);
+  if(loyaltyDiscount>payableByCoins){
+    loyaltyDiscount=payableByCoins;
+    loyaltyCoinsUsed=loyaltyDiscount>0?Math.ceil(loyaltyDiscount/loyaltyVal):0;
+  }
+  // ── Ceiling on everything together: a rupee cap, a % of subtotal cap, or both. ──
+  const capped=applyDiscountCaps({coupon:couponDiscount,referral:refDiscount,loyalty:loyaltyDiscount,subtotal:total,settings,loyaltyVal});
+  couponDiscount=capped.coupon; refDiscount=capped.referral; loyaltyDiscount=capped.loyalty;
+  loyaltyCoinsUsed=capped.coinsUsed;
+  const discountCapped=capped.capped;
+  // Live fish geo-restriction (admin-toggleable)
+  const liveBlocked = hasLiveFish && liveFishBlockedForZone(zone, settings);
+  const fee=shippingFee??0;
+  const grand=Math.max(0,total+fee+lgPrice-couponDiscount-refDiscount-loyaltyDiscount);
+  const f=(k,v)=>setAddr(a=>({...a,[k]:v}));
+  const fb=(k,v)=>setBilling(a=>({...a,[k]:v}));
+  const anySuggestSpecial=cart.some(i=>i.suggestSpecialDelivery);
+  /* A coupon is checked against the cart when it is applied — and the cart can still be edited
+     from this page afterwards. Apply WELCOME100 at ₹1,000, then take an item out down to ₹400,
+     and the ₹100 came off anyway: the minimum was never looked at again. Re-check it whenever
+     the total moves, and say why it went rather than dropping it silently. */
+  useEffect(()=>{
+    if(!couponApplied) return;
+    const min=Number(couponApplied.minOrder)||0;
+    if(min>0 && total<min){
+      setCouponApplied(null);
+      setCouponMsg({text:`Coupon removed — the cart is now under the ₹${min} minimum for it.`,ok:false});
+    }
+  },[total,couponApplied]);
+  /* Coupon, referral and wallet all lived only on step 1, below the address form — so the
+     place a customer actually looks for a discount box, the Review screen with the total on
+     it, had none, and plenty simply never scrolled far enough on the address page to find one.
+     Rendered from here on BOTH steps: same state, same handlers, so a code applied on either
+     is the same code. */
+  const renderOffersBox=()=>(<>
+          {/* Coupon code. No longer behind a setting. A switch in Settings → Promotions used to
+              hide this box while leaving the referral box beside it, so checkout showed a
+              referral field and no coupon field — and nothing on any screen explained why.
+              A store that has coupons wants somewhere to type them; a store that has none has
+              nothing to advertise here anyway, and the box costs it one empty row. */}
+          {true && (
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>🎟 Coupon Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+            {/* Show available coupon hints — secret coupons are never listed here */}
+            {(()=>{
+              // Only codes the owner chose to advertise at checkout, still in date, and
+              // valid for this shopper — a first-order code is not dangled at a repeat customer.
+              const active=usableCoupons(settings,orders,"checkout");
+              if(!active.length) return null;
+              return(
+                <div style={{marginBottom:8,display:"flex",flexDirection:"column",gap:5}}>
+                  {active.map((c,i)=>{
+                    const minOk=!c.minOrder||total>=Number(c.minOrder);
+                    const needed=c.minOrder?Math.max(0,Number(c.minOrder)-total):0;
+                    const discount=c.type==="coins"?`${c.value} reward coins`
+                                  :c.type==="percent"?`${c.value}% off${c.maxDiscount>0?` up to ₹${c.maxDiscount}`:""}`
+                                  :`₹${c.value} off`;
+                    return(
+                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:minOk?"#f0fdf4":"#fefce8",border:`1px solid ${minOk?"#86efac":"#fde68a"}`,borderRadius:10,padding:"7px 12px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:12,color:minOk?C.success:"#92400e",background:minOk?"#dcfce7":"#fef3c7",padding:"2px 8px",borderRadius:6}}>{c.code}</span>
+                          <span style={{fontSize:11.5,color:minOk?"#15803d":"#92400e",fontWeight:600}}>{discount}</span>
+                        </div>
+                        {minOk?(
+                          <button className="press" onClick={()=>{setCouponCode(c.code);}}
+                            style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Apply</button>
+                        ):(
+                          <span style={{fontSize:10.5,color:"#92400e",fontWeight:600}}>Add ₹{needed} more</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            <div style={{display:"flex",gap:8}}>
+              <input value={couponCode} onChange={e=>{setCouponCode(e.target.value);setCouponMsg({text:"",ok:false});setCouponApplied(null);}}
+                placeholder="Enter coupon code"
+                style={{flex:1,borderRadius:12,border:`1.5px solid ${couponMsg.ok?"#22c55e":couponMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
+              <button className="press" onClick={applyCoupon}
+                style={{background:C.primary,color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+                Apply
+              </button>
+            </div>
+            {couponMsg.text&&<div style={{fontSize:11.5,color:couponMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{couponMsg.text}</div>}
+          </div>
+          )}
+          {/* Permanent customer codes and qualifying-order codes use the same alphanumeric format. */}
+          {settings.referralEnabled!==false && (
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>💜 Referral Code <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+            <div style={{display:"flex",gap:8}}>
+              <input value={refInput} onChange={e=>{setRefInput(cleanRefCode(e.target.value).slice(0,12));setRefMsg({text:"",ok:false});setRefApplied(false);}}
+                autoCapitalize="characters" maxLength={12} placeholder="Enter referral code"
+                style={{flex:1,borderRadius:12,border:`1.5px solid ${refMsg.ok?"#22c55e":refMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",letterSpacing:2,fontFamily:"monospace"}}/>
+              <button className="press" onClick={applyReferral} disabled={!REF_CODE_RE.test(cleanRefCode(refInput))}
+                style={{background:REF_CODE_RE.test(cleanRefCode(refInput))?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+                Apply
+              </button>
+            </div>
+            {refMsg.text&&<div style={{fontSize:11.5,color:refMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{refMsg.text}</div>}
+          </div>
+          )}
+  </>);
+  const applyCoupon=async()=>{
+    // Whether these two may be held at once is the owner's setting; reward coins always stack.
+    if(refApplied && settings.allowCouponWithReferral!==true){ setCouponMsg({text:"You can use a coupon or a referral code — not both. Remove the referral code first.",ok:false}); return; }
+    const r=validateCoupon(couponCode,settings,orders,total);
+    if(!r.ok){ setCouponMsg({text:r.msg,ok:false}); setCouponApplied(null); return; }
+    /* Once per customer means once per customer, not "once per customer whose history this
+       browser happens to have finished loading". The list above is whatever is in memory —
+       empty on a fresh device, and empty for a second or two on a slow connection — and an
+       empty history is exactly what makes an already-spent code look unused. Re-check against
+       the cloud, which is the record. If it cannot be read we keep the first answer rather
+       than refusing a genuine first-time customer for being offline. */
+    const uk=userKey(user);
+    const history=await cloudUserOrders(uk);
+    if(history){
+      const r2=validateCoupon(couponCode,settings,history,total);
+      if(!r2.ok){ setCouponMsg({text:r2.msg,ok:false}); setCouponApplied(null); return; }
+    }
+    if(await promoLimitReached("coupon", settings.couponDailyLimit)){
+      setCouponMsg({text:"Today's coupon quota is full — please try tomorrow.",ok:false}); setCouponApplied(null); return;
+    }
+    setCouponApplied(r.coupon);
+    /* Was computed here by hand off r.coupon.discount — a field normalizeCoupon does not write;
+       it writes `value`. So a flat coupon confirmed "saves ₹0" and a percent one "saves ₹NaN",
+       while the total quietly came down by the right amount. The discount was never wrong, the
+       sentence telling the customer about it was. couponBenefit is the one place that knows,
+       ceiling included, so ask it. */
+    const ben=couponBenefit(r.coupon,total);
+    setCouponMsg({text: ben.coins>0
+      ? `✓ Coupon applied — earns ${ben.coins} reward coins!`
+      : `✓ Coupon applied — saves ₹${ben.discount}!`, ok:true});
+  };
+
+  const applyReferral=async()=>{
+    if(couponApplied && settings.allowCouponWithReferral!==true){ setRefMsg({text:"You can use a coupon or a referral code — not both. Remove the coupon first.",ok:false}); return; }
+    if(settings.referralEnabled===false){ setRefMsg({text:"Referral program is currently off",ok:false}); return; }
+    if(await promoLimitReached("referral", settings.referralDailyLimit)){
+      setRefMsg({text:"Today's referral quota is full — please try tomorrow.",ok:false}); setRefApplied(false); return;
+    }
+    const r=await validateReferral(refInput,userKey(user));
+    if(!r.ok){ setRefMsg({text:r.msg,ok:false}); setRefApplied(false); return; }
+    setRefInput(r.code);
+    setRefApplied(true);
+    setRefMsg({text:`✓ Referral applied — ₹${Number(settings.referralDiscount??50)} off!`,ok:true});
+  };
+
+  const validate=()=>{
+    const e={};
+    if(!addr.name.trim())e.name="Required";
+    if(!/^[6-9]\d{9}$/.test(addr.phone))e.phone="Valid 10-digit number required";
+    if(addr.waUpdates&&!/^[6-9]\d{9}$/.test(addr.whatsapp))e.whatsapp="Valid WhatsApp number required";
+    if(!addr.address.trim())e.address="Required";
+    if(!addr.city.trim())e.city="Required";
+    if(!/^\d{6}$/.test(addr.pincode))e.pincode="Valid 6-digit pincode required";
+    setErrs(e);
+    if(Object.keys(e).length){ focusFirstError(e); return false; }
+    setErrFocus("");
+    return true;
+  };
+
+  const handlePlaceOrder=async()=>{
+    if(placing) return;
+    if(liveBlocked){ setPlaceErr("Sorry — we currently don't ship live fish to this region. Please remove live-fish items or use a Tamil Nadu / South India delivery address."); return; }
+    setPlaceErr(""); setPlacing(true);
+    // Live stock re-check — stops the last unit being oversold when two people check out at once
+    if(FB_OK && FB_DB){
+      try{
+        const need={}; cart.forEach(it=>{ need[it.id]=(need[it.id]||0)+it.qty; });
+        const ids=Object.keys(need);
+        const snaps=await Promise.all(ids.map(id=>withTimeout(FB_DB.ref("products/"+id+"/stockCount").get(),5000)));
+        const short=[];
+        ids.forEach((id,i)=>{
+          const snap=snaps[i];
+          const v=(snap&&typeof snap.val==="function")?snap.val():null;
+          const live=(typeof v==="number")?v:null;
+          if(live!==null && live<need[id]){ const nm=(cart.find(c=>c.id===id)||{}).name||"An item"; short.push(live<=0?`${nm} just sold out`:`${nm}: only ${live} left`); }
+        });
+        if(short.length){ setPlaceErr("Stock just changed — "+short.join(" · ")+". Please adjust your cart."); setPlacing(false); return; }
+      }catch(e){ /* network hiccup — the atomic stock transaction still prevents going negative */ }
+    }
+    const id=uid("ord");
+    const now=Date.now();
+    const orderNo=await nextOrderNo(now);
+    const uid2=userKey(user);
+    const appliedRefCode=refApplied?cleanRefCode(refInput):"";
+    if(appliedRefCode){
+      const reserved=await reserveReferral(appliedRefCode,uid2,id);
+      if(!reserved){
+        setRefApplied(false); setRefMsg({text:"This referral code is no longer available — please try another one.",ok:false});
+        setPlaceErr("The referral code could not be reserved. No order was placed."); setPlacing(false); return;
+      }
+    }
+    const qualifiesForOrderCode=settings.referralEnabled!==false&&grand>=orderReferralLimit(settings);
+    const earnedReferralCode=qualifiesForOrderCode?await createOrderReferralCode(uid2,id,grand,settings):"";
+    if(qualifiesForOrderCode&&!earnedReferralCode){
+      if(appliedRefCode) await releaseReferralReservation(appliedRefCode,uid2,id);
+      setPlaceErr("We couldn't generate this order's referral code. Please check your connection and try again; no order was placed."); setPlacing(false); return;
+    }
+    const checkoutAddress={...addr,whatsapp:addr.waUpdates?addr.whatsapp:""};
+    const order={
+      id,orderNo,items:[...cart],address:checkoutAddress,
+      billingAddress:useSameBilling?checkoutAddress:billing,
+      summary:addr.summary||"",
+      total,fee,shippingZone:zone||"",shippingZoneLabel:zone?ZONE_LABELS[zone]:"Unknown",
+      specialDelivery: hasLiveFish ? (selPack.courier==="special") : specialDelivery,
+      specialDeliveryFee: shipBreak.special,
+      packing: hasLiveFish?packing:"", packingLabel: hasLiveFish?packingLabel(packing):"",
+      suggestedPacking: hasLiveFish?suggestedPacking:"", suggestedPackingLabel: hasLiveFish?packingLabel(suggestedPacking):"",
+      liveGuarantee:guaranteeActive,liveGuaranteeFee:0,
+      coupon:couponApplied?couponCode.trim():"",couponDiscount,
+      referralCode:appliedRefCode, referralDiscount:refDiscount,
+      earnedReferralCode,
+      loyaltyDiscount:loyaltyRedeemed?loyaltyDiscount:0,
+      loyaltyCoinsUsed:loyaltyRedeemed?loyaltyCoinsUsed:0,
+      thermacolFee: hasLiveFish?thermacolFeeFor(cart,packing,settings):0,
+      shippingBreakup:{courier:shipBreak.courier,thermacol:shipBreak.thermacol,carton:shipBreak.carton,special:shipBreak.special},
+      status:"Awaiting Payment",trackingNumber:"",
+      paymentMethod:"online",
+      paymentStatus:"Awaiting Payment",
+      amountDue: grand,
+      paymentDeadline: now + PAY_WINDOW_MIN*60*1000,
+      txnId:"", paidAt:"",
+      waUpdates: !!addr.waUpdates,
+      userUid: userKey(user),
+      userPhone:normalizePhone(user?.phone||addr.phone),
+      userEmail:user?.email||"",
+      placedAt:new Date(now).toISOString(),updatedAt:new Date(now).toISOString(),
+    };
+    // Redeem loyalty points if applied
+    if(loyaltyRedeemed&&loyaltyDiscount>0&&uid2){
+      const ptsUsed=Math.ceil(loyaltyDiscount/loyaltyVal);
+      const redeemed=await redeemPoints(uid2, ptsUsed, id);
+      if(!redeemed){
+        if(appliedRefCode) await releaseReferralReservation(appliedRefCode,uid2,id);
+        if(earnedReferralCode) await deactivateEarnedReferral(earnedReferralCode,id);
+        setPlaceErr("Your reward coins could not be applied. Please check your connection and try again; no order was placed.");
+        setPlacing(false); return;
+      }
+    }
+    /* NOBODY is emailed here — not the owner, not the customer. An order at this point is only
+       "Awaiting Payment": the customer may cancel on the very next screen, or simply walk away
+       and let the payment window close it. Mail sent now is mail about an order that in a
+       good number of cases never existed, and the customer is still sitting in front of the
+       payment screen, so it tells them nothing they cannot see. Cashfree's verified
+       payment update is the point at which the paid order becomes actionable. */
+    // Count today's promo usage toward the admin's daily caps
+    if(couponApplied) bumpPromoUsage("coupon");
+    // Root app handles state + storage + stock decrement
+    onOrderPlaced(order);
+    // The order carries the address now, so the half-typed draft has done its job. A new
+    // address enters the saved-address picker only when the customer explicitly opted in.
+    clearAddrDraft(addrUk);
+    if(onSaveAddress&&saveForLater&&!addrEditId) onSaveAddress({...checkoutAddress,id:null});
+    setPlaced(order);
+    setStep(3);
+    setPlacing(false);
+  };
+
+  /* Two things went wrong with a mistyped mobile number. Nothing stopped an 11th digit being
+     typed in the first place; and once validate() had flagged the field, the message stayed
+     on screen while the customer fixed it — errs was only ever recomputed by validate(), so a
+     corrected number still read "Valid 10-digit number required" until Continue was pressed
+     again, which looks like the form rejecting a number that is now perfectly good.
+     Capping the length stops the bad input, and clearing the field's error as it is edited
+     makes the message track what is actually in the box. */
+  const FIELD_MAX={phone:10,whatsapp:10,pincode:6};
+  const inp=(label,key,type="text",ph="",half=false,opt=false)=>(
+    <div style={{flex:half?"1":"auto",minWidth:half?"0":"auto",marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>{label}{opt&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}> (optional)</span>}</div>
+      <input ref={el=>{ if(el) fieldRefs.current[key]=el; }} type={type} value={addr[key]}
+        inputMode={FIELD_MAX[key]?"numeric":undefined} maxLength={FIELD_MAX[key]}
+        onChange={e=>{
+          const v=FIELD_MAX[key]?e.target.value.replace(/\D/g,"").slice(0,FIELD_MAX[key]):e.target.value;
+          f(key,v);
+          if(errs[key]) setErrs(p=>{ const n={...p}; delete n[key]; return n; });
+          if(errFocus===key) setErrFocus("");
+        }} placeholder={ph}
+        style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs[key]?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",
+          boxShadow:errFocus===key?"0 0 0 4px rgba(239,68,68,.20)":"none",transition:"box-shadow .2s ease"}}/>
+      {errs[key]&&<div style={{fontSize:11,color:C.danger,marginTop:4,fontWeight:600}}>{errs[key]}</div>}
+    </div>
+  );
+
+  if(step===3)return(
+    <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",minHeight:"90vh",padding:"40px 18px 100px",textAlign:"center"}}>
+      {submitted?(
+        <>
+          <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Verified! 🎉</div>
+          {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
+          <div style={{fontSize:13,color:C.textSub,lineHeight:1.55,marginBottom:18,maxWidth:320}}>Payment verified. Your order is <b style={{color:C.text}}>Confirmed</b>. We'll update it when shipped and delivered.</div>
+          {/* Care-guide reminder — tailored to what was purchased */}
+          {placed&&(()=>{
+            const cats=new Set((placed.items||[]).map(i=>i.category));
+            const hasFish=cats.has("Live Fish"), hasPlants=cats.has("Plants");
+            if(!hasFish&&!hasPlants) return null; // dry goods only — no acclimatization needed
+            if(hasFish){
+              // Show the acclimatization steps inline right after payment so the customer is ready when the fish arrive.
+              const steps=String(settings.acclimatizationTips||DEFAULT_SETTINGS.acclimatizationTips).split("\n").map(s=>s.replace(/^\s*\d+[.)]\s*/,"").trim()).filter(Boolean);
+              return(
+                <div style={{width:"100%",maxWidth:340,textAlign:"left"}}>
+                  {/* Collapsed by default: the steps matter when the parcel arrives, not while
+                     the customer is still reading their order confirmation. */}
+                  <Collapsible icon="🐠" tone="green" title="How to acclimatize your fish"
+                    subtitle={`${steps.length} steps — tap to read when your parcel arrives`}>
+                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5,marginBottom:10}}>Save these steps for when your parcel arrives — they keep your new fish safe and stress-free.</div>
+                  <ol style={{margin:0,paddingLeft:18,display:"flex",flexDirection:"column",gap:6}}>
+                    {steps.map((st,i)=>(<li key={i} style={{fontSize:12.5,color:"#065f46",lineHeight:1.5}}>{st}</li>))}
+                  </ol>
+                  <button className="press" onClick={()=>nav("guides")}
+                    style={{marginTop:12,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
+                    📖 See full care guides →
+                  </button>
+                  </Collapsible>
+                </div>
+              );
+            }
+            return(
+              <button className="press" onClick={()=>nav("guides")}
+                style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,textAlign:"left",cursor:"pointer"}}>
+                <span style={{fontSize:30,flexShrink:0}}>📖</span>
+                <div>
+                  <div style={{fontSize:13.5,fontWeight:800,color:"#065f46",marginBottom:2}}>Please read the Care Guide</div>
+                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5}}>Settle your new plants in correctly for healthy growth. Tap to read →</div>
+                </div>
+              </button>
+            );
+          })()}
+          {/* Loyalty points earned */}
+          {settings.loyaltyEnabled&&placed&&(()=>{
+            const pts=coinsEarnedFor(placed, settings); // exactly what will be credited on delivery
+            return pts>0?(
+              <div className="points-pop" style={{background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:16,padding:"12px 20px",marginBottom:14,display:"flex",alignItems:"center",gap:10,width:"100%",maxWidth:340}}>
+                <span style={{fontSize:26}}>👛</span>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontSize:14,fontWeight:800,color:"white"}}>{pts} wallet points pending</div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,.85)"}}>≈ ₹{Math.floor(pts*Number(settings.loyaltyRedeemValue||1))} — credited after successful payment when your order is delivered</div>
+                </div>
+              </div>
+            ):null;
+          })()}
+          <div style={{display:"flex",gap:10,width:"100%",maxWidth:340}}>
+            <button className="press" onClick={()=>nav("home")}
+              style={{flex:1,background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Home</button>
+            <button className="press" onClick={()=>nav("orders")}
+              style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View Orders</button>
+          </div>
+        </>
+      ):(
+        <>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text,marginBottom:14}}>Complete payment</div>
+          {placed&&<PaymentPanel order={placed} onVerified={()=>setSubmitted(true)} onCancelled={(o)=>{onCancelled&&onCancelled(o);}} onCheckoutCancelled={onCancelPayment}/>} 
+          <div style={{display:"flex",gap:8,marginTop:14,width:"100%",maxWidth:360}}>
+            <button className="press" onClick={()=>nav("orders")}
+              style={{flex:1,background:"#fff",border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 10px",color:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              Pay later
+            </button>
+            <button className="press" onClick={()=>{ if(placed) onCancelPayment&&onCancelPayment(placed); else goBack(); }}
+              style={{flex:1,background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"9px 10px",color:C.danger,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              Cancel payment
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  return(
+    <div className="slide-up">
+      {exitAsk&&<ExitIntentModal savings={savingsTotal} onStay={()=>setExitAsk(false)} onLeave={(fb)=>{ try{const k="nemo_exit_feedback";const a=JSON.parse(localStorage.getItem(k)||"[]");a.push({t:Date.now(),reasons:fb&&fb.reasons,other:fb&&fb.other,cartValue:total});localStorage.setItem(k,JSON.stringify(a));}catch(e){} setExitAsk(false); goBack(); }}/>}
+      {/* Header */}
+      <div className="vh-head" style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+          <button className="press" onClick={()=>{ if(step!==1){ setStep(1); } else if(cart.length){ setExitAsk(true); } else { goBack(); } }}
+            style={{background:"none",border:"none",fontSize:20,color:C.textSub}}>←</button>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>
+            {step===1?"Address":"Review Order"}
+          </div>
+        </div>
+        {/* Steps */}
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          {["Address","Review","Payment"].map((s,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,
+                background:i<step?C.primary:"transparent",color:i<step?"white":C.textSub,border:`2px solid ${i<step?C.primary:C.border}`}}>
+                {i<step-1?"✓":i+1}
+              </div>
+              <span style={{fontSize:11,fontWeight:600,color:i===step-1?C.primary:C.textSub}}>{s}</span>
+              {i<2&&<div style={{width:16,height:2,background:i<step-1?C.primary:C.border,borderRadius:2}}/>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {step===1&&(
+        <div className="dt-read" style={{padding:"20px 16px 100px"}}>
+          {/* Shipping rates info */}
+          <div style={{background:C.accentLight,borderRadius:14,padding:"12px 14px",marginBottom:16,border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.primaryDark}}>🚚 Shipping rates vary by location &amp; weight</div>
+            {zone&&<div style={{fontSize:11.5,color:C.primary,fontWeight:700,marginTop:4}}>📍 Detected zone: <b>{ZONE_LABELS[zone]}</b></div>}
+            {!zone&&addr.pincode.length===6&&<div style={{fontSize:11.5,color:"#b45309",marginTop:4}}>⚠ Pincode not recognized — enter your city below and we'll confirm shipping</div>}
+            {hasLiveFish&&(()=>{
+              const r2=settings.shippingRates||DEFAULT_SHIPPING_RATES;
+              const fishWt=cart.filter(i=>i.category==="Live Fish").reduce((s,i)=>{const wt=Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2;return s+wt*i.qty;},0);
+              const base=basePackagingWeight(r2,"live",fishWt);
+              const total=fishWt+base;
+              return <div style={{fontSize:11,color:C.textSub,marginTop:4}}>🐠 Estimated live parcel weight: <b style={{color:C.primary}}>{total.toFixed(2)} kg</b> (fish packing: {fishWt.toFixed(2)} kg + base: {base} kg)</div>;
+            })()}
+          </div>
+          {liveBlocked&&(
+            <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:14,padding:"13px 15px",marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#b91c1c",marginBottom:3}}>🚫 Live fish not deliverable to {zone?ZONE_LABELS[zone]:"this region"}</div>
+              <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.5}}>For the safety of the fish we currently ship live stock only within <b>Tamil Nadu</b> and <b>South India</b>. Please use a delivery address in those regions, or remove the live-fish items to continue with the rest of your order.</div>
+            </div>
+          )}
+          {hasLiveFish&&(
+            <>
+            {/* Information, not a decision — folded so it stops taking a card-height
+               bite out of the address screen. The line that DOES need reading while
+               choosing packing is repeated inside that chooser below. */}
+            <Collapsible icon="🛡️" tone="green" title="Live Arrival Guarantee"
+              subtitle="Free with our recommended packing — tap for the terms">
+              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish is <b>Dead on Arrival (DOA)</b>, share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery. If approved, <b>you choose either a refund or reward coins</b> for the fish's value. Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
+            </Collapsible>
+            </>
+          )}
+          {/* Only customer-saved addresses appear here. Past orders never recreate a card. */}
+          {savedAddresses.length>0&&(
+            <div style={{background:"#fff",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:16}}>
+              <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:10}}>📍 Saved Address</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {savedAddresses.map(a=>{
+                  const active=addrFingerprint(a)===addrFingerprint(addr);
+                  // The status-update choice belongs to this order, not to the saved card.
+                  const use=()=>{
+                    setAddr(cur=>({...cur,name:a.name||"",phone:a.phone||"",whatsapp:a.whatsapp||"",
+                      address:a.address||"",city:a.city||"",pincode:a.pincode||"",state:a.state||"",stateCode:a.stateCode||""}));
+                    setAddrEditId(a.id); setSaveForLater(false); setErrs({}); setErrFocus("");
+                  };
+                  return(
+                    <div key={a.id} style={{border:`1.5px solid ${active?C.primary:C.border}`,background:active?C.accentLight:"#fff",borderRadius:12,padding:"10px 12px"}}>
+                      <div style={{fontSize:12.5,fontWeight:800,color:C.text}}>
+                        {a.name||"Address"}{a.label?<span style={{color:C.textSub,fontWeight:600}}> · {a.label}</span>:null}
+                      </div>
+                      <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5,marginTop:3}}>
+                        {a.address}{a.city?`, ${a.city}`:""} — {a.pincode}{a.phone?<><br/>📞 {a.phone}</>:null}
+                      </div>
+                      <div style={{display:"flex",gap:8,marginTop:9,flexWrap:"wrap"}}>
+                        <button className="press" onClick={()=>{ use(); setAddrFormOpen(false); }}
+                          style={{background:C.primary,color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          {active?"✓ In use":"Use this"}
+                        </button>
+                        <button className="press" onClick={()=>{ use(); setAddrFormOpen(true); }}
+                          style={{background:"#fff",color:C.primary,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          ✏ Edit
+                        </button>
+                        <button className="press" onClick={()=>onDeleteAddress&&onDeleteAddress(a.id)}
+                          style={{background:"#fff",color:C.danger,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!addrFormOpen&&(
+                  <button className="press" onClick={()=>{
+                      setAddr(cur=>({...BLANK_ADDR,waUpdates:cur.waUpdates,summary:cur.summary}));
+                      setAddrEditId(null); setSaveForLater(false); setErrs({}); setErrFocus(""); setAddrFormOpen(true);
+                    }}
+                    style={{background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                    ＋ New address
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {showAddrForm&&(<>
+          {inp("Full Name","name","text","John Doe")}
+          {inp("Mobile Number","phone","tel","9876543210")}
+          </>)}
+          {/* WhatsApp is requested only when the customer opts into status updates. */}
+          <label style={{display:"flex",alignItems:"center",gap:10,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"11px 13px",marginBottom:addr.waUpdates?10:14,cursor:"pointer",userSelect:"none"}}>
+            <input type="checkbox" checked={addr.waUpdates} onChange={e=>{
+              const checked=e.target.checked;
+              setAddr(a=>({...a,waUpdates:checked,whatsapp:checked?a.whatsapp:""}));
+              if(!checked&&errs.whatsapp) setErrs(p=>{const n={...p};delete n.whatsapp;return n;});
+            }} style={{width:18,height:18,accentColor:"#25D366",flexShrink:0}}/>
+            <span aria-hidden="true" style={{width:20,height:20,borderRadius:"50%",background:"#25D366",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900}}>☎</span>
+            <span style={{fontSize:12.5,color:"#166534",fontWeight:700}}>Update me on WhatsApp</span>
+          </label>
+          {addr.waUpdates&&inp("WhatsApp Number","whatsapp","tel","9876543210")}
+          {showAddrForm&&(<>
+          {inp("Street Address","address","text","123, Main Street")}
+          <div style={{display:"flex",gap:12}}>
+            {inp("City","city","text","Chennai",true)}
+            {inp("Pincode","pincode","text","600001",true)}
+          </div>
+          {(()=>{ const d=pincodeToState(addr.pincode); const six=/^\d{6}$/.test(addr.pincode||"");
+            return (
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>State</div>
+                {d ? (
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:C.accentLight,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px 14px"}}>
+                    <span style={{fontSize:14,fontWeight:700,color:C.text}}>{d.name}</span>
+                    <span style={{fontSize:10,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"2px 8px",letterSpacing:.3}}>✓ AUTO-DETECTED</span>
+                  </div>
+                ) : (
+                  <select value={addr.stateCode||""} onChange={e=>{const c=e.target.value; f("stateCode",c); f("state",GST_STATES[c]||"");}}
+                    style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",color:addr.stateCode?C.text:C.textSub}}>
+                    <option value="">{six?"Select your state…":"Enter pincode above to auto-detect, or pick…"}</option>
+                    {Object.keys(GST_STATES).sort((a,b)=>GST_STATES[a].localeCompare(GST_STATES[b])).map(c=>(
+                      <option key={c} value={c}>{GST_STATES[c]}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            );
+          })()}
+          </>)}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Special Request <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
+            <textarea value={addr.summary} onChange={e=>f("summary",e.target.value)} rows={3}
+              placeholder="e.g. Please pack fish with extra oxygen, specific colour preference…"
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",lineHeight:1.6,background:"white"}}/>
+          </div>
+          {/* Special delivery — recommended parcel that carries the Live Arrival Guarantee for live fish */}
+          {/* Live-fish packing chooser (customer picks); falls back to dry-goods special toggle */}
+          {hasLiveFish ? (
+            /* Folded, but never blind: the subtitle carries the packing currently selected
+               and whether the guarantee covers it, so a shopper who does not open it still
+               sees what they are getting and what it costs. */
+            <Collapsible icon="🐠" title="Live-fish packing"
+              subtitle={`${packingLabel(packing)}${guaranteeActive?" · 🛡️ guaranteed":" · not covered by the guarantee"}`}>
+              <div style={{fontSize:11.5,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> applies when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer option above it. Whatever you choose, we always pack with the utmost care to keep your fish safe in transit.</div>
+              {PACKING_OPTIONS.map(opt=>{
+                const sel=packing===opt.key;
+                const isSug=opt.key===suggestedPacking;
+                const covered=opt.rank>=packingOpt(suggestedPacking).rank;
+                const optFee=calcShipping(cart,zone,{packing:opt.key},settings);
+                return(
+                  <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:11,background:sel?"#eff6ff":"#fff",borderRadius:13,padding:"12px 13px",marginBottom:8,cursor:"pointer",userSelect:"none",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
+                    <input type="radio" name="packing" checked={sel} onChange={()=>setPacking(opt.key)} style={{width:18,height:18,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        <span style={{fontSize:12.5,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
+                        {isSug&&<span style={{fontSize:9,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"2px 7px",letterSpacing:.3}}>RECOMMENDED</span>}
+                        {covered&&<span style={{fontSize:9.5,fontWeight:700,color:"#15803d"}}>🛡️ Guaranteed</span>}
+                      </div>
+                      <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>{opt.blurb}</div>
+                    </div>
+                    <span style={{fontSize:12.5,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>{zone?`₹${optFee}`:"—"}</span>
+                  </label>
+                );
+              })}
+              {selPack.rank < packingOpt(suggestedPacking).rank &&(
+                <div style={{fontSize:11,color:"#9a3412",lineHeight:1.45,marginTop:2,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px"}}>⚠ You've chosen a lighter packing than we recommend for these fish — that's okay, but <b>live arrival won't be guaranteed</b>.</div>
+              )}
+            </Collapsible>
+          ) : anySuggestSpecial ? (
+            <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"#eff6ff":"#fff",borderRadius:14,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
+              <input type="checkbox" checked={specialDelivery} onChange={e=>setSpecialDelivery(e.target.checked)} style={{width:20,height:20,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
+              <div>
+                <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ Premium Delivery</div>
+                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{zone?speedCourierForZone(zone,settings,cart):(settings.specialDeliveryPrice||200)}</b> to shipping.</div>
+              </div>
+            </label>
+          ) : null}
+          {/* Wallet — redeem points (earned + referral + shipping refunds) */}
+          {settings.loyaltyEnabled&&loyaltyPts!=null&&loyaltyPts>0&&(
+            <LoyaltyWidget points={loyaltyPts} settings={settings} subtotal={total} redeemApplied={loyaltyRedeemed} onRedeem={()=>setLoyaltyRedeemed(true)}/>
+          )}
+          {/* Coupon and referral live on the payment step only, beside the total they change.
+              Asking for a code here as well meant asking twice for the same thing, a screen
+              before there was any total to judge it against. */}
+          {/* Billing address */}
+          <label style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"11px 14px",marginBottom:12,cursor:"pointer",userSelect:"none",border:`1px solid ${C.border}`}}>
+            <input type="checkbox" checked={useSameBilling} onChange={e=>setUseSameBilling(e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
+            <span style={{fontSize:12.5,color:C.primaryDark,fontWeight:600}}>🏠 Billing address same as shipping</span>
+          </label>
+          {!useSameBilling&&(
+            <div style={{background:C.bg,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:10}}>Billing Address</div>
+              {["name","address","city","pincode"].map(k=>(
+                <div key={k} style={{marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:4}}>{k.charAt(0).toUpperCase()+k.slice(1)}</div>
+                  <input value={billing[k]} onChange={e=>fb(k,e.target.value)}
+                    style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                </div>
+              ))}
+            </div>
+          )}
+          {onSaveAddress&&showAddrForm&&!addrEditId&&(
+            <label style={{display:"flex",alignItems:"center",gap:10,background:"#fff",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginBottom:12,cursor:"pointer",userSelect:"none"}}>
+              <input type="checkbox" checked={saveForLater} onChange={e=>setSaveForLater(e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
+              <span style={{fontSize:12.5,color:C.text,fontWeight:700}}>Save this address for future orders</span>
+            </label>
+          )}
+          {onSaveAddress&&showAddrForm&&addrEditId&&(
+            <button className="press" onClick={()=>{ if(validate()) onSaveAddress({...addr,id:addrEditId}); }}
+              style={{width:"100%",marginBottom:10,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              Update saved address
+            </button>
+          )}
+          <button className="press" onClick={()=>{ if(validate()) setStep(2); else setAddrFormOpen(true); }}
+            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            Continue to Payment →
+          </button>
+        </div>
+      )}
+
+      {step===2&&(
+        <div className="dt-read" style={{padding:"20px 16px 100px"}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:12}}>Order Items</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+            <button className="press" onClick={()=>nav("shop")}
+              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>＋ Add more items</button>
+            <button className="press" onClick={()=>setStep(1)}
+              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✏ Edit Address</button>
+          </div>
+          {cart.map(item=>{
+            const m=CAT_META[item.category]||CAT_META["Live Fish"];
+            const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+            return(
+              <div key={item.key||item.id} style={{background:C.card,borderRadius:14,padding:"12px",marginBottom:8,display:"flex",gap:12,alignItems:"center",border:`1px solid ${C.border}`}}>
+                {/* Cart lines are snapshots and carry no picture, so the photo is looked up from
+                    the catalogue — the same helper the cart and order history use. This tile
+                    showed the bare category emoji until now, which made the last screen before
+                    payment the one place you could not see what you were buying. */}
+                <div style={{width:44,height:44,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,overflow:"hidden"}}>
+                  {(()=>{ const src=getCartLineImg(item,products,mediaCache);
+                    return src?<img src={src} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji; })()}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text}}>{item.name}</div>
+                  {item.variantLabel&&<div style={{fontSize:12,color:C.textSub}}>{item.variantLabel}</div>}
+                  {updateQty?(
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginTop:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:10,padding:"4px 10px",border:`1.5px solid ${C.border}`}}>
+                        <button className="press" onClick={()=>updateQty(item.key,-1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,lineHeight:1,cursor:"pointer"}}>−</button>
+                        <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:16,textAlign:"center"}}>{item.qty}</span>
+                        <button className="press" onClick={()=>updateQty(item.key,1)} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:17,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,lineHeight:1,cursor:item.qty>=maxAllowed?"default":"pointer"}}>+</button>
+                      </div>
+                      <button className="press" onClick={()=>updateQty(item.key,-item.qty)} style={{background:"none",border:"none",fontSize:12,color:C.danger,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Remove</button>
+                    </div>
+                  ):(
+                    <div style={{fontSize:12,color:C.textSub}}>Qty: {item.qty}</div>
+                  )}
+                </div>
+                <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary,flexShrink:0}}>₹{item.price*item.qty}</div>
+              </div>
+            );
+          })}
+          {/* Live-fish packing, chosen right here between the items and the money. It was only
+              reachable through a "Change packing" link buried inside the totals card, below the
+              shipping rows — so the one decision that governs both the shipping charge and
+              whether the Live Arrival Guarantee applies was the hardest thing on the page to
+              find. The charge for each option is quoted against the real parcel weight. */}
+          {hasLiveFish&&(
+            /* Folded by default. Four options, each with a fee and a coverage badge, sat open
+               between the basket and the money and pushed the totals and the pay button off the
+               first screen — for a choice the recommendation has already made correctly. The
+               header still carries the selected packing, its charge and whether the guarantee
+               holds, so a shopper who never opens it is not kept in the dark; only the choosing
+               is folded away. The "not covered" warning below stays OUTSIDE the fold: it is the
+               one thing here that must not be closable. */
+            <div style={{marginTop:12}}>
+            <Collapsible icon="🐠" title="Live-Fish Packing" tone={guaranteeActive?"plain":"amber"}
+              subtitle={`${packingLabel(packing)}${packSelFee==null?"":` · ₹${packSelFee}`} · ${guaranteeActive?"🛡️ guarantee applies":"⚠ not covered"} · tap to change`}>
+              <div style={{fontSize:11,color:"#0c4a6e",lineHeight:1.5,marginBottom:10}}>
+                The <b>Live Arrival Guarantee</b> applies on <b>{packingLabel(suggestedPacking)}</b> (our recommendation) or any safer option. Changing this changes your shipping charge below.
+              </div>
+              {!zone&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>Enter a recognised pincode on the shipping step to see the charge for each option.</div>}
+              {PACKING_OPTIONS.map(opt=>{
+                const sel=packing===opt.key;
+                const isSug=opt.key===suggestedPacking;
+                const covered=opt.rank>=packingOpt(suggestedPacking).rank;
+                const optFee=zone?calcShipping(cart,zone,{packing:opt.key},settings):null;
+                return(
+                  <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:10,background:sel?"#e0f2fe":"#fff",borderRadius:12,padding:"10px 12px",marginBottom:7,cursor:"pointer",border:`1.5px solid ${sel?"#0284c7":C.border}`}}>
+                    <input type="radio" name="packmain" checked={sel} onChange={()=>setPacking(opt.key)} style={{width:17,height:17,accentColor:"#0284c7",flexShrink:0,marginTop:1}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                        <span style={{fontSize:12,fontWeight:800,color:sel?"#0369a1":C.text}}>{opt.label}</span>
+                        {isSug&&<span style={{fontSize:8.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
+                        {covered
+                          ? <span style={{fontSize:9,fontWeight:800,color:"#15803d"}} title="Live Arrival Guarantee applies">🛡️</span>
+                          : <span style={{fontSize:8.5,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"1px 6px"}}>NO DEAD-ON-ARRIVAL COVER</span>}
+                      </div>
+                      <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
+                    </div>
+                    <span style={{fontSize:12,fontWeight:800,color:sel?"#0369a1":C.text,whiteSpace:"nowrap"}}>{optFee==null?"—":`₹${optFee}`}</span>
+                  </label>
+                );
+              })}
+            </Collapsible>
+            {!guaranteeActive&&(
+              <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",lineHeight:1.5,marginTop:-4,marginBottom:12}}>
+                ⚠ You've picked packing below our recommendation. Your fish still travel with our usual care, but a <b>Dead-on-Arrival claim can't be honoured</b> on this order.
+              </div>
+            )}
+            </div>
+          )}
+          <div style={{background:C.card,borderRadius:14,padding:"14px",marginTop:12,border:`1px solid ${C.border}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontSize:13,color:C.textSub}}>Subtotal</span>
+              <span style={{fontSize:13,fontWeight:600,color:C.text}}>₹{total}</span>
+            </div>
+            {!zone ? (
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,color:C.textSub}}>Shipping</span>
+                <span style={{fontSize:13,fontWeight:600,color:C.accent}}>TBD after address</span>
+              </div>
+            ) : (<>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,color:C.textSub}}>Shipping <span style={{fontSize:11,color:C.accent}}>({ZONE_LABELS[zone]})</span></span>
+                <span style={{fontSize:13,fontWeight:600,color:C.text}}>{shipBreak.freeShip?"Free":`₹${shipBreak.courier}`}</span>
+              </div>
+              {shipBreak.special>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
+                <span style={{fontSize:13,color:"#1d4ed8"}}>⚡ Premium Courier extra</span>
+                {!hasLiveFish?(
+                  <span style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:13,fontWeight:600,color:"#1d4ed8"}}>₹{shipBreak.special}</span>
+                    <button className="press" onClick={()=>setSpecialDelivery(false)} title="Remove" style={{width:22,height:22,borderRadius:"50%",background:"#dbeafe",color:"#1d4ed8",border:"none",fontSize:14,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
+                  </span>
+                ):<span style={{fontSize:13,fontWeight:600,color:"#1d4ed8"}}>₹{shipBreak.special}</span>}
+              </div>}
+              {shipBreak.thermacol>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,color:C.textSub}}>🧊 Thermacol packaging</span>
+                <span style={{fontSize:13,fontWeight:600,color:C.text}}>₹{shipBreak.thermacol}</span>
+              </div>}
+              {shipBreak.carton>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,color:C.textSub}}>📦 Standard packing</span>
+                <span style={{fontSize:13,fontWeight:600,color:C.text}}>₹{shipBreak.carton}</span>
+              </div>}
+            </>)}
+            {hasLiveFish ? (
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"flex-start"}}>
+                <span style={{fontSize:13,color:C.textSub}}>📦 Packing</span>
+                <span style={{fontSize:12,fontWeight:700,color:C.text,textAlign:"right",maxWidth:"62%"}}>{packingLabel(packing)}</span>
+              </div>
+            ) : null}
+            {/* #3 — inline packing editor: pick packing/courier and see the charge for each (by final parcel weight) */}
+            {zone&&(hasLiveFish||anySuggestSpecial)&&(
+              <div style={{marginBottom:8}}>
+                <button className="press" onClick={()=>setShowPackEdit(v=>!v)}
+                  style={{background:"none",border:"none",fontSize:12,color:C.accent,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",padding:0,cursor:"pointer"}}>{showPackEdit?"▲ Hide packing options":"📦 Change packing"}</button>
+                {showPackEdit&&(
+                  <div style={{marginTop:8}}>
+                    {hasLiveFish?PACKING_OPTIONS.map(opt=>{
+                      const sel=packing===opt.key; const isSug=opt.key===suggestedPacking;
+                      const covered=opt.rank>=packingOpt(suggestedPacking).rank;
+                      const optFee=calcShipping(cart,zone,{packing:opt.key},settings);
+                      return(
+                        <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:10,background:sel?"#eff6ff":"#fff",borderRadius:12,padding:"10px 12px",marginBottom:7,cursor:"pointer",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
+                          <input type="radio" name="packrev" checked={sel} onChange={()=>setPacking(opt.key)} style={{width:17,height:17,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
+                          <div style={{flex:1}}>
+                            <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                              <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
+                              {isSug&&<span style={{fontSize:8.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
+                              {covered&&<span style={{fontSize:9,fontWeight:700,color:"#15803d"}}>🛡️</span>}
+                            </div>
+                            <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
+                          </div>
+                          <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>₹{optFee}</span>
+                        </label>
+                      );
+                    }):[{sp:false,label:"📦 Standard courier",blurb:"Regular courier — carton packed."},{sp:true,label:"⚡ Premium courier",blurb:"Priority courier with extra care for fragile items."}].map(o=>{
+                      const sel=specialDelivery===o.sp; const optFee=calcShipping(cart,zone,{special:o.sp},settings);
+                      return(
+                        <label key={String(o.sp)} style={{display:"flex",alignItems:"flex-start",gap:10,background:sel?"#eff6ff":"#fff",borderRadius:12,padding:"10px 12px",marginBottom:7,cursor:"pointer",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
+                          <input type="radio" name="packrev" checked={sel} onChange={()=>setSpecialDelivery(o.sp)} style={{width:17,height:17,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{o.label}</div>
+                            <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{o.blurb}</div>
+                          </div>
+                          <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>₹{optFee}</span>
+                        </label>
+                      );
+                    })}
+                    <div style={{fontSize:10,color:C.textSub,lineHeight:1.4,marginTop:2}}>Charges are based on your final parcel weight (product weight + base packing weight).</div>
+                  </div>
+                )}
+              </div>
+            )}
+            {zone&&fee>0&&<div style={{fontSize:10.5,color:C.textSub,lineHeight:1.45,marginTop:-2,marginBottom:8,background:C.accentLight,borderRadius:8,padding:"7px 10px"}}>ℹ️ Estimated shipping. Any excess returns to your wallet after dispatch.</div>}
+            {guaranteeActive&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
+              <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Arrival Guarantee</span>
+              <span style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Included</span>
+            </div>}
+            {/* The same box again, where a customer actually goes looking for it: beside the
+                total they are about to pay, not buried under the address form a screen back. */}
+            <div style={{margin:"4px 0 12px"}}>{renderOffersBox()}</div>
+            {couponApplied&&couponDiscount>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontSize:13,color:C.success}}>🎟 Coupon ({couponCode.toUpperCase()})</span>
+              <span style={{fontSize:13,fontWeight:600,color:C.success}}>-₹{couponDiscount}</span>
+            </div>}
+            {refApplied&&refDiscount>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontSize:13,color:"#7c3aed"}}>💜 Referral ({refInput})</span>
+              <span style={{fontSize:13,fontWeight:600,color:"#7c3aed"}}>-₹{refDiscount}</span>
+            </div>}
+            {loyaltyRedeemed&&loyaltyDiscount>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontSize:13,color:"#7c3aed"}}>👛 Wallet</span>
+              <span style={{fontSize:13,fontWeight:600,color:"#7c3aed"}}>-₹{loyaltyDiscount}</span>
+            </div>}
+            {discountCapped&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,gap:8}}>
+              <span style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Max savings of {maxDiscPct}% applied — some discounts were trimmed.</span>
+            </div>}
+            <div style={{height:1,background:C.border,margin:"10px 0"}}/>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontSize:15,fontWeight:700,color:C.text}}>Grand Total</span>
+              <span style={{fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>₹{grand}</span>
+            </div>
+          </div>
+          <div style={{marginTop:16,background:C.card,borderRadius:14,padding:"14px",border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>📍 Shipping To</div>
+            {[{l:"Name",v:addr.name},{l:"Phone",v:addr.phone},{l:"Address",v:addr.address},{l:"City",v:`${addr.city} — ${addr.pincode}`}].map((r,i)=>(
               <div key={i} style={{display:"flex",gap:10,marginBottom:6}}>
                 <span style={{fontSize:12,color:C.textSub,minWidth:55}}>{r.l}</span>
                 <span style={{fontSize:12,color:C.text,fontWeight:600}}>{r.v}</span>
@@ -10103,7 +13308,7 @@ function AdminExitConfirm({onStay,onLeave}){
 }
 
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
-function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onDeleteGuides,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTankMonthlyAward,totmVotes={},tankMonthKey=totmMonthOf(Date.now()),testimonials=[],onDeleteTestimonial,onClearShowcase,onClearTestimonials,onClearRequests,backRef}){
+function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onDeleteGuides,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTankMonthlyAward,totmVotes={},tankMonthKey=totmMonthOf(Date.now()),testimonials=[],onDeleteTestimonial,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
@@ -11218,27 +14423,6 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       {/* ── SETTINGS TAB ── */}
       {tab==="settings"&&(
         <div>
-          {/* Start Fresh — bulk-clear all customer submissions */}
-          <div style={{padding:"16px 16px 0"}}>
-            <div style={{background:"#fff5f5",borderRadius:16,padding:"16px",border:`1.5px solid ${C.danger}`}}>
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.danger,marginBottom:4}}>🧹 Start Fresh</div>
-              <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Permanently delete all customer-submitted content so you can launch with a clean slate. Each clear cannot be undone.</div>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {[
-                  {label:"Customer Tanks",count:showcase.length,fn:onClearShowcase,word:"customer tank photo"},
-                  {label:"Testimonials",count:testimonials.length,fn:onClearTestimonials,word:"testimonial"},
-                  {label:"Requests",count:requests.length,fn:onClearRequests,word:"product request"},
-                ].map(b=>(
-                  <button key={b.label} className="press" disabled={!b.count}
-                    onClick={()=>{ if(b.count&&window.confirm(`Delete ALL ${b.count} ${b.word}${b.count>1?"s":""}?\n\nThis permanently removes them from the website and cannot be undone.`)){ b.fn&&b.fn(); } }}
-                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:b.count?"#fee2e2":C.bg,color:b.count?C.danger:C.textSub,border:`1.5px solid ${b.count?C.danger:C.border}`,borderRadius:12,padding:"11px 14px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:b.count?"pointer":"default",opacity:b.count?1:.6}}>
-                    <span>Clear all {b.label}</span>
-                    <span style={{fontSize:12,fontWeight:800,background:b.count?"rgba(220,38,38,.12)":"transparent",borderRadius:20,padding:b.count?"2px 9px":"0"}}>{b.count}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
           {(()=>{
             const current=tankMonthKey, previous=previousTotmMonth(Date.now());
             const renderMonth=(month,complete)=>{
@@ -11842,21 +15026,27 @@ function SettingsPanel({settings,onSave,products=[]}){
       {/* Shipping rates editor */}
       <Collapsible icon="🚚" title="Shipping Rates">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Edit shipping prices per zone. Leave blank to use default rates. Changes apply immediately after Save.</div>
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:4}}>Base packaging weight for <b>Dry Goods</b> orders (kg)</div>
-          <input type="number" step="0.25" min="0"
-            value={(f.shippingRates||DEFAULT_SHIPPING_RATES).basePackagingKg||0.5}
-            onChange={e=>{const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};set("shippingRates",{...cur,basePackagingKg:Number(e.target.value)||0.5});}}
-            style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-        </div>
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:4}}>Base packaging weight for <b>Live Fish</b> orders (kg) — oxygen bag + box</div>
-          <input type="number" step="0.25" min="0"
-            value={(f.shippingRates||DEFAULT_SHIPPING_RATES).liveBasePackagingKg??0.5}
-            onChange={e=>{const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};set("shippingRates",{...cur,liveBasePackagingKg:Number(e.target.value)||0.5});}}
-            style={{width:"120px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Each fish's per-variant packaging weight is set in the product form. Total = fish weights + this base.</div>
-        </div>
+        <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>⚖️ Packaging weight added by item-weight bracket</div>
+        <div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.45}}>Set the box, oxygen bag and packing-material weight separately for each order-weight range. The app adds it before choosing the courier rate.</div>
+        {[['dry','Dry Goods','basePackagingByWeight','basePackagingKg'],['live','Live Fish · oxygen bag + box','liveBasePackagingByWeight','liveBasePackagingKg']].map(([kind,label,mapKey,legacyKey])=>{
+          const cur=f.shippingRates||DEFAULT_SHIPPING_RATES;
+          const map=cur[mapKey]||{};
+          const fallback=Number(cur[legacyKey]??cur.basePackagingKg??0.5);
+          return <div key={kind} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 11px",marginBottom:10}}>
+            <div style={{fontSize:11.5,fontWeight:800,color:C.text,marginBottom:7}}>{label}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 82px",gap:"6px 10px",alignItems:"center"}}>
+              {SHIP_TIERS.map(t=><React.Fragment key={t}>
+                <span style={{fontSize:10.5,color:C.textSub,fontWeight:700}}>{t}</span>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <input type="number" step="0.05" min="0" value={map[t]??fallback}
+                    onChange={e=>{const rates=f.shippingRates||{...DEFAULT_SHIPPING_RATES};const next={...(rates[mapKey]||{}),[t]:Math.max(0,Number(e.target.value)||0)};set("shippingRates",{...rates,[mapKey]:next});}}
+                    style={{width:"58px",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"6px",fontSize:12,outline:"none",background:"white",textAlign:"right"}}/>
+                  <span style={{fontSize:10,color:C.textSub}}>kg</span>
+                </div>
+              </React.Fragment>)}
+            </div>
+          </div>;
+        })}
         {["dryGoods","liveFish"].map(type=>{
           const rows = (f.shippingRates||DEFAULT_SHIPPING_RATES)[type]||{};
           const label = type==="dryGoods"?"🐟 Dry Goods (by weight)":"🐠 Live Fish (by total parcel weight)";
@@ -11972,15 +15162,18 @@ function SettingsPanel({settings,onSave,products=[]}){
         </button>
       </Collapsible>
 
+      <Collapsible icon="🚚" title="Free Delivery">
+        <div style={{maxWidth:260}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>Free Delivery above (₹)</div>
+          <input type="number" min="0" value={f.freeDeliveryThreshold||0} onChange={e=>set("freeDeliveryThreshold",Number(e.target.value))}
+            style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
+          <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
+        </div>
+      </Collapsible>
+
       {/* Special delivery & live guarantee pricing */}
       <Collapsible icon="⚡" title="Premium Delivery & Live Guarantee">
         <div style={{display:"grid",gridTemplateColumns:"1fr",gap:14}}>
-          <div style={{maxWidth:260}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>🚚 Free Delivery above (₹)</div>
-            <input type="number" min="0" value={f.freeDeliveryThreshold||0} onChange={e=>set("freeDeliveryThreshold",Number(e.target.value))}
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
-          </div>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:4}}>⚡ Premium-courier charge (₹ per parcel-weight bracket × zone)</div>
             <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Added when a customer picks a <b>Premium-courier</b> option, by total parcel weight &amp; their pincode zone.</div>
@@ -14056,29 +17249,6 @@ function NemoStore(){
     await deleteRequest(r.id);
     showToast("✓ User data deleted");
   };
-  // ── "Start Fresh" — admin bulk-clears every customer submission ──
-  const clearAllShowcaseHandler=async()=>{
-    const remaining=await clearAllShowcase();
-    setShowcase([]); // the live listener will also reflect the cleared cloud node
-    if(remaining>0) showToast("⚠ "+remaining+" tank"+(remaining>1?"s":"")+" couldn't be removed — sign in with the admin Google account, then try again","error");
-    else showToast("✓ All customer tanks cleared");
-  };
-  const clearAllTestimonialsHandler=async()=>{
-    const remaining=await clearAllTestimonials();
-    setTestimonials([]);
-    if(remaining>0) showToast("⚠ "+remaining+" testimonial"+(remaining>1?"s":"")+" couldn't be removed — sign in with the admin Google account, then try again","error");
-    else showToast("✓ All testimonials cleared");
-  };
-  const clearAllRequestsHandler=async()=>{
-    const ids=requests.map(r=>r.id);
-    const remaining=await clearAllRequestsCloud();
-    for(const id of ids){ try{ await delMedia(id); }catch(e){} }
-    setRequests([]);
-    setMediaCache(c=>{const n={...c}; ids.forEach(id=>delete n["img-"+id]); return n;});
-    if(remaining>0) showToast("⚠ "+remaining+" request"+(remaining>1?"s":"")+" couldn't be removed — sign in with the admin Google account, then try again","error");
-    else showToast("✓ All requests cleared");
-  };
-
   // Guides
   /* The write is awaited and its result reported. A guide that only reached this device is
      a guide that is going to vanish the next time the store syncs, so say so at the moment
@@ -14857,7 +18027,7 @@ function NemoStore(){
         {page==="contact"  &&<ContactPage nav={nav} goBack={goBack} settings={settings}/>} 
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} onAdminSignIn={adminGoogleSignIn}/>}
-        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{const ok=await deleteShowcasePhoto(id);if(ok)setShowcase(s=>s.filter(x=>x.id!==id));else showToast("Couldn't remove that submission — verify admin sign-in","error");}} onApproveShowcase={handleApproveShowcase} onTankMonthlyAward={handleTankMonthlyAward} totmVotes={totmVotes} tankMonthKey={activeTankMonth} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial} onClearShowcase={clearAllShowcaseHandler} onClearTestimonials={clearAllTestimonialsHandler} onClearRequests={clearAllRequestsHandler}
+        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{const ok=await deleteShowcasePhoto(id);if(ok)setShowcase(s=>s.filter(x=>x.id!==id));else showToast("Couldn't remove that submission — verify admin sign-in","error");}} onApproveShowcase={handleApproveShowcase} onTankMonthlyAward={handleTankMonthlyAward} totmVotes={totmVotes} tankMonthKey={activeTankMonth} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onDeleteGuides={deleteGuidesHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
       </div>
