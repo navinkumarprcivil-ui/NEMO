@@ -17,10 +17,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = readFileSync(join(root, "app.jsx"), "utf8");
 const code = src.slice(src.indexOf("const SHOWCASE_TTL"), src.indexOf("function loadTankStreakLocal("));
 const M = new Function("FB_OK", code + `
-  return {totmMonthOf,previousTotmMonth,totmDayOf,totmMonthLabel,totmMonthEnd,tankVoteRewardOn,tankStreakRewardOn,showcaseImgs,voteCount,
+  return {totmMonthOf,previousTotmMonth,adminRewardReminderPeriod,totmDayOf,totmMonthLabel,totmMonthEnd,tankVoteRewardOn,tankStreakRewardOn,showcaseImgs,voteCount,
           hasVotedForTank,totmStandings,totmMinVotes,totmEligible,
           showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak,monthUploadStats,tankMonthlyRows,replacementForApproval};`)(false);
-const {totmMonthOf,previousTotmMonth,totmDayOf,totmMonthLabel,totmMonthEnd,tankVoteRewardOn,tankStreakRewardOn,showcaseImgs,voteCount,
+const {totmMonthOf,previousTotmMonth,adminRewardReminderPeriod,totmDayOf,totmMonthLabel,totmMonthEnd,tankVoteRewardOn,tankStreakRewardOn,showcaseImgs,voteCount,
        hasVotedForTank,totmStandings,totmMinVotes,totmEligible,
        showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak,monthUploadStats,tankMonthlyRows,replacementForApproval}=M;
 /* Legacy ballot fixture: totmVotes/<month>/<entryId>/<day>/<voter> = true. */
@@ -57,6 +57,13 @@ test("the two monthly tank rewards can be switched independently", () => {
   assert.equal(tankStreakRewardOn({tankStreakRewardEnabled:true}), true);
   assert.equal(tankStreakRewardOn({tankStreakRewardEnabled:false}), false);
   assert.equal(tankStreakRewardOn({}), true); // preserves the existing streak reward until the admin turns it off
+});
+
+test("Admin reminds on the IST month end and keeps the same reward month for seven days", () => {
+  assert.deepEqual(adminRewardReminderPeriod(Date.parse("2026-08-31T18:29:59Z")),{month:"2026-08",phase:"month-end"});
+  assert.deepEqual(adminRewardReminderPeriod(Date.parse("2026-08-31T18:30:00Z")),{month:"2026-08",phase:"follow-up"});
+  assert.deepEqual(adminRewardReminderPeriod(Date.parse("2026-09-07T18:29:59Z")),{month:"2026-08",phase:"follow-up"});
+  assert.equal(adminRewardReminderPeriod(Date.parse("2026-09-07T18:30:00Z")),null);
 });
 
 test("monthly totals add votes across every approved daily image for one customer", () => {
