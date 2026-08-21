@@ -7170,7 +7170,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.7721ec60";
+const APP_BUILD = "v90.d1b7154d";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -9455,7 +9455,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         )}
 
         {/* Reviews tab */}
-        {tab==="reviews"&&canAdminSection("reviews",adminUid)&&(
+        {tab==="reviews"&&(
           <div className="fade-in">
             {/* Success banner */}
             {submitted&&(
@@ -14126,7 +14126,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── REVIEWS TAB ── */}
-      {tab==="reviews"&&(
+      {tab==="reviews"&&canAdminSection("reviews",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {loadingRev?(
             <div style={{display:"flex",justifyContent:"center",padding:"40px"}}><Spinner/></div>
@@ -14870,7 +14870,7 @@ function SettingsPanel({settings,onSave,products=[]}){
       {/* Admin security */}
       {mainAdminOk&&(<Collapsible icon="🔐" title="Admin Security">
 
-        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Google-only admin access</div>
+        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Firebase admin identity</div>
         <div style={{background:adminOk?"#ecfdf5":"#fff7ed",border:`1px solid ${adminOk?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:adminOk?"#166534":"#9a3412",lineHeight:1.55}}>
           {adminOk?"✓ Signed in with the configured Google admin account.":"🔒 Sign in with your configured Google admin account. Client-side admin passwords and recovery answers have been removed."}
         </div>
