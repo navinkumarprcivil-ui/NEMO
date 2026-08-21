@@ -12,10 +12,44 @@ const C = {
 const STORE_NAME     = "Nemo";
 const PRICE_FONT     = "'Plus Jakarta Sans',sans-serif"; // prices / amounts (weight 800)
 const ADMIN_UID      = "cI2HmMt6FdR7fO7uUnugH85GeZt2"; // your Google account — must match Firebase rules
-const ADMIN_UID_2    = ""; // OPTIONAL co-admin (your helper). Paste their Google UID here, then also add it in database.rules.json + Firebase console. Leave "" if unused.
-const ADMIN_UIDS     = [ADMIN_UID, ADMIN_UID_2].filter(Boolean); // everyone allowed admin access
-let RUNTIME_CO_ADMIN = ""; // optional co-admin UID entered in Admin → Settings (kept in sync from settings.coAdminUid)
-function isAdminUid(uid){ return !!uid && (ADMIN_UIDS.indexOf(uid)!==-1 || (!!RUNTIME_CO_ADMIN && uid===RUNTIME_CO_ADMIN)); }
+const ADMIN_SECTION_KEYS=["orders","dashboard","products","wallets","reviews","requests","guides","settings"];
+const DEFAULT_CO_ADMIN_PERMISSIONS={orders:false,dashboard:false,products:false,wallets:false,reviews:false,requests:false,guides:false,settings:false};
+let RUNTIME_ADMIN_ACCESS={coAdminUid:"",permissions:{...DEFAULT_CO_ADMIN_PERMISSIONS}};
+function isMainAdminUid(uid){ return !!uid && uid===ADMIN_UID; }
+function isCoAdminUid(uid){ return !!uid && !!RUNTIME_ADMIN_ACCESS.coAdminUid && uid===RUNTIME_ADMIN_ACCESS.coAdminUid; }
+function isAdminUid(uid){ return isMainAdminUid(uid)||isCoAdminUid(uid); }
+function canAdminSection(section,uid=(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||""){
+  if(isMainAdminUid(uid)) return true;
+  return isCoAdminUid(uid)&&RUNTIME_ADMIN_ACCESS.permissions&&RUNTIME_ADMIN_ACCESS.permissions[section]===true;
+}
+function cleanAdminAccess(raw){
+  raw=raw&&typeof raw==="object"?raw:{};
+  const permissions={...DEFAULT_CO_ADMIN_PERMISSIONS};
+  ADMIN_SECTION_KEYS.forEach(k=>{ permissions[k]=raw.permissions&&raw.permissions[k]===true; });
+  return {coAdminUid:String(raw.coAdminUid||"").trim(),permissions};
+}
+async function refreshAdminAccess(){
+  if(!FB_OK||!FB_DB||!FB_AUTH||!FB_AUTH.currentUser) return RUNTIME_ADMIN_ACCESS;
+  try{
+    const s=await FB_DB.ref("adminAccess").get();
+    RUNTIME_ADMIN_ACCESS=cleanAdminAccess(s&&s.val());
+  }catch(e){
+    if(isMainAdminUid(FB_AUTH.currentUser.uid)) RUNTIME_ADMIN_ACCESS=cleanAdminAccess(null);
+  }
+  return RUNTIME_ADMIN_ACCESS;
+}
+async function saveAdminAccess(raw){
+  if(!FB_OK||!FB_DB||!FB_AUTH||!isMainAdminUid(FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)) throw new Error("main-admin-required");
+  const access=cleanAdminAccess(raw);
+  await FB_DB.ref("adminAccess").set(access);
+  RUNTIME_ADMIN_ACCESS=access;
+  return access;
+}
+async function adminPasswordDigest(value){
+  const bytes=new TextEncoder().encode("nemo-admin-v1:"+String(value||""));
+  const hash=await crypto.subtle.digest("SHA-256",bytes);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
 const BUSINESS_WA    = "919360921030"; // ← change to your WhatsApp number
 const BUSINESS_EMAIL = "nemoaquastore@gmail.com"; // store email — used for order alerts + admin OTP when Settings email is blank
 const SECRET_TAPS    = 10;             // tap logo this many times to open admin
@@ -1973,15 +2007,21 @@ async function loadSettings(){
   const r=await dbGet("nemo-settings"); return r?normalizeSettings({...DEFAULT_SETTINGS,...JSON.parse(r)}):{...DEFAULT_SETTINGS};
 }
 async function saveSettings(s){
-  await dbSet("nemo-settings",JSON.stringify(s));   // local cache keeps the whole thing (admin's own device)
+  await dbSet("nemo-settings",JSON.stringify(s));
   if(FB_OK){
     const {pub,priv,bank}=splitSettings(s);
-    await fbSetObj("settings",pub);
-    await fbSetObj("settingsPrivate",priv);
-    await fbSetObj("settingsBank",bank);
-    // One-time cleanup: these used to be written into the public node, so a store that saved
-    // settings before this change still has them sitting there readable. Clear them out.
-    try{ await Promise.all(NON_PUBLIC_SETTING_KEYS.map(k=>FB_DB.ref("settings/"+k).remove())); }catch(e){}
+    if(isMainAdminUid(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)){
+      await fbSetObj("settings",pub);
+      await fbSetObj("settingsPrivate",priv);
+      await fbSetObj("settingsBank",bank);
+      try{ await Promise.all(NON_PUBLIC_SETTING_KEYS.map(k=>FB_DB.ref("settings/"+k).remove())); }catch(e){}
+    }else if(canAdminSection("settings")){
+      // Firebase compares protected security keys with their existing values, so a co-admin
+      // can update ordinary store settings but cannot alter the password or role assignment.
+      const safePub={...pub};
+      delete safePub.adminSetupHash; delete safePub.coAdminUid; delete safePub.coAdminPermissions;
+      await FB_DB.ref("settings").update(safePub);
+    }
   }
 }
 
@@ -5307,48 +5347,45 @@ function MiniCountdown({endsAt,compact=false}){
 function OfferBanners({settings,orders=[]}){
   const list=usableCoupons(settings,orders,"welcome");
   const [copied,setCopied]=useState("");
-  if(!list.length) return null;
+  const [open,setOpen]=useState(false);
+  const promoDay=()=>{ try{return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());}catch(e){return new Date().toISOString().slice(0,10);} };
+  useEffect(()=>{
+    if(!list.length) return;
+    const day=promoDay();
+    try{
+      if(localStorage.getItem("nemo-promo-popup-day-v1")===day) return;
+      localStorage.setItem("nemo-promo-popup-day-v1",day);
+    }catch(e){}
+    const timer=setTimeout(()=>setOpen(true),220);
+    return()=>clearTimeout(timer);
+  },[list.map(c=>c.id).join("|")]);
+  if(!list.length||!open) return null;
+  const close=()=>setOpen(false);
   const copy=(code)=>{ try{ navigator.clipboard.writeText(code); }catch(e){} setCopied(code); setTimeout(()=>setCopied(""),1600); };
   return(
-    <>
-      {list.map(c=>{
-        const bg=c.bg||"#7c3aed";
-        const worth = c.type==="coins" ? `${c.value} reward coins`
-                    : c.type==="percent" ? `${c.value}% off${c.maxDiscount>0?` (up to ₹${c.maxDiscount})`:""}`
-                    : `₹${c.value} off`;
-        return(
-          /* Centred rather than the old left-aligned row. An offer is a headline, not a
-             list item: the emoji sits above the wording, the amount is the biggest thing
-             on it, and the code and its Copy button sit together underneath instead of
-             the code drifting left while the button hugged the far edge. */
-          <div key={c.id} className="fade-rise" style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:18,padding:"18px 16px",marginBottom:14,textAlign:"center",boxShadow:`0 8px 22px ${bg}33`}}>
-            <div style={{fontSize:30,lineHeight:1}}>{c.emoji||"🎉"}</div>
-            <div style={{fontSize:13,fontWeight:800,color:"rgba(255,255,255,.92)",marginTop:6,letterSpacing:.3}}>
-              {c.name||"Special offer"}
+    <div onClick={close} role="presentation" style={{position:"fixed",inset:0,zIndex:4200,background:"rgba(15,23,42,.56)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
+      <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Today's promotions" className="fade-rise" style={{position:"relative",width:"min(92vw,430px)",maxHeight:"82vh",overflowY:"auto",background:C.card,borderRadius:22,padding:"18px",boxShadow:"0 24px 70px rgba(15,23,42,.32)"}}>
+        <button className="press" onClick={close} aria-label="Close promotion" style={{position:"absolute",right:10,top:9,width:36,height:36,borderRadius:18,border:`1px solid ${C.border}`,background:"rgba(255,255,255,.94)",fontSize:20,fontWeight:800,color:C.text,zIndex:2}}>×</button>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,fontSize:18,color:C.text,paddingRight:38,marginBottom:12}}>Today at Nemo</div>
+        {list.map(c=>{
+          const bg=c.bg||"#7c3aed";
+          const worth=c.type==="coins"?`${c.value} reward coins`:c.type==="percent"?`${c.value}% off${c.maxDiscount>0?` (up to ₹${c.maxDiscount})`:""}`:`₹${c.value} off`;
+          return(
+            <div key={c.id} style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:18,padding:"18px 16px",marginBottom:12,textAlign:"center",boxShadow:`0 8px 22px ${bg}33`}}>
+              <div style={{fontSize:30,lineHeight:1}}>{c.emoji||"🎉"}</div>
+              <div style={{fontSize:13,fontWeight:800,color:"rgba(255,255,255,.92)",marginTop:6,letterSpacing:.3}}>{c.name||"Special offer"}</div>
+              {c.value>0&&<div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"white",lineHeight:1.15,marginTop:2}}>{worth}</div>}
+              {(c.minOrder>0||c.firstOrderOnly)&&<div style={{fontSize:11.5,color:"rgba(255,255,255,.85)",marginTop:4}}>{c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}</div>}
+              {c.code&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:11,flexWrap:"wrap"}}>
+                <div style={{background:"rgba(255,255,255,.2)",borderRadius:8,padding:"5px 14px",border:"1px dashed rgba(255,255,255,.6)"}}><span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{c.code}</span></div>
+                <button className="press" onClick={()=>copy(c.code)} style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 13px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied===c.code?"✓ Copied":"Copy"}</button>
+              </div>}
             </div>
-            {c.value>0&&(
-              <div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"white",lineHeight:1.15,marginTop:2}}>{worth}</div>
-            )}
-            {(c.minOrder>0||c.firstOrderOnly)&&(
-              <div style={{fontSize:11.5,color:"rgba(255,255,255,.85)",marginTop:4}}>
-                {c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}
-              </div>
-            )}
-            {c.code&&(
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:11,flexWrap:"wrap"}}>
-                <div style={{background:"rgba(255,255,255,.2)",borderRadius:8,padding:"5px 14px",border:"1px dashed rgba(255,255,255,.6)"}}>
-                  <span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{c.code}</span>
-                </div>
-                <button className="press" onClick={()=>copy(c.code)}
-                  style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 13px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-                  {copied===c.code?"✓ Copied":"Copy"}
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </>
+          );
+        })}
+        <div style={{fontSize:10.5,color:C.textSub,textAlign:"center"}}>Shown once per day. Tap outside this card or × to close.</div>
+      </div>
+    </div>
   );
 }
 
@@ -6592,7 +6629,6 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
 
 function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, reviewedSet=[], onCancelled, onCancelPayment, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
   const [openId,setOpenId]=useState(null); // which order is expanded (list shows summaries; details open on tap)
-  const [stageFilter,setStageFilter]=useState("Orders Placed");
   // Re-add the exact option that was bought (the 10" net, not whichever size happens to be first).
   const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){
     const vs=productVariants(prod);
@@ -6613,9 +6649,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
       (user.phone && normalizePhone(o.address?.phone)===normalizePhone(user.phone))
     )
   );
-  const orderStages=["Orders Placed","Shipped","Delivered","Past Orders"];
-  const stageCounts=Object.fromEntries(orderStages.map(s=>[s,myOrders.filter(o=>customerOrderStage(o)===s).length]));
-  const visibleOrders=myOrders.filter(o=>customerOrderStage(o)===stageFilter);
+  const visibleOrders=myOrders;
   const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const doaStatusText={
     "Requested":"Received — please send your unboxing video on WhatsApp so we can review it.",
@@ -6656,17 +6690,6 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
           <span style={{fontSize:18,color:C.textSub}}>›</span>
         </button>
-        {myOrders.length>0&&(
-          <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:5,marginBottom:14,WebkitOverflowScrolling:"touch"}}>
-            {orderStages.map(s=>{
-              const on=stageFilter===s;
-              return <button key={s} className="press" onClick={()=>{setStageFilter(s);setOpenId(null);}}
-                style={{position:"relative",flexShrink:0,borderRadius:20,border:`1.5px solid ${on?C.primary:C.border}`,background:on?C.primary:"white",color:on?"white":C.textSub,padding:"8px 12px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                {s}{stageCounts[s]>0&&<span style={{marginLeft:6,background:on?"rgba(255,255,255,.22)":C.accentLight,color:on?"white":C.primary,borderRadius:10,padding:"1px 6px",fontSize:10}}>{stageCounts[s]}</span>}
-              </button>;
-            })}
-          </div>
-        )}
         {myOrders.length===0?(
           <div style={{textAlign:"center",padding:"60px 20px",color:C.textSub}}>
             <div style={{fontSize:64,marginBottom:14}}>📦</div>
@@ -6676,8 +6699,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           </div>
         ):(
           <>
-          <div style={{fontSize:12,color:C.textSub,fontWeight:600,marginBottom:12}}>{visibleOrders.length} {stageFilter.toLowerCase()}</div>
-          {visibleOrders.length===0&&<div style={{textAlign:"center",padding:"36px 16px",color:C.textSub,fontSize:13}}>No {stageFilter.toLowerCase()}.</div>}
+          <div style={{fontSize:12,color:C.textSub,fontWeight:600,marginBottom:12}}>{visibleOrders.length} order{visibleOrders.length===1?"":"s"}</div>
           {visibleOrders.map(o=>{
             const open=openId===o.id;
             const names=(o.items||[]).map(i=>i.name).join(", ");
@@ -7148,7 +7170,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.1c296a81";
+const APP_BUILD = "v90.e86be5de";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -11374,52 +11396,59 @@ function BottomNav({page,nav,cartCount,ordersCount=0}){
 }
 
 /* ═══════════════════ ADMIN LOGIN ═══════════════════ */
-function AdminLogin({onSuccess,onBack,onAdminSignIn}){
+function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
+  const [password,setPassword]=useState("");
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState("");
+  const configured=String(settings.adminSetupHash||"").trim();
 
-  /* A client-side password hash is still a downloadable credential. Admin entry therefore
-     relies only on the configured Firebase Google UID, which is also what the database rules
-     enforce. Returning admins go straight through once Firebase restores their session. */
   useEffect(()=>{
-    let live=true;
-    (async()=>{ await waitForFirebase(8000); if(live&&isAdminSignedIn()) onSuccess(); })();
-    return()=>{live=false;};
+    try{ if(sessionStorage.getItem("nemo-admin-unlocked-v1")==="1") onSuccess(); }catch(e){}
   },[]);
 
-  const submit=async()=>{
+  const unlock=async()=>{
+    if(!configured){ setMsg("Admin password has not been set yet. Use the main Google account once, then set it in Admin Security."); return; }
+    if(!password){ setMsg("Enter the admin password."); return; }
+    setBusy(true); setMsg("");
+    try{
+      const digest=await adminPasswordDigest(password);
+      if(digest!==configured){ setMsg("Incorrect admin password."); return; }
+      try{ sessionStorage.setItem("nemo-admin-unlocked-v1","1"); }catch(e){}
+      onSuccess();
+    }finally{ setBusy(false); }
+  };
+
+  const bootstrap=async()=>{
     setBusy(true); setMsg("");
     try{
       const u=await onAdminSignIn?.();
-      if(u&&isAdminUid(u.uid)) onSuccess();
-      else if(u) setMsg("This Google account is not configured as an admin.");
+      if(u) await refreshAdminAccess();
+      if(u&&isMainAdminUid(u.uid)){
+        try{ sessionStorage.setItem("nemo-admin-unlocked-v1","1"); }catch(e){}
+        onSuccess();
+      }else if(u) setMsg("Only the main admin can initialise the Admin password.");
     }finally{ setBusy(false); }
   };
 
   return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100%",background:C.bg,padding:"24px",position:"relative"}}>
-      <button className="press" onClick={onBack} style={{position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
+      <button className="press" onClick={onBack} style={{position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44}}>←</button>
       <div style={{fontSize:56,marginBottom:14}}>🔐</div>
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:6}}>Admin Access</div>
-      <div style={{fontSize:13.5,color:C.textSub,marginBottom:28,textAlign:"center",lineHeight:1.55}}>Sign in with the Google account configured as the store admin.</div>
-
-      <div style={{width:"100%",maxWidth:320}}>
-        <button className="press" onClick={submit} disabled={busy}
-          style={{width:"100%",background:busy?"#9ca3af":C.primary,color:"white",
-            border:"none",borderRadius:14,padding:"16px",
-            fontSize:15,fontWeight:700,
-            fontFamily:"'Plus Jakarta Sans',sans-serif",
-            transition:"background .2s"}}>
-          {busy?"Opening Google…":"Continue with Google →"}
-        </button>
-        {msg&&<div style={{fontSize:12.5,color:C.danger,fontWeight:650,textAlign:"center",marginTop:12,lineHeight:1.5}}>{msg}</div>}
-        <div style={{fontSize:11.5,color:C.textSub,textAlign:"center",marginTop:16,lineHeight:1.55}}>No admin password is stored in this website or browser bundle.</div>
-      </div>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:7}}>Admin</div>
+      <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.6,maxWidth:380,marginBottom:18}}>The password unlocks the Admin workspace. Google sign-in is still required inside Admin before Firebase orders or changes can be accessed.</div>
+      {configured?(
+        <div style={{width:"min(100%,360px)"}}>
+          <input autoFocus type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock();}} placeholder="Admin password" aria-label="Admin password" style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"12px 14px",fontSize:14,outline:"none",marginBottom:10}}/>
+          <button className="press" onClick={unlock} disabled={busy} style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px 16px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{busy?"Checking…":"Unlock Admin"}</button>
+        </div>
+      ):(
+        <button className="press" onClick={bootstrap} disabled={busy} style={{background:"white",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px 16px",fontSize:12.5,fontWeight:800,color:C.text}}>{busy?"Signing in…":"Sign in with main Google to set password"}</button>
+      )}
+      {msg&&<div style={{marginTop:12,maxWidth:380,textAlign:"center",fontSize:11.5,color:msg.toLowerCase().includes("incorrect")||msg.toLowerCase().includes("only")?C.danger:C.textSub,lineHeight:1.5}}>{msg}</div>}
     </div>
   );
 }
 
-/* ═══════════════════ ADMIN MEDIA UPLOADER ═══════════════════ */
 function MediaUploader({label,accept,preview,previewType,onChange,onClear,note,fit="cover"}){
   const ref=useRef(null);
   const [drag,setDrag]=useState(false);
@@ -13310,6 +13339,12 @@ function AdminExitConfirm({onStay,onLeave}){
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
 function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onDeleteGuides,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTankMonthlyAward,totmVotes={},tankMonthKey=totmMonthOf(Date.now()),testimonials=[],onDeleteTestimonial,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
+
+  const adminUid=(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||"";
+  const allowedTabs=ADMIN_SECTION_KEYS.filter(k=>canAdminSection(k,adminUid));
+  useEffect(()=>{
+    if(ADMIN_SECTION_KEYS.includes(tab)&&!canAdminSection(tab,adminUid)&&allowedTabs.length) setTab(allowedTabs[0]);
+  });
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
     const warn=(e)=>{ e.preventDefault(); e.returnValue=""; return ""; };
@@ -13611,7 +13646,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
         {/* Tab bar */}
         <div style={{display:"flex",background:"rgba(0,0,0,.2)",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-          {["orders","dashboard","products","wallets","reviews","requests","guides","settings"].map(t=>(
+          {allowedTabs.map(t=>(
             <button key={t} className="press" onClick={()=>setTab(t)}
               style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
               {t==="orders"?"📋 Orders":t==="dashboard"?"📊 Dashboard":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
@@ -13644,6 +13679,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
       )}
 
+      {FB_OK&&FB_AUTH?.currentUser&&!isAdminUid(FB_AUTH.currentUser.uid)&&(
+        <div style={{margin:"14px 16px 0",background:"#f0fdf4",border:"1px solid #86efac",borderRadius:14,padding:"14px",fontSize:12,color:"#14532d",lineHeight:1.55}}>
+          <b>New co-admin Google UID</b><br/>
+          <code style={{display:"inline-block",marginTop:6,fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:5,padding:"3px 7px"}}>{FB_AUTH.currentUser.uid}</code>
+          <button className="press" onClick={()=>navigator.clipboard?.writeText(FB_AUTH.currentUser.uid)} style={{display:"block",marginTop:9,background:"#16a34a",color:"white",border:"none",borderRadius:8,padding:"7px 13px",fontSize:11,fontWeight:800}}>📋 Copy UID</button>
+          <div style={{marginTop:7}}>Copy this UID, then sign back in with the main admin account and assign its permissions in Admin Security.</div>
+        </div>
+      )}
       {!isAdminSignedIn()&&(
         <div style={{margin:"14px 16px 0",background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:14,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
@@ -13660,7 +13703,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── DASHBOARD TAB (analytics — separated from order management, #9) ── */}
-      {tab==="dashboard"&&(
+      {tab==="dashboard"&&canAdminSection("dashboard",adminUid)&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
           {/* The Analytics card used to sit here. It moved to the header, next
               to Store, so it is reachable from every tab instead of only this
@@ -14024,7 +14067,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
       )}
       {/* ── ORDERS TAB (order management only) ── */}
-      {tab==="orders"&&(
+      {tab==="orders"&&canAdminSection("orders",adminUid)&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
           {/* Search orders by number / name / phone — top of the tab so it's always reachable */}
           <div style={{position:"relative",marginBottom:10}}>
@@ -14083,7 +14126,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── REVIEWS TAB ── */}
-      {tab==="reviews"&&(
+      {tab==="reviews"&&canAdminSection("reviews",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {loadingRev?(
             <div style={{display:"flex",justifyContent:"center",padding:"40px"}}><Spinner/></div>
@@ -14148,7 +14191,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── PRODUCTS TAB ── */}
-      {tab==="products"&&(
+      {tab==="products"&&canAdminSection("products",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {/* Full-width twin of the header's "+ Add". The header one sits right under the phone's
               status bar, which is a cramped place to aim at — this one is always easy to hit. */}
@@ -14224,7 +14267,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── REQUESTS TAB ── */}
-      {tab==="requests"&&(
+      {tab==="requests"&&canAdminSection("requests",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {requests.length===0?(
             <div style={{textAlign:"center",padding:"50px 0",color:C.textSub}}>
@@ -14301,7 +14344,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── GUIDES TAB ── */}
-      {tab==="guides"&&(
+      {tab==="guides"&&canAdminSection("guides",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {guideFormOpen?(
             <GuideForm guide={editGuide} imgSrc={editGuide?mediaCache["img-"+editGuide.id]:null}
@@ -14346,7 +14389,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── WALLETS TAB ── */}
-      {tab==="wallets"&&(
+      {tab==="wallets"&&canAdminSection("wallets",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div>
@@ -14421,7 +14464,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── SETTINGS TAB ── */}
-      {tab==="settings"&&(
+      {tab==="settings"&&canAdminSection("settings",adminUid)&&(
         <div>
           {(()=>{
             const current=tankMonthKey, previous=previousTotmMonth(Date.now());
@@ -14565,7 +14608,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
 
 /* ═══════════════════ ADMIN SETTINGS PANEL ═══════════════════ */
 function SettingsPanel({settings,onSave,products=[]}){
-  const [f,setF]=useState({...DEFAULT_SETTINGS,...settings});
+  const [f,setF]=useState({...DEFAULT_SETTINGS,...settings,coAdminUid:RUNTIME_ADMIN_ACCESS.coAdminUid||settings.coAdminUid||"",coAdminPermissions:{...DEFAULT_CO_ADMIN_PERMISSIONS,...RUNTIME_ADMIN_ACCESS.permissions}});
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const [logoNote,setLogoNote]=useState("");
   const [sigNote,setSigNote]=useState("");
@@ -14576,6 +14619,19 @@ function SettingsPanel({settings,onSave,products=[]}){
   const [sec,setSec]=useState("store"); // settings are split into pages; this is the active one
   const [secOpen,setSecOpen]=useState(false); // every settings group starts collapsed
   const adminOk=isAdminSignedIn();
+  const mainAdminOk=isMainAdminUid(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid);
+  const [newAdminPassword,setNewAdminPassword]=useState("");
+  const [confirmAdminPassword,setConfirmAdminPassword]=useState("");
+  const changeAdminPassword=async()=>{
+    if(!mainAdminOk){ setPwMsg("Only the main admin can change the Admin password."); return; }
+    if(newAdminPassword.length<6){ setPwMsg("Use at least 6 characters for the Admin password."); return; }
+    if(newAdminPassword!==confirmAdminPassword){ setPwMsg("The two passwords do not match."); return; }
+    const adminSetupHash=await adminPasswordDigest(newAdminPassword);
+    const nf={...f,adminSetupHash};
+    setF(nf); await onSave(nf);
+    setNewAdminPassword(""); setConfirmAdminPassword("");
+    setPwMsg("✓ Admin password updated. It will be required the next time Admin is unlocked.");
+  };
   // Live daily-promo usage (today) — refreshed on mount so admin sees "X of N used today"
   const [promoToday,setPromoToday]=useState({coupon:0,referral:0});
   useEffect(()=>{ let on=true; Promise.all([promoUsageCount("coupon"),promoUsageCount("referral")]).then(([c,r])=>{ if(on) setPromoToday({coupon:c,referral:r}); }); return ()=>{on=false;}; },[]);
@@ -14812,11 +14868,11 @@ function SettingsPanel({settings,onSave,products=[]}){
       </Collapsible>
 
       {/* Admin security */}
-      <Collapsible icon="🔐" title="Admin Security">
+      {mainAdminOk&&(<Collapsible icon="🔐" title="Admin Security">
 
-        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Google-only admin access</div>
+        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Firebase admin identity</div>
         <div style={{background:adminOk?"#ecfdf5":"#fff7ed",border:`1px solid ${adminOk?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:adminOk?"#166534":"#9a3412",lineHeight:1.55}}>
-          {adminOk?"✓ Signed in with the configured Google admin account.":"🔒 Sign in with your configured Google admin account. Client-side admin passwords and recovery answers have been removed."}
+          {adminOk?"✓ Signed in with the configured Google admin account.":"🔒 Sign in with the configured Google admin account to access protected Firebase data."}
         </div>
         {pwMsg&&<div style={{fontSize:11.5,color:pwMsg[0]==="✓"?C.success:C.danger,fontWeight:600,marginBottom:12}}>{pwMsg}</div>}
 
@@ -14829,42 +14885,29 @@ function SettingsPanel({settings,onSave,products=[]}){
           )}
         </div>
 
-        {/* ── Change Admin Google Account ── */}
-        <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:14}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:10}}>🔄 Change Admin Google Account</div>
-          <div style={{background:"#f0f9ff",border:`1px solid #bae6fd`,borderRadius:10,padding:"11px 13px",marginBottom:10,fontSize:12,color:"#0c4a6e",lineHeight:1.6}}>
-            <b>Currently configured admin UID(s):</b><br/>
-            {ADMIN_UIDS.map(u=>(<code key={u} style={{fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:4,padding:"2px 6px",display:"inline-block",marginTop:4,marginRight:4}}>{u}</code>))}
+                <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:14}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:9}}>🔑 Admin password</div>
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginBottom:9}}>This password only unlocks the Admin workspace. Firebase still requires the authorised Google account for protected data.</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <input type="password" value={newAdminPassword} onChange={e=>setNewAdminPassword(e.target.value)} placeholder="New password" aria-label="New admin password" style={{minWidth:0,border:`1.5px solid ${C.border}`,borderRadius:9,padding:"9px 10px"}}/>
+            <input type="password" value={confirmAdminPassword} onChange={e=>setConfirmAdminPassword(e.target.value)} placeholder="Confirm password" aria-label="Confirm admin password" style={{minWidth:0,border:`1.5px solid ${C.border}`,borderRadius:9,padding:"9px 10px"}}/>
           </div>
-          {/* Optional co-admin — a helper account that can also open the admin panel. */}
-          <div style={{marginBottom:12}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:6}}>🤝 Co-admin Google UID (optional)</div>
-            <input value={f.coAdminUid||""} onChange={e=>set("coAdminUid",e.target.value.trim())}
-              placeholder="Paste your helper's Google UID"
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:12.5,fontFamily:"monospace",outline:"none",background:"white"}}/>
-            <div style={{fontSize:10.5,color:C.textSub,marginTop:5,lineHeight:1.55}}>Lets a second person open Admin. You must <b>also</b> add this UID to <code style={{fontSize:10,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 4px"}}>database.rules.json</code> + the Firebase console so their changes sync to the cloud. Save Settings after pasting.</div>
-          </div>
-          {FB_OK && FB_AUTH?.currentUser && !isAdminUid(FB_AUTH.currentUser.uid) && (
-            <div style={{background:"#f0fdf4",border:`1px solid #86efac`,borderRadius:10,padding:"11px 13px",marginBottom:10,fontSize:12,color:"#14532d",lineHeight:1.6}}>
-              <b>✓ New account UID (signed in now):</b><br/>
-              <code style={{fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:4,padding:"2px 6px",display:"inline-block",marginTop:4}}>{FB_AUTH.currentUser.uid}</code>
-              <button className="press" onClick={()=>navigator.clipboard?.writeText(FB_AUTH.currentUser.uid)}
-                style={{display:"block",marginTop:8,background:"#16a34a",color:"white",border:"none",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-                📋 Copy New UID
-              </button>
-            </div>
-          )}
-          <div style={{background:C.bg,borderRadius:10,padding:"12px 13px",fontSize:11.5,color:C.textSub,lineHeight:1.85}}>
-            <b style={{color:C.text,display:"block",marginBottom:4}}>Steps to switch to a new Gmail account:</b>
-            1. Sign in above (Admin panel banner) with your new Gmail<br/>
-            2. Copy the "New account UID" shown in the green box above<br/>
-            3. In <code style={{fontSize:10.5,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 5px"}}>app.jsx</code> line 14, replace the UID inside <code style={{fontSize:10.5,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 5px"}}>ADMIN_UID="..."</code><br/>
-            4. In <code style={{fontSize:10.5,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 5px"}}>database_rules.json</code>, replace all occurrences of the old UID with the new one<br/>
-            5. Push to GitHub → Vercel will redeploy automatically<br/>
-            6. In Firebase Console → Realtime Database → Rules, paste the updated <code style={{fontSize:10.5,background:"rgba(0,0,0,.07)",borderRadius:3,padding:"1px 5px"}}>database_rules.json</code> and click Publish
-          </div>
+          <button className="press" onClick={changeAdminPassword} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:9,padding:"8px 13px",fontSize:11.5,fontWeight:800}}>Save Admin password</button>
         </div>
-      </Collapsible>
+        <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:14}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>🤝 Co-admin access</div>
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginBottom:9}}>Paste the UID copied after the helper signs in with Google. Saving here activates database access; no source-code or Firebase-console edit is required.</div>
+          <input value={f.coAdminUid||""} onChange={e=>set("coAdminUid",e.target.value.trim())} placeholder="Co-admin Google UID" aria-label="Co-admin Google UID" style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:9,padding:"9px 10px",fontFamily:"monospace",fontSize:11.5}}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginTop:10}}>
+            {[['orders','📋 Orders'],['dashboard','📊 Dashboard'],['products','📦 Products'],['wallets','👛 Wallets'],['reviews','⭐ Reviews'],['requests','📨 Requests'],['guides','📖 Guides'],['settings','⚙️ Settings']].map(([key,label])=>(
+              <label key={key} style={{display:"flex",alignItems:"center",gap:7,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 9px",fontSize:11.5,fontWeight:700,color:C.text}}>
+                <input type="checkbox" checked={!!(f.coAdminPermissions&&f.coAdminPermissions[key])} onChange={e=>set("coAdminPermissions",{...DEFAULT_CO_ADMIN_PERMISSIONS,...(f.coAdminPermissions||{}),[key]:e.target.checked})}/>{label}
+              </label>
+            ))}
+          </div>
+          <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.55,marginTop:8}}>A co-admin cannot edit this UID, these permissions, or the Admin password. Disabled sections are hidden and Firebase rejects direct access.</div>
+        </div>
+</Collapsible>)}
 
       {/* Data & Backup */}
       <Collapsible icon="💾" title="Data & Backup">
@@ -16438,10 +16481,11 @@ function NemoStore(){
 
   const saveSettingsHandler=async(s)=>{
     if(lifetimeReferralLimit(s)!==lifetimeReferralLimit(settings)) await snapshotExistingReferralProfiles(orders,settings);
-    setSettings(s); RUNTIME_CO_ADMIN=(s&&s.coAdminUid||"").trim(); await saveSettings(s); showToast("Settings saved");
+    if(isMainAdminUid(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)){
+      try{ await saveAdminAccess({coAdminUid:s.coAdminUid||"",permissions:s.coAdminPermissions||{}}); }catch(e){ showToast("Could not save co-admin access","error"); return; }
+    }
+    setSettings(s); await saveSettings(s); showToast("Settings saved");
   };
-  // Keep the runtime co-admin UID in sync so an entered helper account also unlocks admin (cloud writes still gated by Firebase rules).
-  useEffect(()=>{ RUNTIME_CO_ADMIN=((settings&&settings.coAdminUid)||"").trim(); },[settings.coAdminUid]);
 
   /* ── Scrolling must never edit a value ────────────────────────────────────────
      A focused number field swallows the wheel and steps itself, so a shopper who
@@ -16658,14 +16702,13 @@ function NemoStore(){
   // from the local value after a short grace period even if Firebase is slow/blocked.
   useEffect(()=>{ const t=setTimeout(()=>setSettingsReady(true), 650); return()=>clearTimeout(t); },[]);
 
-  /* Keep the cinematic loader over the app until the shared data needed by the home screen
-     and every customer page is ready. The wallet is included deliberately: previously the
-     cached shell dismissed the splash first and the coin total visibly changed afterward. */
+  /* First paint uses the cached storefront as soon as products + settings are ready. Wallet
+     balance refreshes in the background; it must never hold a returning customer behind splash. */
   useEffect(()=>{
-    if(loading||!hydrated||!settingsReady||!walletReady) return;
+    if(loading||!hydrated||!settingsReady) return;
     try{ window.__nemoBootReady=true; }catch(e){}
     revealStore();
-  },[loading,hydrated,settingsReady,walletReady]);
+  },[loading,hydrated,settingsReady]);
 
   const deepLinkRef = useRef((()=>{ try{ return new URLSearchParams(window.location.search).get("p")||""; }catch(e){ return ""; } })());
   useEffect(()=>{
@@ -17061,8 +17104,9 @@ function NemoStore(){
       if(u){
         const usr={...u,keep:true};
         setUser(usr); saveUser(usr);
-        if(isAdminUid(u.uid)){ showToast("✓ Admin signed in — changes will now sync"); }
-        else{ showToast("Signed in, but this isn't the admin account"); }
+        await refreshAdminAccess();
+        if(isAdminUid(u.uid)){ showToast("✓ Admin signed in — permitted sections are available"); }
+        else{ showToast("Signed in — copy this account UID to add it as a co-admin"); }
         setTimeout(()=>{ loadOrders().then(o=>o&&setOrders(o)); loadInterestCounts().then(setInterestCounts); },400);
         return u;
       }
@@ -17955,13 +17999,11 @@ function NemoStore(){
     const uid=userKey(user);
     if(!uid){ setWalletPts(0); setWalletReady(true); return; }
     let alive=true;
-    setWalletReady(false);
     const cached=loadLoyaltyLocal(uid);
+    setWalletReady(true);
     setWalletPts(cached.points||0);
-    /* If Firebase is unavailable, do not strand an offline customer behind the splash. Six
-       seconds gives the async SDK and authenticated wallet read time to complete on a slow
-       phone, then accepts the cached balance as the best available result. */
-    const fallback=setTimeout(()=>{ if(alive) setWalletReady(true); },6000);
+    // Cached balance is already painted; Firebase now refreshes it without delaying first paint.
+    const fallback=setTimeout(()=>{},0);
     // Provision the permanent referral profile now, freezing today's unlock threshold for
     // this customer so later admin changes affect only profiles created afterwards.
     if(settings.referralEnabled!==false) ensureReferralProfile(uid,settings).catch(()=>{});
@@ -18026,7 +18068,7 @@ function NemoStore(){
         {page==="about"    &&<AboutPage nav={nav} goBack={goBack} settings={settings}/>} 
         {page==="contact"  &&<ContactPage nav={nav} goBack={goBack} settings={settings}/>} 
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
-        {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} onAdminSignIn={adminGoogleSignIn}/>}
+        {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} onAdminSignIn={adminGoogleSignIn} settings={settings}/>}
         {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{const ok=await deleteShowcasePhoto(id);if(ok)setShowcase(s=>s.filter(x=>x.id!==id));else showToast("Couldn't remove that submission — verify admin sign-in","error");}} onApproveShowcase={handleApproveShowcase} onTankMonthlyAward={handleTankMonthlyAward} totmVotes={totmVotes} tankMonthKey={activeTankMonth} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onDeleteGuides={deleteGuidesHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
