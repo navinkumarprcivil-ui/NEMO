@@ -48,6 +48,14 @@ jobs:
               'assert.match(app,/mainAdminOk&&\\(<Collapsible title="Admin Security"/);',
               'assert.match(app,/mainAdminOk&&\\(<Collapsible[^>]*title="Admin Security"/);'
           )
+          s=s.replace(
+              'index, n = re.subn(r\'const SPLASH_MAX_MS\\s*=\\s*12000\', \'const SPLASH_MAX_MS = 4000\', index, count=1)',
+              'index, n = re.subn(r\'(?:const|var) SPLASH_MAX_MS\\s*=\\s*12000\', \'var SPLASH_MAX_MS = 4000\', index, count=1)'
+          )
+          s=s.replace(
+              '      await FB_DB.ref("settings").update(pub);',
+              '      const safePub={...pub};\n      delete safePub.adminSetupHash; delete safePub.coAdminUid; delete safePub.coAdminPermissions;\n      await FB_DB.ref("settings").update(safePub);'
+          )
           p.write_text(s)
           PY
 
@@ -63,7 +71,7 @@ jobs:
             TESTS=99
           fi
           echo "tests_exit=$TESTS" >> .agent-release-status.txt
-          if [ -f /tmp/tests.log ]; then tail -n 120 /tmp/tests.log >> .agent-release-status.txt; fi
+          if [ -f /tmp/tests.log ]; then tail -n 160 /tmp/tests.log >> .agent-release-status.txt; fi
 
           if [ "$PATCH" -eq 0 ] && [ "$TESTS" -eq 0 ]; then
             npm ci > /tmp/npm.log 2>&1
@@ -72,7 +80,7 @@ jobs:
             NPM=99
           fi
           echo "npm_exit=$NPM" >> .agent-release-status.txt
-          if [ "$NPM" -ne 0 ] && [ -f /tmp/npm.log ]; then tail -n 80 /tmp/npm.log >> .agent-release-status.txt; fi
+          if [ "$NPM" -ne 0 ] && [ -f /tmp/npm.log ]; then tail -n 100 /tmp/npm.log >> .agent-release-status.txt; fi
 
           if [ "$NPM" -eq 0 ]; then
             node scripts/build.mjs > /tmp/compile.log 2>&1
