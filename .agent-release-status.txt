@@ -1,5 +1,5 @@
 Nemo final admin release verification
-source_commit=8bc827dd5ffa99ed895e81f71d1147b7c192c412
+source_commit=a74e92dd03bc66a434cfc801e34d399bd91f6b04
 baseline_tests_exit=0
 patch_exit=0
 release patch applied
