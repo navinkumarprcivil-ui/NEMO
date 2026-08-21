@@ -22,6 +22,12 @@ function canAdminSection(section,uid=(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.curr
   if(isMainAdminUid(uid)) return true;
   return isCoAdminUid(uid)&&RUNTIME_ADMIN_ACCESS.permissions&&RUNTIME_ADMIN_ACCESS.permissions[section]===true;
 }
+function canViewAdminSection(section,uid=(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||""){
+  // Password controls Admin workspace entry. Only a configured co-admin is UI-limited
+  // by section permissions; an unconfigured UID may inspect the workspace/copy its UID,
+  // but Firebase rules still reject shared writes from that UID.
+  return isCoAdminUid(uid)?canAdminSection(section,uid):true;
+}
 function cleanAdminAccess(raw){
   raw=raw&&typeof raw==="object"?raw:{};
   const permissions={...DEFAULT_CO_ADMIN_PERMISSIONS};
@@ -7170,7 +7176,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.e86be5de";
+const APP_BUILD = "v90.39590233";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -11402,10 +11408,6 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
   const [msg,setMsg]=useState("");
   const configured=String(settings.adminSetupHash||"").trim();
 
-  useEffect(()=>{
-    try{ if(sessionStorage.getItem("nemo-admin-unlocked-v1")==="1") onSuccess(); }catch(e){}
-  },[]);
-
   const unlock=async()=>{
     if(!configured){ setMsg("Admin password has not been set yet. Use the main Google account once, then set it in Admin Security."); return; }
     if(!password){ setMsg("Enter the admin password."); return; }
@@ -11413,7 +11415,7 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
     try{
       const digest=await adminPasswordDigest(password);
       if(digest!==configured){ setMsg("Incorrect admin password."); return; }
-      try{ sessionStorage.setItem("nemo-admin-unlocked-v1","1"); }catch(e){}
+      
       onSuccess();
     }finally{ setBusy(false); }
   };
@@ -11424,7 +11426,7 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
       const u=await onAdminSignIn?.();
       if(u) await refreshAdminAccess();
       if(u&&isMainAdminUid(u.uid)){
-        try{ sessionStorage.setItem("nemo-admin-unlocked-v1","1"); }catch(e){}
+        
         onSuccess();
       }else if(u) setMsg("Only the main admin can initialise the Admin password.");
     }finally{ setBusy(false); }
@@ -11435,7 +11437,7 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
       <button className="press" onClick={onBack} style={{position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44}}>←</button>
       <div style={{fontSize:56,marginBottom:14}}>🔐</div>
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:7}}>Admin</div>
-      <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.6,maxWidth:380,marginBottom:18}}>The password unlocks the Admin workspace. Google sign-in is still required inside Admin before Firebase orders or changes can be accessed.</div>
+      <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.6,maxWidth:380,marginBottom:18}}>Enter the Admin password every time you open Admin. Google sign-in is needed only for shared Firebase data and changes; only the main admin or the added co-admin UID can sync changes.</div>
       {configured?(
         <div style={{width:"min(100%,360px)"}}>
           <input autoFocus type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock();}} placeholder="Admin password" aria-label="Admin password" style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"12px 14px",fontSize:14,outline:"none",marginBottom:10}}/>
@@ -13341,9 +13343,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
 
   const adminUid=(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||"";
-  const allowedTabs=ADMIN_SECTION_KEYS.filter(k=>canAdminSection(k,adminUid));
+  const allowedTabs=isCoAdminUid(adminUid)?ADMIN_SECTION_KEYS.filter(k=>canAdminSection(k,adminUid)):ADMIN_SECTION_KEYS;
   useEffect(()=>{
-    if(ADMIN_SECTION_KEYS.includes(tab)&&!canAdminSection(tab,adminUid)&&allowedTabs.length) setTab(allowedTabs[0]);
+    if(isCoAdminUid(adminUid)&&ADMIN_SECTION_KEYS.includes(tab)&&!canAdminSection(tab,adminUid)&&allowedTabs.length) setTab(allowedTabs[0]);
   });
   // Warn before the admin accidentally closes/refreshes/navigates away from the panel.
   useEffect(()=>{
@@ -13703,7 +13705,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── DASHBOARD TAB (analytics — separated from order management, #9) ── */}
-      {tab==="dashboard"&&canAdminSection("dashboard",adminUid)&&(
+      {tab==="dashboard"&&canViewAdminSection("dashboard",adminUid)&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
           {/* The Analytics card used to sit here. It moved to the header, next
               to Store, so it is reachable from every tab instead of only this
@@ -14067,7 +14069,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         </div>
       )}
       {/* ── ORDERS TAB (order management only) ── */}
-      {tab==="orders"&&canAdminSection("orders",adminUid)&&(
+      {tab==="orders"&&canViewAdminSection("orders",adminUid)&&(
         <div className="dt-read" style={{padding:"16px 16px 100px"}}>
           {/* Search orders by number / name / phone — top of the tab so it's always reachable */}
           <div style={{position:"relative",marginBottom:10}}>
@@ -14126,7 +14128,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── REVIEWS TAB ── */}
-      {tab==="reviews"&&canAdminSection("reviews",adminUid)&&(
+      {tab==="reviews"&&canViewAdminSection("reviews",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {loadingRev?(
             <div style={{display:"flex",justifyContent:"center",padding:"40px"}}><Spinner/></div>
@@ -14191,7 +14193,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── PRODUCTS TAB ── */}
-      {tab==="products"&&canAdminSection("products",adminUid)&&(
+      {tab==="products"&&canViewAdminSection("products",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {/* Full-width twin of the header's "+ Add". The header one sits right under the phone's
               status bar, which is a cramped place to aim at — this one is always easy to hit. */}
@@ -14267,7 +14269,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── REQUESTS TAB ── */}
-      {tab==="requests"&&canAdminSection("requests",adminUid)&&(
+      {tab==="requests"&&canViewAdminSection("requests",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {requests.length===0?(
             <div style={{textAlign:"center",padding:"50px 0",color:C.textSub}}>
@@ -14344,7 +14346,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── GUIDES TAB ── */}
-      {tab==="guides"&&canAdminSection("guides",adminUid)&&(
+      {tab==="guides"&&canViewAdminSection("guides",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           {guideFormOpen?(
             <GuideForm guide={editGuide} imgSrc={editGuide?mediaCache["img-"+editGuide.id]:null}
@@ -14389,7 +14391,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── WALLETS TAB ── */}
-      {tab==="wallets"&&canAdminSection("wallets",adminUid)&&(
+      {tab==="wallets"&&canViewAdminSection("wallets",adminUid)&&(
         <div style={{padding:"16px 16px 100px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div>
@@ -14464,7 +14466,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
       )}
 
       {/* ── SETTINGS TAB ── */}
-      {tab==="settings"&&canAdminSection("settings",adminUid)&&(
+      {tab==="settings"&&canViewAdminSection("settings",adminUid)&&(
         <div>
           {(()=>{
             const current=tankMonthKey, previous=previousTotmMonth(Date.now());
