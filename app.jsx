@@ -2373,11 +2373,9 @@ function foodReorderDue(orders, products, days=30){
 
 /* Favorites / Saved items — per user (local cache + cloud sync) */
 /* ── Saved delivery addresses ──────────────────────────────────────────────────────────
-   Kept on the device, not in Firebase: the database rules have no node for addresses, and
-   adding one is a rules change that has to be deployed separately. What makes that
-   acceptable is `seedAddressBook` below — a customer on a new device gets their previous
-   addresses back from their own past orders, which ARE in the cloud. So the book is a local
-   convenience over cloud-backed truth, not the only copy of anything.
+   Only addresses the customer explicitly saves belong in this device's address book.
+   Past orders are never imported: deleting a saved address must remove it for good instead
+   of allowing order history to recreate it on the next checkout.
 
    The draft is separate from the book: it is whatever is half-typed in the checkout form
    right now, saved on every keystroke so a reload or a wander into another tab doesn't
@@ -2396,55 +2394,19 @@ function addrFingerprint(a){
   return [n(a&&a.address),n(a&&a.pincode),n(a&&a.phone)].join("|");
 }
 function addrIsBlank(a){ return !a || !(String(a.address||"").trim() && String(a.pincode||"").trim()); }
-/* One-time repair of address books written before seeding was uid-checked.
-   An admin session holds EVERY customer's orders in `orders`; navigating out of the admin panel
-   re-ran the seed against that array while it was still loaded, filing other people's names,
-   phones and street addresses into the local book — where they then showed up as pickable cards
-   at checkout and on the payment step. The cards are indistinguishable from legitimate ones
-   after the fact, so every book is cleaned once: entries derived from an order are dropped and
-   re-derived from the user's OWN orders on the next seed, while anything the customer typed and
-   saved themselves (fromOrder:false) is kept untouched. */
-function addrBookCleanKey(uid){ return "nemo-addrbook-own-"+(uid||"anon"); }
+/* Remove every legacy order-derived row on every load. Older builds marked the cleanup as
+   complete and could then seed a past-order row again; a permanent filter makes deletion
+   reliable even on devices that passed through more than one old build. */
 function purgeForeignAddrEntries(uid){
   try{
-    if(localStorage.getItem(addrBookCleanKey(uid))==="1") return;
     const book=loadAddrBook(uid);
     const mineOnly=book.filter(a=>!(a&&a.fromOrder));
     if(mineOnly.length!==book.length) saveAddrBook(uid,mineOnly);
-    localStorage.setItem(addrBookCleanKey(uid),"1");
   }catch(e){}
 }
-/* Past orders are the cross-device backstop: whatever was shipped before is an address that
-   worked, so a fresh device is seeded from them rather than starting empty. Newest first.
-
-   ONLY the signed-in customer's own orders may be read here. The caller cannot be trusted to
-   have passed a clean list — the admin listener puts all customers' orders in the same state,
-   and effect ordering decides which one is in hand when this runs — so ownership is checked
-   against each order rather than assumed. An order that does not name this user as its owner is
-   skipped: at worst a legacy order without a userUid costs a returning customer one tap to
-   retype an address, which is the right way for this to fail. */
-function seedAddressBook(uid, orders){
+function loadSavedAddresses(uid){
   purgeForeignAddrEntries(uid);
-  const book=loadAddrBook(uid);
-  const seen=new Set(book.map(addrFingerprint));
-  const extra=[];
-  [...(orders||[])]
-    .filter(o=>o&&String(o.userUid||"")===String(uid||""))
-    .sort((a,b)=>String(b.placedAt||"").localeCompare(String(a.placedAt||"")))
-    .forEach(o=>{
-      const a=o&&o.address;
-      if(addrIsBlank(a)) return;
-      const fp=addrFingerprint(a);
-      if(seen.has(fp)) return;
-      seen.add(fp);
-      extra.push({ id:uid_addr(), label:"", name:a.name||"", phone:a.phone||"", whatsapp:a.whatsapp||"",
-        address:a.address||"", city:a.city||"", pincode:a.pincode||"", state:a.state||"", stateCode:a.stateCode||"",
-        notes:a.notes||"", fromOrder:true });
-    });
-  if(!extra.length) return book;
-  const merged=[...book,...extra];
-  saveAddrBook(uid,merged);
-  return merged;
+  return loadAddrBook(uid).filter(a=>!(a&&a.fromOrder));
 }
 function uid_addr(){ return "ad"+Math.random().toString(36).slice(2,9); }
 
@@ -5010,10 +4972,10 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
      The desktop top-nav also carries account + cart, so hide the in-hero chrome and keep a slim banner. */
   .home-hero-logo{display:none !important;}
   .home-hero-chrome{display:none !important;}
-  /* Desktop opening banner: tall gradient hero with left-aligned headline + CTA */
-  .home-hero{padding:38px 48px 34px !important;display:flex !important;flex-direction:column;align-items:flex-start;text-align:left;}
-  .home-hero .hero-tagline{font-size:clamp(34px,4vw,54px) !important;text-align:left !important;max-width:640px;margin-bottom:12px !important;}
-  .home-hero .hero-sub{font-size:16px !important;text-align:left !important;letter-spacing:.3px;}
+  /* Compact desktop opening banner with left-aligned headline + CTA */
+  .home-hero{padding:26px 40px 24px !important;display:flex !important;flex-direction:column;align-items:flex-start;text-align:left;}
+  .home-hero .hero-tagline{font-size:clamp(30px,3.4vw,44px) !important;text-align:left !important;max-width:640px;margin-bottom:8px !important;}
+  .home-hero .hero-sub{font-size:14px !important;text-align:left !important;letter-spacing:.2px;}
   /* Desktop: surface the left-slide category sidebar from inside the banner, just above the quote */
   .home-hero .hero-browse{display:inline-flex !important;}
   .home-search{max-width:560px;margin-left:0 !important;margin-right:auto !important;margin-top:-28px !important;}
@@ -5327,30 +5289,29 @@ function LoyaltyWidget({points,settings,onRedeem,redeemApplied,subtotal=0}){
   const worth=Math.floor(usedCoins*val);
   const totalWorth=Math.floor(points*val);
   return(
-    <div className="points-pop" style={{background:"linear-gradient(135deg,#1d4ed8 0%,#7c3aed 100%)",borderRadius:16,padding:"14px 16px",marginBottom:14,boxShadow:"0 6px 20px rgba(124,58,237,.2)"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:redeemApplied?0:8}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:22}}>👛</span>
-          <div>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,color:"white",lineHeight:1}}>{points} pts</div>
-            <div style={{fontSize:10.5,color:"rgba(255,255,255,.8)"}}>Wallet = ₹{totalWorth}</div>
+    <div className="points-pop" style={{background:"linear-gradient(135deg,#1d4ed8 0%,#7c3aed 100%)",borderRadius:12,padding:"10px 12px",marginBottom:12,boxShadow:"0 4px 14px rgba(124,58,237,.18)"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:redeemApplied?0:5}}>
+        <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
+          <span style={{fontSize:18}}>👛</span>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13.5,fontWeight:800,color:"white",lineHeight:1.2,whiteSpace:"nowrap"}}>
+            {points} coins <span style={{fontWeight:600,opacity:.82}}>· ₹{totalWorth}</span>
           </div>
         </div>
         {!redeemApplied&&(
           <button className="press" onClick={onRedeem} disabled={!canRedeem}
-            style={{background:canRedeem?"rgba(255,255,255,.2)":"rgba(255,255,255,.08)",border:`1px solid ${canRedeem?"rgba(255,255,255,.5)":"rgba(255,255,255,.2)"}`,borderRadius:10,padding:"8px 14px",color:canRedeem?"white":"rgba(255,255,255,.45)",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:canRedeem?"pointer":"not-allowed"}}>
-            {points<min?`Need ${min-points} more pts`:!orderOk?`Min order ₹${minOrder}`:`Redeem ₹${worth}`}
+            style={{background:canRedeem?"rgba(255,255,255,.2)":"rgba(255,255,255,.08)",border:`1px solid ${canRedeem?"rgba(255,255,255,.5)":"rgba(255,255,255,.2)"}`,borderRadius:8,padding:"6px 9px",color:canRedeem?"white":"rgba(255,255,255,.55)",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:canRedeem?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
+            {points<min?`Need ${min-points} coins`:!orderOk?`Min. order ₹${minOrder}`:`Use ₹${worth}`}
           </button>
         )}
       </div>
       {redeemApplied&&(
-        <div style={{fontSize:12,color:"rgba(255,255,255,.9)",fontWeight:600}}>✓ ₹{worth} wallet credit applied{points>maxCoins?` (max ${maxCoins} coins/order)`:""}!</div>
+        <div style={{fontSize:10.5,color:"rgba(255,255,255,.9)",fontWeight:700}}>✓ ₹{worth} wallet applied{points>maxCoins?` · max ${maxCoins} coins/order`:""}</div>
       )}
       {!redeemApplied&&canRedeem&&points>maxCoins&&(
-        <div style={{fontSize:10.5,color:"rgba(255,255,255,.8)",marginTop:4}}>You can use up to {maxCoins} coins (₹{Math.floor(maxCoins*val)}) on this order.</div>
+        <div style={{fontSize:9.5,color:"rgba(255,255,255,.8)",marginTop:3}}>Up to {maxCoins} coins (₹{Math.floor(maxCoins*val)}) per order</div>
       )}
       {!redeemApplied&&!canRedeem&&(
-        <div style={{background:"rgba(0,0,0,.15)",borderRadius:8,height:5,overflow:"hidden",marginTop:4}}>
+        <div style={{background:"rgba(0,0,0,.15)",borderRadius:8,height:3,overflow:"hidden",marginTop:3}}>
           <div style={{height:"100%",background:"rgba(255,255,255,.6)",borderRadius:8,width:`${Math.min(100,(points/min)*100)}%`,transition:"width .4s ease"}}/>
         </div>
       )}
@@ -7084,7 +7045,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.41e8dfc8";
+const APP_BUILD = "v90.347a66e2";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -8344,7 +8305,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
       <WalletModal open={walletOpen} onClose={()=>setWalletOpen(false)} points={walletPts} user={user} settings={settings}/>
       {/* Hero */}
       <div className="home-hero" style={{background:"linear-gradient(180deg,#f1f9fe 0%,#ffffff 100%)",
-        padding:"42px 22px 30px",borderRadius:"0 0 36px 36px",position:"relative",overflow:"hidden"}}>
+        padding:"34px 18px 22px",borderRadius:"0 0 28px 28px",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-50,right:-40,width:180,height:180,borderRadius:"50%",border:"2px solid rgba(14,165,233,.10)"}}/>
         <div style={{position:"absolute",top:40,right:50,width:70,height:70,borderRadius:"50%",border:"2px solid rgba(244,63,94,.10)"}}/>
         <div style={{position:"absolute",bottom:-50,left:-40,width:160,height:160,borderRadius:"50%",background:"rgba(14,165,233,.05)"}}/>
@@ -8382,8 +8343,8 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             desktop but was unreachable on a phone. touchAction:manipulation turns off
             double-tap zoom on the logo so every tap counts. */}
         <div onPointerDown={onSecretTap} className="home-hero-logo"
-          style={{display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",touchAction:"manipulation",WebkitTapHighlightColor:"transparent",marginBottom:16,marginTop:46}}>
-          <div style={{width:"min(248px,70%)",aspectRatio:"600 / 311",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          style={{display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",touchAction:"manipulation",WebkitTapHighlightColor:"transparent",marginBottom:9,marginTop:39}}>
+          <div style={{width:"min(205px,62%)",aspectRatio:"600 / 311",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:"100%",height:"100%",objectFit:"contain",filter:"drop-shadow(0 6px 14px rgba(0,0,0,.28))"}}/>
           </div>
         </div>
@@ -8396,7 +8357,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
         </button>
         {/* Tagline */}
-        <div className="hero-tagline" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(26px,7vw,44px)",fontWeight:800,letterSpacing:"-0.03em",color:C.text,lineHeight:1.1,marginBottom:7,textWrap:"balance",textAlign:"center"}}>
+        <div className="hero-tagline" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(23px,6vw,38px)",fontWeight:800,letterSpacing:"-0.03em",color:C.text,lineHeight:1.1,marginBottom:5,textWrap:"balance",textAlign:"center"}}>
           {settings.heroHeadline||"Bring Colour to Your Life"}
         </div>
         <div className="hero-sub" style={{fontSize:13.5,fontWeight:500,color:C.textSub,marginBottom:0,textAlign:"center"}}>
@@ -8405,7 +8366,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
       </div>
 
       {/* Search bar — type inline; Enter or the icon opens Shop with your query */}
-      <div className="home-search" style={{padding:"0 16px",marginTop:-22,marginBottom:18,position:"relative",zIndex:2}}>
+      <div className="home-search" style={{padding:"0 16px",marginTop:-18,marginBottom:16,position:"relative",zIndex:2}}>
         <div style={{display:"flex",alignItems:"center",gap:10,background:C.card,borderRadius:16,padding:"14px 16px",border:`1.5px solid ${C.border}`,boxShadow:"0 8px 24px rgba(11,110,114,.12)",position:"relative"}}>
           <button onClick={()=>nav("shop")} aria-label="Search" style={{background:"none",border:"none",padding:0,fontSize:18,cursor:"pointer",lineHeight:1}}>🔍</button>
           <input type="text" placeholder="Search fish, plants, accessories…"
@@ -9657,12 +9618,11 @@ function MiniCart({open,onClose,cart,total,updateQty,nav,settings={},products=[]
 }
 
 function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={},orders=[]}){
-  const hasLiveFish=cart.some(i=>i.category==="Live Fish");
   if(!cart.length)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"20px",textAlign:"center"}}>
       <div style={{fontSize:80,marginBottom:20}}>🛒</div>
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Cart is empty</div>
-      <div style={{fontSize:13,color:C.textSub,marginBottom:28}}>Browse our fish and accessories!</div>
+      <div style={{fontSize:13,color:C.textSub,marginBottom:24}}>Find something for your aquarium.</div>
       <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px 32px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Start Shopping</button>
     </div>
   );
@@ -9744,14 +9704,10 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
           return (
             <div style={{background:"#ecfdf5",borderRadius:12,padding:"11px 14px",marginTop:10,fontSize:12.5,color:"#15803d",fontWeight:700,border:"1px solid #a7f3d0",display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:16}}>👛</span>
-              <span>Earn ₹{worth} back in wallet points — credited when your order is delivered.</span>
+              <span>Earn ₹{worth} in wallet coins after delivery.</span>
             </div>
           );
         })()}
-        <div style={{background:C.accentLight,borderRadius:12,padding:"10px 14px",marginTop:10,fontSize:12.5,color:C.primaryDark,fontWeight:600,border:`1px solid ${C.border}`}}>
-          🚚 Shipping is calculated at checkout based on your location &amp; order weight
-          {hasLiveFish&&<span style={{display:"block",fontSize:11,fontWeight:500,marginTop:3,color:C.primary}}>🐠 Live fish shipping rates apply</span>}
-        </div>
         {/* ── How close they are to the next offer ──────────────────────────────
             Directly above the checkout button, centred, because this is the last
             thing a shopper reads before deciding whether the cart is finished. A
@@ -9905,9 +9861,9 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
             <div style={{fontSize:12.5,color:"#b91c1c",fontWeight:700,lineHeight:1.5}}>⌛ Payment window closed. This order will be cancelled. Please place a new order.</div>
           ):(
             <>
-              <div style={{fontSize:11,color:"#9a3412",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>⚠ Pay within {PAY_WINDOW_MIN} minutes</div>
+              <div style={{fontSize:11,color:"#9a3412",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>Pay within {PAY_WINDOW_MIN} minutes</div>
               <div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"#c2410c",letterSpacing:1}}>{mm}:{ss}</div>
-              <div style={{fontSize:11,color:"#9a3412",marginTop:2,lineHeight:1.4}}>Orders not paid within {PAY_WINDOW_MIN} min are auto-cancelled.</div>
+              <div style={{fontSize:10.5,color:"#9a3412",marginTop:2}}>Auto-cancels when time ends</div>
             </>
           )}
         </div>
@@ -9915,7 +9871,7 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
 
       <div style={{background:C.card,border:`1.5px solid ${C.primary}`,borderRadius:18,padding:"18px"}}>
         <div style={{textAlign:"center",marginBottom:14}}>
-          <div style={{fontSize:11,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}>Amount to Pay (full)</div>
+          <div style={{fontSize:11,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}>Amount due</div>
           <div style={{fontFamily:PRICE_FONT,fontSize:30,fontWeight:800,color:C.primary,lineHeight:1.1}}>₹{grand}</div>
           <div style={{fontSize:11.5,color:C.textSub,marginTop:2}}>Order {order.orderNo}</div>
         </div>
@@ -9942,7 +9898,7 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
             <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:9,lineHeight:1.5}}>
               {gatewayMode==="sandbox"
                 ?"Uses Cashfree's sandbox payment details. Cancel this test order afterwards to release its reserved stock."
-                :"UPI · Card · Netbanking · Wallets — your payment is recorded automatically after Cashfree verifies it."}
+                :"UPI · Cards · Netbanking · Wallets · Auto-verified"}
             </div>
             {payNote&&<div style={{fontSize:12,fontWeight:700,marginTop:10,textAlign:"center",lineHeight:1.5,color:payNote[0]==="⚠"?C.danger:C.success}}>{payNote}</div>}
           </>
@@ -10005,7 +9961,7 @@ function ShippingRatesChart({settings={}}){
 }
 
 /* ═══════════════════ CHECKOUT PAGE (Phase 3+4) ═══════════════════ */
-const BLANK_ADDR={name:"",phone:"",whatsapp:"",address:"",city:"",pincode:"",state:"",stateCode:"",notes:"",summary:"",waUpdates:true};
+const BLANK_ADDR={name:"",phone:"",whatsapp:"",address:"",city:"",pincode:"",state:"",stateCode:"",notes:"",summary:"",waUpdates:false};
 
 /* Two-stage exit-intent sheet shown when a customer with items tries to leave checkout. */
 function ExitIntentModal({savings=0, onStay, onLeave}){
@@ -10066,10 +10022,9 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
     return draft?{...base,...draft}:base;
   });
   const [addrEditId,setAddrEditId]=useState(null);   // which saved card the form is editing, if any
-  /* A customer who has ordered before should not retype an address that already worked. When
-     there is one on file the form starts closed and their addresses are the screen — pick one
-     and carry on. The form opens on request (a new address, or editing one of these), and it
-     is all a first-time customer sees, because they have nothing to pick from. */
+  const [saveForLater,setSaveForLater]=useState(false);
+  /* Explicitly saved addresses start as the picker. A new address stays checkout-only unless
+     the customer chooses "Save this address for future orders" below. */
   const [addrFormOpen,setAddrFormOpen]=useState(false);
   const showAddrForm = !savedAddresses.length || addrFormOpen;
   /* Fill the most recent one in straight away, so "Use this" is already true and Continue
@@ -10325,7 +10280,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
     const e={};
     if(!addr.name.trim())e.name="Required";
     if(!/^[6-9]\d{9}$/.test(addr.phone))e.phone="Valid 10-digit number required";
-    if(addr.whatsapp&&!/^[6-9]\d{9}$/.test(addr.whatsapp))e.whatsapp="Valid 10-digit number required";
+    if(addr.waUpdates&&!/^[6-9]\d{9}$/.test(addr.whatsapp))e.whatsapp="Valid WhatsApp number required";
     if(!addr.address.trim())e.address="Required";
     if(!addr.city.trim())e.city="Required";
     if(!/^\d{6}$/.test(addr.pincode))e.pincode="Valid 6-digit pincode required";
@@ -10373,9 +10328,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
       if(appliedRefCode) await releaseReferralReservation(appliedRefCode,uid2,id);
       setPlaceErr("We couldn't generate this order's referral code. Please check your connection and try again; no order was placed."); setPlacing(false); return;
     }
+    const checkoutAddress={...addr,whatsapp:addr.waUpdates?addr.whatsapp:""};
     const order={
-      id,orderNo,items:[...cart],address:addr,
-      billingAddress:useSameBilling?addr:billing,
+      id,orderNo,items:[...cart],address:checkoutAddress,
+      billingAddress:useSameBilling?checkoutAddress:billing,
       summary:addr.summary||"",
       total,fee,shippingZone:zone||"",shippingZoneLabel:zone?ZONE_LABELS[zone]:"Unknown",
       specialDelivery: hasLiveFish ? (selPack.courier==="special") : specialDelivery,
@@ -10395,7 +10351,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
       paymentStatus:"Awaiting Payment",
       amountDue: grand,
       paymentDeadline: now + PAY_WINDOW_MIN*60*1000,
-      txnId:"", paymentProof:"", paidAt:"",
+      txnId:"", paidAt:"",
       waUpdates: !!addr.waUpdates,
       userUid: userKey(user),
       userPhone:normalizePhone(user?.phone||addr.phone),
@@ -10423,10 +10379,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
     if(couponApplied) bumpPromoUsage("coupon");
     // Root app handles state + storage + stock decrement
     onOrderPlaced(order);
-    // The order carries the address now, so the half-typed draft has done its job. It is also
-    // filed in the address book, so the next order starts one tap away instead of blank.
+    // The order carries the address now, so the half-typed draft has done its job. A new
+    // address enters the saved-address picker only when the customer explicitly opted in.
     clearAddrDraft(addrUk);
-    if(onSaveAddress) onSaveAddress({...addr, id:addrEditId||null});
+    if(onSaveAddress&&saveForLater&&!addrEditId) onSaveAddress({...checkoutAddress,id:null});
     setPlaced(order);
     setStep(3);
     setPlacing(false);
@@ -10464,7 +10420,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Verified! 🎉</div>
           {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
-          <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,marginBottom:20,maxWidth:320}}>Thank you! Cashfree has <b style={{color:C.text}}>verified your payment</b> and your order is now <b style={{color:C.text}}>Confirmed</b>. The store will update it when shipped and delivered.</div>
+          <div style={{fontSize:13,color:C.textSub,lineHeight:1.55,marginBottom:18,maxWidth:320}}>Payment verified. Your order is <b style={{color:C.text}}>Confirmed</b>. We'll update it when shipped and delivered.</div>
           {/* Care-guide reminder — tailored to what was purchased */}
           {placed&&(()=>{
             const cats=new Set((placed.items||[]).map(i=>i.category));
@@ -10524,17 +10480,18 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
         </>
       ):(
         <>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:4}}>Almost there — complete payment</div>
-          <div style={{fontSize:12.5,color:C.textSub,marginBottom:18,maxWidth:330,lineHeight:1.5}}>Your order is reserved. Complete the secure Cashfree payment to confirm it.</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text,marginBottom:14}}>Complete payment</div>
           {placed&&<PaymentPanel order={placed} onVerified={()=>setSubmitted(true)} onCancelled={(o)=>{onCancelled&&onCancelled(o);}} onCheckoutCancelled={onCancelPayment}/>} 
-          <button className="press" onClick={()=>nav("orders")}
-            style={{marginTop:16,background:"none",border:"none",color:C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
-            I'll pay later — go to Orders
-          </button>
-          <button className="press" onClick={()=>{ if(placed) onCancelPayment&&onCancelPayment(placed); else goBack(); }}
-            style={{marginTop:6,background:"none",border:"none",color:C.danger,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
-            ✕ Cancel payment — keep items in my cart
-          </button>
+          <div style={{display:"flex",gap:8,marginTop:14,width:"100%",maxWidth:360}}>
+            <button className="press" onClick={()=>nav("orders")}
+              style={{flex:1,background:"#fff",border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 10px",color:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              Pay later
+            </button>
+            <button className="press" onClick={()=>{ if(placed) onCancelPayment&&onCancelPayment(placed); else goBack(); }}
+              style={{flex:1,background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"9px 10px",color:C.danger,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              Cancel payment
+            </button>
+          </div>
         </>
       )}
     </div>
@@ -10549,12 +10506,12 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           <button className="press" onClick={()=>{ if(step!==1){ setStep(1); } else if(cart.length){ setExitAsk(true); } else { goBack(); } }}
             style={{background:"none",border:"none",fontSize:20,color:C.textSub}}>←</button>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>
-            {step===1?"Shipping Details":"Payment"}
+            {step===1?"Address":"Review Order"}
           </div>
         </div>
         {/* Steps */}
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          {["Address","Payment","Confirm Order"].map((s,i)=>(
+          {["Address","Review","Payment"].map((s,i)=>(
             <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
               <div style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,
                 background:i<step?C.primary:"transparent",color:i<step?"white":C.textSub,border:`2px solid ${i<step?C.primary:C.border}`}}>
@@ -10599,29 +10556,23 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             </Collapsible>
             </>
           )}
-          {/* Deliver to. Seeded from past orders as well as saved cards, so a returning
-              customer sees a real choice even on a device they have never checked out from.
-              This is the whole address step for them: pick one and continue. The form below
-              stays shut until they ask for it — and opens by itself for a first-time
-              customer, who has nothing here to pick. */}
+          {/* Only customer-saved addresses appear here. Past orders never recreate a card. */}
           {savedAddresses.length>0&&(
             <div style={{background:"#fff",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:16}}>
-              <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:10}}>📍 Deliver to</div>
+              <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:10}}>📍 Saved Address</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {savedAddresses.map(a=>{
                   const active=addrFingerprint(a)===addrFingerprint(addr);
-                  // Only the address fields are taken; the special requests and the
-                  // WhatsApp-updates choice belong to THIS order, not to the card.
+                  // The status-update choice belongs to this order, not to the saved card.
                   const use=()=>{
                     setAddr(cur=>({...cur,name:a.name||"",phone:a.phone||"",whatsapp:a.whatsapp||"",
                       address:a.address||"",city:a.city||"",pincode:a.pincode||"",state:a.state||"",stateCode:a.stateCode||""}));
-                    setAddrEditId(a.id); setErrs({}); setErrFocus("");
+                    setAddrEditId(a.id); setSaveForLater(false); setErrs({}); setErrFocus("");
                   };
                   return(
                     <div key={a.id} style={{border:`1.5px solid ${active?C.primary:C.border}`,background:active?C.accentLight:"#fff",borderRadius:12,padding:"10px 12px"}}>
                       <div style={{fontSize:12.5,fontWeight:800,color:C.text}}>
                         {a.name||"Address"}{a.label?<span style={{color:C.textSub,fontWeight:600}}> · {a.label}</span>:null}
-                        {a.fromOrder&&<span style={{fontSize:9,fontWeight:800,color:C.textSub,background:C.bg,borderRadius:20,padding:"2px 7px",marginLeft:6}}>FROM A PAST ORDER</span>}
                       </div>
                       <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5,marginTop:3}}>
                         {a.address}{a.city?`, ${a.city}`:""} — {a.pincode}{a.phone?<><br/>📞 {a.phone}</>:null}
@@ -10646,26 +10597,31 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                 {!addrFormOpen&&(
                   <button className="press" onClick={()=>{
                       setAddr(cur=>({...BLANK_ADDR,waUpdates:cur.waUpdates,summary:cur.summary}));
-                      setAddrEditId(null); setErrs({}); setErrFocus(""); setAddrFormOpen(true);
+                      setAddrEditId(null); setSaveForLater(false); setErrs({}); setErrFocus(""); setAddrFormOpen(true);
                     }}
                     style={{background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-                    ＋ Deliver to a new address
+                    ＋ New address
                   </button>
                 )}
-                <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.45}}>Saved on this device. Addresses from past orders reappear automatically when you sign in elsewhere.</div>
               </div>
             </div>
           )}
-          {/* Order-level, not address-level: it is a choice about THIS order, so it stays on
-              screen whether they picked a saved address or are typing a new one. */}
-          <label style={{display:"flex",alignItems:"center",gap:10,background:C.accentLight,borderRadius:12,padding:"12px 14px",marginBottom:14,cursor:"pointer",userSelect:"none"}}>
-            <input type="checkbox" checked={addr.waUpdates} onChange={e=>f("waUpdates",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
-            <span style={{fontSize:12.5,color:C.primaryDark,fontWeight:500,lineHeight:1.45}}>💬 Notify me about my order (payment confirmed, shipped, delivered)</span>
-          </label>
           {showAddrForm&&(<>
           {inp("Full Name","name","text","John Doe")}
           {inp("Mobile Number","phone","tel","9876543210")}
-          {inp("WhatsApp Number","whatsapp","tel","9876543210 (if different)",false,true)}
+          </>)}
+          {/* WhatsApp is requested only when the customer opts into status updates. */}
+          <label style={{display:"flex",alignItems:"center",gap:10,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"11px 13px",marginBottom:addr.waUpdates?10:14,cursor:"pointer",userSelect:"none"}}>
+            <input type="checkbox" checked={addr.waUpdates} onChange={e=>{
+              const checked=e.target.checked;
+              setAddr(a=>({...a,waUpdates:checked,whatsapp:checked?a.whatsapp:""}));
+              if(!checked&&errs.whatsapp) setErrs(p=>{const n={...p};delete n.whatsapp;return n;});
+            }} style={{width:18,height:18,accentColor:"#25D366",flexShrink:0}}/>
+            <span aria-hidden="true" style={{width:20,height:20,borderRadius:"50%",background:"#25D366",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900}}>☎</span>
+            <span style={{fontSize:12.5,color:"#166534",fontWeight:700}}>Update me on WhatsApp</span>
+          </label>
+          {addr.waUpdates&&inp("WhatsApp Number","whatsapp","tel","9876543210")}
+          {showAddrForm&&(<>
           {inp("Street Address","address","text","123, Main Street")}
           <div style={{display:"flex",gap:12}}>
             {inp("City","city","text","Chennai",true)}
@@ -10765,37 +10721,34 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
               ))}
             </div>
           )}
+          {onSaveAddress&&showAddrForm&&!addrEditId&&(
+            <label style={{display:"flex",alignItems:"center",gap:10,background:"#fff",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginBottom:12,cursor:"pointer",userSelect:"none"}}>
+              <input type="checkbox" checked={saveForLater} onChange={e=>setSaveForLater(e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
+              <span style={{fontSize:12.5,color:C.text,fontWeight:700}}>Save this address for future orders</span>
+            </label>
+          )}
+          {onSaveAddress&&showAddrForm&&addrEditId&&(
+            <button className="press" onClick={()=>{ if(validate()) onSaveAddress({...addr,id:addrEditId}); }}
+              style={{width:"100%",marginBottom:10,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              Update saved address
+            </button>
+          )}
           <button className="press" onClick={()=>{ if(validate()) setStep(2); else setAddrFormOpen(true); }}
             style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             Continue to Payment →
           </button>
-          {/* Explicit save, for a customer who wants this address on file before committing to
-              the order. Placing the order saves it anyway — this is just the earlier chance. */}
-          {onSaveAddress&&showAddrForm&&(
-            <button className="press" onClick={()=>{ if(validate()) onSaveAddress({...addr, id:addrEditId||null}); }}
-              style={{width:"100%",marginTop:9,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"12px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-              💾 {addrEditId?"Update this saved address":"Save this address for next time"}
-            </button>
-          )}
         </div>
       )}
 
       {step===2&&(
         <div className="dt-read" style={{padding:"20px 16px 100px"}}>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:12}}>Order Items</div>
-          <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,marginTop:-4}}>You can still adjust quantities or remove items below before placing your order.</div>
-          <div style={{display:"flex",gap:8,marginBottom:12}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+            <button className="press" onClick={()=>nav("shop")}
+              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>＋ Add more items</button>
             <button className="press" onClick={()=>setStep(1)}
-              style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🚚 Change shipping</button>
+              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✏ Edit Address</button>
           </div>
-          {/* Centred, to match the same nudge in the cart. Passing `orders` matters as much as
-              the alignment: without it usableCoupons cannot tell a returning customer from a
-              new one, so this offered first-order-only coupons to people who cannot use them. */}
-          {(()=>{ const dc=nextDiscountNudge(total,settings,orders); if(!dc||dc.unlocked) return null; return (
-            <button className="press" onClick={()=>nav("shop")} style={{width:"100%",textAlign:"center",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:11.5,color:"#9a3412",fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",lineHeight:1.5}}>
-              🏷️ Add <b>₹{dc.need}</b> more to get <b>{dc.off}</b> — use code <b>{dc.code}</b> · tap to add items
-            </button>
-          ); })()}
           {cart.map(item=>{
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
             const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
@@ -10961,7 +10914,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                 )}
               </div>
             )}
-            {zone&&fee>0&&<div style={{fontSize:10.5,color:C.textSub,lineHeight:1.5,marginTop:-2,marginBottom:8,background:C.accentLight,borderRadius:8,padding:"7px 10px"}}>ℹ️ Shipping is charged as an estimate. If your parcel actually costs less to send, we credit the difference back to your 👛 wallet as loyalty coins after it's dispatched.</div>}
+            {zone&&fee>0&&<div style={{fontSize:10.5,color:C.textSub,lineHeight:1.45,marginTop:-2,marginBottom:8,background:C.accentLight,borderRadius:8,padding:"7px 10px"}}>ℹ️ Estimated shipping. Any excess returns to your wallet after dispatch.</div>}
             {guaranteeActive&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
               <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Arrival Guarantee</span>
               <span style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Included</span>
@@ -11001,15 +10954,6 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             <button className="press" onClick={()=>setStep(1)} style={{marginTop:10,background:"none",border:"none",fontSize:12,color:C.accent,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✏ Edit Address</button>
           </div>
 
-          {/* Prepayment notice */}
-          <div style={{marginTop:16,background:"#eff6ff",border:`1px solid #bfdbfe`,borderRadius:14,padding:"14px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-              <span style={{fontSize:18}}>💳</span>
-              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#1e40af"}}>Prepaid order — pay ₹{grand} to confirm</span>
-            </div>
-            <div style={{fontSize:12,color:"#1e3a8a",lineHeight:1.55}}>On the next screen, pay the <b>full amount</b> securely through Cashfree. Your payment is verified and recorded automatically. Orders unpaid within {PAY_WINDOW_MIN} minutes are auto-cancelled.</div>
-          </div>
-
           {/* Courier-collection notice — the single biggest cause of a bad delivery is a parcel
               sitting at the courier hub. Said plainly right before the order is placed. */}
           {/* Advice, not an instruction the customer must act on before paying — so it sits
@@ -11025,11 +10969,8 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           {placeErr&&<div style={{marginTop:14,background:"#fef2f2",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
           <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={handlePlaceOrder} disabled={placing}
             style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,opacity:placing?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
-            {placing?"Checking stock…":<>Place Order &amp; Pay ₹{grand} →</>}
+            {placing?"Checking stock…":"Place Order"}
           </button>
-          <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:7,lineHeight:1.5}}>
-            You'll complete payment on the next step to confirm your order.
-          </div>
         </div>
       )}
     </div>
@@ -17087,20 +17028,14 @@ function NemoStore(){
   const startReview=(prod,preset=0)=>{ setReviewIntent(prod.id); setReviewPreset(Number(preset)||0); nav("detail",prod); };
 
   /* ── Address book ──────────────────────────────────────────────────────────────────
-     Loaded per signed-in customer and re-seeded from their orders whenever those arrive,
-     so a new device recovers the addresses they have actually shipped to before. */
+     Only customer-saved cards are loaded. Order history is deliberately excluded so a
+     deleted address cannot reappear at the next checkout. */
   useEffect(()=>{
     const uk=userKey(user);
     if(!uk){ setSavedAddresses([]); return; }
-    // Belt and braces: seedAddressBook now checks the owner of every order it reads, so a
-    // stray all-customers array can no longer contribute an address. This guard stays because
-    // it is also the cheaper answer — while the admin panel is open there is nothing here worth
-    // seeding from anyway. It is no longer what makes the seed safe, which matters: the leak it
-    // was written for happened on the way OUT of the admin panel, when page had already changed
-    // and `orders` had not yet been replaced by the customer listener.
     if(page==="admin") return;
-    setSavedAddresses(seedAddressBook(uk, orders));
-  },[user,orders.length,page]);
+    setSavedAddresses(loadSavedAddresses(uk));
+  },[user,page]);
   const saveAddressBookEntry=entry=>{
     const uk=userKey(user);
     if(!uk||addrIsBlank(entry)) return;
@@ -17120,6 +17055,7 @@ function NemoStore(){
     const uk=userKey(user);
     if(!uk) return;
     setSavedAddresses(prev=>{ const next=prev.filter(a=>a.id!==id); saveAddrBook(uk,next); return next; });
+    showToast("Address deleted");
   };
   const toggleFav=(prod)=>{
     if(!user){ goAuth("home"); showToast("Sign in to save items"); return; }
@@ -17704,7 +17640,7 @@ function NemoStore(){
       });
     }
     navRewind("cart");
-    showToast("Payment cancelled — your items are back in your cart");
+    showToast("Payment Cancelled");
   };
 
   // Auto-close a delivered order once its return window has passed (idempotent).
