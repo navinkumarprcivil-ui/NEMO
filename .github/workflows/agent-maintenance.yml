@@ -25,13 +25,17 @@ jobs:
 
           targets = {
               "app.jsx": [
-                  "coAdminUid", "adminPassHash", "settingsPrivate", "AdminHub",
-                  "AdminAccess", "adminUnlocked", "googleSignIn", "customerOrderStage",
-                  "WhyNemoPopup", "promotion", "promo", "banner", "fadeSplash",
-                  "nemoBoot", "bootReady", "adminTab", "OrdersPage"
+                  "function AdminLogin", "stageFilter", "orderStages", "showOnWelcome",
+                  "welcomeOffers", "migrateCoupons", "WhyNemoPopup", "coAdminUid",
+                  "adminPassHash", "saveSettingsHandler", "AdminHub", "adminGoogleSignIn",
+                  "SPLASH_MIN_MS", "SPLASH_MAX_MS", "walletReady", "settingsReady",
+                  "renderOffers", "festivalBanner", "promoDateKey"
               ],
-              "database.rules.json": ["coAdminUid", "settingsPrivate", "orders", "products", "wallet", "reviews", "requests", "guides"],
-              "index.html": ["fadeSplash", "nemoBoot", "splash", "app.js"]
+              "database.rules.json": [
+                  "settingsPrivate", "orders", "products", "loyalty", "reviews",
+                  "experienceReviews", "requests", "guides", "settings", "admin"
+              ],
+              "index.html": ["SPLASH_MIN_MS", "SPLASH_MAX_MS", "fadeSplash", "app.js"]
           }
 
           def redact(line):
@@ -51,8 +55,8 @@ jobs:
                   if not hits:
                       continue
                   print(f"\n--- TERM: {term} ({len(hits)} hits) ---")
-                  for i in hits[:14]:
-                      lo, hi = max(0, i-5), min(len(lines), i+6)
+                  for i in hits[:20]:
+                      lo, hi = max(0, i-14), min(len(lines), i+20)
                       key=(lo,hi)
                       if key in seen:
                           continue
