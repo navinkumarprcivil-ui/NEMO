@@ -1,0 +1,12 @@
+Admin release verification
+commit=0def1470ceb33f84d06fa2b9972faeeb210613c4
+patch_exit=1
+Traceback (most recent call last):
+  File "/home/runner/work/nemo/nemo/scripts/apply-admin-release.py", line 362, in <module>
+    raise RuntimeError('splash max anchor missing')
+RuntimeError: splash max anchor missing
+tests_exit=99
+npm_exit=99
+compile_exit=99
+cloudflare_build_exit=99
+RESULT=FAIL
