@@ -3302,9 +3302,22 @@ function cashfreeCheckoutWasClosed(result){
   return /close|cancel|dismiss|abort|user[_ -]?drop|dropped/.test(detail);
 }
 
+/* Cashfree may reject checkout before a modal is rendered (for example an inactive
+   whitelist or invalid session). Keep the customer-facing reference short and safe:
+   codes/reasons are useful, while free-form gateway payloads do not belong in the UI. */
+function cashfreeCheckoutFailureCode(result){
+  const error=result&&result.error;
+  if(!error||result.paymentDetails) return "";
+  const raw=error.code||error.type||error.reason||"checkout-rejected";
+  return String(raw).replace(/[^A-Za-z0-9_-]/g,"-").replace(/-+/g,"-").slice(0,60)||"checkout-rejected";
+}
+
 async function payWithGateway(order, settings={}){
-  if(!FB_OK||!FB_AUTH||!FB_AUTH.currentUser) throw new Error("sign-in-required");
-  const token = await FB_AUTH.currentUser.getIdToken();
+  /* The visible customer profile is cached for fast boot; payment authority is not. It must
+     be the live, non-anonymous Firebase account that owns this exact order. */
+  const authUser=FB_OK&&FB_AUTH&&FB_AUTH.currentUser;
+  if(!authUser||authUser.isAnonymous||authUser.uid!==order.userUid) throw new Error("sign-in-required");
+  const token = await authUser.getIdToken();
   const res = await fetch("/api/pay-create",{
     method:"POST", headers:{"content-type":"application/json",authorization:"Bearer "+token},
     body: JSON.stringify({ userUid: order.userUid, orderId: order.id }),
@@ -3321,6 +3334,13 @@ async function payWithGateway(order, settings={}){
     redirectTarget:"_modal",
   });
   if(checkoutResult&&checkoutResult.redirect) return "redirected";
+  if(checkoutResult&&checkoutResult.error&&!checkoutResult.paymentDetails){
+    if(cashfreeCheckoutWasClosed(checkoutResult)) throw new Error("dismissed");
+    const code=cashfreeCheckoutFailureCode(checkoutResult);
+    console.error("Cashfree checkout rejected",code);
+    throw new Error("checkout-rejected:"+code);
+  }
+  if(!FB_AUTH.currentUser||FB_AUTH.currentUser.uid!==order.userUid) throw new Error("sign-in-required");
   const freshToken=await FB_AUTH.currentUser.getIdToken();
   const verify=await fetch("/api/pay-verify",{
     method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+freshToken},
@@ -7060,7 +7080,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.3fe4802b";
+const APP_BUILD = "v90.61d3e73c";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -9829,14 +9849,23 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, onCheck
       else setPayNote("✓ Payment verified and recorded — the store will confirm your order shortly.");
     }catch(e){
       const m=String(e?.message||"");
+      console.error("Gateway payment failed",m);
       if(m==="dismissed"&&onCheckoutCancelled){
         setPayNote("Returning your items to the cart…");
         await onCheckoutCancelled(order);
       } else if(m==="dismissed") setPayNote("");
       else if(m==="order-not-payable") setPayNote("⚠ This order has already been paid or cancelled.");
+      else if(m==="payment-window-closed") setPayNote("⚠ This payment window has expired. Please place the order again.");
+      else if(m==="valid-phone-required") setPayNote("⚠ Add a valid 10-digit Indian mobile number to the delivery address.");
+      else if(m==="sign-in-required"||m==="order-owner-mismatch") setPayNote("⚠ Your secure sign-in session has expired. Sign out, sign in with Google again, then retry payment.");
       else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote(""); } // fall back to the manual flow
       else if(m==="sandbox-admin-only"){ setGatewayOn(false); setPayNote(""); }
       else if(m==="checkout-script-failed") setPayNote("⚠ Couldn't load the payment window — check your connection and try again.");
+      else if(m==="cashfree-checkout-not-approved") setPayNote("⚠ Cashfree checkout approval is not active yet. Nothing has been charged.");
+      else if(m==="cashfree-credentials-rejected") setPayNote("⚠ The payment service rejected its production credentials. Nothing has been charged.");
+      else if(m==="gateway-busy") setPayNote("⚠ Cashfree is temporarily busy. Nothing has been charged — please retry shortly.");
+      else if(m==="payment-session-failed") setPayNote("⚠ Cashfree couldn't create a payment session. Nothing has been charged. Reference: payment-session-failed.");
+      else if(m.startsWith("checkout-rejected:")) setPayNote("⚠ Cashfree rejected the checkout before it opened. Nothing has been charged. Reference: "+m.slice(18));
       else setPayNote("⚠ Payment didn't go through. Nothing has been charged — please try again.");
     }finally{ setPayBusy(false); }
   };
