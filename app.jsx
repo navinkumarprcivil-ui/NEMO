@@ -473,6 +473,12 @@ function applyGstTerms(text,gstin){
 function normalizeSettings(s){
   if(!s) return s;
   let fixed = s.termsPolicy ? {...s, termsPolicy: applyGstTerms(s.termsPolicy, s.gstin)} : s;
+  const privacy=String(fixed.privacyPolicy||"");
+  if(/payment reference ID and screenshot you submit so we can verify your payment/i.test(privacy)){
+    fixed={...fixed,privacyPolicy:privacy
+      .replace(/plus the payment reference ID and screenshot you submit so we can verify your payment\./i,"plus the verified payment status returned by Cashfree.")
+      .replace(/Payments are processed through your own UPI app or our secure payment gateway;/i,"Payments are processed securely by Cashfree;")};
+  }
   if(/vote for the same tank more than once per day/i.test(String(fixed.tankRewardRules||""))){
     fixed={...fixed,tankRewardRules:String(fixed.tankRewardRules).replace(/vote for the same tank more than once per day/gi,"vote more than once for the same tank image")};
   }
@@ -1770,7 +1776,7 @@ async function deleteReview(pid,rid){
 const COURIER_COLLECT_TERM = "Tracking & collection: once your order is dispatched we share the courier partner and consignment number. Please keep tracking your parcel and collect it from the courier partner as soon as it reaches your area. Door delivery depends entirely on the courier partner and is not in our hands, so we request every customer to put in that effort and take delivery of the package at the earliest — especially when ordering live fish or plants, where every extra hour the parcel spends in transit or lying at the hub affects the livestock. Loss or deterioration caused by a parcel left uncollected, collected late, refused, or returned undelivered is not covered by the Live Arrival Guarantee or by any refund or reward coins.";
 
 /* Store settings (WhatsApp numbers, payment) — shared via Firebase */
-const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, razorpayLink:"", website:"", bankAccountName:"", bankName:"", bankBranch:"", bankAccountNo:"", bankIfsc:"", invoiceSignature:"",
+const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supporterEnabled:false, storeAddress:"", storeHours:"", orderEmail:"", instagramUrl:"", facebookUrl:"", storeLogo:"", emailjsService:"", emailjsTemplate:"", emailjsKey:"", upiId:"", upiName:STORE_NAME, website:"", bankAccountName:"", bankName:"", bankBranch:"", bankAccountNo:"", bankIfsc:"", invoiceSignature:"",
   aboutStory:"Nemo Aqua Store is a passionate home-based aquarium business. We hand-pick healthy, vibrant fish, live plants, and quality accessories — and deliver them with care to fellow hobbyists. Every order is packed personally to make sure your aquatic friends arrive happy and healthy.",
   deliveryAreas:"We currently deliver across the city and nearby areas. Live fish are delivered on selected days to ensure safe, short transit. Please provide a complete, correct address and stay reachable on the delivery day — deliveries that fail due to a wrong address, no response, or no one available are not covered by our guarantees and may incur a re-delivery charge. Contact us on WhatsApp to confirm delivery to your location.",
   liveArrivalGuarantee:"Live Arrival Guarantee is included free with every live fish order shipped on our recommended Premium Delivery parcel — there is no separate charge. Because temperature and transit conditions vary by area and season, you may instead choose a normal parcel based on your location and weather; orders sent by normal parcel are not covered by the guarantee.\n\nTo make a claim you must send ONE clear, continuous, unedited unboxing video — starting with the sealed, unopened package and clearly showing the affected fish — to our WhatsApp within 2 hours of delivery. We review the video and, if the claim is approved, you choose either a refund of the affected fish value or the same value as reward coins. The guarantee covers the price of the affected fish only — delivery/shipping charges are not refundable.\n\nApproved reward coins are added to your Nemo wallet. Approved refunds are returned through the applicable payment method. The guarantee does not apply without a valid unboxing video, if our acclimatization steps were not followed, to wrong/incomplete addresses, failed or refused deliveries, or to any loss after the fish has been placed in your tank.",
@@ -1796,7 +1802,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   /* No store-wide GST rate or HSN: both are per product (see the product editor). */
   jurisdiction: "Salem, Tamil Nadu",
   termsPolicy: "By placing an order you agree to these terms. "+STORE_NAME+" Aqua Store is a home-based proprietary micro-enterprise (Udyam-registered) trading in aquarium livestock and supplies. All orders are subject to stock availability and our acceptance of your payment. Prices are in INR and inclusive of applicable taxes. We are currently a small enterprise not registered under GST, so no GST is charged at present; this notice and your invoice will be updated once we register for GST, at which point your bill will be issued as a GST Tax Invoice. Live animals are perishable goods sold under our Live Arrival Guarantee, which is your sole and exclusive remedy for any transit loss. To the maximum extent permitted by law, our total liability for any order is limited to the amount actually paid for that order; we are not liable for indirect, incidental or consequential losses, nor for any loss arising after livestock has been introduced to your tank or system. We are not responsible for delays or failures caused by courier partners, weather, power/water conditions at your premises, or other events beyond our reasonable control. "+COURIER_COLLECT_TERM+" These terms are governed by the laws of India and subject to the exclusive jurisdiction of the courts at Salem, Tamil Nadu.",
-  privacyPolicy: "We collect only the details needed to fulfil your order — your name, contact number, delivery address and email, plus the payment reference ID and screenshot you submit so we can verify your payment. This information is used solely to process, deliver and provide support for your orders. We do not sell your data or share it with anyone except our delivery partners and payment provider, and only as needed to complete your order. Payments are processed through your own UPI app or our secure payment gateway; we never see or store your card, UPI PIN or bank credentials. You can ask us to delete your stored account data at any time by messaging us on WhatsApp.",
+  privacyPolicy: "We collect only the details needed to fulfil your order — your name, contact number, delivery address and email, plus the verified payment status returned by Cashfree. This information is used solely to process, deliver and provide support for your orders. We do not sell your data or share it with anyone except our delivery partners and payment provider, and only as needed to complete your order. Payments are processed securely by Cashfree; we never see or store your card, UPI PIN or bank credentials. You can ask us to delete your stored account data at any time by messaging us on WhatsApp.",
   liveGuaranteePrice: 150,        // legacy flat fallback
   liveGuaranteePriceTN: 150,      // Inside Tamil Nadu
   liveGuaranteePriceSouth: 200,   // South India
@@ -1863,8 +1869,8 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   adminOrderEmail: false, // email a copy of each new order to the admin (off by default; opt in below)
 };
 /* ── Public vs private settings ───────────────────────────────────────────────
-   The `settings` node is world-readable (the storefront needs the WhatsApp number, UPI id,
-   policies, rates and so on before anyone signs in). These keys are NOT storefront data and
+   The `settings` node is world-readable (the storefront needs the WhatsApp number, policies,
+   rates and so on before anyone signs in). These keys are NOT storefront data and
    have no business being fetched by a stranger, so they live in `settingsPrivate`, which the
    rules restrict to the admin uid:
      · adminPassHash   — retired legacy value, kept private until it is removed from old data
@@ -1879,10 +1885,11 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
    The invoice renders these client-side so the buyer's accountant has somewhere to send the
    money — a real need, but only ever for someone who has an order, and you cannot have an order
    without signing in. Sitting in the public node they were a `curl` away for the whole internet.
-   The UPI id stays public: it draws the payment QR on the storefront before checkout.
+   The optional business UPI id stays public only as an invoice reference; it is not a
+   checkout fallback.
 
-   Everything else stays public because the customer's own browser genuinely uses it — the UPI
-   id renders the payment QR, and the EmailJS ids send the order confirmation from the client.
+   Everything else stays public because the customer's own browser genuinely uses it — for
+   example, the EmailJS ids send the order confirmation from the client.
    (Lock those down in the EmailJS dashboard with an allowed-domains restriction; a static site
    cannot hide a key it has to use.) */
 const PRIVATE_SETTING_KEYS = ["adminPassHash","coAdminUid","returnAddress","returnAddress1Label","returnAddress2","returnAddress2Label"];
@@ -3250,17 +3257,16 @@ async function googleSignIn(){
   return { name:u.displayName||"Customer", email:u.email||"", phone:normalizePhone(u.phoneNumber||""), uid:u.uid, photoURL:u.photoURL||"", method:"google", loginAt:new Date().toISOString() };
 }
 /* ═══════════════════ PAYMENT GATEWAY (Cashfree) ═══════════════════
-   The store ships with the manual flow — pay by UPI, send a screenshot, the owner
-   verifies it by hand — and switches itself to the gateway the moment the keys
-   exist in the server environment. Nothing here needs editing to make that happen:
-   /api/pay-create answers whether it is configured, and this asks once per load.
+   Cashfree is the store's only customer checkout. The API keys remain on the server;
+   /api/pay-create reports whether that secure server-side configuration is ready.
 
    Everything that matters is decided on the server. Cashfree's popup result is
    only a cue to ask our server to check the order directly with Cashfree; the
    signed webhook is a second, asynchronous path. A closed tab, lost connection or
    tampered client therefore cannot mark an order paid. */
 let PAY_GATEWAY = { ready:false, checked:false, provider:"", mode:"" };
-async function payGatewayStatus(){
+async function payGatewayStatus(force=false){
+  if(force) PAY_GATEWAY.checked=false;
   if(PAY_GATEWAY.checked) return PAY_GATEWAY;
   PAY_GATEWAY.checked = true;
   try{
@@ -3269,7 +3275,7 @@ async function payGatewayStatus(){
       const j = await r.json();
       PAY_GATEWAY={...PAY_GATEWAY,ready:!!j.ready,provider:j.provider||"",mode:j.mode||""};
     }
-  }catch(e){ /* no gateway reachable — the manual flow stands */ }
+  }catch(e){ /* PaymentPanel offers a safe retry; no manual-payment fallback is exposed. */ }
   return PAY_GATEWAY;
 }
 /* Cashfree's own script, fetched only when a payment is actually opened — an
@@ -4210,7 +4216,6 @@ function generateInvoiceHTML(order, settings, opts){
   // ── GST / tax block (activates the moment a GSTIN is saved in Settings) ──
   const gstinRaw=String(s.gstin||"").trim();
   const hasGst=!!gstinRaw;
-  const payLink=String(s.razorpayLink||"").trim();
   const discountTotal=couponOff+refOff+loyaltyOff;
   const fmt2=n=>Number(n||0).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
   const money=n=>"₹"+fmt2(n);
@@ -4431,7 +4436,7 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
         ${custId?`<tr><td class="k">CUSTOMER ID</td><td>${custId}</td></tr>`:""}
         ${cn?"":`<tr><td class="k">STATUS</td><td>${E(o.status||"—")}</td></tr>`}
         ${hasGst?`<tr><td class="k">PLACE OF SUPPLY</td><td>${placeOfSupply}</td></tr><tr><td class="k">REVERSE CHARGE</td><td>No</td></tr>`:""}
-        ${cn?"":`<tr><td class="k">PAYMENT MODE</td><td>${E(o.paymentMode||(payLink?"Online (UPI / Card / Netbanking)":"UPI"))}</td></tr><tr><td class="k">PAYMENT STATUS</td><td>${isPaid?"PAID":"PAYMENT DUE"}</td></tr>`}
+        ${cn?"":`<tr><td class="k">PAYMENT MODE</td><td>${E(o.paymentMode||(o.gateway==="cashfree"?"Online (Cashfree)":"Online"))}</td></tr><tr><td class="k">PAYMENT STATUS</td><td>${isPaid?"PAID":"PAYMENT DUE"}</td></tr>`}
         ${o.txnId?`<tr><td class="k">PAYMENT REF</td><td>${E(o.txnId)}</td></tr>`:""}
       </table>
     </div>
@@ -4467,7 +4472,6 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
   <div class="words"><span class="wl">Total Amount (in words)</span><br>${E(amountInWordsINR(grand))}</div>
   ${hsnSummaryHtml}
   ${(shipmentHtml||bankHtml)?`<div class="blkrow">${shipmentHtml}${bankHtml}</div>`:""}
-  ${(!cn&&!isPaid&&payLink)?`<div class="np paybox"><a href="${E(payLink)}" target="_blank" rel="noopener">💳 Pay ₹${fmt(grand)} securely online →</a></div>`:""}
   <div class="payrow">
     ${/* The signature lives in sigHtml below — this row used to print a second "For <firm> /
            Authorised Signatory" of its own, so every sheet carried the block twice. */""}
@@ -6538,7 +6542,7 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
   );
 }
 
-function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, reviewedSet=[], onSubmitPayment, onCancelled, onCancelPayment, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
+function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, onDeleteAccount, onWriteReview, reviewedSet=[], onCancelled, onCancelPayment, onReportDoa, onCancelByCustomer, onRequestReturn, onSubmitReturnShipment, addToCart, settings={}, favorites=[]}){
   const [openId,setOpenId]=useState(null); // which order is expanded (list shows summaries; details open on tap)
   // Re-add the exact option that was bought (the 10" net, not whichever size happens to be first).
   const reorder=(o)=>{ let n=0; (o.items||[]).forEach(it=>{ const prod=products.find(p=>p.id===it.id); if(prod&&!prod.comingSoon&&(prod.stockCount??DEFAULT_STOCK)>0&&addToCart){
@@ -6738,7 +6742,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               {o.status==="Awaiting Payment"&&(
                 <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
                   {payOpen===o.id?(
-                    <PaymentPanel order={o} settings={settings} compact onSubmitPayment={onSubmitPayment} onCancelled={onCancelled} onCheckoutCancelled={onCancelPayment}/>
+                    <PaymentPanel order={o} compact onCancelled={onCancelled} onCheckoutCancelled={onCancelPayment}/>
                   ):(
                     <>
                       <div style={{background:"#fef3c7",border:`1px solid #fde68a`,borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:12,color:"#92400e",fontWeight:600,lineHeight:1.5}}>⏳ Payment pending — complete it to confirm this order (auto-cancels if unpaid).</div>
@@ -6749,7 +6753,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 </div>
               )}
               {o.status==="Payment Review"&&(
-                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>🔎 Payment submitted{o.txnId?` (Ref: ${o.txnId})`:""} — under verification. We'll confirm within 1–2 days.</div>
+                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>{o.gateway==="cashfree"?"✓ Payment received and verified by Cashfree — awaiting store confirmation.":`🔎 Payment submitted${o.txnId?` (Ref: ${o.txnId})`:""} — under verification.`}</div>
               )}
               {o.status==="Cancelled"&&(
                 <div style={{marginTop:10}}>
@@ -7080,7 +7084,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.8612ce86";
+const APP_BUILD = "v90.a49bd739";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -9815,38 +9819,44 @@ function Collapsible({title, icon="", subtitle="", open=false, tone="plain", chi
   );
 }
 
-/* ═══════════════════ PAYMENT PANEL (prepayment + proof upload) ═══════════════════ */
-function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, onCheckoutCancelled, compact=false}){
+/* ═══════════════════ PAYMENT PANEL (Cashfree checkout) ═══════════════════ */
+function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, compact=false}){
   const grand = order.amountDue ?? (order.total+order.fee);
-  const [txn,setTxn]=useState(order.txnId||"");
-  const [proof,setProof]=useState(order.paymentProof||"");
-  const [proofNote,setProofNote]=useState("");
-  const [busy,setBusy]=useState(false);
-  const [sentWA,setSentWA]=useState(false);
   const [now,setNow]=useState(Date.now());
-  /* Which checkout this order gets. Asked once, of the server — the store flips to
-     the gateway when the keys are in the environment, without a rebuild. */
+  /* Asked of the server rather than inferred from editable storefront settings. */
   const [gatewayOn,setGatewayOn]=useState(PAY_GATEWAY.ready&&PAY_GATEWAY.mode==="production");
   const [gatewayMode,setGatewayMode]=useState(PAY_GATEWAY.mode||"");
+  const [gatewayChecking,setGatewayChecking]=useState(!PAY_GATEWAY.checked);
   const [payBusy,setPayBusy]=useState(false);
   const [payNote,setPayNote]=useState("");
   useEffect(()=>{
     let live=true;
+    setGatewayChecking(true);
     payGatewayStatus().then(s=>{
       if(!live)return;
       setGatewayMode(s.mode||"");
       // Sandbox is an owner test bench, never a payment option for real customers.
       setGatewayOn(!!s.ready&&(s.mode==="production"||isAdminSignedIn()));
-    });
+    }).finally(()=>{if(live)setGatewayChecking(false);});
     return()=>{live=false;};
   },[]);
+  const retryGateway=async()=>{
+    setGatewayChecking(true); setPayNote("");
+    const s=await payGatewayStatus(true);
+    setGatewayMode(s.mode||"");
+    setGatewayOn(!!s.ready&&(s.mode==="production"||isAdminSignedIn()));
+    setGatewayChecking(false);
+  };
   const payNow=async()=>{
     setPayBusy(true); setPayNote("");
     try{
       const outcome=await payWithGateway(order, settings);
       if(outcome==="test-confirmed") setPayNote("✓ Sandbox test completed — no real money was charged. This is not a fulfilment order.");
       else if(outcome==="redirected") setPayNote("Payment opened in a secure page. Check My Orders after completing it.");
-      else setPayNote("✓ Payment verified and recorded — the store will confirm your order shortly.");
+      else{
+        setPayNote("✓ Payment verified and recorded — the store will confirm your order shortly.");
+        if(onVerified) onVerified(order);
+      }
     }catch(e){
       const m=String(e?.message||"");
       console.error("Gateway payment failed",m);
@@ -9858,8 +9868,8 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, onCheck
       else if(m==="payment-window-closed") setPayNote("⚠ This payment window has expired. Please place the order again.");
       else if(m==="valid-phone-required") setPayNote("⚠ Add a valid 10-digit Indian mobile number to the delivery address.");
       else if(m==="sign-in-required"||m==="order-owner-mismatch") setPayNote("⚠ Your secure sign-in session has expired. Sign out, sign in with Google again, then retry payment.");
-      else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote(""); } // fall back to the manual flow
-      else if(m==="sandbox-admin-only"){ setGatewayOn(false); setPayNote(""); }
+      else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote("⚠ Secure payment is temporarily unavailable. Please retry shortly."); }
+      else if(m==="sandbox-admin-only"){ setGatewayOn(false); setPayNote("⚠ Secure payment is temporarily unavailable."); }
       else if(m==="checkout-script-failed") setPayNote("⚠ Couldn't load the payment window — check your connection and try again.");
       else if(m==="cashfree-checkout-not-approved") setPayNote("⚠ Cashfree checkout approval is not active yet. Nothing has been charged.");
       else if(m==="cashfree-credentials-rejected") setPayNote("⚠ The payment service rejected its production credentials. Nothing has been charged.");
@@ -9869,7 +9879,6 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, onCheck
       else setPayNote("⚠ Payment didn't go through. Nothing has been charged — please try again.");
     }finally{ setPayBusy(false); }
   };
-  const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
   const deadline=order.paymentDeadline||0;
   const msLeft=Math.max(0,deadline-now);
   const expired=deadline&&msLeft<=0;
@@ -9882,22 +9891,6 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, onCheck
     return()=>clearInterval(t);
   },[deadline]);
   useEffect(()=>{ if(expired&&order.status==="Awaiting Payment"&&onCancelled){ onCancelled(order); } },[expired]);
-
-  const handleProof=async(file)=>{
-    if(!file)return;
-    setProofNote("Processing…");
-    const b64=await compressImage(file, 1100, 0.82);
-    setProof(b64);
-    setProofNote("✓ Screenshot attached");
-  };
-  const submit=async()=>{
-    if(!txn.trim()){ setProofNote("⚠ Enter the transaction / UPI reference ID"); return; }
-    if(!proof){ setProofNote("⚠ Attach your payment screenshot"); return; }
-    setBusy(true);
-    try{ await onSubmitPayment(order,{txnId:txn.trim(),paymentProof:proof}); }
-    catch(err){ console.error("payment submit",err); setProofNote("⚠ Couldn't submit — check your connection and try again"); }
-    finally{ setBusy(false); }
-  };
 
   if(expired&&order.status!=="Awaiting Payment"){
     // already handled / cancelled — show nothing special here
@@ -9953,58 +9946,20 @@ function PaymentPanel({order, settings={}, onSubmitPayment, onCancelled, onCheck
             </div>
             {payNote&&<div style={{fontSize:12,fontWeight:700,marginTop:10,textAlign:"center",lineHeight:1.5,color:payNote[0]==="⚠"?C.danger:C.success}}>{payNote}</div>}
           </>
-        ):settings.upiId?(
-          <>
-            <a className="press" href={`upi://pay?pa=${encodeURIComponent(settings.upiId)}&pn=${encodeURIComponent(settings.upiName||STORE_NAME)}&am=${grand}&cu=INR&tn=${encodeURIComponent(order.orderNo||"")}`}
-              style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:C.primary,color:"white",borderRadius:14,padding:"14px",fontSize:14.5,fontWeight:700,textDecoration:"none",marginBottom:10}}>
-              <span style={{fontSize:18}}>📲</span> Pay ₹{grand} via UPI App
-            </a>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.bg,borderRadius:10,padding:"10px 14px",marginBottom:14}}>
-              <div><div style={{fontSize:10,color:C.textSub,fontWeight:700}}>UPI ID</div><div style={{fontSize:13,fontWeight:700,color:C.text}}>{settings.upiId}</div></div>
-              <button className="press" onClick={()=>{navigator.clipboard?.writeText(settings.upiId);}} style={{background:C.accentLight,border:"none",color:C.primary,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Copy</button>
+        ):(
+          <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px",textAlign:"center"}}>
+            <div style={{fontSize:12.5,color:"#9a3412",fontWeight:700,lineHeight:1.5}}>
+              {gatewayChecking?"Checking secure payment…":"⚠ Secure Cashfree payment is temporarily unavailable."}
             </div>
-          </>
-        ):(
-          <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:"#9a3412",lineHeight:1.5}}>⚠ Store UPI not set yet. Please contact us on WhatsApp to pay.</div>
-        )}
-        {!gatewayOn&&settings.razorpayLink&&(
-          <a className="press" href={settings.razorpayLink} target="_blank" rel="noopener"
-            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#072654",color:"white",borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:700,textDecoration:"none",marginBottom:14}}>
-            💳 Pay via Card / Netbanking
-          </a>
-        )}
-
-        {/* After paying — proof. The whole block is the manual flow: it exists to
-            get a human to check a screenshot, and the gateway confirms without one. */}
-        {!gatewayOn&&<>
-        <div style={{height:1,background:C.border,margin:"4px 0 14px"}}/>
-        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>After paying, confirm here 👇</div>
-        <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Enter your payment reference and attach a screenshot. We verify &amp; confirm your order within 1–2 days.</div>
-
-        <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5}}>Transaction / UPI Ref ID</div>
-        <input value={txn} onChange={e=>{setTxn(e.target.value);setProofNote("");}} placeholder="e.g. 4198XXXXXX27"
-          style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",marginBottom:12}}/>
-
-        <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5}}>Payment Screenshot</div>
-        {proof?(
-          <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:`1.5px solid ${C.border}`,marginBottom:6}}>
-            <img src={proof} alt="payment proof" style={{width:"100%",maxHeight:220,objectFit:"contain",background:"#0c2b30",display:"block"}}/>
-            <button className="press" onClick={()=>{setProof("");setProofNote("");}} style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,.6)",color:"white",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700}}>Replace</button>
+            {!gatewayChecking&&(
+              <button className="press" onClick={retryGateway}
+                style={{marginTop:10,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"10px 16px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                Retry secure payment
+              </button>
+            )}
+            {payNote&&<div style={{fontSize:11.5,color:C.danger,fontWeight:700,marginTop:9,lineHeight:1.45}}>{payNote}</div>}
           </div>
-        ):(
-          <label style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,border:`1.5px dashed ${C.border}`,borderRadius:12,padding:"18px",cursor:"pointer",marginBottom:6,background:C.bg}}>
-            <span style={{fontSize:26}}>📤</span>
-            <span style={{fontSize:12.5,fontWeight:700,color:C.primary}}>Tap to upload screenshot</span>
-            <input type="file" accept="image/*" onChange={e=>handleProof(e.target.files?.[0])} style={{display:"none"}}/>
-          </label>
         )}
-        {proofNote&&<div style={{fontSize:11.5,color:proofNote[0]==="⚠"?C.danger:C.success,fontWeight:600,marginBottom:8}}>{proofNote}</div>}
-
-        <button className="press" onClick={submit} disabled={busy||expired}
-          style={{width:"100%",background:(busy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:6}}>
-          {busy?"Submitting…":expired?"Payment window closed":"✓ Submit Payment & Confirm Order"}
-        </button>
-        </>}
       </div>
     </div>
   );
@@ -10096,7 +10051,7 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
   );
 }
 
-function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCancelled,onCancelPayment,updateQty,user,settings={},orders=[],products=[],mediaCache={},savedAddresses=[],onSaveAddress,onDeleteAddress}){
+function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelPayment,updateQty,user,settings={},orders=[],products=[],mediaCache={},savedAddresses=[],onSaveAddress,onDeleteAddress}){
   const [step,setStep]=useState(1);
   useEffect(()=>{ trackFunnel("checkout"); },[]); // funnel: reached checkout
   const [exitAsk,setExitAsk]=useState(false);
@@ -10131,9 +10086,6 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
     setAddrEditId(a.id);
   },[savedAddresses]);
   useEffect(()=>{ saveAddrDraft(addrUk,addr); },[addr,addrUk]);
-  const ownerWA=(settings.ownerWhatsapp||BUSINESS_WA).replace(/\D/g,"");
-  const supWA=(settings.supporterWhatsapp||"").replace(/\D/g,"");
-  const onlineAvail=!!(settings.upiId||settings.razorpayLink);
   const hasLiveFish=cart.some(i=>i.category==="Live Fish");
   const [errs,setErrs]=useState({});
   /* Scroll the first unfilled mandatory field into view when Continue is pressed. The form is
@@ -10159,7 +10111,6 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
   // once an order has been placed (placing empties the cart, and the payment screen is step 3;
   // bouncing here was creating duplicate orders + double-decrementing stock → false "sold out").
   useEffect(()=>{ if(step>=2&&cart.length===0&&!placed) setStep(1); },[cart.length,step,placed]);
-  const [sentWA,setSentWA]=useState(false);
   // Auto-fill the delivery State (and GST state code) from the pincode — the
   // place of supply that decides CGST+SGST (inside TN) vs IGST on the invoice.
   // A recognised pincode is authoritative; unknown pincodes keep any manual pick.
@@ -10370,11 +10321,6 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
     setRefMsg({text:`✓ Referral applied — ₹${Number(settings.referralDiscount??50)} off!`,ok:true});
   };
 
-  const submitPaymentHere=async(order,pay)=>{
-    await onSubmitPayment(order,pay);
-    setSubmitted(true);
-  };
-
   const validate=()=>{
     const e={};
     if(!addr.name.trim())e.name="Required";
@@ -10516,9 +10462,9 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
       {submitted?(
         <>
           <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Submitted! 🎉</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Verified! 🎉</div>
           {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
-          <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,marginBottom:20,maxWidth:320}}>Thank you! We'll <b style={{color:C.text}}>verify your payment</b> and confirm your order within <b style={{color:C.text}}>1–2 days</b>. You can track status anytime under <b style={{color:C.text}}>Orders</b>.</div>
+          <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,marginBottom:20,maxWidth:320}}>Thank you! Cashfree has <b style={{color:C.text}}>verified your payment</b>. The store will review and confirm your order shortly. You can track it anytime under <b style={{color:C.text}}>Orders</b>.</div>
           {/* Care-guide reminder — tailored to what was purchased */}
           {placed&&(()=>{
             const cats=new Set((placed.items||[]).map(i=>i.category));
@@ -10579,8 +10525,8 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
       ):(
         <>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:4}}>Almost there — complete payment</div>
-          <div style={{fontSize:12.5,color:C.textSub,marginBottom:18,maxWidth:330,lineHeight:1.5}}>Your order is reserved. Pay the full amount now &amp; submit proof to confirm it.</div>
-          {placed&&<PaymentPanel order={placed} settings={settings} onSubmitPayment={submitPaymentHere} onCancelled={(o)=>{onCancelled&&onCancelled(o);}} onCheckoutCancelled={onCancelPayment}/>}
+          <div style={{fontSize:12.5,color:C.textSub,marginBottom:18,maxWidth:330,lineHeight:1.5}}>Your order is reserved. Complete the secure Cashfree payment to confirm it.</div>
+          {placed&&<PaymentPanel order={placed} onVerified={()=>setSubmitted(true)} onCancelled={(o)=>{onCancelled&&onCancelled(o);}} onCheckoutCancelled={onCancelPayment}/>} 
           <button className="press" onClick={()=>nav("orders")}
             style={{marginTop:16,background:"none",border:"none",color:C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
             I'll pay later — go to Orders
@@ -11061,7 +11007,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onSubmitPayment,onCan
               <span style={{fontSize:18}}>💳</span>
               <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#1e40af"}}>Prepaid order — pay ₹{grand} to confirm</span>
             </div>
-            <div style={{fontSize:12,color:"#1e3a8a",lineHeight:1.55}}>On the next screen, pay the <b>full amount</b> by UPI and upload your payment screenshot. We verify &amp; confirm within 1–2 days. Orders unpaid within {PAY_WINDOW_MIN} minutes are auto-cancelled.</div>
+            <div style={{fontSize:12,color:"#1e3a8a",lineHeight:1.55}}>On the next screen, pay the <b>full amount</b> securely through Cashfree. Your payment is verified and recorded automatically. Orders unpaid within {PAY_WINDOW_MIN} minutes are auto-cancelled.</div>
           </div>
 
           {/* Courier-collection notice — the single biggest cause of a bad delivery is a parcel
@@ -12974,7 +12920,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 
         {/* Payment — prepayment verification */}
         <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${C.border}`}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>💳 Payment Verification</div>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>💳 {o.gateway==="cashfree"?"Cashfree Payment":"Payment Verification"}</div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:C.text}}>Amount: ₹{o.amountDue??(o.total+o.fee)}</div>
@@ -12983,12 +12929,10 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             <StatusBadge status={o.status}/>
           </div>
           {o.txnId&&<div style={{background:C.bg,borderRadius:10,padding:"9px 12px",marginBottom:10,fontSize:12.5}}><span style={{color:C.textSub}}>Txn / Ref ID: </span><b style={{color:C.text}}>{o.txnId}</b></div>}
-          {o.paymentProof?(
+          {o.paymentProof&&(
             <button className="press" onClick={()=>setProofZoom(true)} style={{display:"block",width:"100%",padding:0,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:"#0c2b30",marginBottom:10,cursor:"zoom-in"}}>
               <img src={o.paymentProof} alt="payment proof" style={{width:"100%",maxHeight:260,objectFit:"contain",display:"block"}}/>
             </button>
-          ):(
-            <div style={{fontSize:12,color:C.textSub,marginBottom:10,fontStyle:"italic"}}>No payment screenshot uploaded yet.</div>
           )}
           {(o.status==="Payment Review"||o.status==="Awaiting Payment")&&(
             rejectConfirm?(
@@ -13787,18 +13731,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           </div>
           {/* DOA insights — loss patterns by species × zone × season */}
           <DoaInsights orders={orders}/>
-          {/* Payment destination — glance-check that money still routes to you */}
-          <div style={{background:(settings.upiId||settings.razorpayLink)?"#ecfdf5":"#fff7ed",border:`1px solid ${(settings.upiId||settings.razorpayLink)?"#a7f3d0":"#fed7aa"}`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
-            <div style={{fontSize:11,fontWeight:800,color:(settings.upiId||settings.razorpayLink)?"#15803d":"#9a3412",letterSpacing:.4,marginBottom:5}}>💰 PAYMENTS GO TO</div>
-            {(settings.upiId||settings.razorpayLink)?(
-              <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                {settings.upiId&&<div style={{fontSize:13,fontWeight:700,color:"#166534"}}>UPI: <span style={{fontFamily:"monospace"}}>{settings.upiId}</span>{settings.upiName?` · ${settings.upiName}`:""}</div>}
-                {settings.razorpayLink&&<div style={{fontSize:11.5,color:"#166534",wordBreak:"break-all"}}>Gateway: {settings.razorpayLink}</div>}
-                <div style={{fontSize:10.5,color:"#15803d",marginTop:3,lineHeight:1.5}}>Changing these now requires an emailed code. If this ever looks wrong, fix it in Settings → Online Payment immediately.</div>
-              </div>
-            ):(
-              <div style={{fontSize:12.5,color:"#9a3412",fontWeight:600}}>⚠ No payment method set — add your UPI ID or gateway link in Settings so customers can pay.</div>
-            )}
+          {/* Payment destination — Cashfree credentials live only on the Worker. */}
+          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:800,color:"#15803d",letterSpacing:.4,marginBottom:5}}>💰 ONLINE PAYMENTS</div>
+            <div style={{fontSize:13,fontWeight:700,color:"#166534"}}>Cashfree integrated checkout</div>
+            <div style={{fontSize:10.5,color:"#15803d",marginTop:3,lineHeight:1.5}}>Production credentials and automatic verification are managed securely by the Cloudflare Worker.</div>
+            {settings.upiId&&<div style={{fontSize:10.5,color:"#15803d",marginTop:5}}>Invoice UPI reference: <span style={{fontFamily:"monospace"}}>{settings.upiId}</span></div>}
           </div>
 
           {/* Monthly report reminder */}
@@ -14668,8 +14606,7 @@ function SettingsPanel({settings,onSave,products=[]}){
   const sensitiveChanged=(nf)=>(
     String(nf.ownerWhatsapp||"")!==String(settings.ownerWhatsapp||"") ||
     String(nf.orderEmail||"")!==String(settings.orderEmail||"") ||
-    String(nf.upiId||"")!==String(settings.upiId||"") ||
-    String(nf.razorpayLink||"")!==String(settings.razorpayLink||"")
+    String(nf.upiId||"")!==String(settings.upiId||"")
   );
   const adminEmail=()=>((settings.orderEmail||"").trim() || BUSINESS_EMAIL || (FB_OK&&FB_AUTH?.currentUser?.email)||"");
   const startSave=async(nf)=>{
@@ -15051,10 +14988,9 @@ function SettingsPanel({settings,onSave,products=[]}){
       {/* Payment */}
       <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:6}}>💳 Online Payment</div>
-        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}>Two ways to collect payment — use either or both:<br/><b>1. UPI ID</b> — the current manual payment route.<br/><b>2. Cashfree checkout</b> — enabled securely from the server after credentials are configured. The link below is only a fallback. To stop manual UPI after production activation, clear the UPI ID field and Save.</div>
-        {field("UPI ID","upiId","yourname@oksbi","Direct UPI collection. Clear this field + Save to remove it once your gateway is live.")}
+        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}><b>Customer payments use the integrated Cashfree checkout.</b> Its production credentials are stored securely on Cloudflare and are never entered here. The optional UPI details below are printed on invoices only.</div>
+        {field("UPI ID (invoice only)","upiId","yourname@oksbi","Optional business UPI reference printed on invoices; it is not a checkout fallback.")}
         {field("UPI Display Name","upiName","Nemo Aqua Store")}
-        {field("Fallback Payment Link","razorpayLink","https://payments.cashfree.com/...","Optional Cashfree Payment Link used only when the integrated checkout is unavailable. Sandbox/live API credentials stay securely in Vercel, never in this field.")}
         {/* Printed in the "Bank & Payment Details" box on every invoice — a business buyer's
             accountant needs an account to pay into and something to reconcile against. All
             optional: any field left blank simply doesn't print. */}
@@ -17689,19 +17625,6 @@ function NemoStore(){
     showToast("Return shipment details saved — thank you");
   };
 
-  // Customer submits payment proof → order moves to "Payment Review"
-  const submitPayment=async(order,pay)=>{
-    const updated={...order,...pay,status:"Payment Review",paymentStatus:"Submitted",paidAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
-    setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
-    await saveOneOrder(updated);
-    trackFunnel("paid");
-    /* Both mails go out here, once, now that payment has actually been submitted: the owner's
-       copy to look at, and the customer's receipt for the order they just paid for. */
-    sendOrderEmail(updated, settings.orderEmail||BUSINESS_EMAIL, settings);
-    sendCustomerEmail(updated, settings, "placed");
-    return updated;
-  };
-
   // Restock items from a cancelled order
   const restock=(o)=>{
     const back={}, backVar={};
@@ -18113,10 +18036,10 @@ function NemoStore(){
         {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} goBack={goBack} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={products} mediaCache={mediaCache} orders={orders}/>}
         {page==="checkout" &&(user
-          ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} goBack={goBack} onOrderPlaced={placeOrder} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} updateQty={updateQty} user={user} settings={settings} orders={orders} products={products} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>
+          ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} goBack={goBack} onOrderPlaced={placeOrder} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} updateQty={updateQty} user={user} settings={settings} orders={orders} products={products} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={goBack}/>)}
         {page==="orders"   &&(user
-          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} reviewedSet={reviewedSet} onSubmitPayment={submitPayment} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
+          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} reviewedSet={reviewedSet} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
           : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={goBack}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={goBack}/>}
         {page==="request"  &&<RequestPage nav={nav} goBack={goBack} user={user} onSubmit={submitRequest}/>}
