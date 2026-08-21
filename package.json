@@ -9,6 +9,7 @@
     "cf:check": "npm run build && wrangler deploy --dry-run"
   },
   "devDependencies": {
+    "esbuild": "^0.25.0",
     "wrangler": "^4.124.0"
   }
 }
