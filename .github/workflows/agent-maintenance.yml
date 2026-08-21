@@ -16,54 +16,47 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect targeted implementation areas
+      - name: Inspect release targets
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
 
-          targets = {
-              "app.jsx": [
-                  "function AdminLogin", "stageFilter", "orderStages", "showOnWelcome",
-                  "welcomeOffers", "migrateCoupons", "WhyNemoPopup", "coAdminUid",
-                  "adminPassHash", "saveSettingsHandler", "AdminHub", "adminGoogleSignIn",
-                  "SPLASH_MIN_MS", "SPLASH_MAX_MS", "walletReady", "settingsReady",
-                  "renderOffers", "festivalBanner", "promoDateKey"
-              ],
-              "database.rules.json": [
-                  "settingsPrivate", "orders", "products", "loyalty", "reviews",
-                  "experienceReviews", "requests", "guides", "settings", "admin"
-              ],
-              "index.html": ["SPLASH_MIN_MS", "SPLASH_MAX_MS", "fadeSplash", "app.js"]
-          }
-
-          def redact(line):
-              line = re.sub(r'([A-Za-z0-9_]*(?:Pass|pass|Hash|hash|Secret|secret)[A-Za-z0-9_]*\s*[:=]\s*)["\'][^"\']+["\']', r'\1"<redacted>"', line)
-              line = re.sub(r'(["\'](?:adminPassHash|password|secret)["\']\s*:\s*)["\'][^"\']+["\']', r'\1"<redacted>"', line)
-              return line
-
-          for filename, terms in targets.items():
-              p = Path(filename)
-              if not p.exists():
-                  continue
-              lines = p.read_text(errors="replace").splitlines()
-              print(f"\n===== {filename} =====")
-              seen = set()
-              for term in terms:
-                  hits = [i for i, line in enumerate(lines) if term.lower() in line.lower()]
-                  if not hits:
-                      continue
-                  print(f"\n--- TERM: {term} ({len(hits)} hits) ---")
-                  for i in hits[:20]:
-                      lo, hi = max(0, i-14), min(len(lines), i+20)
-                      key=(lo,hi)
-                      if key in seen:
-                          continue
-                      seen.add(key)
-                      for n in range(lo, hi):
-                          print(f"{n+1:06d}: {redact(lines[n])}")
-                      print("...")
+          terms = [
+            'function AdminLogin','function AdminGate','function AdminHub','stageFilter','orderStages',
+            'WhyNemoPopup','showOnWelcome','welcomeOffers','coAdminUid','adminPassHash','saveSettingsHandler',
+            'adminGoogleSignIn','SPLASH_MIN_MS','SPLASH_MAX_MS','walletReady','settingsReady','festivalBanner'
+          ]
+          lines = Path('app.jsx').read_text(errors='replace').splitlines()
+          def safe(s):
+            s = re.sub(r'([A-Za-z0-9_]*(?:Pass|pass|Hash|hash|Secret|secret)[A-Za-z0-9_]*\s*[:=]\s*)["\'][^"\']+["\']', r'\1"<redacted>"', s)
+            return s
+          for term in terms:
+            hits = [i for i,l in enumerate(lines) if term.lower() in l.lower()]
+            print(f'\n## {term}: {[i+1 for i in hits[:12]]}')
+            for i in hits[:4]:
+              for n in range(max(0,i-5), min(len(lines),i+8)):
+                print(f'{n+1:05d}: {safe(lines[n])}')
+              print('---')
+          print('\n## RULES')
+          rlines = Path('database.rules.json').read_text(errors='replace').splitlines()
+          for term in ['settingsPrivate','orders','products','loyalty','reviews','experienceReviews','requests','guides','settings','admin']:
+            hits=[i for i,l in enumerate(rlines) if f'"{term}"' in l]
+            print(term, [i+1 for i in hits[:10]])
+            for i in hits[:2]:
+              for n in range(max(0,i-3), min(len(rlines),i+9)):
+                print(f'{n+1:04d}: {rlines[n]}')
+              print('---')
+          print('\n## INDEX')
+          ilines = Path('index.html').read_text(errors='replace').splitlines()
+          for term in ['SPLASH_MIN_MS','SPLASH_MAX_MS','fadeSplash','app.js']:
+            hits=[i for i,l in enumerate(ilines) if term.lower() in l.lower()]
+            print(term, [i+1 for i in hits[:10]])
+            for i in hits[:2]:
+              for n in range(max(0,i-4), min(len(ilines),i+8)):
+                print(f'{n+1:04d}: {ilines[n]}')
+              print('---')
           PY
       - name: Baseline tests
         run: node --test test/*.test.mjs
