@@ -16,38 +16,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect admin release anchors
+      - name: Inspect auth and routing anchors
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
           lines=Path('app.jsx').read_text(errors='replace').splitlines()
-          terms=['adminPassHash','hashPassword','sha256','pwMsg','setPw','const tabs','tabs=[','tabItems','wallets','tab==="dashboard"','tab==="orders"','tab==="products"','tab==="reviews"','tab==="requests"','tab==="guides"','tab==="settings"','function OfferBanners']
+          terms=['isAdminUid','isAdminSignedIn','ADMIN_UID','RUNTIME_CO_ADMIN','<AdminLogin','AdminLogin ','<AdminHub','AdminHub ','function SettingsPanel','<SettingsPanel','walletReady','setWalletReady']
           def safe(s):
             s=re.sub(r'([A-Za-z0-9_]*(?:Pass|pass|Hash|hash|Secret|secret)[A-Za-z0-9_]*\s*[:=]\s*)["\'][^"\']+["\']',r'\1"<redacted>"',s)
             return s
-          printed=set()
           for term in terms:
             hits=[i for i,l in enumerate(lines) if term.lower() in l.lower()]
-            print(f'\n## {term}: {[i+1 for i in hits[:20]]}')
-            for i in hits[:8]:
-              lo=max(0,i-4); hi=min(len(lines),i+7)
-              if (lo,hi) in printed: continue
-              printed.add((lo,hi))
-              for n in range(lo,hi): print(f'{n+1:05d}: {safe(lines[n])}')
-              print('---')
-          # Finish the promotion component and inspect splash controls.
-          for name,a,b in [('offer-end',5301,5395),('admin-tabs',13520,13690)]:
-            print(f'\n===== {name} =====')
-            for n in range(a-1,min(len(lines),b)): print(f'{n+1:05d}: {safe(lines[n])}')
-          idx=Path('index.html').read_text(errors='replace').splitlines()
-          print('\n===== splash =====')
-          for term in ['SPLASH_MIN_MS','SPLASH_MAX_MS','__nemoBootReady','nemoRevealStore','revealStore']:
-            hits=[i for i,l in enumerate(idx) if term.lower() in l.lower()]
-            print(term,[i+1 for i in hits[:20]])
-            for i in hits[:10]:
-              for n in range(max(0,i-4),min(len(idx),i+8)): print(f'{n+1:04d}: {idx[n]}')
+            print(f'\n## {term}: {[i+1 for i in hits[:30]]}')
+            for i in hits[:12]:
+              for n in range(max(0,i-5),min(len(lines),i+9)): print(f'{n+1:05d}: {safe(lines[n])}')
               print('---')
           PY
       - name: Baseline tests
