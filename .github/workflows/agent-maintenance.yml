@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - agent/finalize-admin-release
+    paths-ignore:
+      - .agent-release-status.txt
 
 permissions:
   contents: write
@@ -20,9 +22,16 @@ jobs:
         with:
           ref: agent/finalize-admin-release
           fetch-depth: 0
-      - name: Correct release patch anchors
+
+      - name: Apply, verify and build release
+        id: release
         shell: bash
         run: |
+          set +e
+          : > .agent-release-status.txt
+          echo "Admin release verification" >> .agent-release-status.txt
+          echo "commit=$(git rev-parse HEAD)" >> .agent-release-status.txt
+
           python3 - <<'PY'
           from pathlib import Path
           p=Path('scripts/apply-admin-release.py')
@@ -41,26 +50,74 @@ jobs:
           )
           p.write_text(s)
           PY
-      - name: Apply requested release changes
-        run: python3 scripts/apply-admin-release.py
-      - name: Run complete test suite
-        run: node --test test/*.test.mjs
-      - name: Install build dependency
-        run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
-      - name: Rebuild Cloudflare storefront
-        run: npm run build
-      - name: Restore one-time patcher source
-        run: git checkout -- scripts/apply-admin-release.py
-      - name: Commit verified release
+
+          python3 scripts/apply-admin-release.py > /tmp/patch.log 2>&1
+          PATCH=$?
+          echo "patch_exit=$PATCH" >> .agent-release-status.txt
+          cat /tmp/patch.log >> .agent-release-status.txt
+
+          if [ "$PATCH" -eq 0 ]; then
+            node --test test/*.test.mjs > /tmp/tests.log 2>&1
+            TESTS=$?
+          else
+            TESTS=99
+          fi
+          echo "tests_exit=$TESTS" >> .agent-release-status.txt
+          if [ -f /tmp/tests.log ]; then tail -n 120 /tmp/tests.log >> .agent-release-status.txt; fi
+
+          if [ "$PATCH" -eq 0 ] && [ "$TESTS" -eq 0 ]; then
+            npm ci > /tmp/npm.log 2>&1
+            NPM=$?
+          else
+            NPM=99
+          fi
+          echo "npm_exit=$NPM" >> .agent-release-status.txt
+          if [ "$NPM" -ne 0 ] && [ -f /tmp/npm.log ]; then tail -n 80 /tmp/npm.log >> .agent-release-status.txt; fi
+
+          if [ "$NPM" -eq 0 ]; then
+            node scripts/build.mjs > /tmp/compile.log 2>&1
+            COMPILE=$?
+          else
+            COMPILE=99
+          fi
+          echo "compile_exit=$COMPILE" >> .agent-release-status.txt
+          if [ -f /tmp/compile.log ]; then cat /tmp/compile.log >> .agent-release-status.txt; fi
+
+          if [ "$COMPILE" -eq 0 ]; then
+            npm run build > /tmp/cf.log 2>&1
+            CF=$?
+          else
+            CF=99
+          fi
+          echo "cloudflare_build_exit=$CF" >> .agent-release-status.txt
+          if [ -f /tmp/cf.log ]; then cat /tmp/cf.log >> .agent-release-status.txt; fi
+
+          if [ "$PATCH" -eq 0 ] && [ "$TESTS" -eq 0 ] && [ "$NPM" -eq 0 ] && [ "$COMPILE" -eq 0 ] && [ "$CF" -eq 0 ]; then
+            echo "RESULT=PASS" >> .agent-release-status.txt
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "RESULT=FAIL" >> .agent-release-status.txt
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+          git checkout -- scripts/apply-admin-release.py
+          exit 0
+
+      - name: Commit verified product release
+        if: steps.release.outputs.ok == 'true'
         shell: bash
         run: |
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- app.jsx database.rules.json index.html test/ux-lifecycle.test.mjs test/admin-access-release.test.mjs
-          if git diff --cached --quiet; then
-            echo "No release changes to commit"
-          else
-            git commit -m "Complete admin permissions release [skip ci]"
-            git push origin HEAD:agent/finalize-admin-release
-          fi
+          git add -- app.jsx app.js database.rules.json index.html version.json sw.js test/ux-lifecycle.test.mjs test/admin-access-release.test.mjs
+          git commit -m "Complete admin permissions release [skip ci]"
+          git push origin HEAD:agent/finalize-admin-release
+
+      - name: Commit verification report on failure
+        if: steps.release.outputs.ok != 'true'
+        shell: bash
+        run: |
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- .agent-release-status.txt
+          git commit -m "Record admin release verification failure [skip ci]" || true
+          git push origin HEAD:agent/finalize-admin-release
