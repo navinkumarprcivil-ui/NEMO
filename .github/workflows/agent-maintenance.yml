@@ -89,7 +89,7 @@ jobs:
           if [ -f /tmp/tests.log ]; then grep '^not ok' /tmp/tests.log >> .agent-release-status.txt || true; fi
 
           if [ "$PATCH" -eq 0 ] && [ "$TESTS" -eq 0 ]; then
-            npm ci > /tmp/npm.log 2>&1
+            if [ -f package-lock.json ]; then npm ci > /tmp/npm.log 2>&1; else npm install > /tmp/npm.log 2>&1; fi
             NPM=$?
           else
             NPM=99
