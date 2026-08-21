@@ -29,6 +29,18 @@ const safePhone = value => {
   return digits.slice(-10);
 };
 
+const publicCashfreeError = error => {
+  const status = Number(error?.status || 0);
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+  if (status === 401 || status === 403 || /authentication|client[_ -]?id|secret/.test(`${code} ${message}`)) {
+    return 'cashfree-credentials-rejected';
+  }
+  if (/whitelist|domain|package/.test(`${code} ${message}`)) return 'cashfree-checkout-not-approved';
+  if (status === 429) return 'gateway-busy';
+  return 'payment-session-failed';
+};
+
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     res.status(200).json({
@@ -134,7 +146,14 @@ export default async function handler(req, res) {
       orderNo: order.orderNo || orderId,
     });
   } catch (error) {
-    console.error('pay-create', error?.message || error);
-    res.status(500).json({ error: 'payment-session-failed' });
+    const publicError = publicCashfreeError(error);
+    console.error(JSON.stringify({
+      event: 'pay_create_failed',
+      status: Number(error?.status || 0),
+      code: String(error?.code || '').slice(0, 80),
+      message: String(error?.message || error).slice(0, 240),
+      publicError,
+    }));
+    res.status(502).json({ error: publicError });
   }
 }
