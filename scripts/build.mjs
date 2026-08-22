@@ -56,3 +56,7 @@ const swNext = sw.replace(/const CACHE = '[^']*';/, `const CACHE = 'nemo-${build
 if (swNext === sw && !sw.includes(`'nemo-${build}'`)) throw new Error("could not rewrite CACHE in sw.js");
 if (swNext !== sw) writeFileSync(swPath, swNext);
 console.log(`build ${build} — version.json + sw.js CACHE in sync`);
+
+// Cloudflare ships this composed source only as the browser fallback when app.js is unavailable.
+// Keeping it exported avoids ever rewriting the repository's app.jsx during a build.
+export { src as builtSource, build };
