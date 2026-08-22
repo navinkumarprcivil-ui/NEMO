@@ -1,0 +1,16 @@
+{
+  "name": "nemo-aqua-store-android-twa",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "doctor": "bubblewrap doctor",
+    "validate": "bubblewrap validate --url=https://www.nemoaquastore.in/",
+    "set-version": "node scripts/set-version.mjs",
+    "sync": "node scripts/sync.mjs",
+    "build": "node scripts/build-release.mjs"
+  },
+  "devDependencies": {
+    "@bubblewrap/cli": "1.25.0"
+  }
+}
