@@ -1,0 +1,52 @@
+{
+  "packageId": "in.nemoaquastore.app",
+  "host": "www.nemoaquastore.in",
+  "name": "Nemo Aqua Store",
+  "launcherName": "NEMO",
+  "display": "standalone",
+  "themeColor": "#FFFFFF",
+  "themeColorDark": "#000000",
+  "navigationColor": "#FFFFFF",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#E5E7EB",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#0369A1",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://www.nemoaquastore.in/assets/favicon-512.png?v=3",
+  "maskableIconUrl": "https://www.nemoaquastore.in/assets/favicon-512-maskable.png?v=3",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./secrets/upload-key.jks",
+    "alias": "upload"
+  },
+  "appVersionCode": 1,
+  "appVersion": "1.0.0-backup",
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://www.nemoaquastore.in/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://www.nemoaquastore.in/",
+  "minSdkVersion": 19,
+  "orientation": "portrait",
+  "fingerprints": [
+    {
+      "name": "trusted-certificate-1",
+      "value": "2B:EA:58:3B:A5:81:43:E7:A1:0E:26:0E:7F:F2:3D:17:AB:65:55:C2:55:96:BE:AE:AB:0D:EF:02:F0:97:0C:54"
+    },
+    {
+      "name": "trusted-certificate-2",
+      "value": "E9:85:54:02:07:6A:BF:58:88:E7:03:9A:F3:9C:18:3F:E1:62:D7:6C:30:DE:1C:01:A9:20:93:8B:F2:C3:81:D4"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "launchHandlerClientMode": "navigate-existing"
+}
