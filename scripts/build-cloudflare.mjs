@@ -1,4 +1,4 @@
-import './build.mjs';
+import { builtSource } from './build.mjs';
 import { cp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
@@ -36,7 +36,12 @@ for (const entry of entries) {
   const isPublicHtml = ext === '.html' && !entry.name.endsWith('.dc.html') && !entry.name.startsWith('_preview-');
   const isPublicRootImage = rootImageExts.has(ext);
   if (exactFiles.has(entry.name) || isPublicHtml || isPublicRootImage) {
-    await cp(source, target);
+    if (entry.name === 'app.jsx') {
+      // The repository keeps the legacy monolith untouched; the public fallback must match app.js.
+      await writeFile(target, builtSource, 'utf8');
+    } else {
+      await cp(source, target);
+    }
   }
 }
 
