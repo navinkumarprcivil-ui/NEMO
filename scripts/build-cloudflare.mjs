@@ -1,3 +1,4 @@
+import './build.mjs';
 import { cp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 

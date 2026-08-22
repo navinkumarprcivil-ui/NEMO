@@ -16,6 +16,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { transformSync } from "esbuild";
+import { ensureAdminLoginSource } from "./admin-login-fix.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -31,6 +32,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
  * to app.jsx or index.html produces a new one, and it is written back into app.jsx so the
  * source, the bundle, version.json and the worker can never disagree. */
 let src = readFileSync(join(root, "app.jsx"), "utf8");
+const adminFixed = ensureAdminLoginSource(src);
+if(adminFixed !== src){
+  src = adminFixed;
+  writeFileSync(join(root, "app.jsx"), src);
+  console.log("AdminLogin normalized — password field is always rendered");
+}
 const shell = readFileSync(join(root, "index.html"), "utf8");
 const BUILD_RE = /const APP_BUILD\s*=\s*"([^"]+)"/;
 const prevBuild = (src.match(BUILD_RE) || [])[1];
