@@ -74,7 +74,10 @@ export function composeReviewDeleteConfirmationSource(source){
   source=replaceRequiredOnce(source,reviewHandlerTail,reviewHandlerNext,"customer review delete handler");
 
   const stars='<ReviewStars value={r.rating} size={13}/>';
-  const starsWithDelete='<div style={{display:"flex",alignItems:"center",gap:8}}>\n                      <ReviewStars value={r.rating} size={13}/>\n                      {user&&r.uid===userKey(user)&&(<button className="press" onClick={()=>handleDeleteOwnReview(r)} aria-label="Delete your review" style={{background:"#fee2e2",border:"none",borderRadius:8,padding:"4px 9px",fontSize:10.5,fontWeight:700,color:C.danger,fontFamily:"\'Plus Jakarta Sans\',sans-serif",cursor:"pointer"}}>Delete</button>)}\n                    </div>';
+  const starsWithDelete=`<div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <ReviewStars value={r.rating} size={13}/>
+                      {user&&r.uid===userKey(user)&&(<button className="press" onClick={()=>handleDeleteOwnReview(r)} aria-label="Delete your review" style={{background:"#fee2e2",border:"none",borderRadius:8,padding:"4px 9px",fontSize:10.5,fontWeight:700,color:C.danger,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Delete</button>)}
+                    </div>`;
   const detailStart=source.indexOf(detailSigNext);
   const detailEnd=source.indexOf("function CartPage(",detailStart);
   if(detailStart<0||detailEnd<0) throw new Error("DetailPage review block boundary not found");
