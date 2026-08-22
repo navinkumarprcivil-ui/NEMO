@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Local signing material — NEVER commit
+secrets/
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+*.properties
+.env
+.env.*
+
+# Play / service-account credentials — NEVER commit
+*service-account*.json
+play-service-account*.json
+
+# Generated Android/Bubblewrap project files
+app/
+gradle/
+gradlew
+gradlew.bat
+build.gradle
+settings.gradle
+gradle.properties
+manifest-checksum.txt
+local.properties
+.gradle/
+build/
+decompressed/
+
+# Build outputs
+*.aab
+*.apk
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
