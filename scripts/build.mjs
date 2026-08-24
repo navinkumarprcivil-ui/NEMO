@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { transformSync } from "esbuild";
 import { composeAdminLoginSource, composeOfferBannersPortalSource, composeReviewDeleteConfirmationSource } from "./compose-source.mjs";
+import { composeMobileUxSource } from "./compose-mobile-ux.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -20,6 +21,7 @@ const adminLoginSource = readFileSync(join(root, "src", "AdminLogin.jsx"), "utf8
 let src = composeAdminLoginSource(appSource, adminLoginSource);
 src = composeOfferBannersPortalSource(src);
 src = composeReviewDeleteConfirmationSource(src);
+src = composeMobileUxSource(src);
 const shell = readFileSync(join(root, "index.html"), "utf8");
 const BUILD_RE = /const APP_BUILD\s*=\s*"([^"]+)"/;
 const prevBuild = (src.match(BUILD_RE) || [])[1];
