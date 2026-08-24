@@ -1,5 +1,5 @@
 import { builtSource } from './build.mjs';
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
 const ROOT = process.cwd();
@@ -9,7 +9,6 @@ const exactFiles = new Set([
   'index.html',
   'app.js',
   'app.jsx',
-  'mobile-ux.js',
   'sw.js',
   'manifest.webmanifest',
   'robots.txt',
@@ -40,16 +39,6 @@ for (const entry of entries) {
     if (entry.name === 'app.jsx') {
       // The repository keeps the legacy monolith untouched; the public fallback must match app.js.
       await writeFile(target, builtSource, 'utf8');
-    } else if (entry.name === 'index.html') {
-      // Keep the source index untouched. Production gets the native-feeling mobile UX
-      // as a tiny early script so its capture-phase Back handler is registered before React.
-      const html = await readFile(source, 'utf8');
-      const marker = '<!-- Warm up connections to the CDNs the app pulls from — shaves latency off the very first load -->';
-      const nativeUx = '<!-- Native mobile UX: final-Home exit confirmation + no accidental text selection -->\n<script src="mobile-ux.js?v=1"></script>\n';
-      if (!html.includes(marker)) {
-        throw new Error('Cloudflare build could not find the index injection marker for mobile-ux.js');
-      }
-      await writeFile(target, html.replace(marker, nativeUx + marker), 'utf8');
     } else {
       await cp(source, target);
     }
@@ -70,7 +59,7 @@ const headers = `/*
 `;
 await writeFile(join(OUT, '_headers'), headers, 'utf8');
 
-for (const required of ['index.html', 'app.js', 'mobile-ux.js', 'sw.js', 'manifest.webmanifest']) {
+for (const required of ['index.html', 'app.js', 'sw.js', 'manifest.webmanifest']) {
   try {
     const info = await stat(join(OUT, required));
     if (!info.isFile()) throw new Error();
