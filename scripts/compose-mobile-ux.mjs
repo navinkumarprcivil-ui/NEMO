@@ -51,13 +51,12 @@ function AppExitConfirm({onStay,onExit}){
   source=replaceRequiredOnce(source,oldBackComment,newBackComment,"phone Back comment");
 
   const oldExitRef='  const exitArmRef = useRef(0);\n';
-  const exitState='  const [appExitAsk,setAppExitAsk]=useState(false);\n  const appExitAskRef=useRef(false);\n  const exitApprovedRef=useRef(false);\n';
+  const exitState='  const [appExitAsk,setAppExitAsk]=useState(false);\n  const appExitAskRef=useRef(false);\n';
   source=replaceRequiredOnce(source,oldExitRef,exitState,"app exit state");
 
-  // One approved exit needs two history traversals: sentinel → page-load entry → outside app.
   // Back while the confirmation is open means Cancel, so the consumed sentinel is re-armed.
   const popStart='    const onPop=()=>{\n      if(pageRef.current==="admin"){';
-  const popStartNext='    const onPop=()=>{\n      if(exitApprovedRef.current){\n        exitApprovedRef.current=false;\n        window.removeEventListener("popstate",onPop);\n        setTimeout(()=>{ try{ history.back(); }catch(e){} },0);\n        return;\n      }\n      if(appExitAskRef.current){\n        try{ history.pushState({nemo:1},""); }catch(e){}\n        appExitAskRef.current=false;\n        setAppExitAsk(false);\n        return;\n      }\n      if(pageRef.current==="admin"){';
+  const popStartNext='    const onPop=()=>{\n      if(appExitAskRef.current){\n        try{ history.pushState({nemo:1},""); }catch(e){}\n        appExitAskRef.current=false;\n        setAppExitAsk(false);\n        return;\n      }\n      if(pageRef.current==="admin"){';
   source=replaceRequiredOnce(source,popStart,popStartNext,"hardware Back handler start");
 
   // Replace only the final Home branch, leaving inner-page, Admin, and scroll-to-top behavior intact.
@@ -80,7 +79,7 @@ function AppExitConfirm({onStay,onExit}){
 
   const adminExitRender='      {adminExitAsk&&<AdminExitConfirm onStay={()=>setAdminExitAsk(false)} onLeave={()=>{setAdminExitAsk(false);nav("home");}}/>}\n';
   const exitRender=adminExitRender+
-    '      {appExitAsk&&<AppExitConfirm onStay={()=>{appExitAskRef.current=false;setAppExitAsk(false);}} onExit={()=>{appExitAskRef.current=false;setAppExitAsk(false);exitApprovedRef.current=true;try{history.back();}catch(e){exitApprovedRef.current=false;}}}/>}\n';
+    '      {appExitAsk&&<AppExitConfirm onStay={()=>{appExitAskRef.current=false;setAppExitAsk(false);}} onExit={()=>{try{window.close();}catch(e){}}}/>}\n';
   source=replaceRequiredOnce(source,adminExitRender,exitRender,"app exit confirmation render");
 
   return source;
