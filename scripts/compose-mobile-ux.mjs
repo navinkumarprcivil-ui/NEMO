@@ -14,10 +14,27 @@ export function composeMobileUxSource(source){
   // Stop accidental long-press Select/Copy handles while a customer scrolls the app.
   // Editing fields stay selectable; data-allow-select is the explicit opt-in escape hatch.
   const tapStyle='*{-webkit-tap-highlight-color:transparent;}\n';
+  const nativeAndroidStyles=
+    '.nemo-native-android .home-hero-logo{margin-top:56px!important;}\n'+
+    '.nemo-native-android .drawer-panel{box-sizing:border-box!important;padding-bottom:64px!important;scroll-padding-bottom:64px!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}\n'+
+    '.nemo-native-android .mobile-bottom-nav{bottom:0!important;}\n'+
+    '.nemo-native-android .nemo-app:has(.nemo-native-checkout-cta){padding-bottom:88px!important;}\n'+
+    '.nemo-native-android .nemo-native-checkout-cta{scroll-margin-bottom:88px!important;}\n';
   const selectionStyles=tapStyle+
     '.nemo-app,.nemo-app *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;}\n'+
-    '.nemo-app input,.nemo-app textarea,.nemo-app select,.nemo-app [contenteditable="true"],.nemo-app [data-allow-select="true"]{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important;}\n';
+    '.nemo-app input,.nemo-app textarea,.nemo-app select,.nemo-app [contenteditable="true"],.nemo-app [data-allow-select="true"]{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important;}\n'+
+    nativeAndroidStyles;
   source=replaceRequiredOnce(source,tapStyle,selectionStyles,"native mobile selection styles");
+
+  // Give the two checkout actions a stable hook. Android used to locate these by visible text
+  // after every React render, which made their spacing jump as nodes were remounted.
+  const continueCheckoutButton='className="press" onClick={()=>{ if(validate()) setStep(2); else setAddrFormOpen(true); }}';
+  const continueCheckoutButtonNative='className="press nemo-native-checkout-cta" onClick={()=>{ if(validate()) setStep(2); else setAddrFormOpen(true); }}';
+  source=replaceRequiredOnce(source,continueCheckoutButton,continueCheckoutButtonNative,"native Continue to Payment hook");
+
+  const placeOrderButton='className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={handlePlaceOrder} disabled={placing}';
+  const placeOrderButtonNative='className="cta nemo-native-checkout-cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={handlePlaceOrder} disabled={placing}';
+  source=replaceRequiredOnce(source,placeOrderButton,placeOrderButtonNative,"native Place Order hook");
 
   // The Android shell already keeps the webpage above the phone's system navigation area.
   // Move the cart/discount pill a little closer to Nemo's own bottom navigation there, while
