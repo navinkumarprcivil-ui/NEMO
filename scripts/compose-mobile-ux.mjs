@@ -19,6 +19,13 @@ export function composeMobileUxSource(source){
     '.nemo-app input,.nemo-app textarea,.nemo-app select,.nemo-app [contenteditable="true"],.nemo-app [data-allow-select="true"]{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important;}\n';
   source=replaceRequiredOnce(source,tapStyle,selectionStyles,"native mobile selection styles");
 
+  // The Android shell already keeps the webpage above the phone's system navigation area.
+  // Move the cart/discount pill a little closer to Nemo's own bottom navigation there, while
+  // preserving the existing browser/PWA safe-area spacing everywhere else.
+  const floatingCartBottom='bottom:"calc(76px + env(safe-area-inset-bottom))"';
+  const floatingCartBottomApp='bottom:(window.nemoInApp?"68px":"calc(76px + env(safe-area-inset-bottom))")';
+  source=replaceRequiredOnce(source,floatingCartBottom,floatingCartBottomApp,"Android floating cart position");
+
   // Use an in-app sheet because window.confirm() is unreliable inside popstate on phones.
   const adminHubMarker='/* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */';
   const appExitComponent=`/* Confirmation shown when the phone's Back button is pressed at the top of Home.
