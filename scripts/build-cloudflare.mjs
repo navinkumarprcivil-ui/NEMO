@@ -40,13 +40,12 @@ for (const entry of entries) {
       // The repository keeps the legacy monolith untouched; the public fallback must match app.js.
       await writeFile(target, builtSource, 'utf8');
     } else if (entry.name === 'index.html') {
-      // A native Android WebView is not browser `standalone`, so the old probe briefly rendered
-      // the "Get the Nemo app" banner inside the app before Android hid it. The WebView supplies
-      // NemoAquaStoreAndroid in its user agent; treat that as installed-app mode synchronously,
-      // before the first paint. Normal browser/PWA behaviour is unchanged.
+      // A native Android WebView is not browser `standalone`, so identify it synchronously from
+      // the user agent before the first paint. The class is a stable CSS hook for native-only
+      // layout corrections; it avoids Android repeatedly restyling React nodes after navigation.
       let html = await readFile(source, 'utf8');
       const standaloneProbe = "  var standalone=(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;";
-      const nativeAwareProbe = "  var nemoNativeAndroid=/NemoAquaStoreAndroid/i.test(navigator.userAgent||'');\n  var standalone=nemoNativeAndroid || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;";
+      const nativeAwareProbe = "  var nemoNativeAndroid=/NemoAquaStoreAndroid/i.test(navigator.userAgent||'');\n  if(nemoNativeAndroid){ window.nemoInApp=true; document.documentElement.classList.add('nemo-native-android'); }\n  var standalone=nemoNativeAndroid || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;";
       if (!html.includes(standaloneProbe)) throw new Error('index.html installed-app probe not found');
       html = html.replace(standaloneProbe, nativeAwareProbe);
       await writeFile(target, html, 'utf8');
