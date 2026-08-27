@@ -39,20 +39,33 @@ const esc = (v) =>
   );
 
 /** The picture the card should show: the product's first real photo.
- * Modern products keep URLs in product.media[]. Older products keep one image
- * separately at media/img-<product id>; use that before the store banner.
+ * New catalogue entries store the photo under media/<media key> as a Firebase
+ * data image. Crawlers cannot read data: URLs from Open Graph, so the Worker
+ * exposes that photo through /share-image/<key>. Older URL-based products are
+ * still supported.
  */
-function imageOf(product, legacyImage) {
+function imageOf(product, productId) {
   const media = Array.isArray(product && product.media) ? product.media : [];
   for (const m of media) {
     if (!m || m.type === 'video') continue;
-    // Full image first — a thumbnail upscaled into a preview looks soft.
     if (typeof m.url === 'string' && /^https?:\/\//i.test(m.url)) return m.url;
     if (typeof m.thumbUrl === 'string' && /^https?:\/\//i.test(m.thumbUrl)) return m.thumbUrl;
+    if (typeof m.key === 'string' && /^[A-Za-z0-9_-]{1,96}$/.test(m.key)) {
+      const thumb = m.thumb ? '?thumb=1' : '';
+      return `${SITE}/share-image/${encodeURIComponent(m.key)}${thumb}`;
+    }
   }
-  if (typeof legacyImage === 'string' && /^https?:\/\//i.test(legacyImage)) {
-    return legacyImage;
+
+  if (typeof product?.imageUrl === 'string' && /^https?:\/\//i.test(product.imageUrl)) {
+    return product.imageUrl;
   }
+
+  // Legacy products used media/img-<product id>. The image endpoint handles
+  // either an old HTTP URL or a Firebase base64 data image.
+  if (product && product.hasImg && /^[A-Za-z0-9_-]{1,64}$/.test(productId)) {
+    return `${SITE}/share-image/${encodeURIComponent(`img-${productId}`)}`;
+  }
+
   return FALLBACK_IMAGE;
 }
 
@@ -70,19 +83,12 @@ export default async function handler(req, res) {
   const target = id ? `${SITE}/?p=${encodeURIComponent(id)}` : SITE;
 
   let product = null;
-  let legacyImage = null;
   if (/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
     try {
-      const [productResponse, legacyImageResponse] = await Promise.all([
-        fetch(`${DB}/products/${encodeURIComponent(id)}.json`, {
-          signal: AbortSignal.timeout(4000),
-        }),
-        fetch(`${DB}/media/${encodeURIComponent(`img-${id}`)}.json`, {
-          signal: AbortSignal.timeout(4000),
-        }),
-      ]);
+      const productResponse = await fetch(`${DB}/products/${encodeURIComponent(id)}.json`, {
+        signal: AbortSignal.timeout(4000),
+      });
       if (productResponse.ok) product = await productResponse.json();
-      if (legacyImageResponse.ok) legacyImage = await legacyImageResponse.json();
     } catch (e) {
       // A slow or unreachable database must not make the link dead. Falling
       // through renders the site-level card, which remains a working link.
@@ -94,8 +100,9 @@ export default async function handler(req, res) {
     product && product.desc
       ? String(product.desc).replace(/\s+/g, ' ').trim().slice(0, 160)
       : 'Hand-picked healthy fish, live plants & quality accessories — delivered with care across India.';
-  const image = product ? imageOf(product, legacyImage) : FALLBACK_IMAGE;
-  const url = `${SITE}/s/${encodeURIComponent(id)}`;
+  const image = product ? imageOf(product, id) : FALLBACK_IMAGE;
+  const shareVersion = String((req.query && req.query.v) || '').trim();
+  const url = `${SITE}/s/${encodeURIComponent(id)}${shareVersion ? `?v=${encodeURIComponent(shareVersion)}` : ''}`;
 
   // Scrapers re-fetch a link every time it is shared; five minutes keeps that
   // cheap while a re-priced product still corrects itself quickly.
@@ -120,6 +127,7 @@ export default async function handler(req, res) {
 <meta property="og:description" content="${esc(description)}"/>
 <meta property="og:url" content="${esc(url)}"/>
 <meta property="og:image" content="${esc(image)}"/>
+<meta property="og:image:secure_url" content="${esc(image)}"/>
 <meta property="og:image:alt" content="${esc(product && product.name ? product.name : STORE)}"/>
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:title" content="${esc(title)}"/>
