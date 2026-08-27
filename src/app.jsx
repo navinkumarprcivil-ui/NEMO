@@ -3310,6 +3310,33 @@ function careWeekKey(now=Date.now()){
 }
 function careChangeLitres(tank,heavy){ return Math.round((Number(tank&&tank.litres)||0)*(heavy?35:25)/100); }
 async function googleSignIn(){
+  /* The Android app owns Google account selection. Calling it directly avoids opening a
+     Firebase browser popup that the WebView immediately intercepts and then leaves pending.
+     The native side still signs into this exact Firebase Auth instance with LOCAL persistence. */
+  if(window.nemoInApp && window.NemoAndroid && typeof window.NemoAndroid.signInWithGoogle==="function"){
+    return new Promise((resolve,reject)=>{
+      let settled=false;
+      const finish=(callback,value)=>{
+        if(settled) return;
+        settled=true;
+        clearTimeout(timeout);
+        try{ delete window.__nemoNativeGoogleAuthComplete; }catch(e){}
+        try{ delete window.__nemoNativeGoogleAuthFailed; }catch(e){}
+        callback(value);
+      };
+      const timeout=setTimeout(
+        ()=>finish(reject,new Error("native-sign-in-timeout")),
+        60000
+      );
+      window.__nemoNativeGoogleAuthComplete=user=>finish(resolve,user);
+      window.__nemoNativeGoogleAuthFailed=message=>finish(
+        reject,
+        new Error(String(message||"native-sign-in-failed"))
+      );
+      try{ window.NemoAndroid.signInWithGoogle(); }
+      catch(e){ finish(reject,e); }
+    });
+  }
   /* The Firebase scripts load async and App Check gets a grace period on top, so on a cold
      cache FB_OK is still false for the first second or two of the visit. Throwing "offline"
      the moment someone taps Sign in was the whole of the intermittent "I couldn't log in, it
