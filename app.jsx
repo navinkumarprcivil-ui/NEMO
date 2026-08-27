@@ -9223,7 +9223,6 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
 }
 
 function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
-  const [qty,setQty]           = useState(1);
   const [selVarId,setSelVarId] = useState(null);
   const [tab,setTab]           = useState("desc");
   const [reviews,setReviews]   = useState([]);
@@ -9231,7 +9230,6 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   const [showForm,setShowForm] = useState(false);
   const [submitted,setSubmitted]= useState(false);
   const [slide,setSlide]       = useState(0); // active gallery slide
-  const [justAdded,setJustAdded] = useState(false);
   const [photoZoom,setPhotoZoom] = useState(null); // review photo lightbox src
   const [lightbox,setLightbox] = useState(-1); // product gallery lightbox — active slide index (-1 = closed)
   const galRef                 = useRef(null); // the hero scroller, so the arrows can drive it
@@ -9300,10 +9298,6 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   const onSale = activeDiscount(p)>0;
   const baseEff = effectivePrice(p);
   const unitPrice = selVar ? variantEffPrice(p, selVar) : baseEff;
-  const maxQty = Math.max(1, Math.min(stk, MAX_PER_ORDER));
-  // How many of THIS product + selected variant are already in the cart (same key format as addToCart)
-  const cartKey = p.id + (selVar?("|"+selVar.id):"");
-  const inCart = (cart.find(i=>i.key===cartKey)?.qty) || 0;
   const canReview = user && hasPurchased(orders, user, p.id);
 
   // Live rating from real reviews only
@@ -9367,7 +9361,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
       {/* Content */}
       {/* The panel is pulled up 24px over the image, so its top padding has to clear that
           before the category line gets any breathing room of its own. */}
-      <div style={{background:C.bg,borderRadius:"26px 26px 0 0",marginTop:-24,padding:"42px 20px 180px",minHeight:400}}>
+      <div style={{background:C.bg,borderRadius:"26px 26px 0 0",marginTop:-24,padding:p.comingSoon?"42px 20px 150px":"42px 20px 20px",minHeight:400}}>
         {/* Title row */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
           <div style={{flex:1,paddingRight:12}}>
@@ -9652,37 +9646,17 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         )}
       </div>
 
-      {/* Sticky bottom bar */}
-      <div className="nemo-product-bottom-bar" style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,
-        background:"rgba(255,255,255,.97)",backdropFilter:"blur(16px)",padding:"14px 20px",borderTop:`1px solid ${C.border}`,display:"flex",gap:12,alignItems:"center",zIndex:50}}>
-        {p.comingSoon ? (
+      {/* Coming Soon keeps one sticky interest action. Normal products no longer
+          duplicate Add to Cart and quantity controls at the bottom of Detail. */}
+      {p.comingSoon&&(
+        <div className="nemo-product-bottom-bar" style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,
+          background:"rgba(255,255,255,.97)",backdropFilter:"blur(16px)",padding:"14px 20px",borderTop:`1px solid ${C.border}`,display:"flex",gap:12,alignItems:"center",zIndex:50}}>
           <button className="press" onClick={()=>{if(!isInterested&&onInterest)onInterest(p);}} disabled={isInterested}
             style={{flex:1,background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:14,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             {isInterested?"✓ We'll notify you when it's in!":"🔔 Coming Soon — I'm Interested"}
           </button>
-        ) : inCart>0 ? (<>
-          {/* Already in cart — the stepper edits the cart quantity directly; no duplicate adds */}
-          <div style={{display:"flex",alignItems:"center",gap:14,background:C.bg,borderRadius:12,padding:"8px 14px",border:`1.5px solid ${C.border}`}}>
-            <button className="press" onClick={()=>addToCart(p,-1,selVar)} style={{background:"none",border:"none",fontSize:20,color:C.primary,fontWeight:700,lineHeight:1}}>−</button>
-            <span style={{fontSize:16,fontWeight:700,color:C.text,minWidth:18,textAlign:"center"}}>{inCart}</span>
-            <button className="press" onClick={()=>{if(inCart<maxQty)addToCart(p,1,selVar);}} disabled={inCart>=maxQty} style={{background:"none",border:"none",fontSize:20,color:inCart>=maxQty?C.textSub:C.primary,fontWeight:700,lineHeight:1,opacity:inCart>=maxQty?.5:1}}>+</button>
-          </div>
-          <button className="press" onClick={()=>nav("cart")}
-            style={{flex:1,background:C.success,color:"white",border:"none",borderRadius:14,padding:"14px 12px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            ✓ In Cart · View Cart →
-          </button>
-        </>) : (<>
-        <div style={{display:"flex",alignItems:"center",gap:14,background:C.bg,borderRadius:12,padding:"8px 14px",border:`1.5px solid ${C.border}`}}>
-          <button className="press" onClick={()=>setQty(q=>Math.max(1,q-1))} style={{background:"none",border:"none",fontSize:20,color:C.primary,fontWeight:700,lineHeight:1}}>−</button>
-          <span style={{fontSize:16,fontWeight:700,color:C.text,minWidth:18,textAlign:"center"}}>{qty}</span>
-          <button className="press" onClick={()=>setQty(q=>Math.min(maxQty,q+1))} disabled={qty>=maxQty} style={{background:"none",border:"none",fontSize:20,color:qty>=maxQty?C.textSub:C.primary,fontWeight:700,lineHeight:1,opacity:qty>=maxQty?.5:1}}>+</button>
         </div>
-        <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={e=>{if(!oos){addToCart(p,qty,selVar);flyToCart(e.clientX,e.clientY);}}} disabled={oos}
-          style={{flex:1,background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-          {oos?"Out of Stock":`Add to Cart · ₹${unitPrice*qty}`}
-        </button>
-        </>)}
-      </div>
+      )}
 
       {lightbox>=0&&slides[lightbox]&&(
         <MediaLightbox slides={slides} index={lightbox} setIndex={setLightbox} onClose={()=>setLightbox(-1)} name={p.name}/>
