@@ -14,12 +14,13 @@ export function composeMobileUxSource(source){
   // Stop accidental long-press Select/Copy handles while a customer scrolls the app.
   // Editing fields stay selectable; data-allow-select is the explicit opt-in escape hatch.
   const tapStyle='*{-webkit-tap-highlight-color:transparent;}\n';
+  /* Native Android owns only the system-inset bridge. Do not move page content,
+     the Home logo, checkout buttons, or drawers here: Nemo's actual scrollable region
+     is the inner .nemo-main-scroll, and shell-level padding/margins cause the layout
+     to jump after React navigation. MainActivity measures the real bottom nav and
+     applies safe scroll space to the correct container. */
   const nativeAndroidStyles=
-    '.nemo-native-android .home-hero-logo{margin-top:56px!important;}\n'+
-    '.nemo-native-android .drawer-panel{box-sizing:border-box!important;padding-bottom:64px!important;scroll-padding-bottom:64px!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}\n'+
-    '.nemo-native-android .mobile-bottom-nav{bottom:0!important;}\n'+
-    '.nemo-native-android .nemo-app:has(.nemo-native-checkout-cta){padding-bottom:88px!important;}\n'+
-    '.nemo-native-android .nemo-native-checkout-cta{scroll-margin-bottom:88px!important;}\n';
+    '.nemo-native-android .mobile-bottom-nav{bottom:0!important;}\n';
   const selectionStyles=tapStyle+
     '.nemo-app,.nemo-app *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;}\n'+
     '.nemo-app input,.nemo-app textarea,.nemo-app select,.nemo-app [contenteditable="true"],.nemo-app [data-allow-select="true"]{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important;}\n'+
@@ -36,13 +37,9 @@ export function composeMobileUxSource(source){
   const placeOrderButtonNative='className="cta nemo-native-checkout-cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={handlePlaceOrder} disabled={placing}';
   source=replaceRequiredOnce(source,placeOrderButton,placeOrderButtonNative,"native Place Order hook");
 
-  // The Android shell already keeps the webpage above the phone's system navigation area.
-  // Move the cart/discount pill a little closer to Nemo's own bottom navigation there, while
-  // preserving the existing browser/PWA safe-area spacing everywhere else.
-  const floatingCartBottom='bottom:"calc(76px + env(safe-area-inset-bottom))"';
-  const floatingCartBottomApp='bottom:(window.nemoInApp?"68px":"calc(76px + env(safe-area-inset-bottom))")';
-  source=replaceRequiredOnce(source,floatingCartBottom,floatingCartBottomApp,"Android floating cart position");
-
+  // Keep the website's own floating-cart geometry unchanged. The native WebView
+  // measures the rendered bottom navigation and adjusts only the final bottom offset,
+  // so it remains correct on phones with different navigation-bar sizes.
   // Use an in-app sheet because window.confirm() is unreliable inside popstate on phones.
   const adminHubMarker='/* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */';
   const appExitComponent=`/* Confirmation shown when the phone's Back button is pressed at the top of Home.
