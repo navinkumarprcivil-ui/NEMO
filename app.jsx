@@ -4682,7 +4682,8 @@ function openCreditNote(order,settings){
    what made the old message look like a listing rather than a recommendation. */
 async function shareProduct(p, showToast){
   const origin=(typeof location!=="undefined")?location.origin:"";
-  const url=origin?`${origin}/s/${encodeURIComponent(p.id)}`:"";
+  // Version the preview URL so messaging apps do not reuse the old store-banner cache.
+  const url=origin?`${origin}/s/${encodeURIComponent(p.id)}?v=product-photo-2`:"";
   const price=effectivePrice(p);
   const text=`🐠 ${p.name} — ₹${price}\n${STORE_NAME} Aqua Store`;
   try{
