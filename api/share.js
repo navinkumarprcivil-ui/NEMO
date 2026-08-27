@@ -38,14 +38,20 @@ const esc = (v) =>
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
   );
 
-/** The picture the card should show: the product's first real photo. */
-function imageOf(product) {
+/** The picture the card should show: the product's first real photo.
+ * Modern products keep URLs in product.media[]. Older products keep one image
+ * separately at media/img-<product id>; use that before the store banner.
+ */
+function imageOf(product, legacyImage) {
   const media = Array.isArray(product && product.media) ? product.media : [];
   for (const m of media) {
     if (!m || m.type === 'video') continue;
-    // Full image first — a thumbnail upscaled into a 1200x630 card looks soft.
-    if (m.url) return m.url;
-    if (m.thumbUrl) return m.thumbUrl;
+    // Full image first — a thumbnail upscaled into a preview looks soft.
+    if (typeof m.url === 'string' && /^https?:\/\//i.test(m.url)) return m.url;
+    if (typeof m.thumbUrl === 'string' && /^https?:\/\//i.test(m.thumbUrl)) return m.thumbUrl;
+  }
+  if (typeof legacyImage === 'string' && /^https?:\/\//i.test(legacyImage)) {
+    return legacyImage;
   }
   return FALLBACK_IMAGE;
 }
@@ -64,16 +70,22 @@ export default async function handler(req, res) {
   const target = id ? `${SITE}/?p=${encodeURIComponent(id)}` : SITE;
 
   let product = null;
+  let legacyImage = null;
   if (/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
     try {
-      const r = await fetch(`${DB}/products/${encodeURIComponent(id)}.json`, {
-        signal: AbortSignal.timeout(4000),
-      });
-      if (r.ok) product = await r.json();
+      const [productResponse, legacyImageResponse] = await Promise.all([
+        fetch(`${DB}/products/${encodeURIComponent(id)}.json`, {
+          signal: AbortSignal.timeout(4000),
+        }),
+        fetch(`${DB}/media/${encodeURIComponent(`img-${id}`)}.json`, {
+          signal: AbortSignal.timeout(4000),
+        }),
+      ]);
+      if (productResponse.ok) product = await productResponse.json();
+      if (legacyImageResponse.ok) legacyImage = await legacyImageResponse.json();
     } catch (e) {
       // A slow or unreachable database must not make the link dead. Falling
-      // through renders the site-level card, which is what used to happen
-      // always — a worse preview, still a working link.
+      // through renders the site-level card, which remains a working link.
     }
   }
 
@@ -82,7 +94,7 @@ export default async function handler(req, res) {
     product && product.desc
       ? String(product.desc).replace(/\s+/g, ' ').trim().slice(0, 160)
       : 'Hand-picked healthy fish, live plants & quality accessories — delivered with care across India.';
-  const image = product ? imageOf(product) : FALLBACK_IMAGE;
+  const image = product ? imageOf(product, legacyImage) : FALLBACK_IMAGE;
   const url = `${SITE}/s/${encodeURIComponent(id)}`;
 
   // Scrapers re-fetch a link every time it is shared; five minutes keeps that
