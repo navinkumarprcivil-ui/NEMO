@@ -2636,6 +2636,7 @@ async function redeemPoints(uid, pts, redemptionId){
 
 /* ── Customer Tank Showcase ── */
 const SHOWCASE_TTL = 24*60*60*1000; // photos auto-expire 24h AFTER admin approval (when expiresAt is set)
+const SHOWCASE_PENDING_TTL = 24*60*60*1000; // unapproved customer tank requests are removed after 24h
 const IST_OFFSET_MS=5.5*60*60*1000;
 function istDayKey(ms){ return new Date((ms==null?Date.now():ms)+IST_OFFSET_MS).toISOString().slice(0,10); }
 /* ── Tank of the Month ─────────────────────────────────────────────────────────
@@ -2776,6 +2777,19 @@ function showcaseExpiry(x){
   return Number.isFinite(legacy)?legacy+SHOWCASE_TTL:0;
 }
 function showcaseExpired(x, now){ const exp=showcaseExpiry(x); return exp>0 && now>=exp; }
+/* Pending customer tank requests also have a strict 24-hour retention window.
+   New uploads carry a numeric pendingExpiresAt so Firebase rules can safely allow
+   any signed-in client to remove them once expired. Legacy pending rows fall back
+   to createdAt + 24h for display/filtering, and are deleted whenever an authorised
+   owner/admin client encounters them. */
+function showcasePendingExpiry(x){
+  const explicit=Number(x&&x.pendingExpiresAt)||0;
+  if(explicit>0) return explicit;
+  if(!x||x.approved!==false) return 0;
+  const created=Date.parse((x&&x.createdAt)||"");
+  return Number.isFinite(created)?created+SHOWCASE_PENDING_TTL:0;
+}
+function showcasePendingExpired(x,now){ const exp=showcasePendingExpiry(x); return exp>0 && (now||Date.now())>=exp; }
 function showcaseHoursLeft(x,now){
   const exp=showcaseExpiry(x);
   return exp>0?Math.max(0,Math.ceil((exp-(now||Date.now()))/3600000)):0;
@@ -2831,9 +2845,13 @@ async function loadShowcase(){
      local copy stands in only for a cloud read that did not happen (offline / timed out). */
   if(!fromCloud){ const r=await dbGet("nemo-showcase"); if(r) try{ arr=JSON.parse(r); }catch(e){} }
   const now=Date.now();
-  // Best-effort cleanup: delete expired entries from the cloud (rules permit deleting expired ones).
-  if(FB_OK){ arr.filter(x=>showcaseExpired(x,now)).forEach(x=>{ try{ FB_DB.ref("showcase/"+x.id).remove(); }catch(e){} }); }
-  const live=arr.filter(x=>!showcaseExpired(x,now)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+  // Best-effort cleanup: approved photos expire 24h after approval; pending requests
+  // expire 24h after submission. Filter them immediately even if a cloud delete is
+  // temporarily denied/offline, so stale requests never remain visible in the app.
+  const expired=arr.filter(x=>showcaseExpired(x,now)||showcasePendingExpired(x,now));
+  if(FB_OK){ expired.forEach(x=>{ try{ FB_DB.ref("showcase/"+x.id).remove(); }catch(e){} }); }
+  const expiredIds=new Set(expired.map(x=>x&&x.id).filter(Boolean));
+  const live=arr.filter(x=>x&&!expiredIds.has(x.id)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
   // Keep the offline copy honest too, so the next cold start can't revive a deleted photo either.
   if(fromCloud) await pruneShowcaseCache(live);
   return live;
@@ -2850,7 +2868,8 @@ async function addShowcasePhoto(item){
 async function approveShowcasePhoto(item,settings,showcase){
   const now=Date.now(), contest=!!(settings&&settings.totmEnabled);
   const month=totmMonthOf(now);
-  const updated={...item, approved:true, approvedAt:new Date(now).toISOString(),
+  const {pendingExpiresAt:_pendingExpiresAt,...approvedBase}=item||{};
+  const updated={...approvedBase, approved:true, approvedAt:new Date(now).toISOString(),
     expiresAt: now+SHOWCASE_TTL,
     ...(contest?{month}:{})};
   const replaced=replacementForApproval(showcase,item);
@@ -5539,8 +5558,10 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
     const finalName=(user?.name||ownerName||"Aquarist").trim();
     setUploading(true);
     const entryId=minePending?.id||(user?.uid?(user.uid+"_"+Date.now().toString(36)):uid("sc"));
+    const submittedAt=Date.now();
     await onSubmit({id:entryId,imgData:preview[0],imgs:preview,ownerName:finalName,caption:caption.trim(),
-      createdAt:new Date().toISOString(),approved:false,userUid:user?.uid||(user?userKey(user):""),...(contest?{month}:{})});
+      createdAt:new Date(submittedAt).toISOString(),pendingExpiresAt:submittedAt+SHOWCASE_PENDING_TTL,
+      approved:false,userUid:user?.uid||(user?userKey(user):""),...(contest?{month}:{})});
     if(user?.uid) loadTankUploadStreak(user.uid).then(setStreak);
     setPreview([]);setCaption("");setOwnerName(user?.name||"");setNote("📩 Submitted! We'll review it soon.");setUploading(false);
     setTimeout(()=>setNote(""),4000);
@@ -7312,7 +7333,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
         </div>
         {/* Only this part scrolls; `overscroll-behavior:contain` stops the flick from
             carrying through to the page behind the drawer once the list hits its end. */}
-        <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",padding:"12px 12px 18px"}}>
+        <div className="nemo-browse-scroll" style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",padding:"12px 12px 18px"}}>
           <ReferralDrawerCard open={open} user={user} settings={settings} orders={orders} nav={nav} onClose={onClose}/>
           <button className="press" onClick={()=>onSelect("All")}
             style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderRadius:13,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
@@ -9632,7 +9653,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
       </div>
 
       {/* Sticky bottom bar */}
-      <div style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,
+      <div className="nemo-product-bottom-bar" style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,
         background:"rgba(255,255,255,.97)",backdropFilter:"blur(16px)",padding:"14px 20px",borderTop:`1px solid ${C.border}`,display:"flex",gap:12,alignItems:"center",zIndex:50}}>
         {p.comingSoon ? (
           <button className="press" onClick={()=>{if(!isInterested&&onInterest)onInterest(p);}} disabled={isInterested}
@@ -18050,7 +18071,7 @@ function NemoStore(){
       {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap} walletPts={walletPts} ordersCount={priorityOrderCount}/>} 
       {/* overscrollBehavior:contain stops a flick that reaches the end of this list from
           chaining out to the document and dragging the pinned bottom nav with it. */}
-      <div ref={scrollRef} style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
+      <div ref={scrollRef} className="nemo-main-scroll" style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
         <div key={page} className="page-swap">
         {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} tankPreviousWinners={tankPreviousWinners} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
