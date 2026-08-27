@@ -5083,6 +5083,11 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
 @media(prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;}
 }
+/* Mobile portrait: the wallet/account row is absolutely positioned at the top.
+   Keep the real logo below that measured 40px row with a clear 12px visual gap. */
+@media(max-width:559px) and (orientation:portrait){
+  .home-hero-logo{margin-top:64px !important;}
+}
 /* ── Desktop layout (≥1000px) ── */
 .desk-nav{display:none;}
 /* Header top padding adapts to device safe-area instead of a flat notch inset */
