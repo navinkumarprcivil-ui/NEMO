@@ -133,6 +133,84 @@ function redirectApex(url) {
   });
 }
 
+const MEDIA_DB = 'https://nemo-aqua-store-default-rtdb.asia-southeast1.firebasedatabase.app';
+
+function imageBytes(dataUrl) {
+  if (typeof dataUrl !== 'string') return null;
+  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp|gif|avif));base64,([\s\S]+)$/i);
+  if (!match) return null;
+
+  try {
+    const binary = atob(match[2].replace(/\s+/g, ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return { type: match[1].toLowerCase(), bytes };
+  } catch {
+    return null;
+  }
+}
+
+async function shareImageResponse(request, url, mediaKey) {
+  if (!/^[A-Za-z0-9_-]{1,96}$/.test(mediaKey)) {
+    return new Response('Not found', {
+      status: 404,
+      headers: { ...securityHeaders, 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }
+
+  const preferThumb = url.searchParams.get('thumb') === '1';
+  const candidates = preferThumb ? [`${mediaKey}_thumb`, mediaKey] : [mediaKey];
+
+  for (const key of candidates) {
+    try {
+      const dbResponse = await fetch(
+        `${MEDIA_DB}/media/${encodeURIComponent(key)}.json`,
+        { cf: { cacheTtl: 3600, cacheEverything: true } }
+      );
+      if (!dbResponse.ok) continue;
+
+      const stored = await dbResponse.json();
+      if (typeof stored === 'string' && /^https?:\/\//i.test(stored)) {
+        return new Response(null, {
+          status: 302,
+          headers: {
+            ...securityHeaders,
+            Location: stored,
+            'Cache-Control': 'public, max-age=3600, s-maxage=86400',
+          },
+        });
+      }
+
+      const decoded = imageBytes(stored);
+      if (!decoded) continue;
+
+      const headers = {
+        ...securityHeaders,
+        'Content-Type': decoded.type,
+        'Content-Length': String(decoded.bytes.byteLength),
+        'Content-Disposition': 'inline',
+        'Cache-Control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400',
+        'Access-Control-Allow-Origin': '*',
+      };
+      return new Response(request.method === 'HEAD' ? null : decoded.bytes, {
+        status: 200,
+        headers,
+      });
+    } catch {
+      // Try the full image when a thumbnail is unavailable.
+    }
+  }
+
+  return new Response(null, {
+    status: 302,
+    headers: {
+      ...securityHeaders,
+      Location: 'https://www.nemoaquastore.in/assets/share-banner.jpg',
+      'Cache-Control': 'public, max-age=300, s-maxage=300',
+    },
+  });
+}
+
 async function staticAssetResponse(request, env, path) {
   const response = await env.ASSETS.fetch(request);
   const headers = new Headers(response.headers);
@@ -167,6 +245,13 @@ export default {
     if (url.hostname === 'nemoaquastore.in') return redirectApex(url);
 
     const path = url.pathname.replace(/\/+$/, '') || '/';
+
+    if (path.startsWith('/share-image/')) {
+      let mediaKey = '';
+      try { mediaKey = decodeURIComponent(path.slice('/share-image/'.length)); }
+      catch { return new Response('Not found', { status: 404 }); }
+      return shareImageResponse(request, url, mediaKey);
+    }
 
     if (path === '/sitemap.xml') return runHandler(sitemap, request, url);
 
