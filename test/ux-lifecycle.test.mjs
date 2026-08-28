@@ -60,6 +60,12 @@ test('performance safeguards avoid rendering distant product rows and disable to
   assert.match(app, /decoding="async" loading=\{loading\}/);
 });
 
+test('reveal observers are disconnected when navigating between pages', () => {
+  assert.match(app, /const staggerObservers=\[\]/);
+  assert.match(app, /staggerObservers\.push\(so\)/);
+  assert.match(app, /staggerObservers\.forEach\(so=>so\.disconnect\(\)\)/);
+});
+
 test('month-end rewards create an in-admin notification and settings badge', () => {
   const block = app.slice(app.indexOf('function AdminHub('), app.indexOf('function SettingsPanel('));
   assert.match(block, /Month-end reward check/);

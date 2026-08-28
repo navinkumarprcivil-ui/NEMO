@@ -28,3 +28,14 @@ test("Firebase upload returns without waiting for the optional offline cache",()
   assert.ok(fn.indexOf('await FB_DB.ref("showcase/"+item.id).set(item)')<fn.indexOf("scheduleShowcaseCacheWrite(item)"));
   assert.doesNotMatch(fn,/await scheduleShowcaseCacheWrite/);
 });
+
+test("Android WebView does not duplicate Customer Tank base64 photos into IndexedDB",()=>{
+  const fn=src.slice(src.indexOf("function scheduleShowcaseCacheWrite("),src.indexOf("async function addShowcasePhoto("));
+  assert.match(fn,/if\(window\.nemoInApp\) return/);
+});
+
+test("Android WebView clears legacy Customer Tank cache after a successful cloud read",()=>{
+  const fn=src.slice(src.indexOf("async function loadShowcase("),src.indexOf("function scheduleShowcaseCacheWrite("));
+  assert.match(fn,/if\(window\.nemoInApp\)/);
+  assert.match(fn,/dbSet\("nemo-showcase","\[\]"\)/);
+});

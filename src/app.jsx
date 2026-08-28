@@ -59,7 +59,7 @@ async function adminPasswordDigest(value){
 const BUSINESS_WA    = "919360921030"; // ← change to your WhatsApp number
 const BUSINESS_EMAIL = "nemoaquastore@gmail.com"; // store email — used for order alerts + admin OTP when Settings email is blank
 const SECRET_TAPS    = 10;             // tap logo this many times to open admin
-const PLAY_PACKAGE   = "in.nemoaquastore.app"; // Android app on Google Play (TWA wrapper around this site)
+const PLAY_PACKAGE   = "in.nemoaquastore.app"; // Android app on Google Play (native WebView wrapper around this site)
 /* Play listing link. `referrer` is what shows up in Play Console → Acquisition, so each badge
    passes where the tap came from and installs can be attributed to the site. */
 const playUrl = (medium="website") =>
@@ -2864,10 +2864,24 @@ async function loadShowcase(){
   const expiredIds=new Set(expired.map(x=>x&&x.id).filter(Boolean));
   const live=arr.filter(x=>x&&!expiredIds.has(x.id)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
   // Keep the offline copy honest too, so the next cold start can't revive a deleted photo either.
-  if(fromCloud) await pruneShowcaseCache(live);
+  if(fromCloud){
+    if(window.nemoInApp){
+      /* Native WebView already has the cloud copy and does not benefit from duplicating up to
+         three large base64 photos into IndexedDB. Clear any cache left by older builds once the
+         cloud has answered, which reduces WebView storage churn and JSON parsing on later opens. */
+      try{
+        const cached=await dbGet("nemo-showcase");
+        if(cached&&cached!=="[]") await dbSet("nemo-showcase","[]");
+      }catch(e){}
+    }else{
+      await pruneShowcaseCache(live);
+    }
+  }
   return live;
 }
 function scheduleShowcaseCacheWrite(item){
+  // The Android WebView is online-first for this gallery; avoid duplicating large base64 photos locally.
+  if(window.nemoInApp) return;
   const work=async()=>{
     try{
       const cached=await dbGet("nemo-showcase");
@@ -2924,6 +2938,11 @@ async function markTankMonthlyWinner(month,type,row,coins){
   return record;
 }
 function scheduleShowcaseCacheRemoval(id){
+  if(window.nemoInApp){
+    // Remove any legacy WebView copy without parsing a potentially multi-megabyte JSON payload.
+    Promise.resolve(dbSet("nemo-showcase","[]")).catch(()=>{});
+    return;
+  }
   const work=async()=>{
     try{
       const r=await dbGet("nemo-showcase");
@@ -17940,6 +17959,7 @@ function NemoStore(){
   useEffect(()=>{
     if(typeof IntersectionObserver==="undefined") return;
     let io;
+    const staggerObservers=[];
     const raf=requestAnimationFrame(()=>{
       // Staggered child reveals (product grids — each card springs in +55ms after the last)
       document.querySelectorAll(".js-stagger").forEach(cont=>{
@@ -17947,6 +17967,7 @@ function NemoStore(){
         if(!kids.length) return;
         kids.forEach((k,i)=>{ k.classList.add("reveal"); k.style.transitionDelay=Math.min(i*55,520)+"ms"; });
         const so=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ Array.from(en.target.children).forEach(k=>k.classList.add("reveal-in")); so.unobserve(en.target); } }); },{threshold:0.04});
+        staggerObservers.push(so);
         so.observe(cont);
       });
       const els=document.querySelectorAll(".js-reveal:not(.reveal-in)");
@@ -17955,7 +17976,7 @@ function NemoStore(){
       io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("reveal-in"); io.unobserve(en.target); } }); },{threshold:0.06,rootMargin:"0px 0px -40px 0px"});
       els.forEach(el=>io.observe(el));
     });
-    return ()=>{ cancelAnimationFrame(raf); if(io) io.disconnect(); };
+    return ()=>{ cancelAnimationFrame(raf); if(io) io.disconnect(); staggerObservers.forEach(so=>so.disconnect()); };
   },[page]);
   // When in admin mode, a page refresh/close prompts for confirmation so you don't exit admin by accident.
   useEffect(()=>{
