@@ -1,6 +1,6 @@
 # Nemo Aqua Store — Project Status & Handoff
 
-**Live:** https://www.nemoaquastore.in · **Deploy:** Vercel (auto-deploys `main`) · **Backend:** Firebase Realtime DB + Storage
+**Live:** https://www.nemoaquastore.in · **Deploy:** Cloudflare Workers (`nemo-aqua-store`) · **Backend:** Firebase Realtime DB + Storage
 
 > Read this first when resuming in a new chat. It captures how the project is built and what's done / pending.
 
@@ -15,7 +15,7 @@
 - Theme = "PRISTINE AQUA" (pure white, Plus Jakarta Sans, cyan `#0ea5e9` accents, coral `#f43f5e` CTAs). Central token object `const C` at top of `app.jsx`.
 
 ## Workflow
-Work on branch `claude/nemo-aqua-store-enhancement-74a3o1` → commit → push → open PR to `main` → user merges → Vercel deploys. (Write access via GitHub MCP is working.)
+Website source lives in GitHub on `main`. Build with `npm run build`; deploy the website with `npm run deploy` to Cloudflare Workers. Native Android changes are made separately in Android Studio and require a new signed AAB/versionCode; website-only changes do **not** require a new AAB.
 
 ## Done ✅
 - Full storefront + admin: catalog, cart, checkout (flexible: add-items/change-shipping/cancel), orders, wallet/loyalty, referrals.
@@ -32,9 +32,9 @@ Work on branch `claude/nemo-aqua-store-enhancement-74a3o1` → commit → push �
 - Icons unified to the clownfish; new 1200×630 share banner.
 - **GST live (GSTIN `33BWXPP8706N1ZI`, Tamil Nadu):** once a GSTIN is saved in Settings, the formal invoice (`openInvoice` → `generateInvoiceHTML`) becomes a proper **Tax Invoice** with HSN, place of supply, and the correct tax split — **CGST+SGST for deliveries inside TN, IGST for every other state**. Checkout now collects **State**, auto-detected from the delivery pincode via `pincodeToState()` (editable dropdown if the pincode is unrecognised) and stored on the order; the invoice falls back to pincode derivation for older orders. Puducherry pockets (Pondicherry town, Karaikal, Yanam, Mahe) are special-cased to UT 34 → IGST. Settings shows a live "✓ Valid GSTIN · Seller state: TAMIL NADU (33)" confirmation under the GSTIN field. Prices are treated as GST-inclusive; default rate/HSN in Settings, per-product override supported. **We deliberately do NOT store/show the GST certificate image** (it carries the proprietor's personal address; only the GSTIN is shown, which is all that's legally required online).
 
-## Play Store launch — LIVE STATUS (updated 24 Jul 2026)
-**Account type: PERSONAL** → requires 12 testers opted-in for 14 continuous days before production.
-Package: `in.nemoaquastore.app`. TWA host: `www.nemoaquastore.in`. `.aab` built via PWABuilder (user has it + the permanent `signing.keystore` — NEVER commit it).
+## Play Store launch — LIVE STATUS (updated 28 Aug 2026)
+**Account type: PERSONAL** → closed testing is being used before production access.
+Package: `in.nemoaquastore.app`. The app is now a native Android **WebView** wrapper (not TWA) built in Android Studio. Current closed-testing release: **11 (2.0.0)**, `targetSdk 36`, available to selected testers. Keep using the permanent original `signing.keystore` / upload key — NEVER commit it.
 
 **DONE ✅**
 - App created in Play Console; app-signing enabled.
@@ -58,7 +58,7 @@ Details worth knowing:
 - **The badges hide themselves** when there's no point offering the app: inside the installed app/TWA, or when Chrome's `navigator.getInstalledRelatedApps()` says the Play app is already on the device. That probe is why `manifest.webmanifest` now declares `related_applications` (pkg `in.nemoaquastore.app`) — it needs the manifest entry *and* the matching `assetlinks.json`, both of which are in place. `prefer_related_applications` is deliberately **false**: Android users can still install the PWA if they'd rather not use the Play app.
 - The `usePlayAppOffer()` hook is what callers use to drop a whole "Get the App" section, so a heading never survives a badge that removed itself.
 
-**⚠ TARGET API 36 (deadline 31 Aug 2026)** — Play Console flagged the app targets API 35; must target **Android 16 (API 36)** to keep updating. Fix is in the **PWABuilder package, NOT this repo**: rebuild the `.aab` at **Target API = 36** in PWABuilder, **signing with the SAME existing `signing.keystore`** (never a new key, or Play rejects it as a different app), then upload to the **existing closed-testing track** (does NOT reset the 12-tester/14-day opt-in clock) → promote that same build to production after day 14. If the rebuild shows a new SHA-256, add it to `.well-known/assetlinks.json`.
+**Android release baseline (28 Aug 2026):** versionCode **11**, versionName **2.0.0**, minSdk **24**, targetSdk **36**. Release signing and the embedded AAB certificate were verified against the original upload key. Do not rebuild/upload a new AAB for ordinary website changes; only native Android changes require incrementing the versionCode and uploading another signed bundle.
 
 **NEXT — the ONLY thing gating production ⏳** (in progress: 12 testers opted in, ~8 days as of late Jul 2026)
 1. **Closed testing**: create release (Add-from-library, use the **API-36** `.aab`) → country India → add **12+ tester Gmails** → roll out for review.
