@@ -1,9 +1,14 @@
 {
+  "name": "nemo-aqua-store",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test test/*.test.mjs",
     "build": "node scripts/build-cloudflare.mjs",
     "build:cloudflare": "node scripts/build-cloudflare.mjs",
+    "check:rules": "node scripts/check-rules.mjs",
+    "check": "npm test && npm run check:rules && npm run cf:check",
     "deploy": "npm run build && wrangler deploy",
     "preview": "npm run build && wrangler dev",
     "cf:check": "npm run build && wrangler deploy --dry-run"

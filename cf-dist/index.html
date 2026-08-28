@@ -459,7 +459,9 @@
   // On Android it offers the real Play Store app; everywhere else it offers the PWA install.
   // Skips entirely when the app is already installed (running standalone / inside the TWA).
   var deferred=null, AUTO_HIDE=4500, el, shownAt=0, hideTimer;
-  var standalone=(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;
+  var nemoNativeAndroid=/NemoAquaStoreAndroid/i.test(navigator.userAgent||'');
+  if(nemoNativeAndroid){ window.nemoInApp=true; document.documentElement.classList.add('nemo-native-android'); }
+  var standalone=nemoNativeAndroid || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;
   function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream; }
   function isAndroid(){ return /android/i.test(navigator.userAgent); }
   /* Shared with the React app (app.jsx) so the in-app Play badges follow the same rules:

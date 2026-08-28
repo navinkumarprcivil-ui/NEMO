@@ -1366,9 +1366,9 @@ function waitForFirebase(ms){
     setTimeout(()=>done(FB_OK),ms);
   });
 }
-/* Lift the boot splash. index.html owns the timing — it holds the cinematic minimum and its own
-   hard maximum — so this only says "the store has something real to show now". Idempotent, and
-   a no-op if the splash markup isn't there (e.g. the app embedded elsewhere). */
+/* Lift the boot splash only when the initial store data is ready. index.html owns the visual
+   fade but deliberately has no display-duration timer. Idempotent, and a no-op if the splash
+   markup isn't there (for example when the app is embedded elsewhere). */
 /* The splash registers its teardown hook (window.nemoSplashReady) from index.html, which can
    land AFTER the REST prefetch has already answered. A plain `if present` check would silently
    do nothing in that case, and the store would stay behind the splash until the much later
@@ -1381,11 +1381,7 @@ function revealStore(){
        are ready. Queue those early signals until NemoStore marks the complete boot ready. */
     if(window.__nemoBootReady!==true){ window.__nemoRevealQueued=true; return; }
     if(window.nemoSplashReady){ window.nemoSplashReady(); return; }
-    let n=30;   // ~1.5s of 50ms retries, inside the splash's own short backstop
-    const t=setInterval(()=>{
-      if(window.nemoSplashReady){ clearInterval(t); try{ window.nemoSplashReady(); }catch(e){} }
-      else if(--n<=0){ clearInterval(t); }
-    },50);
+    window.__nemoRevealQueued=true;
   }catch(e){}
 }
 
@@ -3939,6 +3935,24 @@ function ejKeys(s){
   };
 }
 
+/* Email is not part of browsing, so downloading its third-party SDK on every Home visit wastes
+   bandwidth and JavaScript work. Load it once, only when an enabled email action actually runs. */
+const EMAILJS_SRC="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js";
+let emailjsLoadPromise=null;
+function loadEmailJS(){
+  if(window.emailjs) return Promise.resolve(window.emailjs);
+  if(emailjsLoadPromise) return emailjsLoadPromise;
+  emailjsLoadPromise=new Promise((resolve,reject)=>{
+    const script=document.createElement("script");
+    script.src=EMAILJS_SRC;
+    script.async=true;
+    script.onload=()=>window.emailjs?resolve(window.emailjs):reject(new Error("EmailJS did not initialise"));
+    script.onerror=()=>reject(new Error("EmailJS library could not be downloaded"));
+    document.head.appendChild(script);
+  }).catch(error=>{ emailjsLoadPromise=null; throw error; });
+  return emailjsLoadPromise;
+}
+
 /* Send an email to the CUSTOMER via EmailJS (needs keys set in admin Settings).
    `event` controls the message: "placed" | "confirmed" | "shipped" | "delivered". */
 function sendCustomerEmail(order, settings, event){
@@ -3946,7 +3960,6 @@ function sendCustomerEmail(order, settings, event){
   const to=order.userEmail||"";
   const ej=ejKeys(s);
   if(!to || !ej.service || !ej.template || !ej.key) return;
-  if(typeof emailjs==="undefined") return;
   // NOTE: status-update emails are governed ONLY by the admin's per-event switches below.
   // (The WhatsApp-updates opt-out applies to WhatsApp, not to transactional order emails.)
   const ev=event||"placed";
@@ -4001,11 +4014,11 @@ function sendCustomerEmail(order, settings, event){
     console.warn("[Email] Skipped — EmailJS keys not set in Admin → Settings.");
     return;
   }
-  try{
+  loadEmailJS().then(emailjs=>{
     emailjs.send(ej.service, ej.template, params, {publicKey:ej.key})
       .then(()=>console.log("[Email] Sent '"+ev+"' to "+to))
       .catch(err=>console.error("[Email] FAILED:", err && (err.text||err.message||err)));
-  }catch(e){ console.error("[Email] threw:", e); }
+  }).catch(e=>console.error("[Email] library failed:",e));
 }
 
 /* Email an order copy to the OWNER via EmailJS (reuses the customer template). Fire-and-forget. */
@@ -4015,7 +4028,6 @@ function sendOrderEmail(order, email, settings){
   if(s.adminOrderEmail!==true) return;
   const ej=ejKeys(s);
   if(!email || !ej.service || !ej.template || !ej.key) return;
-  if(typeof emailjs==="undefined") return;
   const items=order.items.map(i=>`${i.name}${i.variantLabel?" ("+i.variantLabel+")":""} x${i.qty} = Rs.${i.price*i.qty}`).join("\n");
   const grand=order.amountDue??(order.total+order.fee);
   const addr=order.address||{};
@@ -4041,7 +4053,7 @@ function sendOrderEmail(order, email, settings){
     store_whatsapp: s.ownerWhatsapp||BUSINESS_WA,
     ...buildInvoiceFields(order, s),
   };
-  try{ emailjs.send(ej.service, ej.template, params, {publicKey:ej.key}).catch(()=>{}); }catch(e){}
+  loadEmailJS().then(emailjs=>emailjs.send(ej.service, ej.template, params, {publicKey:ej.key})).catch(()=>{});
 }
 
 /* ── Bill / Invoice generator ──────────────────────────────────────────────
@@ -4053,7 +4065,6 @@ async function sendOtpEmail(email, code, settings){
   const ej=ejKeys(s);
   if(!email) return {ok:false, error:"No admin email set in Settings"};
   if(!ej.service || !ej.template || !ej.key) return {ok:false, error:"EmailJS Service/Template/Key missing in Settings"};
-  if(typeof emailjs==="undefined") return {ok:false, error:"EmailJS library not loaded (check your connection)"};
   const params={
     to_email: email,
     to_name: "Admin",
@@ -4075,6 +4086,7 @@ async function sendOtpEmail(email, code, settings){
     store_whatsapp: s.ownerWhatsapp||BUSINESS_WA,
   };
   try{
+    const emailjs=await loadEmailJS();
     await emailjs.send(ej.service, ej.template, params, {publicKey:ej.key});
     return {ok:true};
   }catch(e){

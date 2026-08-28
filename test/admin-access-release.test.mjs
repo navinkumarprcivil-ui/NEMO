@@ -34,9 +34,10 @@ test('promotion is a once-daily dismissible popup',()=>{
   assert.match(block,/Close promotion/);
 });
 
-test('first paint does not wait for wallet and splash fallback is bounded',()=>{
-  const boot=app.slice(app.indexOf('First paint uses the cached storefront'),app.indexOf('const deepLinkRef'));
-  assert.doesNotMatch(boot,/walletReady/);
-  const max=Number((index.match(/SPLASH_MAX_MS\s*=\s*(\d+)/)||[])[1]);
-  assert.ok(max>0&&max<=5000,`splash max was ${max}`);
+test('first paint waits for complete boot readiness and splash has no display timer',()=>{
+  const boot=app.slice(app.indexOf('The cinematic opening may lift only'),app.indexOf('const deepLinkRef'));
+  assert.match(boot,/walletReady/);
+  assert.match(boot,/communityReady/);
+  assert.match(index,/window\.nemoSplashReady=fadeSplash/);
+  assert.doesNotMatch(index,/SPLASH_(?:MIN|MAX)_MS/);
 });

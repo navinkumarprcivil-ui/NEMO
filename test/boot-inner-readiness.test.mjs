@@ -13,8 +13,10 @@ for (const file of ["app.jsx","src/app.jsx"]) {
   });
 }
 
-test("index keeps only a bounded crash fallback",()=>{
+test("index releases the splash from boot readiness, never a display timer",()=>{
   const source=fs.readFileSync(new URL("../index.html",import.meta.url),"utf8");
-  assert.match(source,/var SPLASH_MAX_MS = 10000/);
   assert.match(source,/window\.nemoSplashReady=fadeSplash/);
+  assert.doesNotMatch(source,/SPLASH_(?:MIN|MAX)_MS/);
+  assert.doesNotMatch(source,/setTimeout\(hideSplashNow/);
+  assert.match(source,/window\.nemoSplashFailed/);
 });

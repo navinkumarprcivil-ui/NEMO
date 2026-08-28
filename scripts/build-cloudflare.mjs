@@ -8,6 +8,7 @@ const OUT = join(ROOT, 'cf-dist');
 const exactFiles = new Set([
   'index.html',
   'app.js',
+  'admin.js',
   'app.jsx',
   'sw.js',
   'manifest.webmanifest',
@@ -69,7 +70,7 @@ const headers = `/*
 `;
 await writeFile(join(OUT, '_headers'), headers, 'utf8');
 
-for (const required of ['index.html', 'app.js', 'sw.js', 'manifest.webmanifest']) {
+for (const required of ['index.html', 'app.js', 'admin.js', 'sw.js', 'manifest.webmanifest']) {
   try {
     const info = await stat(join(OUT, required));
     if (!info.isFile()) throw new Error();
