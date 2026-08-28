@@ -5674,7 +5674,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
         <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={showcaseImgs(mineApproved)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
           <div style={{fontSize:11.5,color:"#15803d",fontWeight:600,lineHeight:1.45}}>
-            ✓ Your current tank stays live{contest?<> with <b>{votesFor(mineApproved)} vote{votesFor(mineApproved)===1?"":"s"}</b></>:null}{showcaseHoursLeft(mineApproved,now)>0?<> · <b>{showcaseHoursLeft(mineApproved,now)}h left</b></>:null}{minePending?" while the replacement is reviewed":""}.
+            ✓ Your current tank is live{contest?<> · <b>🗳️ {votesFor(mineApproved)}</b></>:null}{showcaseHoursLeft(mineApproved,now)>0?<> · <b>🕒 {showcaseHoursLeft(mineApproved,now)}h</b></>:null}{minePending?" · replacement pending":""}.
           </div>
         </div>
       )}
@@ -5692,9 +5692,9 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
                   {imgs.length>1&&<span style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,.55)",color:"#fff",fontSize:9,fontWeight:700,borderRadius:20,padding:"2px 6px"}}>{imgs.length} 📷</span>}
                 </div>
                 <div style={{padding:"7px 8px"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🐠 {s.ownerName}</div>
-                  <div style={{fontSize:10.5,color:contest&&voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>{contest?(voted?`✓ Voted · ${n}`:`🗳️ ${n} vote${n===1?"":"s"}`):"Customer tank"} · {showcaseHoursLeft(s,now)}h left</div>
+                  <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.ownerName}</div>
                   {s.caption&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.caption}</div>}
+                  <div style={{fontSize:10.5,color:contest&&voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>🗳️ {n} · 🕒 {showcaseHoursLeft(s,now)}h</div>
                 </div>
               </div>
             );
@@ -5821,10 +5821,10 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
                   style={{width:"100%",background:own?"rgba(255,255,255,.14)":voted?"rgba(255,255,255,.92)":C.primary,color:own?"rgba(255,255,255,.7)":voted?C.success:"#fff",
                           border:"none",borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:800,
                           fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(own||voted)?"default":"pointer"}}>
-                  {own?`Your tank · ${n} vote${n===1?"":"s"}`
+                  {own?`🗳️ ${n}`
                      : voting===fullImg.id?"…"
-                     : voted?`✓ Vote recorded · ${n}`
-                     : `🗳️ Vote for this tank · ${n}`}
+                     : voted?`✓ 🗳️ ${n}`
+                     : `🗳️ Vote · ${n}`}
                 </button>
                 {!user&&<div style={{color:"rgba(255,255,255,.75)",fontSize:11,marginTop:7,textAlign:"center"}}>Sign in to vote.</div>}
               </div>
