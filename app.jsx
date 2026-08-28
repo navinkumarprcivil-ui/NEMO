@@ -16938,6 +16938,37 @@ function NemoStore(){
   // open sub-screen (product form / order detail) first; at the top level we ask to confirm.
   const adminBackRef = useRef(null);
   const [adminExitAsk,setAdminExitAsk]=useState(false);
+
+  /* Native Android Back bridge. WebView URLs do not reliably reveal React's current
+     screen, so Android asks the app itself. From a deep flow the first press restores
+     the immediately previous screen, then the trail is deliberately reduced to Home:
+     next press reaches Home, and only the following press may show Android's exit dialog. */
+  useEffect(()=>{
+    const handleAndroidBack=()=>{
+      if(pageRef.current==="admin"){
+        if(adminBackRef.current && adminBackRef.current()) return "handled";
+        setAdminExitAsk(true);
+        return "handled";
+      }
+      if(pageRef.current==="home") return "home";
+      const prev=navStackRef.current.pop();
+      if(prev&&prev.page&&prev.page!=="home"){
+        navStackRef.current=[{page:"home",product:null}];
+        nav(prev.page,prev.page==="detail"?prev.product:null,{restore:true,back:true});
+      }else{
+        navStackRef.current=[];
+        nav("home",null,{restore:true,back:true});
+      }
+      return "handled";
+    };
+    window.__nemoHandleAndroidBack=handleAndroidBack;
+    return()=>{
+      if(window.__nemoHandleAndroidBack===handleAndroidBack){
+        try{ delete window.__nemoHandleAndroidBack; }catch(e){ window.__nemoHandleAndroidBack=undefined; }
+      }
+    };
+  },[]);
+
   useEffect(()=>{
     // Seed one history entry so the FIRST back press is captured (even on a fresh Home load).
     try{ history.pushState({nemo:1},""); }catch(e){}
