@@ -1709,6 +1709,17 @@ function compressImage(file, maxDim=1100, quality=0.82){
     img.onerror=(err)=>{ URL.revokeObjectURL(url); reject(err); }; img.src=url;
   });
 }
+/* Customer-tank rules cap each stored image at 700,000 characters. Compress through
+   progressively smaller attempts and keep headroom for data-URL metadata and Firebase encoding. */
+const MAX_TANK_IMAGE_CHARS=650000;
+async function compressTankImage(file){
+  let latest="";
+  for(const [maxDim,quality] of [[1000,.78],[850,.72],[720,.65]]){
+    latest=await compressImage(file,maxDim,quality);
+    if(typeof latest==="string"&&latest.length<=MAX_TANK_IMAGE_CHARS) return latest;
+  }
+  throw new Error(latest?"tank-image-too-large":"tank-image-unreadable");
+}
 /* Make a small catalog thumbnail (JPEG data-URL) from a full-size image data-URL.
    Used so the product grid downloads ~tiny images instead of full-res ones — the
    single biggest first-load win. Returns null for anything that isn't a data-URL image. */
@@ -2856,12 +2867,29 @@ async function loadShowcase(){
   if(fromCloud) await pruneShowcaseCache(live);
   return live;
 }
+function scheduleShowcaseCacheWrite(item){
+  const work=async()=>{
+    try{
+      const cached=await dbGet("nemo-showcase");
+      let existing=[]; try{ existing=cached?JSON.parse(cached):[]; }catch(e){}
+      await dbSet("nemo-showcase",JSON.stringify([item,...existing.filter(x=>x&&x.id!==item.id)]));
+    }catch(e){}
+  };
+  if(typeof requestIdleCallback==="function") requestIdleCallback(()=>{ void work(); },{timeout:1200});
+  else setTimeout(()=>{ void work(); },0);
+}
 async function addShowcasePhoto(item){
-  const cached=await dbGet("nemo-showcase");
-  let existing=[]; try{ existing=cached?JSON.parse(cached):[]; }catch(e){}
-  await dbSet("nemo-showcase",JSON.stringify([item,...existing.filter(x=>x&&x.id!==item.id)]));
-  if(FB_OK){ try{ await FB_DB.ref("showcase/"+item.id).set(item); return true; }catch(e){ return false; } }
-  return false;
+  /* Firebase is the upload. The offline cache is only a convenience and must never block it:
+     large base64 photos can fill or slow IndexedDB on Android devices. */
+  if(!FB_OK) return false;
+  try{
+    await FB_DB.ref("showcase/"+item.id).set(item);
+  }catch(e){
+    console.warn("customer tank upload",e&&((e.code)||e.message)||e);
+    return false;
+  }
+  scheduleShowcaseCacheWrite(item);
+  return true;
 }
 /* Approval always starts one 24-hour window. Voting and the optional monthly board never extend
    a customer's photo beyond that privacy/retention promise. */
@@ -5594,7 +5622,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
     try{
       // Smaller than a single-photo entry was: three of these ride in one database record.
       const out=[];
-      for(const f of list) out.push(await compressImage(f,1000,0.8));
+      for(const f of list) out.push(await compressTankImage(f));
       setPreview(p=>[...p,...out].slice(0,MAX_IMGS));
       setNote(`✓ ${Math.min(preview.length+out.length,MAX_IMGS)} photo${preview.length+out.length>1?"s":""} ready`);
     }catch(e){ setNote("⚠ Couldn't read that image — try a JPG or PNG"); }
@@ -5603,14 +5631,21 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
     if(!preview.length){setNote("⚠ Please add at least one photo");return;}
     const finalName=(user?.name||ownerName||"Aquarist").trim();
     setUploading(true);
-    const entryId=minePending?.id||(user?.uid?(user.uid+"_"+Date.now().toString(36)):uid("sc"));
-    const submittedAt=Date.now();
-    await onSubmit({id:entryId,imgData:preview[0],imgs:preview,ownerName:finalName,caption:caption.trim(),
-      createdAt:new Date(submittedAt).toISOString(),pendingExpiresAt:submittedAt+SHOWCASE_PENDING_TTL,
-      approved:false,userUid:user?.uid||(user?userKey(user):""),...(contest?{month}:{})});
-    if(user?.uid) loadTankUploadStreak(user.uid).then(setStreak);
-    setPreview([]);setCaption("");setOwnerName(user?.name||"");setNote("📩 Submitted! We'll review it soon.");setUploading(false);
-    setTimeout(()=>setNote(""),4000);
+    try{
+      const entryId=minePending?.id||(user?.uid?(user.uid+"_"+Date.now().toString(36)):uid("sc"));
+      const submittedAt=Date.now();
+      const uploaded=await onSubmit({id:entryId,imgData:preview[0],imgs:preview,ownerName:finalName,caption:caption.trim(),
+        createdAt:new Date(submittedAt).toISOString(),pendingExpiresAt:submittedAt+SHOWCASE_PENDING_TTL,
+        approved:false,userUid:user?.uid||(user?userKey(user):""),...(contest?{month}:{})});
+      if(!uploaded) throw new Error("tank-upload-failed");
+      if(user?.uid) loadTankUploadStreak(user.uid).then(setStreak);
+      setPreview([]);setCaption("");setOwnerName(user?.name||"");setNote("📩 Submitted! We'll review it soon.");
+      setTimeout(()=>setNote(""),4000);
+    }catch(e){
+      setNote("⚠ Upload failed. Your photo is still here — tap Share my tank to retry.");
+    }finally{
+      setUploading(false);
+    }
   };
   const vote=async(entry)=>{
     if(!user){ setNote("⚠ Sign in to vote"); return; }
@@ -5702,7 +5737,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
             <label style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,border:`1.5px dashed ${C.border}`,borderRadius:12,padding:"14px",cursor:"pointer",marginBottom:8,background:C.bg}}>
               <span style={{fontSize:24}}>🐡</span>
               <span style={{fontSize:12,fontWeight:700,color:C.primary}}>{preview.length?`Add another (${preview.length}/${MAX_IMGS})`:"Tap to add your tank photos"}</span>
-              <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>handleFiles(e.target.files)}/>
+              <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{const chosen=Array.from(e.target.files||[]);e.target.value="";void handleFiles(chosen);}}/>
             </label>
           )}
           <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,background:C.bg,marginBottom:6,color:C.text}}>
@@ -17236,9 +17271,13 @@ function NemoStore(){
   };
   const handleShowcaseSubmit=async(item)=>{
     const cloudOk=await addShowcasePhoto(item);
+    if(!cloudOk){
+      showToast("Couldn't upload the tank photo — check your connection and retry","error");
+      return false;
+    }
     setShowcase(s=>[item,...s.filter(x=>x.id!==item.id)]); // pending replacement and approved photo may coexist
-    if(cloudOk) showToast("📩 Submitted! We'll review and post it soon.");
-    else showToast("⚠ Saved on this device, but it couldn't reach our server — please check your connection and try again.");
+    showToast("📩 Submitted! We'll review and post it soon.");
+    return true;
   };
   const handleDeleteShowcase=async(id)=>{
     const removed=(showcase||[]).find(x=>x&&x.id===id);
