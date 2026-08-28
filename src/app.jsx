@@ -2849,7 +2849,7 @@ async function loadShowcase(){
   // expire 24h after submission. Filter them immediately even if a cloud delete is
   // temporarily denied/offline, so stale requests never remain visible in the app.
   const expired=arr.filter(x=>showcaseExpired(x,now)||showcasePendingExpired(x,now));
-  if(FB_OK){ expired.forEach(x=>{ try{ FB_DB.ref("showcase/"+x.id).remove(); }catch(e){} }); }
+  if(FB_OK){ expired.forEach(x=>{ FB_DB.ref("showcase/"+x.id).remove().catch(()=>{}); }); }
   const expiredIds=new Set(expired.map(x=>x&&x.id).filter(Boolean));
   const live=arr.filter(x=>x&&!expiredIds.has(x.id)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
   // Keep the offline copy honest too, so the next cold start can't revive a deleted photo either.
@@ -2895,9 +2895,22 @@ async function markTankMonthlyWinner(month,type,row,coins){
   if(FB_OK) await FB_DB.ref("tankMonthlyWinners/"+month+"/"+type).set(record);
   return record;
 }
+function scheduleShowcaseCacheRemoval(id){
+  const work=async()=>{
+    try{
+      const r=await dbGet("nemo-showcase");
+      const arr=r?JSON.parse(r):[];
+      await dbSet("nemo-showcase",JSON.stringify(arr.filter(x=>x&&x.id!==id)));
+    }catch(e){}
+  };
+  /* Base64 tank photos can make JSON parsing expensive. Let the visible admin action finish
+     first, then clean the offline cache when the browser is idle. */
+  if(typeof requestIdleCallback==="function") requestIdleCallback(()=>{ void work(); },{timeout:1200});
+  else setTimeout(()=>{ void work(); },0);
+}
 async function deleteShowcasePhoto(id){
   if(FB_OK){ try{ await FB_DB.ref("showcase/"+id).remove(); }catch(e){ return false; } }
-  const r=await dbGet("nemo-showcase"); const arr=r?JSON.parse(r):[]; await dbSet("nemo-showcase",JSON.stringify(arr.filter(x=>x.id!==id)));
+  scheduleShowcaseCacheRemoval(id);
   return true;
 }
 
@@ -13369,6 +13382,29 @@ function AdminExitConfirm({onStay,onLeave}){
 /* ═══════════════════ ADMIN HUB (Dashboard + Orders) ═══════════════════ */
 function AdminHub({products,orders,mediaCache,requests,guides,settings,interestCounts={},abandonedCarts=[],onDismissAbandoned,onSaveProd,onDeleteProd,onUpdateOrder,onDeleteOrder,onCleanupOrders,onResetOrderData,onBackfillThumbs,onDeleteRequest,onPurgeUser,onSaveGuide,onDeleteGuide,onDeleteGuides,onSaveSettings,onReviewsChanged,onBack,showToast,onAdminSignIn,showcase=[],onDeleteShowcase,onApproveShowcase,onTankMonthlyAward,totmVotes={},tankMonthKey=totmMonthOf(Date.now()),testimonials=[],onDeleteTestimonial,backRef}){
   const [tab,setTab]=useState("orders"); // orders | products | reviews | requests | guides | settings | form | orderDetail
+  const showcaseActionRef=useRef(new Set());
+  const [showcaseAction,setShowcaseAction]=useState({});
+  const runShowcaseAction=async(s,action)=>{
+    if(!s||showcaseActionRef.current.has(s.id)) return;
+    showcaseActionRef.current.add(s.id);
+    setShowcaseAction(current=>({...current,[s.id]:action}));
+    /* Yield once so the phone can paint immediate feedback before Firebase handles the image row. */
+    await new Promise(resolve=>setTimeout(resolve,0));
+    try{
+      if(action==="approve"){
+        if(onApproveShowcase) await onApproveShowcase(s);
+      }else if(onDeleteShowcase){
+        await onDeleteShowcase(s.id);
+      }
+    }finally{
+      showcaseActionRef.current.delete(s.id);
+      setShowcaseAction(current=>{
+        const next={...current};
+        delete next[s.id];
+        return next;
+      });
+    }
+  };
 
   const adminUid=(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||"";
   const allowedTabs=isCoAdminUid(adminUid)?ADMIN_SECTION_KEYS.filter(k=>canAdminSection(k,adminUid)):ADMIN_SECTION_KEYS;
@@ -14560,7 +14596,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           {/* Showcase management */}
           {showcase.length>0&&(()=>{
             const now=Date.now();
-            const pending=showcase.filter(s=>!showcaseApproved(s)&&!showcaseExpired(s,now));
+            const pending=showcase.filter(s=>!showcaseApproved(s)&&!showcasePendingExpired(s,now));
             const live=showcase.filter(s=>showcaseApproved(s)&&!showcaseExpired(s,now));
             const row=(s,isPending)=>(
               <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"8px 10px",border:`1px solid ${isPending?"#fed7aa":C.border}`}}>
@@ -14571,14 +14607,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   <div style={{fontSize:10,color:C.textSub}}>{fmtDate(s.createdAt)}{!isPending&&showcaseExpiry(s)>0?` · ${showcaseHoursLeft(s,now)}h left`:""}</div>
                 </div>
                 {isPending&&(
-                  <button className="press" onClick={()=>onApproveShowcase&&onApproveShowcase(s)}
-                    style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"5px 11px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
-                    Approve
+                  <button type="button" className="press" disabled={!!showcaseAction[s.id]} onClick={()=>runShowcaseAction(s,"approve")}
+                    style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"5px 11px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,opacity:showcaseAction[s.id]?0.65:1}}>
+                    {showcaseAction[s.id]==="approve"?"Approving…":"Approve"}
                   </button>
                 )}
-                <button className="press" onClick={()=>onDeleteShowcase&&onDeleteShowcase(s.id)}
-                  style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
-                  {isPending?"Reject":"Remove"}
+                <button type="button" className="press" disabled={!!showcaseAction[s.id]} onClick={()=>runShowcaseAction(s,"reject")}
+                  style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,opacity:showcaseAction[s.id]?0.65:1}}>
+                  {showcaseAction[s.id]==="reject"?(isPending?"Rejecting…":"Removing…"):(isPending?"Reject":"Remove")}
                 </button>
               </div>
             );
@@ -17204,6 +17240,20 @@ function NemoStore(){
     if(cloudOk) showToast("📩 Submitted! We'll review and post it soon.");
     else showToast("⚠ Saved on this device, but it couldn't reach our server — please check your connection and try again.");
   };
+  const handleDeleteShowcase=async(id)=>{
+    const removed=(showcase||[]).find(x=>x&&x.id===id);
+    if(!removed) return true;
+    /* Optimistic removal keeps Reject/Remove instant. Restore the exact row if Firebase refuses. */
+    setShowcase(list=>list.filter(x=>x&&x.id!==id));
+    const ok=await deleteShowcasePhoto(id);
+    if(!ok){
+      setShowcase(list=>list.some(x=>x&&x.id===id)?list:[removed,...list].sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")));
+      showToast("Couldn't remove that submission — verify admin sign-in","error");
+      return false;
+    }
+    showToast(showcaseApproved(removed)?"Tank photo removed":"Submission rejected");
+    return true;
+  };
   const handleApproveShowcase=async(item)=>{
     const {updated,replacedId,ok}=await approveShowcasePhoto(item,settings,showcase);
     if(!ok){ showToast("Couldn't approve — sign in with the admin Google account and retry","error"); return; }
@@ -18099,7 +18149,7 @@ function NemoStore(){
         {page==="contact"  &&<ContactPage nav={nav} goBack={goBack} settings={settings}/>} 
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
         {page==="admin-login"&&<AdminLogin onSuccess={()=>nav("admin")} onBack={goBack} onAdminSignIn={adminGoogleSignIn} settings={settings}/>}
-        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={async id=>{const ok=await deleteShowcasePhoto(id);if(ok)setShowcase(s=>s.filter(x=>x.id!==id));else showToast("Couldn't remove that submission — verify admin sign-in","error");}} onApproveShowcase={handleApproveShowcase} onTankMonthlyAward={handleTankMonthlyAward} totmVotes={totmVotes} tankMonthKey={activeTankMonth} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial}
+        {page==="admin"   &&<AdminHub products={products} orders={orders} requests={requests} guides={guides} settings={settings} interestCounts={interestCounts} mediaCache={mediaCache} showToast={showToast} abandonedCarts={abandonedCarts} onDismissAbandoned={dismissAbandoned} showcase={showcase} onDeleteShowcase={handleDeleteShowcase} onApproveShowcase={handleApproveShowcase} onTankMonthlyAward={handleTankMonthlyAward} totmVotes={totmVotes} tankMonthKey={activeTankMonth} testimonials={testimonials} onDeleteTestimonial={handleDeleteTestimonial}
           onSaveProd={saveProdHandler} onDeleteProd={deleteProdHandler} onUpdateOrder={updateOrderHandler} onDeleteOrder={deleteOrderHandler} onCleanupOrders={cleanupOldOrders} onResetOrderData={resetOrderDataHandler} onBackfillThumbs={backfillThumbs} onDeleteRequest={deleteRequest} onPurgeUser={purgeUserForAdmin} onSaveGuide={saveGuideHandler} onDeleteGuide={deleteGuideHandler} onDeleteGuides={deleteGuidesHandler} onSaveSettings={saveSettingsHandler} onReviewsChanged={recomputeProductRating} onBack={()=>nav("home")} onAdminSignIn={adminGoogleSignIn} backRef={adminBackRef}/>}
         </div>
       </div>

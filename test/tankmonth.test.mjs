@@ -19,10 +19,10 @@ const code = src.slice(src.indexOf("const SHOWCASE_TTL"), src.indexOf("function 
 const M = new Function("FB_OK", code + `
   return {totmMonthOf,previousTotmMonth,adminRewardReminderPeriod,totmDayOf,totmMonthLabel,totmMonthEnd,tankVoteRewardOn,tankStreakRewardOn,showcaseImgs,voteCount,
           hasVotedForTank,totmStandings,totmMinVotes,totmEligible,
-          showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak,monthUploadStats,tankMonthlyRows,replacementForApproval};`)(false);
+          showcaseExpiry,showcaseExpired,showcasePendingExpiry,showcasePendingExpired,showcaseHoursLeft,computeTankUploadStreak,monthUploadStats,tankMonthlyRows,replacementForApproval};`)(false);
 const {totmMonthOf,previousTotmMonth,adminRewardReminderPeriod,totmDayOf,totmMonthLabel,totmMonthEnd,tankVoteRewardOn,tankStreakRewardOn,showcaseImgs,voteCount,
        hasVotedForTank,totmStandings,totmMinVotes,totmEligible,
-       showcaseExpiry,showcaseExpired,showcaseHoursLeft,computeTankUploadStreak,monthUploadStats,tankMonthlyRows,replacementForApproval}=M;
+       showcaseExpiry,showcaseExpired,showcasePendingExpiry,showcasePendingExpired,showcaseHoursLeft,computeTankUploadStreak,monthUploadStats,tankMonthlyRows,replacementForApproval}=M;
 /* Legacy ballot fixture: totmVotes/<month>/<entryId>/<day>/<voter> = true. */
 const ballots = pairs => {
   const out = {};
@@ -201,6 +201,19 @@ test("approved tank photos show hours remaining and expire at exactly 24 hours",
   assert.equal(showcaseHoursLeft(legacy, approvedAt), 24);
   assert.ok(showcaseExpired(legacy, approvedAt + 24 * 60 * 60 * 1000));
   assert.equal(showcaseExpiry({approved:false,createdAt:"2026-08-17T08:00:00Z"}), 0);
+});
+
+test("pending tank requests expire 24 hours after submission", () => {
+  const submitted = Date.parse("2026-08-17T08:00:00Z");
+  const explicit = {approved:false, createdAt:"2026-08-17T08:00:00Z", pendingExpiresAt:submitted + 24 * 60 * 60 * 1000};
+  assert.equal(showcasePendingExpiry(explicit), submitted + 24 * 60 * 60 * 1000);
+  assert.ok(!showcasePendingExpired(explicit, submitted + 24 * 60 * 60 * 1000 - 1));
+  assert.ok(showcasePendingExpired(explicit, submitted + 24 * 60 * 60 * 1000));
+
+  const legacy = {approved:false, createdAt:"2026-08-17T08:00:00Z"};
+  assert.equal(showcasePendingExpiry(legacy), submitted + 24 * 60 * 60 * 1000);
+  assert.ok(showcasePendingExpired(legacy, submitted + 24 * 60 * 60 * 1000));
+  assert.equal(showcasePendingExpiry({approved:true,createdAt:"2026-08-17T08:00:00Z"}), 0);
 });
 
 test("daily tank uploads keep current and best streaks", () => {

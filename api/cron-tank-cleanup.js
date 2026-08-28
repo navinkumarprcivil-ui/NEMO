@@ -1,13 +1,24 @@
-/** Remove approved customer-tank entries once their 24-hour approval window ends. */
+/** Remove pending and approved customer-tank entries once their 24-hour window ends. */
 import { dbGet, dbDelete } from '../lib/payments.mjs';
 
 const TTL = 24 * 60 * 60 * 1000;
-const expiryOf = (entry) => {
-  const explicit = Number(entry?.expiresAt) || 0;
-  if (explicit > 0) return explicit;
-  if (!entry || entry.approved === false) return 0;
-  const legacy = Date.parse(entry.approvedAt || entry.createdAt || '');
-  return Number.isFinite(legacy) ? legacy + TTL : 0;
+
+/* Pending time starts at submission. Approved time is a separate window that starts only when
+   the admin approves. Explicit numeric expiries win; the date fallbacks keep legacy rows clean. */
+export const tankEntryExpiry = (entry) => {
+  if (!entry) return 0;
+
+  if (entry.approved === false) {
+    const pending = Number(entry.pendingExpiresAt) || 0;
+    if (pending > 0) return pending;
+    const submitted = Date.parse(entry.createdAt || '');
+    return Number.isFinite(submitted) ? submitted + TTL : 0;
+  }
+
+  const approved = Number(entry.expiresAt) || 0;
+  if (approved > 0) return approved;
+  const approvedAt = Date.parse(entry.approvedAt || entry.createdAt || '');
+  return Number.isFinite(approvedAt) ? approvedAt + TTL : 0;
 };
 
 export default async function handler(req, res) {
@@ -21,10 +32,11 @@ export default async function handler(req, res) {
   try {
     const all = await dbGet('showcase') || {};
     const now = Date.now();
-    const expired = Object.entries(all).filter(([, entry]) =>
-      entry && entry.approved !== false && expiryOf(entry) > 0 && expiryOf(entry) <= now
-    );
-    // Delete by the actual database key, not a client-supplied `entry.id` field.
+    const expired = Object.entries(all).filter(([, entry]) => {
+      const expiry = tankEntryExpiry(entry);
+      return expiry > 0 && expiry <= now;
+    });
+    // Service-account deletion is authoritative and does not depend on a customer/admin opening the app.
     await Promise.all(expired.map(([key]) => dbDelete(`showcase/${encodeURIComponent(key)}`)));
     res.status(200).json({ ok: true, removed: expired.length });
   } catch (error) {
