@@ -282,7 +282,9 @@
   // is ready. This maximum is only a crash/offline escape hatch; normal release comes from
   // window.nemoSplashReady after NemoStore's complete readiness check.
   var SPLASH_MIN_MS=400;
-  var SPLASH_MAX_MS = 4000;
+  // The app normally releases earlier, immediately after its inner data settles.
+  // Ten seconds is only the last-resort escape hatch for a broken/offline boot.
+  var SPLASH_MAX_MS = 10000;
   var splashGone=false;
   function hideSplashNow(){
     if(splashGone) return; splashGone=true;

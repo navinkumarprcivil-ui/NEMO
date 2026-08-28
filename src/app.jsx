@@ -16559,6 +16559,9 @@ function NemoStore(){
   const [tankPreviousWinners,setTankPreviousWinners] = useState(null);
   const [activeTankMonth,setActiveTankMonth] = useState(()=>totmMonthOf(Date.now()));
   const [testimonials,setTestimonials] = useState([]);
+  // First Firebase community snapshots (including a valid empty result) must settle before
+  // the cinematic opening lifts, otherwise these sections pop into an already-visible Home.
+  const [communityReady,setCommunityReady] = useState(false);
   const [restockSet,setRestockSet] = useState(()=>loadRestockLocal().map(x=>x.pid));
   const [selProduct,setSelProduct] = useState(null);
   const [walletPts,setWalletPts]   = useState(0);
@@ -16803,13 +16806,14 @@ function NemoStore(){
   // from the local value after a short grace period even if Firebase is slow/blocked.
   useEffect(()=>{ const t=setTimeout(()=>setSettingsReady(true), 650); return()=>clearTimeout(t); },[]);
 
-  /* First paint uses the cached storefront as soon as products + settings are ready. Wallet
-     balance refreshes in the background; it must never hold a returning customer behind splash. */
+  /* The cinematic opening may lift only after the visible Home data has settled:
+     catalogue, settings, Customer Tanks, testimonials and the signed-in wallet. Each source
+     carries its own bounded fallback, so this waits for real inner completion without hanging. */
   useEffect(()=>{
-    if(loading||!hydrated||!settingsReady) return;
+    if(loading||!hydrated||!settingsReady||!communityReady||!walletReady) return;
     try{ window.__nemoBootReady=true; }catch(e){}
     revealStore();
-  },[loading,hydrated,settingsReady]);
+  },[loading,hydrated,settingsReady,communityReady,walletReady]);
 
   const deepLinkRef = useRef((()=>{ try{ return new URLSearchParams(window.location.search).get("p")||""; }catch(e){ return ""; } })());
   useEffect(()=>{
@@ -18100,28 +18104,73 @@ function NemoStore(){
 
   // GLOBAL: live listeners on community content (showcase + testimonials) so the admin
   // sees new submissions the instant they're posted, and customers see fresh testimonials.
+  // Their FIRST settled results are part of boot readiness. A result may validly be empty;
+  // readiness means the inner read completed, not that the store happens to contain a row.
   useEffect(()=>{
-    if(!(FB_OK && FB_DB)){
-      loadShowcase().then(sc=>{ if(sc&&sc.length) setShowcase(sc); });
-      loadTestimonials().then(ts=>{ if(ts&&ts.length) setTestimonials(ts); });
-      return;
-    }
-    const scRef=FB_DB.ref("showcase");
-    const scCb=scRef.on("value",s=>{
-      const v=s&&s.val(); const now=Date.now();
-      let arr=v?Object.values(v).filter(x=>x&&x.id):[];
-      arr=arr.filter(x=>!showcaseExpired(x,now)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
-      setShowcase(arr);
-      pruneShowcaseCache(arr); // this device's copy must not outlive what the admin deleted
-    },()=>{ loadShowcase().then(sc=>{ if(sc&&sc.length) setShowcase(sc); }); });
-    const tsRef=FB_DB.ref("testimonials");
-    const tsCb=tsRef.on("value",s=>{
-      const v=s&&s.val();
-      const arr=v?Object.values(v).filter(x=>x&&x.id).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")):[];
-      setTestimonials(arr);
-      pruneTestimonialCache(arr);
-    },()=>{ loadTestimonials().then(ts=>{ if(ts&&ts.length) setTestimonials(ts); }); });
-    return ()=>{ try{scRef.off("value",scCb);}catch(e){} try{tsRef.off("value",tsCb);}catch(e){} };
+    let alive=true;
+    let detach=()=>{};
+    let showcaseSettled=false, testimonialsSettled=false;
+    const settle=kind=>{
+      if(!alive) return;
+      if(kind==="showcase") showcaseSettled=true;
+      if(kind==="testimonials") testimonialsSettled=true;
+      if(showcaseSettled&&testimonialsSettled){ clearTimeout(guard); setCommunityReady(true); }
+    };
+    const useShowcase=sc=>{
+      if(!alive) return;
+      setShowcase(Array.isArray(sc)?sc:[]);
+      settle("showcase");
+    };
+    const useTestimonials=ts=>{
+      if(!alive) return;
+      setTestimonials(Array.isArray(ts)?ts:[]);
+      settle("testimonials");
+    };
+    // Failure boundary only: normal release comes from both inner reads below. This prevents
+    // one blocked Firebase path from trapping the customer behind the opening forever.
+    const guard=setTimeout(()=>{ if(alive) setCommunityReady(true); },8000);
+    const start=async()=>{
+      // Firebase loads asynchronously after React. Give it a brief chance to connect before
+      // deciding the device is offline and using the local community cache.
+      if(!(FB_OK&&FB_DB)) await waitForFirebase(4000);
+      if(!alive) return;
+      if(!(FB_OK&&FB_DB)){
+        Promise.all([
+          loadShowcase().then(useShowcase).catch(()=>useShowcase([])),
+          loadTestimonials().then(useTestimonials).catch(()=>useTestimonials([])),
+        ]);
+        return;
+      }
+      const scRef=FB_DB.ref("showcase");
+      const scCb=scRef.on("value",s=>{
+        if(!alive) return;
+        const v=s&&s.val(); const now=Date.now();
+        let arr=v?Object.values(v).filter(x=>x&&x.id):[];
+        arr=arr.filter(x=>!showcaseExpired(x,now)&&!showcasePendingExpired(x,now))
+          .sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+        useShowcase(arr);
+        pruneShowcaseCache(arr);
+      },()=>{
+        loadShowcase().then(useShowcase).catch(()=>useShowcase([]));
+      });
+      const tsRef=FB_DB.ref("testimonials");
+      const tsCb=tsRef.on("value",s=>{
+        if(!alive) return;
+        const v=s&&s.val();
+        const arr=v?Object.values(v).filter(x=>x&&x.id)
+          .sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")):[];
+        useTestimonials(arr);
+        pruneTestimonialCache(arr);
+      },()=>{
+        loadTestimonials().then(useTestimonials).catch(()=>useTestimonials([]));
+      });
+      detach=()=>{
+        try{ scRef.off("value",scCb); }catch(e){}
+        try{ tsRef.off("value",tsCb); }catch(e){}
+      };
+    };
+    start();
+    return()=>{ alive=false; clearTimeout(guard); detach(); };
   },[fbReady]);
 
   // CUSTOMER: live listener on THEIR orders (reflects admin status updates instantly)
