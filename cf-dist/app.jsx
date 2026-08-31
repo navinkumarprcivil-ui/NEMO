@@ -106,6 +106,59 @@ const CAT_META = {
   "Medicine":    { emoji:"💊", c1:"#5b2d82", c2:"#8b5cf6" },
 };
 const CATEGORIES  = Object.keys(CAT_META);
+
+/* ═══════════════════ LIVE FISH MASTER SWITCH ═══════════════════
+   Razorpay does not onboard merchants that sell live animals, so the storefront
+   currently ships with live fish hidden. This is a visibility switch, NOT a
+   deletion. Nothing is removed from Firebase: every Live Fish product, its
+   media, variants, packing rules and prices stay exactly where they are, and
+   every past order keeps its fish line items, DOA claims and refunds — those are
+   GST records and they still render in admin and in order history.
+
+   Fishkeeping *content* is untouched on purpose. Aqua Tools, the Fish Community
+   Planner, My Tank, the Customer Tank showcase and the care guides all stay:
+   Razorpay restricts selling live animals, not writing about them.
+
+   ── To bring live fish back ──────────────────────────────────────────────
+       LIVE_FISH_ENABLED = true          (here, and in lib/catalog.mjs)
+       node scripts/build.mjs && npm run check
+
+   That flip restores the catalogue, shop, search, category filters, checkout,
+   the Live Arrival Guarantee, the DOA flow and the live-fish shipping logic.
+   `lib/catalog.mjs` carries the same switch for the server-rendered /p/ pages
+   and the sitemap; both must be flipped together, and
+   test/live-fish-switch.test.mjs fails the build if they drift apart.
+   docs/LIVE_FISH_BACKOUT.md documents every gated site and how to reverse it. */
+const LIVE_FISH_ENABLED = false;
+const LIVE_FISH_CATEGORY = "Live Fish";
+const isLiveFishCategory = (c) => c === LIVE_FISH_CATEGORY;
+/* True when a product may appear on a shopping surface. Admin and order history
+   deliberately do NOT filter through this — the owner still manages the hidden
+   catalogue, and a past order must keep rendering the fish it actually contained. */
+const isShoppable = (p) => LIVE_FISH_ENABLED || !isLiveFishCategory(p && p.category);
+const shoppable = (list) => LIVE_FISH_ENABLED ? (list || []) : (list || []).filter(isShoppable);
+/* Categories the storefront offers. CATEGORIES itself stays complete so the admin
+   product form can still file a product under Live Fish while the switch is off. */
+const SHOP_CATEGORIES = LIVE_FISH_ENABLED ? CATEGORIES : CATEGORIES.filter(c => !isLiveFishCategory(c));
+/* Policy pages that exist only to describe shipping live animals — the Live Arrival Guarantee
+   and the Acclimatization Guide ("settle your new arrivals in safely"). They leave the policy
+   menus with the fish and come back with them. Note this is the one place where a piece of
+   fishkeeping *guidance* is hidden: keeping a page about acclimatizing the fish we shipped you,
+   while the store says it does not sell live animals, is the kind of contradiction a payment
+   review is looking for. The care guides section itself is untouched. */
+const HIDDEN_POLICY_ROUTES = LIVE_FISH_ENABLED ? [] : ["policy-guarantee","policy-acclimatize"];
+const policyLinks = (links) => (links || []).filter(l => !HIDDEN_POLICY_ROUTES.includes(l.to));
+/* Marketing copy the owner has saved in Firebase may name fish — the home hero is the first
+   thing both a shopper and a payment reviewer read. Rather than rewriting what the owner
+   saved (it has to come back verbatim), the storefront falls back to fish-free wording for
+   as long as the switch is off. Copy with no fish in it is always shown as written. */
+const FISHY_COPY_RE = /fish|livestock|live arrival|aquarium life/i;
+function storeCopy(saved, whenOn, whenOff){
+  const v = String(saved || "").trim();
+  if(LIVE_FISH_ENABLED) return v || whenOn;
+  return (!v || FISHY_COPY_RE.test(v)) ? whenOff : v;
+}
+
 const ORDER_STATUSES = ["Confirmed","Shipped","Delivered"]; // Cashfree confirms; admin ships and delivers
 const ALL_STATUSES   = ["Awaiting Payment","Payment Review","Confirmed","Shipped","Delivered","Cancelled"];
 const ADMIN_ORDER_FILTERS = ["All","Order Placed","Shipped","Delivered","Past Orders","Return/Replacement"];
@@ -210,6 +263,11 @@ function returnWindowOpen(o){
    IS one. An order that has shipped but is not yet marked delivered stays open. */
 const DOA_WINDOW_HOURS = 24;
 function doaEntryOpen(o){
+  // The Live Arrival Guarantee is a live-fish product, so while live fish are switched off no
+  // NEW claim can be raised. This gates only the entry point: a claim already on an order still
+  // renders in order history and is still resolved and refunded from Admin, because those are
+  // GST records. Flipping LIVE_FISH_ENABLED back on reopens the flow exactly as it was.
+  if(!LIVE_FISH_ENABLED) return false;
   if(!o || o.status==="Cancelled") return false;
   // Before payment there is no order to claim against.
   const paid = !!o.paidAt || ["Payment Review","Confirmed","Shipped","Delivered"].includes(o.status);
@@ -1967,6 +2025,30 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   emailDelivered: false,  // delivered (WhatsApp instead)
   adminOrderEmail: false, // email a copy of each new order to the admin (off by default; opt in below)
 };
+
+/* ── Policy copy while live fish are switched off ─────────────────────────────
+   The owner's live-fish policy wording lives in Firebase, was written by them, and has to
+   come back word for word when live fish do — so it is never rewritten or overwritten.
+   These replacements are applied at RENDER only, by `policyText` below. Admin's Settings
+   editors keep showing and saving the real saved text, and nothing here is ever persisted:
+   flipping LIVE_FISH_ENABLED back on restores the owner's wording untouched.
+
+   Deliberately NOT routed through normalizeSettings — that result is what Admin saves back,
+   so sanitising there would quietly overwrite the live-fish policies in Firebase. */
+const COURIER_COLLECT_TERM_DRY = "Tracking & collection: once your order is dispatched we share the courier partner and consignment number. Please keep tracking your parcel and collect it from the courier partner as soon as it reaches your area. Door delivery depends entirely on the courier partner and is not in our hands, so we request every customer to put in that effort and take delivery of the package at the earliest — live plants in particular are affected by every extra hour the parcel spends in transit or lying at the hub. Loss or deterioration caused by a parcel left uncollected, collected late, refused, or returned undelivered is not covered by any refund or reward coins.";
+/* The tracking & collection clause the storefront currently shows. */
+function courierCollectTerm(){ return LIVE_FISH_ENABLED ? COURIER_COLLECT_TERM : COURIER_COLLECT_TERM_DRY; }
+
+const LIVE_FISH_OFF_POLICY = {
+  returnPolicy: "Unused accessories and equipment in original, undamaged packaging may be returned within 3 days of delivery. Return shipping is paid by the customer unless the item arrived damaged or incorrect. Refunds are issued within 5–7 working days after inspection. Live plants, feed and medicines are final sale after safe delivery. Customers cannot cancel after payment confirmation, and store cancellation is unavailable after shipment.",
+  termsPolicy: "By placing an order you agree to these terms. "+STORE_NAME+" Aqua Store is a home-based proprietary micro-enterprise (Udyam-registered) trading in aquarium plants, supplies and equipment. All orders are subject to stock availability and our acceptance of your payment. Prices are in INR and inclusive of applicable taxes. We are currently a small enterprise not registered under GST, so no GST is charged at present; this notice and your invoice will be updated once we register for GST, at which point your bill will be issued as a GST Tax Invoice. To the maximum extent permitted by law, our total liability for any order is limited to the amount actually paid for that order; we are not liable for indirect, incidental or consequential losses, nor for any loss arising after goods have been introduced to your tank or system. We are not responsible for delays or failures caused by courier partners, weather, power/water conditions at your premises, or other events beyond our reasonable control. "+COURIER_COLLECT_TERM_DRY+" These terms are governed by the laws of India and subject to the exclusive jurisdiction of the courts at Salem, Tamil Nadu.",
+};
+/* The policy text to display for `key`. Falls back to the saved value, then the default. */
+function policyText(key, s){
+  const saved = (s && s[key]) || DEFAULT_SETTINGS[key];
+  if(LIVE_FISH_ENABLED) return saved;
+  return LIVE_FISH_OFF_POLICY[key] || saved;
+}
 /* ── Public vs private settings ───────────────────────────────────────────────
    The `settings` node is world-readable (the storefront needs the WhatsApp number, policies,
    rates and so on before anyone signs in). These keys are NOT storefront data and
@@ -4681,7 +4763,7 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
     ${/* One source of truth for the window. The invoice used to carry its own fallback copy
            promising 7 days for accessories while the settings default said 3 — a printed
            promise the store had no intention of honouring if the setting was ever cleared. */""}
-    <p style="font-size:10px"><b>Cancellations, Returns &amp; Refunds:</b> ${policyHTML(s.returnPolicy||DEFAULT_SETTINGS.returnPolicy)}</p>
+    <p style="font-size:10px"><b>Cancellations, Returns &amp; Refunds:</b> ${policyHTML(policyText("returnPolicy", s))}</p>
   </div>
   ${sigHtml}
   <div class="np" style="text-align:right;margin-top:18px"><button onclick="window.print()" style="background:#2f4b7c;color:#fff;border:none;border-radius:6px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / Save as PDF</button></div>
@@ -6027,8 +6109,8 @@ function CustomerStageBadge({order}){
   return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:m.bg,color:m.c,borderRadius:20,padding:"4px 10px",fontSize:10.5,fontWeight:800,whiteSpace:"nowrap"}}>{m.icon} {stage}</span>;
 }
 function CategoryPills({selected,onSelect,all,counts}){
-  const list=all?["All",...CATEGORIES]:CATEGORIES;
-  const icons={All:"🌊",...Object.fromEntries(CATEGORIES.map(c=>[c,CAT_META[c].emoji]))};
+  const list=all?["All",...SHOP_CATEGORIES]:SHOP_CATEGORIES;
+  const icons={All:"🌊",...Object.fromEntries(SHOP_CATEGORIES.map(c=>[c,CAT_META[c].emoji]))};
   return(
     <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
       {list.map(c=>(
@@ -7313,7 +7395,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.e2815982";
+const APP_BUILD = "v90.9cdb16cc";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7425,7 +7507,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
   const go=(to)=>{ onClose&&onClose(); nav&&nav(to); };
   const [refreshing,setRefreshing]=useState(false);
   const COMPANY=[{label:"About Us",to:"about"},{label:"Care Guides",to:"guides"},{label:"Request a Product",to:"request"},{label:"Track My Orders",to:"orders"}];
-  const POLICIES=[{label:"Live Guarantee",to:"policy-guarantee"},{label:"Cancellations, Returns & Refunds",to:"policy-returns",href:"/cancellations-returns-refunds"},{label:"Terms & Conditions",to:"policy-terms"},{label:"Privacy Policy",to:"policy-privacy"},{label:"Contact Us",to:"contact",href:"/contact-us"}];
+  const POLICIES=policyLinks([{label:"Live Guarantee",to:"policy-guarantee"},{label:"Cancellations, Returns & Refunds",to:"policy-returns",href:"/cancellations-returns-refunds"},{label:"Terms & Conditions",to:"policy-terms"},{label:"Privacy Policy",to:"policy-privacy"},{label:"Contact Us",to:"contact",href:"/contact-us"}]);
   return(
     /* Portal: the drawer sits inside the page's .slide-up wrapper, whose held identity
        matrix traps position:fixed — the overlay was being sized to the whole home page
@@ -7456,7 +7538,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
             <span style={{fontSize:22,width:28,textAlign:"center"}}>🌊</span>
             <span style={{fontSize:14.5,fontWeight:800,color:C.text}}>All Products</span>
           </button>
-          {CATEGORIES.map(cat=>(
+          {SHOP_CATEGORIES.map(cat=>(
             <button key={cat} className="press" onClick={()=>onSelect(cat)}
               style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderTop:`1px solid ${C.border}`,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
               <span style={{fontSize:22,width:28,textAlign:"center"}}>{CAT_META[cat].emoji}</span>
@@ -7537,7 +7619,7 @@ function PincodeChecker({settings={}}){
         <span style={{fontSize:22}}>📍</span>
         <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,color:"#fff"}}>Check delivery to your area</span>
       </div>
-      <div style={{fontSize:12.5,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>Enter your 6-digit pincode to see if we deliver — and whether live fish reach your area.</div>
+      <div style={{fontSize:12.5,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>{LIVE_FISH_ENABLED?"Enter your 6-digit pincode to see if we deliver — and whether live fish reach your area.":"Enter your 6-digit pincode to see if we deliver to your area."}</div>
       <div style={{display:"flex",gap:8}}>
         <input value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,6));setRes(null);}}
           onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric" placeholder="e.g. 600001"
@@ -7550,7 +7632,9 @@ function PincodeChecker({settings={}}){
             <div style={{fontSize:13,fontWeight:700,color:C.danger}}>Please enter a valid 6-digit pincode.</div>
           ):(<>
             <div style={{fontSize:14,fontWeight:800,color:C.success,marginBottom:6}}>✓ Yes! We deliver to {ZONE_LABELS[res.zone]}.</div>
-            {res.live?(
+            {!LIVE_FISH_ENABLED?(
+              <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.5}}>🌿 Plants, tanks, accessories &amp; feed — all available, delivered across India.</div>
+            ):res.live?(
               <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.5}}>🐠 Live fish, plants &amp; accessories — all available, with our Live Arrival Guarantee.</div>
             ):(
               <div style={{fontSize:12.5,color:"#b45309",lineHeight:1.5,fontWeight:600}}>📦 Accessories, food &amp; plants ship here. Live fish aren't delivered to this region yet — for their safety we ship live stock only within Tamil Nadu &amp; South India.</div>
@@ -8623,10 +8707,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         </button>
         {/* Tagline */}
         <div className="hero-tagline" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(23px,6vw,38px)",fontWeight:800,letterSpacing:"-0.03em",color:C.text,lineHeight:1.1,marginBottom:5,textWrap:"balance",textAlign:"center"}}>
-          {settings.heroHeadline||"Bring Colour to Your Life"}
+          {storeCopy(settings.heroHeadline,"Bring Colour to Your Life","Bring Colour to Your Life")}
         </div>
         <div className="hero-sub" style={{fontSize:13.5,fontWeight:500,color:C.textSub,marginBottom:0,textAlign:"center"}}>
-          {settings.heroSub||"Quality Fishes · Plants · Accessories"}
+          {storeCopy(settings.heroSub,"Quality Fishes · Plants · Accessories","Plants · Tanks · Accessories · Feed")}
         </div>
       </div>
 
@@ -8847,7 +8931,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             {/* Shop */}
             <div>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Shop</div>
-              {CATEGORIES.map(cat=>(
+              {SHOP_CATEGORIES.map(cat=>(
                 <button key={cat} className="press" onClick={()=>{setCategory(cat);nav("shop");}}
                   style={{display:"flex",alignItems:"center",gap:7,background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
                   <span style={{fontSize:14}}>{CAT_META[cat].emoji}</span>{cat}
@@ -8872,13 +8956,13 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             {/* Policies */}
             <div>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Policies</div>
-              {[
+              {policyLinks([
                 {label:"Live Guarantee",to:"policy-guarantee"},
                 {label:"Cancellations, Returns & Refunds",to:"policy-returns",href:"/cancellations-returns-refunds"},
                 {label:"Terms & Conditions",to:"policy-terms"},
                 {label:"Privacy Policy",to:"policy-privacy"},
                 {label:"Contact Us",to:"contact",href:"/contact-us"},
-              ].map(l=>(
+              ]).map(l=>(
                 <a key={l.label} className="press" href={l.href||"#"} onClick={e=>{e.preventDefault();nav(l.to);}}
                   style={{display:"block",background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",cursor:"pointer",width:"100%",textDecoration:"none"}}>
                   {l.label}
@@ -8989,7 +9073,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
   const catCounts=useMemo(()=>{
     const q=(query||"").trim();
     const match=p=>!q||smartMatch(q,p);
-    const m={All:0}; CATEGORIES.forEach(c=>m[c]=0);
+    const m={All:0}; SHOP_CATEGORIES.forEach(c=>m[c]=0);
     products.forEach(p=>{ if(match(p)){ m.All++; if(m[p.category]!=null) m[p.category]++; } });
     return m;
   },[products,query]);
@@ -9764,7 +9848,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         {!p.comingSoon&&(
           <div style={{margin:"22px 0 6px",padding:"14px 12px",background:C.card,borderRadius:16,border:`1px solid ${C.border}`}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-              {[["🛡️","Live Arrival","Guarantee"],["📦","Safe, breathable","Packing"],["🔒","Secure UPI /","Online Pay"]].map(([ic,a,b])=>(
+              {[LIVE_FISH_ENABLED?["🛡️","Live Arrival","Guarantee"]:["🚚","Delivery across","India"],["📦","Safe, breathable","Packing"],["🔒","Secure UPI /","Online Pay"]].map(([ic,a,b])=>(
                 <div key={a} style={{display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",gap:5}}>
                   <span style={{fontSize:22,lineHeight:1}}>{ic}</span>
                   <span style={{fontSize:10.5,fontWeight:700,color:C.text,lineHeight:1.3}}>{a}<br/>{b}</span>
@@ -10293,7 +10377,12 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
     setAddrEditId(a.id);
   },[savedAddresses]);
   useEffect(()=>{ saveAddrDraft(addrUk,addr); },[addr,addrUk]);
-  const hasLiveFish=cart.some(i=>i.category==="Live Fish");
+  /* The whole live-fish half of checkout — the packing chooser, the thermacol and live-fish
+     courier charges, the Live Arrival Guarantee line and the Central/North India block — hangs
+     off this one flag. The cart can no longer hold a fish while the switch is off, so naming the
+     switch here as well is belt and braces: checkout cannot show or charge for live-fish
+     shipping even if a fish line reached it some other way. */
+  const hasLiveFish=LIVE_FISH_ENABLED && cart.some(i=>isLiveFishCategory(i.category));
   const [errs,setErrs]=useState({});
   /* Scroll the first unfilled mandatory field into view when Continue is pressed. The form is
      longer than the screen, so a failed validation used to look like the button was simply
@@ -11744,13 +11833,13 @@ function AboutPage({nav,goBack,settings={}}){
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>Our Policies</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {[
+            {policyLinks([
               {icon:"🛡️",label:"Live Arrival Guarantee",to:"policy-guarantee"},
               {icon:"↩️",label:"Cancellations, Returns & Refunds",to:"policy-returns"},
               {icon:"💧",label:"Acclimatization Guide",to:"policy-acclimatize"},
               {icon:"📜",label:"Terms & Conditions",to:"policy-terms"},
               {icon:"🔒",label:"Privacy Policy",to:"policy-privacy"},
-            ].map(l=>(
+            ]).map(l=>(
               <button key={l.to} className="press" onClick={()=>nav(l.to)}
                 style={{display:"flex",alignItems:"center",gap:11,width:"100%",textAlign:"left",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 <span style={{fontSize:18}}>{l.icon}</span>
@@ -11833,7 +11922,7 @@ function ContactPage({nav,goBack,settings={}}){
           <div style={{fontSize:13.5,fontWeight:800,color:C.text,marginBottom:9}}>Before contacting us</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
             <a href="/cancellations-returns-refunds" onClick={e=>{e.preventDefault();nav("policy-returns");}} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,textDecoration:"none"}}>Cancellations, Returns &amp; Refunds</a>
-            <button className="press" onClick={()=>nav("policy-guarantee")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Live Arrival Guarantee</button>
+            {LIVE_FISH_ENABLED&&<button className="press" onClick={()=>nav("policy-guarantee")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Live Arrival Guarantee</button>}
             <button className="press" onClick={()=>nav("orders")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Track My Orders</button>
           </div>
         </div>
@@ -11843,7 +11932,7 @@ function ContactPage({nav,goBack,settings={}}){
 }
 
 /* ═══════════════════ SINGLE POLICY PAGE ═══════════════════ */
-const POLICY_META = {
+const POLICY_META_ALL = {
   guarantee:   { icon:"🛡️", title:"Live Arrival Guarantee", key:"liveArrivalGuarantee", sub:"Our promise on every live order." },
   returns:     { icon:"↩️", title:"Cancellations, Returns & Refunds", key:"returnPolicy", sub:"Cancellations, returns, DOA claims & refunds." },
   acclimatize: { icon:"💧", title:"Acclimatization Guide",   key:"acclimatizationTips",  sub:"Settle your new arrivals in safely." },
@@ -11851,6 +11940,11 @@ const POLICY_META = {
   privacy:     { icon:"🔒", title:"Privacy Policy",          key:"privacyPolicy",        sub:"How we handle your information." },
   delivery:    { icon:"🚚", title:"Delivery Areas",          key:"deliveryAreas",        sub:"Where and how we deliver." },
 };
+/* Built by filtering the complete map rather than by assembling a shorter one, so the order the
+   policies appear in comes back exactly as it was when live fish do. An old bookmark to a hidden
+   policy falls through to Terms below rather than rendering an empty page. */
+const POLICY_META = LIVE_FISH_ENABLED ? POLICY_META_ALL : Object.fromEntries(
+  Object.entries(POLICY_META_ALL).filter(([k]) => k!=="guarantee" && k!=="acclimatize"));
 function PolicyPage({nav,goBack,settings={},which}){
   const s={...DEFAULT_SETTINGS,...settings};
   const meta=POLICY_META[which]||POLICY_META.terms;
@@ -11864,7 +11958,7 @@ function PolicyPage({nav,goBack,settings={},which}){
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>{meta.sub}</div>
       </div>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
-        <div style={{background:C.card,borderRadius:18,padding:"20px",border:`1px solid ${C.border}`,fontSize:13.5,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{s[meta.key]}</div>
+        <div style={{background:C.card,borderRadius:18,padding:"20px",border:`1px solid ${C.border}`,fontSize:13.5,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{policyText(meta.key, s)}</div>
         {/* The tracking & collection clause is part of the terms whether or not the saved text
             carries it — a store that customised its terms before this clause existed would
             otherwise show terms that don't match what checkout tells the customer. Shown only
@@ -11875,7 +11969,7 @@ function PolicyPage({nav,goBack,settings={},which}){
               <span style={{fontSize:17}}>📦</span>
               <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#92400e"}}>Tracking &amp; collection</span>
             </div>
-            <div style={{fontSize:13,color:"#78350f",lineHeight:1.75}}>{COURIER_COLLECT_TERM.replace(/^Tracking & collection: /,"")}</div>
+            <div style={{fontSize:13,color:"#78350f",lineHeight:1.75}}>{courierCollectTerm().replace(/^Tracking & collection: /,"")}</div>
           </div>
         )}
         <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,margin:"22px 4px 10px"}}>More policies</div>
@@ -12043,6 +12137,12 @@ const DIRECT_PATH_BY_PAGE={contact:"/contact-us","policy-returns":"/cancellation
 function NemoStore(){
   const [page,setPage]             = useState(()=>DIRECT_PAGE_BY_PATH[window.location.pathname]||"home");
   const [products,setProducts]     = useState(DEFAULT_PRODUCTS);
+  /* The one list every shopping surface reads. `products` stays complete — Admin still
+     manages the hidden Live Fish catalogue and order history still renders the fish a
+     past order contained — but Home, Shop, Search, Detail, Cart, Checkout, Saved and the
+     mini cart all shop from this. Filtering here rather than at load is what makes the
+     restore a single flag: nothing is deleted, it is simply not offered. */
+  const shopProducts=useMemo(()=>shoppable(products),[products]);
   // Cold-start skeleton: true once we have real/cached data (returning visitors keep instant paint)
   const [hydrated,setHydrated]     = useState(()=>{ try{ return !!localProducts(); }catch(e){ return false; } });
   const [orders,setOrders]         = useState([]);
@@ -12076,7 +12176,10 @@ function NemoStore(){
   const [walletReady,setWalletReady] = useState(false);
   // Cart persists across sessions (localStorage) — a returning shopper finds their items waiting,
   // which itself recovers otherwise-abandoned carts.
-  const [cart,setCart]             = useState(()=>{ try{ return JSON.parse(localStorage.getItem("nemo-cart")||"[]")||[]; }catch(e){ return []; } });
+  // `shoppable` drops any live-fish line a shopper had in their basket from before the
+  // switch was flipped, before the first render — so checkout can never price, ship or
+  // charge for a hidden item. The cleaned cart is persisted by the effect that syncs it.
+  const [cart,setCart]             = useState(()=>{ try{ return shoppable(JSON.parse(localStorage.getItem("nemo-cart")||"[]")||[]); }catch(e){ return []; } });
   const [abandonedCarts,setAbandonedCarts] = useState([]); // admin view of shoppers who left items behind
   const [query,setQuery]           = useState("");
   const [category,setCategory]     = useState("All");
@@ -12327,14 +12430,18 @@ function NemoStore(){
   useEffect(()=>{
     const pid=deepLinkRef.current;
     if(!pid) return;
-    const prod=products.find(p=>p.id===pid);
-    if(prod){
+    // Resolved against the shoppable list: an old share link or a Google result for a
+    // hidden live-fish product must not open its detail page. The link is retired either
+    // way, so a hidden id lands on Home with a clean URL instead of retrying forever.
+    const prod=shopProducts.find(p=>p.id===pid);
+    const hidden=!prod&&products.some(p=>p.id===pid);
+    if(prod||hidden){
       deepLinkRef.current=""; // fire once
-      nav("detail",prod);
+      if(prod) nav("detail",prod);
       // Tidy the URL so a refresh/share doesn't keep re-triggering, without reloading
       try{ window.history.replaceState({},"",window.location.pathname); }catch(e){}
     }
-  },[products]);
+  },[products,shopProducts]);
   // Page deep links (?page=shop|orders|cart|guides|tools) — used by PWA app shortcuts
   useEffect(()=>{
     try{
@@ -13762,21 +13869,21 @@ function NemoStore(){
           chaining out to the document and dragging the pinned bottom nav with it. */}
       <div ref={scrollRef} className="nemo-main-scroll" style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
         <div key={page} className="page-swap">
-        {page==="home"     &&<HomePage nav={nav} products={products} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} tankPreviousWinners={tankPreviousWinners} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
-        {page==="shop"     &&<ShopPage nav={nav} products={products} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
-        {page==="detail"   &&<DetailPage product={selProduct} products={products} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} goBack={goBack} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} onReviewDeleted={unmarkReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
-        {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={products} mediaCache={mediaCache} orders={orders}/>}
+        {page==="home"     &&<HomePage nav={nav} products={shopProducts} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} tankPreviousWinners={tankPreviousWinners} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
+        {page==="shop"     &&<ShopPage nav={nav} products={shopProducts} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
+        {page==="detail"   &&<DetailPage product={selProduct} products={shopProducts} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} goBack={goBack} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} onReviewDeleted={unmarkReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
+        {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={shopProducts} mediaCache={mediaCache} orders={orders}/>}
         {page==="checkout" &&(user
-          ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} goBack={goBack} onOrderPlaced={placeOrder} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} updateQty={updateQty} user={user} settings={settings} orders={orders} products={products} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>
+          ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} goBack={goBack} onOrderPlaced={placeOrder} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} updateQty={updateQty} user={user} settings={settings} orders={orders} products={shopProducts} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>
           : <PhoneAuth mode="checkout" settings={settings} onSuccess={(u)=>{setUser(u);if(u.keep!==false)saveUser(u);nav("checkout");}} onBack={goBack}/>)}
         {page==="orders"   &&(user
-          ? <OrderHistoryPage user={user} orders={orders} products={products} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} reviewedSet={reviewedSet} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
+          ? <OrderHistoryPage user={user} orders={orders} products={shopProducts} mediaCache={mediaCache} nav={nav} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onWriteReview={startReview} reviewedSet={reviewedSet} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} onReportDoa={reportDoa} onCancelByCustomer={cancelByCustomer} onRequestReturn={requestReturn} onSubmitReturnShipment={submitReturnShipment} addToCart={addToCart} settings={settings} favorites={favorites}/>
           : <PhoneAuth mode="signin" settings={settings} onSuccess={(u)=>{setUser(u);setReviewedSet(loadReviewedSet(userKey(u)));if(u.keep!==false)saveUser(u);nav("home");}} onBack={goBack}/>)}
         {page==="auth"     &&<PhoneAuth mode="signin" settings={settings} onSuccess={handleLogin} onBack={goBack}/>}
         {page==="request"  &&<RequestPage nav={nav} goBack={goBack} user={user} onSubmit={submitRequest}/>}
         {page==="guides"   &&<CareGuidesPage nav={nav} goBack={goBack} guides={guides} mediaCache={mediaCache}/>}
         {page==="tools"    &&<AquaToolsPage nav={nav} goBack={goBack} user={user} settings={settings}/>}
-        {page==="saved"    &&<SavedPage nav={nav} products={products} mediaCache={mediaCache} favorites={favorites} addToCart={addToCart} cartMap={cartMap} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} user={user} restockSet={restockSet} onRestock={handleRestock}/>}
+        {page==="saved"    &&<SavedPage nav={nav} products={shopProducts} mediaCache={mediaCache} favorites={favorites} addToCart={addToCart} cartMap={cartMap} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} user={user} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="about"    &&<AboutPage nav={nav} goBack={goBack} settings={settings}/>} 
         {page==="contact"  &&<ContactPage nav={nav} goBack={goBack} settings={settings}/>} 
         {typeof page==="string"&&page.indexOf("policy-")===0&&<PolicyPage nav={nav} goBack={goBack} settings={settings} which={page.slice(7)}/>}
@@ -13815,7 +13922,7 @@ function NemoStore(){
         );
       })()}
       {!isAdminPage&&<BottomNav page={page} nav={nav} cartCount={cartCount} ordersCount={priorityOrderCount}/>} 
-      {!isAdminPage&&<MiniCart open={miniOpen} onClose={()=>setMiniOpen(false)} cart={cart} total={cartTotal} updateQty={updateQty} nav={nav} settings={settings} products={products} mediaCache={mediaCache}/>}
+      {!isAdminPage&&<MiniCart open={miniOpen} onClose={()=>setMiniOpen(false)} cart={cart} total={cartTotal} updateQty={updateQty} nav={nav} settings={settings} products={shopProducts} mediaCache={mediaCache}/>}
     </div>
   );
 }

@@ -27,6 +27,8 @@
  * exactly the bug being fixed.
  */
 
+import { LIVE_FISH_ENABLED } from '../lib/catalog.mjs';
+
 const DB = 'https://nemo-aqua-store-default-rtdb.asia-southeast1.firebasedatabase.app';
 const SITE = 'https://www.nemoaquastore.in';
 const STORE = 'Nemo Aqua Store';
@@ -89,6 +91,11 @@ export default async function handler(req, res) {
         signal: AbortSignal.timeout(4000),
       });
       if (productResponse.ok) product = await productResponse.json();
+      // An old share link to a product that is no longer offered — a live fish while
+      // LIVE_FISH_ENABLED is off — must not preview it with its name and price. Dropping
+      // the product falls through to the site-level card below, which is still a working
+      // link. The flag is imported so there is no second copy of it to keep in step.
+      if (!LIVE_FISH_ENABLED && product && product.category === 'Live Fish') product = null;
     } catch (e) {
       // A slow or unreachable database must not make the link dead. Falling
       // through renders the site-level card, which remains a working link.
@@ -99,7 +106,9 @@ export default async function handler(req, res) {
   const description =
     product && product.desc
       ? String(product.desc).replace(/\s+/g, ' ').trim().slice(0, 160)
-      : 'Hand-picked healthy fish, live plants & quality accessories — delivered with care across India.';
+      : (LIVE_FISH_ENABLED
+        ? 'Hand-picked healthy fish, live plants & quality accessories — delivered with care across India.'
+        : 'Hand-picked live plants, tanks, feed & quality accessories — delivered with care across India.');
   const image = product ? imageOf(product, id) : FALLBACK_IMAGE;
   const shareVersion = String((req.query && req.query.v) || '').trim();
   const url = `${SITE}/s/${encodeURIComponent(id)}${shareVersion ? `?v=${encodeURIComponent(shareVersion)}` : ''}`;
