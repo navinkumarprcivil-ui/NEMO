@@ -91,6 +91,29 @@ function AdminHub(props){ return <AdminChunkGate name="NemoAdminHub" props={prop
 
 const split=splitAdminChunk(src);
 
+/* A function defined in the lazily-loaded Admin chunk but called from the always-loaded main
+ * bundle is a ReferenceError for every normal visitor: admin.js is only fetched when the owner
+ * opens Admin, so the call works for whoever just used the panel and for nobody else. The
+ * `new Function(code)` checks below cannot see it — they parse, they do not resolve — and the
+ * test suite reads app.jsx, not the split. That is exactly how the Care Guides poster viewer
+ * shipped broken, so the boundary is checked here, where the split is made. */
+function topLevelFunctionNames(source){
+  const names = new Set();
+  for (const m of source.matchAll(/^function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) names.add(m[1]);
+  return names;
+}
+const adminOnly = topLevelFunctionNames(split.adminSource);
+// The two the loader deliberately publishes on `window` for the main bundle to pick up.
+adminOnly.delete("NemoAdminLoginImpl");
+adminOnly.delete("NemoAdminHubImpl");
+const leaked = [...adminOnly].filter(name => new RegExp(`\\b${name}\\b`).test(split.mainSource));
+if(leaked.length){
+  throw new Error(
+    `main bundle references Admin-only ${leaked.join(", ")} — admin.js is not loaded for a shopper, so ` +
+    `this throws "is not defined" at runtime. Move the definition below the CARE GUIDES PAGE marker.`
+  );
+}
+
 // Hash everything EXCEPT the id itself, so the id is a function of the shipped code.
 // The new id is substituted only in the in-memory build source; app.jsx is never rewritten.
 const fingerprint = createHash("sha256")

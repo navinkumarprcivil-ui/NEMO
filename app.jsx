@@ -16065,6 +16065,13 @@ function GuideForm({guide,imgSrc,onSave,onCancel}){
 }
 
 /* Fullscreen poster REEL — swipe up/down between posters (Instagram-style), pinch / wheel / double-tap zoom, drag-to-pan, share. */
+/* ═══════════════════ CARE GUIDES PAGE ═══════════════════ */
+/* This marker is the end of the lazily-loaded Admin chunk (scripts/build.mjs
+   splitAdminChunk). Everything ABOVE it, back to the ADMIN LOGIN marker, ships only in
+   admin.js, which is fetched when the owner opens Admin and never for a shopper. The
+   poster viewer below is used by the customer-facing Care Guides page, so it has to sit
+   on this side of the boundary — it previously sat above it, which made tapping a guide
+   poster throw "PosterReel is not defined" for everyone who had not opened Admin. */
 function PosterReel({posters=[],start=0,onClose}){
   const [idx,setIdx]       = useState(Math.max(0,Math.min(start,posters.length-1)));
   const [scale,setScale]   = useState(1);
@@ -16219,7 +16226,6 @@ function PosterReel({posters=[],start=0,onClose}){
     </Portal>
   );
 }
-/* ═══════════════════ CARE GUIDES PAGE ═══════════════════ */
 function CareGuidesPage({nav,goBack,guides,mediaCache}){
   const [cat,setCat]=useState("All");
   const [openId,setOpenId]=useState(null);

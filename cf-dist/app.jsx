@@ -7395,7 +7395,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.9cdb16cc";
+const APP_BUILD = "v90.ff7066b6";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -11695,6 +11695,166 @@ function AdminLogin(props){ return <AdminChunkGate name="NemoAdminLogin" props={
 function AdminHub(props){ return <AdminChunkGate name="NemoAdminHub" props={props}/>; }
 
 /* ═══════════════════ CARE GUIDES PAGE ═══════════════════ */
+/* This marker is the end of the lazily-loaded Admin chunk (scripts/build.mjs
+   splitAdminChunk). Everything ABOVE it, back to the ADMIN LOGIN marker, ships only in
+   admin.js, which is fetched when the owner opens Admin and never for a shopper. The
+   poster viewer below is used by the customer-facing Care Guides page, so it has to sit
+   on this side of the boundary — it previously sat above it, which made tapping a guide
+   poster throw "PosterReel is not defined" for everyone who had not opened Admin. */
+function PosterReel({posters=[],start=0,onClose}){
+  const [idx,setIdx]       = useState(Math.max(0,Math.min(start,posters.length-1)));
+  const [scale,setScale]   = useState(1);
+  const [tx,setTx]         = useState(0),[ty,setTy]=useState(0);
+  const [showNotes,setShowNotes] = useState(false);
+  const [dragY,setDragY]   = useState(0);   // live reel-swipe offset (px)
+  const [anim,setAnim]     = useState(true); // animate track between slides
+  const [hint,setHint]     = useState(posters.length>1); // "swipe up" coach mark
+  const [shared,setShared] = useState("");
+  const drag  = React.useRef(null);  // image pan gesture
+  const swipe = React.useRef(null);  // reel swipe gesture
+  const pinch = React.useRef(null);  // two-finger pinch
+  const wheelLock = React.useRef(0);
+  const cur   = posters[idx]||{};
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const reset = ()=>{ setScale(1); setTx(0); setTy(0); };
+  const applyScale = ns=>{ ns=clamp(ns,1,5); setScale(ns); if(ns<=1){ setTx(0); setTy(0); } };
+  useEffect(()=>{ reset(); setShowNotes(false); },[idx]);
+  useEffect(()=>{ if(!hint) return; const t=setTimeout(()=>setHint(false),2600); return ()=>clearTimeout(t); },[hint]);
+  const go = d => setIdx(i=>clamp(i+d,0,posters.length-1));
+
+  useEffect(()=>{
+    const onKey=e=>{ if(e.key==="Escape")onClose(); else if(e.key==="ArrowDown"||e.key==="ArrowRight")go(1); else if(e.key==="ArrowUp"||e.key==="ArrowLeft")go(-1); };
+    window.addEventListener("keydown",onKey); return ()=>window.removeEventListener("keydown",onKey);
+  },[posters.length]);
+
+  const onWheel = e=>{
+    if(e.ctrlKey){ e.preventDefault(); applyScale(scale - e.deltaY*0.0025*scale); return; }
+    if(scale<=1){ e.preventDefault(); const now=Date.now(); if(now<wheelLock.current) return;
+      if(e.deltaY>24){ wheelLock.current=now+380; go(1); setHint(false); }
+      else if(e.deltaY<-24){ wheelLock.current=now+380; go(-1); } }
+  };
+  const onDblClick = ()=>{ scale>1?applyScale(1):applyScale(2.5); };
+  const onPointerDown = e=>{
+    if(pinch.current) return;
+    if(scale>1){ drag.current={x:e.clientX,y:e.clientY,tx,ty}; }
+    else { swipe.current={y:e.clientY,x:e.clientX,t:Date.now()}; setAnim(false); }
+  };
+  const onPointerMove = e=>{
+    if(drag.current){ setTx(drag.current.tx+(e.clientX-drag.current.x)); setTy(drag.current.ty+(e.clientY-drag.current.y)); return; }
+    if(swipe.current){
+      let dy=e.clientY-swipe.current.y;
+      if((idx===0&&dy>0)||(idx===posters.length-1&&dy<0)) dy*=0.35; // rubber-band at ends
+      setDragY(dy); if(Math.abs(dy)>8) setHint(false);
+    }
+  };
+  const endPointer = ()=>{
+    if(drag.current){ drag.current=null; return; }
+    if(swipe.current){
+      const dy=dragY, dt=Date.now()-swipe.current.t; swipe.current=null; setAnim(true);
+      const fast=Math.abs(dy)/Math.max(dt,1)>0.45;
+      if((dy<-70||(fast&&dy<-24)) && idx<posters.length-1) setIdx(idx+1);
+      else if((dy>70||(fast&&dy>24)) && idx>0) setIdx(idx-1);
+      setDragY(0);
+    }
+  };
+  const dist = t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+  const onTouchStart = e=>{ if(e.touches.length===2){ pinch.current={d:dist(e.touches),s:scale}; swipe.current=null; } };
+  const onTouchMove  = e=>{ if(e.touches.length===2&&pinch.current){ e.preventDefault(); applyScale(pinch.current.s*(dist(e.touches)/pinch.current.d)); } };
+  const onTouchEnd   = e=>{ if(e.touches.length<2) pinch.current=null; };
+
+  const share = async()=>{
+    const src=cur.src; if(!src) return;
+    try{
+      if(navigator.share){
+        try{
+          const blob=await (await fetch(src)).blob();
+          const file=new File([blob],((cur.title||"care-guide").replace(/[^\w -]+/g,"")||"care-guide")+".jpg",{type:blob.type||"image/jpeg"});
+          if(navigator.canShare && navigator.canShare({files:[file]})){
+            await navigator.share({files:[file],title:cur.title||"Care Guide",text:(cur.title?cur.title+" — ":"")+"NEMO Aqua Store care guide"});
+            return;
+          }
+        }catch(_){}
+        await navigator.share({title:cur.title||"Care Guide",text:cur.title||"Care Guide",url:location.href});
+        return;
+      }
+      const a=document.createElement("a"); a.href=src; a.download=((cur.title||"care-guide"))+".jpg"; document.body.appendChild(a); a.click(); a.remove();
+      setShared("Saved"); setTimeout(()=>setShared(""),1600);
+    }catch(e){ /* user cancelled */ }
+  };
+
+  const btn={width:38,height:38,borderRadius:11,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:19,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,backdropFilter:"blur(6px)"};
+  const pct=Math.round(scale*100);
+  return(
+    <Portal>
+    <div style={{position:"fixed",inset:0,background:"rgba(4,16,20,.97)",zIndex:9000,display:"flex",flexDirection:"column",animation:"fadeIn .2s ease"}}>
+      {/* top bar */}
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",color:"white",flexShrink:0,zIndex:5}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.title||"Care Guide"}</div>
+          {posters.length>1&&<div style={{fontSize:11,fontWeight:700,opacity:.7,marginTop:2}}>{idx+1} / {posters.length}</div>}
+        </div>
+        <button className="press" onClick={share} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800}} aria-label="Share poster">{shared||"⤴ Share"}</button>
+        {cur.notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
+        <button className="press" onClick={onClose} style={btn} aria-label="Close">✕</button>
+      </div>
+
+      {/* reel stage */}
+      <div onClick={e=>{ if(e.target===e.currentTarget && scale<=1) onClose(); }} onWheel={onWheel}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointer} onPointerLeave={endPointer}
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+        style={{flex:1,position:"relative",overflow:"hidden",touchAction:"none",cursor:scale>1?"grab":"default"}}>
+        <div style={{position:"absolute",inset:0,transform:"translateY(calc("+(-idx*100)+"% + "+dragY+"px))",transition:anim?"transform .34s cubic-bezier(.22,1,.36,1)":"none",willChange:"transform"}}>
+          {posters.map((p,i)=>{
+            const near=Math.abs(i-idx)<=1;
+            const active=i===idx;
+            return(
+              <div key={i} style={{position:"absolute",top:(i*100)+"%",left:0,right:0,height:"100%",display:"flex",alignItems:"center",justifyContent:"center",padding:"6px 10px"}}>
+                {near
+                  ? <div onDoubleClick={active?onDblClick:undefined} onClick={active?()=>{ if(scale<=1)applyScale(2.2); }:undefined}
+                      style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",transform:active?("translate("+tx+"px,"+ty+"px) scale("+scale+")"):"scale(1)",transformOrigin:"center center",transition:(active&&(drag.current||pinch.current))?"none":"transform .14s ease",willChange:"transform"}}>
+                      <img src={p.src} alt={p.title||""} draggable={false} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:12,boxShadow:"0 18px 50px rgba(0,0,0,.55)",userSelect:"none",pointerEvents:"none"}}/>
+                    </div>
+                  : <div style={{width:40,height:40,borderRadius:"50%",border:"3px solid rgba(255,255,255,.25)",borderTopColor:"rgba(255,255,255,.7)",animation:"spin 1s linear infinite"}}/>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* vertical progress dots */}
+        {posters.length>1&&posters.length<=12&&(
+          <div style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",display:"flex",flexDirection:"column",gap:6,zIndex:4}}>
+            {posters.map((p,i)=>(
+              <div key={i} onClick={()=>setIdx(i)} style={{width:6,height:i===idx?18:6,borderRadius:6,background:i===idx?"#fff":"rgba(255,255,255,.4)",transition:"height .2s,background .2s",cursor:"pointer"}}/>
+            ))}
+          </div>
+        )}
+
+        {/* swipe-up coach mark */}
+        {hint&&scale<=1&&idx<posters.length-1&&(
+          <div style={{position:"absolute",bottom:16,left:0,right:0,display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:"rgba(255,255,255,.85)",pointerEvents:"none",zIndex:4,animation:"bobUp 1.4s ease-in-out infinite"}}>
+            <span style={{fontSize:22,lineHeight:1}}>⌃</span>
+            <span style={{fontSize:11.5,fontWeight:700,letterSpacing:.3}}>Swipe up for next</span>
+          </div>
+        )}
+      </div>
+
+      {/* notes panel */}
+      {cur.notes&&showNotes&&(
+        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13.5,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cur.notes}</div>
+      )}
+
+      {/* zoom controls */}
+      <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:12,padding:"12px 18px calc(14px + env(safe-area-inset-bottom))",background:"rgba(0,0,0,.35)"}}>
+        <button className="press" onClick={()=>applyScale(scale-0.5)} style={btn} aria-label="Zoom out">−</button>
+        <input type="range" min="1" max="5" step="0.1" value={scale} onChange={e=>applyScale(Number(e.target.value))} style={{flex:1,accentColor:C.accent,height:4}}/>
+        <button className="press" onClick={()=>applyScale(scale+0.5)} style={btn} aria-label="Zoom in">+</button>
+        <div style={{minWidth:52,textAlign:"center",color:"white",fontSize:12.5,fontWeight:800}}>{pct}%</div>
+        <button className="press" onClick={()=>applyScale(1)} style={{...btn,width:"auto",padding:"0 12px",fontSize:12,fontWeight:800}}>Fit</button>
+      </div>
+    </div>
+    </Portal>
+  );
+}
 function CareGuidesPage({nav,goBack,guides,mediaCache}){
   const [cat,setCat]=useState("All");
   const [openId,setOpenId]=useState(null);
