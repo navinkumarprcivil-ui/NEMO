@@ -9,7 +9,17 @@ const index=readFileSync(new URL('../index.html',import.meta.url),'utf8');
 test('admin password gate and eight independent co-admin permissions are wired',()=>{
   for(const key of ['orders','dashboard','products','wallets','reviews','requests','guides','settings']) assert.match(app,new RegExp(`['"]${key}['"]`));
   assert.match(app,/ADMIN_SECTION_KEYS\.filter\(k=>canAdminSection/);
-  assert.match(app,/type="password"/);
+  /* Admin password entry is masked. It used to be asserted as the literal `type="password"`,
+     which stopped matching the moment the field gained a show/hide eye — the gate was intact,
+     the string was not. Assert the behaviour instead: the shared field defaults to hidden and
+     only reveals on an explicit toggle, and every admin password box goes through it. */
+  assert.match(app,/function PasswordField\(/);
+  assert.match(app,/const \[show,setShow\]=useState\(false\)/);
+  assert.match(app,/type=\{show\?"text":"password"\}/);
+  assert.doesNotMatch(app,/<input[^>]*type="password"/);
+  for(const label of ['Admin password','New admin password','Confirm admin password']){
+    assert.match(app,new RegExp(`<PasswordField[^>]*label="${label}"`),`${label} must use the shared masked field`);
+  }
   assert.match(app,/adminSetupHash/);
   assert.match(app,/isMainAdminUid/);
   assert.match(app,/mainAdminOk&&\(<Collapsible[^>]*title="Admin Security"/);

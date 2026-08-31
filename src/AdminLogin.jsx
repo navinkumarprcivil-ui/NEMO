@@ -52,7 +52,10 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:7}}>Admin</div>
       <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.6,maxWidth:380,marginBottom:18}}>Enter the Admin password every time you open Admin. Google sign-in is needed only for shared Firebase data and changes; only the main admin or the added co-admin UID can sync changes.</div>
       <div style={{width:"min(100%,360px)"}}>
-        <input autoFocus type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock();}} placeholder="Admin password" aria-label="Admin password" style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"12px 14px",fontSize:14,outline:"none",marginBottom:10}}/>
+        {/* PasswordField lives in the main bundle (see app.jsx) and carries the show/hide eye,
+            so a mistyped password on a phone keyboard can be checked rather than retyped. */}
+        <PasswordField autoFocus value={password} onChange={setPassword} onEnter={unlock}
+          placeholder="Admin password" label="Admin password" style={{marginBottom:10}}/>
         <button className="press" onClick={unlock} disabled={busy||checking} style={{width:"100%",background:(busy||checking)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"12px 16px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{checking?"Checking…":busy?"Checking…":"Unlock Admin"}</button>
       </div>
       {!configured&&!checking&&(

@@ -1432,6 +1432,12 @@ function waitForFirebase(ms){
    do nothing in that case, and the store would stay behind the splash until the much later
    cloud sync happened to call this again — the data was ready, nobody was listening. Retry
    briefly so an early reveal is never dropped. */
+/* Report boot progress to the splash bar in index.html, which owns the number and keeps it
+   monotonic. Safe to call before the splash script has run, and after the splash has gone. */
+function bootProgress(pct){
+  try{ if(window.nemoSplashProgress) window.nemoSplashProgress(pct); }catch(e){}
+}
+
 function revealStore(){
   try{
     /* Boot data owns the reveal now. Several fast paths call revealStore as their own data
@@ -7395,7 +7401,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.ff7066b6";
+const APP_BUILD = "v90.65f37537";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -11614,6 +11620,44 @@ function BottomNav({page,nav,cartCount,ordersCount=0}){
   );
 }
 
+/* An eye / eye-with-a-slash, drawn inline. An emoji would inherit the platform's own glyph and
+   render as a different size, colour and baseline on every device; this matches the field. */
+function EyeIcon({off}){
+  const common={width:19,height:19,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round","aria-hidden":"true",focusable:"false"};
+  return off
+    ? <svg {...common}><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.4 5.2A9.6 9.6 0 0 1 12 5c5 0 9 4.5 9 7 0 .9-.6 2.1-1.7 3.3M6.1 6.8C4 8.2 3 10.3 3 12c0 2.5 4 7 9 7 1.4 0 2.7-.3 3.9-.9"/></svg>
+    : <svg {...common}><path d="M3 12s3.6-7 9-7 9 7 9 7-3.6 7-9 7-9-7-9-7z"/><circle cx="12" cy="12" r="2.6"/></svg>;
+}
+
+/* A password box with a show/hide eye.
+   Deliberately defined here, in the always-loaded main bundle, rather than beside the Admin
+   screens that use it: admin.js is a lazily fetched chunk, so anything defined there exists
+   only once the owner has opened Admin. Shared controls belong on this side of the split —
+   that is the rule the Care Guides poster viewer broke. */
+function PasswordField({value,onChange,placeholder,label,autoFocus,onEnter,autoComplete="current-password",style={}}){
+  const [show,setShow]=useState(false);
+  const title=show?"Hide password":"Show password";
+  return(
+    <div style={{position:"relative",...style}}>
+      <input autoFocus={autoFocus} type={show?"text":"password"} value={value}
+        onChange={e=>onChange(e.target.value)}
+        onKeyDown={e=>{ if(e.key==="Enter"&&onEnter) onEnter(); }}
+        placeholder={placeholder} aria-label={label||placeholder}
+        autoComplete={autoComplete} autoCapitalize="off" autoCorrect="off" spellCheck={false}
+        style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:12,
+          padding:"12px 46px 12px 14px",fontSize:14,outline:"none",fontFamily:"inherit"}}/>
+      {/* type="button" matters: inside a form this would otherwise submit it on every peek. */}
+      <button type="button" className="press" onClick={()=>setShow(s=>!s)}
+        aria-label={title} aria-pressed={show} title={title}
+        style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",width:38,height:38,
+          display:"flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",
+          padding:0,cursor:"pointer",color:C.textSub}}>
+        <EyeIcon off={show}/>
+      </button>
+    </div>
+  );
+}
+
 function AdminExitConfirm({onStay,onLeave}){
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,.55)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:4000}} onClick={onStay}>
@@ -12580,9 +12624,19 @@ function NemoStore(){
   /* The cinematic opening may lift only after the visible Home data has settled:
      catalogue, settings, Customer Tanks, testimonials and the signed-in wallet. Each source
      carries its own bounded fallback, so this waits for real inner completion without hanging. */
+  /* Drive the splash percentage from the same five gates the reveal waits on, so the number
+     reflects work that actually finished rather than a timer. 40% is the shell existing at
+     all — React mounted and this component is rendering — and the five data gates share the
+     rest, 12 points each. index.html keeps it monotonic and creeps between milestones. */
+  useEffect(()=>{
+    const done=[!loading,hydrated,settingsReady,communityReady,walletReady].filter(Boolean).length;
+    bootProgress(40+done*12);
+  },[loading,hydrated,settingsReady,communityReady,walletReady]);
+
   useEffect(()=>{
     if(loading||!hydrated||!settingsReady||!communityReady||!walletReady) return;
     try{ window.__nemoBootReady=true; }catch(e){}
+    bootProgress(100);
     revealStore();
   },[loading,hydrated,settingsReady,communityReady,walletReady]);
 

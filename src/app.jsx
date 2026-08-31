@@ -1432,6 +1432,12 @@ function waitForFirebase(ms){
    do nothing in that case, and the store would stay behind the splash until the much later
    cloud sync happened to call this again — the data was ready, nobody was listening. Retry
    briefly so an early reveal is never dropped. */
+/* Report boot progress to the splash bar in index.html, which owns the number and keeps it
+   monotonic. Safe to call before the splash script has run, and after the splash has gone. */
+function bootProgress(pct){
+  try{ if(window.nemoSplashProgress) window.nemoSplashProgress(pct); }catch(e){}
+}
+
 function revealStore(){
   try{
     /* Boot data owns the reveal now. Several fast paths call revealStore as their own data
@@ -11597,21 +11603,78 @@ function BottomNav({page,nav,cartCount,ordersCount=0}){
   );
 }
 
+/* An eye / eye-with-a-slash, drawn inline. An emoji would inherit the platform's own glyph and
+   render as a different size, colour and baseline on every device; this matches the field. */
+function EyeIcon({off}){
+  const common={width:19,height:19,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round","aria-hidden":"true",focusable:"false"};
+  return off
+    ? <svg {...common}><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.4 5.2A9.6 9.6 0 0 1 12 5c5 0 9 4.5 9 7 0 .9-.6 2.1-1.7 3.3M6.1 6.8C4 8.2 3 10.3 3 12c0 2.5 4 7 9 7 1.4 0 2.7-.3 3.9-.9"/></svg>
+    : <svg {...common}><path d="M3 12s3.6-7 9-7 9 7 9 7-3.6 7-9 7-9-7-9-7z"/><circle cx="12" cy="12" r="2.6"/></svg>;
+}
+
+/* A password box with a show/hide eye.
+   Deliberately defined here, in the always-loaded main bundle, rather than beside the Admin
+   screens that use it: admin.js is a lazily fetched chunk, so anything defined there exists
+   only once the owner has opened Admin. Shared controls belong on this side of the split —
+   that is the rule the Care Guides poster viewer broke. */
+function PasswordField({value,onChange,placeholder,label,autoFocus,onEnter,autoComplete="current-password",style={}}){
+  const [show,setShow]=useState(false);
+  const title=show?"Hide password":"Show password";
+  return(
+    <div style={{position:"relative",...style}}>
+      <input autoFocus={autoFocus} type={show?"text":"password"} value={value}
+        onChange={e=>onChange(e.target.value)}
+        onKeyDown={e=>{ if(e.key==="Enter"&&onEnter) onEnter(); }}
+        placeholder={placeholder} aria-label={label||placeholder}
+        autoComplete={autoComplete} autoCapitalize="off" autoCorrect="off" spellCheck={false}
+        style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:12,
+          padding:"12px 46px 12px 14px",fontSize:14,outline:"none",fontFamily:"inherit"}}/>
+      {/* type="button" matters: inside a form this would otherwise submit it on every peek. */}
+      <button type="button" className="press" onClick={()=>setShow(s=>!s)}
+        aria-label={title} aria-pressed={show} title={title}
+        style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",width:38,height:38,
+          display:"flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",
+          padding:0,cursor:"pointer",color:C.textSub}}>
+        <EyeIcon off={show}/>
+      </button>
+    </div>
+  );
+}
+
 /* ═══════════════════ ADMIN LOGIN ═══════════════════ */
 function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
   const [password,setPassword]=useState("");
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState("");
-  const configured=String(settings.adminSetupHash||"").trim();
+  const [configured,setConfigured]=useState(String(settings.adminSetupHash||"").trim());
+  const [checking,setChecking]=useState(!String(settings.adminSetupHash||"").trim());
+
+  useEffect(()=>{
+    const fromSettings=String(settings.adminSetupHash||"").trim();
+    if(fromSettings){ setConfigured(fromSettings); setChecking(false); return; }
+    let live=true;
+    (async()=>{
+      setChecking(true);
+      try{
+        await waitForFirebase(4000);
+        if(FB_OK&&FB_DB){
+          const snap=await FB_DB.ref("settings/adminSetupHash").get();
+          if(live) setConfigured(String((snap&&snap.val())||"").trim());
+        }
+      }catch(e){}
+      finally{ if(live) setChecking(false); }
+    })();
+    return()=>{ live=false; };
+  },[settings.adminSetupHash]);
 
   const unlock=async()=>{
-    if(!configured){ setMsg("Admin password has not been set yet. Use the main Google account once, then set it in Admin Security."); return; }
+    if(checking){ setMsg("Checking Admin password setup…"); return; }
+    if(!configured){ setMsg("Admin password has not been set yet. Sign in once with the main Google account, then set it in Admin Security."); return; }
     if(!password){ setMsg("Enter the admin password."); return; }
     setBusy(true); setMsg("");
     try{
       const digest=await adminPasswordDigest(password);
       if(digest!==configured){ setMsg("Incorrect admin password."); return; }
-      
       onSuccess();
     }finally{ setBusy(false); }
   };
@@ -11621,10 +11684,8 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
     try{
       const u=await onAdminSignIn?.();
       if(u) await refreshAdminAccess();
-      if(u&&isMainAdminUid(u.uid)){
-        
-        onSuccess();
-      }else if(u) setMsg("Only the main admin can initialise the Admin password.");
+      if(u&&isMainAdminUid(u.uid)) onSuccess();
+      else if(u) setMsg("Only the main admin can initialise the Admin password.");
     }finally{ setBusy(false); }
   };
 
@@ -11634,13 +11695,15 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
       <div style={{fontSize:56,marginBottom:14}}>🔐</div>
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:7}}>Admin</div>
       <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.6,maxWidth:380,marginBottom:18}}>Enter the Admin password every time you open Admin. Google sign-in is needed only for shared Firebase data and changes; only the main admin or the added co-admin UID can sync changes.</div>
-      {configured?(
-        <div style={{width:"min(100%,360px)"}}>
-          <input autoFocus type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock();}} placeholder="Admin password" aria-label="Admin password" style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"12px 14px",fontSize:14,outline:"none",marginBottom:10}}/>
-          <button className="press" onClick={unlock} disabled={busy} style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px 16px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{busy?"Checking…":"Unlock Admin"}</button>
-        </div>
-      ):(
-        <button className="press" onClick={bootstrap} disabled={busy} style={{background:"white",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px 16px",fontSize:12.5,fontWeight:800,color:C.text}}>{busy?"Signing in…":"Sign in with main Google to set password"}</button>
+      <div style={{width:"min(100%,360px)"}}>
+        {/* PasswordField lives in the main bundle (see app.jsx) and carries the show/hide eye,
+            so a mistyped password on a phone keyboard can be checked rather than retyped. */}
+        <PasswordField autoFocus value={password} onChange={setPassword} onEnter={unlock}
+          placeholder="Admin password" label="Admin password" style={{marginBottom:10}}/>
+        <button className="press" onClick={unlock} disabled={busy||checking} style={{width:"100%",background:(busy||checking)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"12px 16px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{checking?"Checking…":busy?"Checking…":"Unlock Admin"}</button>
+      </div>
+      {!configured&&!checking&&(
+        <button className="press" onClick={bootstrap} disabled={busy} style={{marginTop:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"10px 14px",fontSize:11.5,fontWeight:800,color:C.text}}>{busy?"Signing in…":"Main admin: set up password"}</button>
       )}
       {msg&&<div style={{marginTop:12,maxWidth:380,textAlign:"center",fontSize:11.5,color:msg.toLowerCase().includes("incorrect")||msg.toLowerCase().includes("only")?C.danger:C.textSub,lineHeight:1.5}}>{msg}</div>}
     </div>
@@ -15112,8 +15175,8 @@ function SettingsPanel({settings,onSave,products=[]}){
           <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:9}}>🔑 Admin password</div>
           <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginBottom:9}}>This password only unlocks the Admin workspace. Firebase still requires the authorised Google account for protected data.</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <input type="password" value={newAdminPassword} onChange={e=>setNewAdminPassword(e.target.value)} placeholder="New password" aria-label="New admin password" style={{minWidth:0,border:`1.5px solid ${C.border}`,borderRadius:9,padding:"9px 10px"}}/>
-            <input type="password" value={confirmAdminPassword} onChange={e=>setConfirmAdminPassword(e.target.value)} placeholder="Confirm password" aria-label="Confirm admin password" style={{minWidth:0,border:`1.5px solid ${C.border}`,borderRadius:9,padding:"9px 10px"}}/>
+            <PasswordField value={newAdminPassword} onChange={setNewAdminPassword} placeholder="New password" label="New admin password" autoComplete="new-password" style={{minWidth:0}}/>
+            <PasswordField value={confirmAdminPassword} onChange={setConfirmAdminPassword} placeholder="Confirm password" label="Confirm admin password" autoComplete="new-password" style={{minWidth:0}}/>
           </div>
           <button className="press" onClick={changeAdminPassword} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:9,padding:"8px 13px",fontSize:11.5,fontWeight:800}}>Save Admin password</button>
         </div>
@@ -16951,9 +17014,19 @@ function NemoStore(){
   /* The cinematic opening may lift only after the visible Home data has settled:
      catalogue, settings, Customer Tanks, testimonials and the signed-in wallet. Each source
      carries its own bounded fallback, so this waits for real inner completion without hanging. */
+  /* Drive the splash percentage from the same five gates the reveal waits on, so the number
+     reflects work that actually finished rather than a timer. 40% is the shell existing at
+     all — React mounted and this component is rendering — and the five data gates share the
+     rest, 12 points each. index.html keeps it monotonic and creeps between milestones. */
+  useEffect(()=>{
+    const done=[!loading,hydrated,settingsReady,communityReady,walletReady].filter(Boolean).length;
+    bootProgress(40+done*12);
+  },[loading,hydrated,settingsReady,communityReady,walletReady]);
+
   useEffect(()=>{
     if(loading||!hydrated||!settingsReady||!communityReady||!walletReady) return;
     try{ window.__nemoBootReady=true; }catch(e){}
+    bootProgress(100);
     revealStore();
   },[loading,hydrated,settingsReady,communityReady,walletReady]);
 

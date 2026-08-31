@@ -148,17 +148,21 @@
   #splash .sub{color:rgba(255,255,255,.88);font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:14px;letter-spacing:.4px;text-align:center;
     animation:subIn 1s ease .8s both;}
   @keyframes subIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-  /* The ring never turned. It carried two animations, and the second — subIn, borrowed from the
-     tagline — animates `transform` as well as opacity. When two animations touch the same
-     property the LAST one wins, and subIn runs `both`, so it pinned transform to `none` for the
-     whole splash and held it there after finishing. spin was overridden from the first frame:
-     what shoppers saw was a ring that faded in and then sat perfectly still while they waited.
-     The fade now animates opacity only, so it has nothing to argue with spin about. */
-  #splash .spin{width:26px;height:26px;border:3px solid rgba(255,255,255,.22);border-top-color:#fff;border-radius:50%;
-    margin-top:10px;opacity:0;animation:spin .75s linear infinite, fadeIn .5s ease 1.1s both;}
+  /* A determinate bar, not a spinner. An indeterminate ring says only "still working"; on a
+     slow connection that is indistinguishable from a hang, which is when people leave. The
+     percentage is driven by real boot milestones reported from the app (see nemoSplashProgress
+     below), with a slow creep in between so it is never frozen while the network is quiet. */
+  #splash .prog{width:min(210px,58vw);margin-top:14px;opacity:0;animation:fadeIn .5s ease 1.1s both;}
+  #splash .prog-track{height:4px;border-radius:99px;background:rgba(255,255,255,.2);overflow:hidden;}
+  #splash .prog-fill{height:100%;width:0;border-radius:99px;background:#fff;
+    box-shadow:0 0 12px rgba(255,255,255,.5);transition:width .38s cubic-bezier(.25,.8,.3,1);}
+  #splash .prog-pct{margin-top:8px;text-align:center;color:rgba(255,255,255,.82);
+    font-family:'Plus Jakarta Sans',sans-serif;font-size:11.5px;font-weight:700;letter-spacing:.6px;
+    font-variant-numeric:tabular-nums;}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-  @media (prefers-reduced-motion:reduce){#splash .bub,#splash .logo,#splash .logo::after,#splash .sub,#splash .spin{animation:none!important;opacity:1;transform:none;}}
-  @keyframes spin{to{transform:rotate(360deg)}}
+  /* Reduced motion keeps the bar (it carries information) but drops the decorative animation. */
+  @media (prefers-reduced-motion:reduce){#splash .bub,#splash .logo,#splash .logo::after,#splash .sub,#splash .prog{animation:none!important;opacity:1;transform:none;}
+    #splash .prog-fill{transition:none;}}
   /* PWA install banner — slides down briefly on each visit */
   #installBanner{position:fixed;top:0;left:0;right:0;z-index:9998;display:flex;align-items:center;gap:12px;
     padding:10px 14px;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;
@@ -238,12 +242,20 @@
          half-written cache entry rather than a missing file, so it retries past the cache first,
          then tries the app icon (same brand mark, cached separately), and only gives up to the
          emoji if all three are gone. -->
+    <!-- The splash logo is the largest thing painted on a cold load, so it is the LCP element.
+         fetchpriority="high" moves it ahead of the deferred React/Firebase scripts in the
+         browser's queue; without it the brand mark waits behind code nothing can paint yet. -->
     <img src="assets/nemo-logo.webp" alt="Nemo Aqua Store" id="splash-logo"
+         fetchpriority="high" decoding="async"
          onerror="window.__nemoLogoFallback&&window.__nemoLogoFallback(this)"/>
     <span class="emoji-fallback">🐠</span>
   </div>
   <div class="sub">Bring Colour to Your Life</div>
-  <div class="spin"></div>
+  <div class="prog" id="splash-prog" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+       aria-valuenow="0" aria-label="Loading Nemo Aqua Store">
+    <div class="prog-track"><div class="prog-fill" id="splash-bar"></div></div>
+    <div class="prog-pct" id="splash-pct">0%</div>
+  </div>
 </div>
 <div id="root"></div>
 <!-- PWA install banner (revealed after splash, auto-hides) -->
@@ -279,6 +291,41 @@
   // while NemoStore completes its initial catalogue, settings, community and wallet reads,
   // then the app itself calls window.nemoSplashReady().
   var splashGone=false;
+
+  /* ── Splash progress ───────────────────────────────────────────────────────
+     One monotonic number, owned here so the bar can never jump backwards however many
+     callers report progress. The app reports real milestones through nemoSplashProgress
+     (see the boot effect in app.jsx); between them a slow creep keeps the bar moving, so a
+     shopper on a bad connection sees progress rather than a frozen UI — but the creep is
+     capped just above the last real milestone, so it can never run ahead of actual work and
+     sit at 99% while nothing is happening. */
+  var progValue=0, progCeil=14, progTimer=null;
+  function paintProg(){
+    var bar=document.getElementById("splash-bar");
+    var pct=document.getElementById("splash-pct");
+    var wrap=document.getElementById("splash-prog");
+    var n=Math.round(progValue);
+    if(bar) bar.style.width=n+"%";
+    if(pct) pct.textContent=n+"%";
+    if(wrap) wrap.setAttribute("aria-valuenow",n);
+  }
+  function setProg(v){
+    if(splashGone) return;
+    if(v>progValue) progValue=Math.min(v,100);
+    paintProg();
+  }
+  /* Real milestone: raise the value and let the creep run a little past it. */
+  window.nemoSplashProgress=function(v){
+    v=Number(v)||0;
+    progCeil=Math.min(96,Math.max(progCeil,v+7));
+    setProg(v);
+  };
+  progTimer=setInterval(function(){
+    if(splashGone){ clearInterval(progTimer); return; }
+    if(progValue<progCeil) setProg(progValue+Math.max(0.25,(progCeil-progValue)*0.06));
+  },180);
+  paintProg();
+
   function hideSplashNow(){
     if(splashGone) return; splashGone=true;
     requestAnimationFrame(function(){
@@ -289,6 +336,12 @@
   /* The app calls this (as window.nemoSplashReady) only after its common customer data is
      ready. Idempotent — repeat calls are ignored. */
   function fadeSplash(){
+    /* Land the bar on 100 first, then fade. Both run together — the fill's .38s width
+       transition inside the .45s opacity fade — so the bar visibly completes instead of
+       vanishing part-filled, which reads as a failure even when everything worked. No timer
+       decides WHEN this happens: the app calls this only once its boot readiness is met. */
+    if(progTimer){ clearInterval(progTimer); progTimer=null; }
+    progCeil=100; setProg(100);
     hideSplashNow();
   }
   window.nemoSplashReady=fadeSplash;
@@ -300,7 +353,7 @@
     var s=document.getElementById("splash"); if(!s) return;
     var sub=s.querySelector(".sub");
     if(sub) sub.textContent=message||"Nemo could not finish loading.";
-    var spin=s.querySelector(".spin"); if(spin) spin.style.display="none";
+    var prog=s.querySelector(".prog"); if(prog) prog.style.display="none";
     var retry=s.querySelector(".splash-retry");
     if(!retry){
       retry=document.createElement("button");

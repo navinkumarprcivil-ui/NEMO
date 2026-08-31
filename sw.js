@@ -1,12 +1,19 @@
 /* Nemo Aqua Store — service worker (offline fallback + always-fresh code) */
-const CACHE = 'nemo-v90.ff7066b6';
+const CACHE = 'nemo-v90.65f37537';
 /* Precached on install — so keep this to what a visit actually uses. The logo is
    here as WebP only: the splash asks for the WebP, so the PNG beside it is
    reached only by a browser that cannot read WebP, and precaching 160 KB for a
    fallback almost nobody takes cost more on a first visit than the whole
    document does. A browser that does need it fetches it on demand, and the
-   cache-first handler below keeps it from then on. */
-const ASSETS = ['./index.html', './app.js', './app.jsx', './assets/nemo-logo.webp', './manifest.webmanifest'];
+   cache-first handler below keeps it from then on.
+
+   app.jsx is excluded for exactly the same reason, and it cost far more: index.html runs the
+   precompiled app.js on the fast path and only falls back to compiling the JSX source when
+   app.js is missing. Precaching it downloaded ~276 KB gzipped of source, on the first visit,
+   competing with the app itself, for a path almost nobody takes — and one that cannot arise
+   offline anyway, since app.js is precached right here. The .jsx handler below is
+   network-first with a cache fallback, so a browser that genuinely needs it still gets it. */
+const ASSETS = ['./index.html', './app.js', './assets/nemo-logo.webp', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

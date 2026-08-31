@@ -97,16 +97,19 @@ const split=splitAdminChunk(src);
  * `new Function(code)` checks below cannot see it — they parse, they do not resolve — and the
  * test suite reads app.jsx, not the split. That is exactly how the Care Guides poster viewer
  * shipped broken, so the boundary is checked here, where the split is made. */
-function topLevelFunctionNames(source){
+function topLevelNames(source){
   const names = new Set();
-  for (const m of source.matchAll(/^function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) names.add(m[1]);
+  for (const m of source.matchAll(/^(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
   return names;
 }
-const adminOnly = topLevelFunctionNames(split.adminSource);
-// The two the loader deliberately publishes on `window` for the main bundle to pick up.
-adminOnly.delete("NemoAdminLoginImpl");
-adminOnly.delete("NemoAdminHubImpl");
-const leaked = [...adminOnly].filter(name => new RegExp(`\\b${name}\\b`).test(split.mainSource));
+const adminNames = topLevelNames(split.adminSource);
+const mainNames  = topLevelNames(split.mainSource);
+/* A name the main bundle also declares for itself is fine — that is exactly how the generated
+   loader provides AdminLogin/AdminHub as lazy gates. Comparing the two sets rather than keeping
+   an exclusion list means new intentional boundaries need no maintenance here, and covers
+   `const`/`class` components as well as function declarations. */
+const leaked = [...adminNames].filter(name =>
+  !mainNames.has(name) && new RegExp(`\\b${name}\\b`).test(split.mainSource));
 if(leaked.length){
   throw new Error(
     `main bundle references Admin-only ${leaked.join(", ")} — admin.js is not loaded for a shopper, so ` +
