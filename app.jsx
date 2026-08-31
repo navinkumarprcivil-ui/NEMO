@@ -3419,10 +3419,38 @@ async function subscribeRestock(uid, pid){
 function loadRestockLocal(){ try{const r=localStorage.getItem("nemo-restock");return r?JSON.parse(r):[];}catch{return[];} }
 
 /* ── Push notification helper ── */
+/* Reports the browser's own outcome — "granted" | "denied" | "default" | "unsupported" —
+   rather than a boolean.
+
+   "default" is the one that matters and the one a boolean could not express: it means the
+   prompt was DISMISSED, not answered. The permission is unchanged and can be asked again.
+   Collapsing it to false made every caller record a permanent denial, so one stray tap outside
+   the prompt turned a working switch into a dead end that said the browser had blocked it.
+
+   "unsupported" is separated from "denied" for the same reason: a browser with no Notification
+   API has not blocked anything, and telling someone to unblock it in settings they will never
+   find is worse than saying it is unavailable. */
 function requestNotifPerm(cb){
-  if(!("Notification"in window)){cb&&cb(false);return;}
-  if(Notification.permission==="granted"){cb&&cb(true);return;}
-  Notification.requestPermission().then(p=>cb&&cb(p==="granted"));
+  let fired=false;
+  const done=(p)=>{ if(fired) return; fired=true; cb&&cb(p); };
+  let current;
+  try{
+    if(typeof window==="undefined"||!("Notification"in window)){ done("unsupported"); return; }
+    current=Notification.permission;
+  }catch(e){ done("unsupported"); return; }
+  if(current==="granted"||current==="denied"){ done(current); return; }
+  try{
+    /* Safari has only the legacy callback form and returns undefined; everything else returns
+       a promise. Both are wired, and `done` fires once, so neither is left without an answer. */
+    const r=Notification.requestPermission(p=>done(p||"default"));
+    if(r&&typeof r.then==="function") r.then(p=>done(p||"default")).catch(()=>done("default"));
+  }catch(e){ done("default"); }
+}
+/* The current permission, read defensively — a WebView without the API must read as
+   "unsupported", never as a block the customer is told to go and undo. */
+function notifPermNow(){
+  try{ return ("Notification"in window) ? Notification.permission : "unsupported"; }
+  catch(e){ return "unsupported"; }
 }
 /* `channel` lets a caller respect the customer's own switch for that kind of alert, not just
    the browser permission — "guides" is the care-guide toggle in GuideNotifBtn. Left empty,
@@ -6056,35 +6084,65 @@ const GUIDE_NOTIF_KEY="nemo-guide-notif";
 function guideNotifOn(){ try{ return localStorage.getItem(GUIDE_NOTIF_KEY)==="1"; }catch(e){ return false; } }
 function setGuideNotifPref(on){ try{ localStorage.setItem(GUIDE_NOTIF_KEY,on?"1":"0"); }catch(e){} }
 function GuideNotifBtn(){
-  const [perm,setPerm]=useState(()=>typeof Notification!=="undefined"?Notification.permission:"default");
+  const [perm,setPerm]=useState(notifPermNow);
   const [on,setOn]=useState(guideNotifOn);
+  const [note,setNote]=useState("");
   const active = on && perm==="granted";
   const apply=(v)=>{ setOn(v); setGuideNotifPref(v); };
+
+  /* Permission can change outside the page — in browser site settings, or in Android's app
+     settings for the installed app. Re-read it when the tab comes back and, where the
+     Permissions API exists, the moment it actually changes. Without this the control kept
+     showing a stale "blocked" after the customer had just allowed it and returned. */
+  useEffect(()=>{
+    const sync=()=>setPerm(notifPermNow());
+    document.addEventListener("visibilitychange",sync);
+    let status=null;
+    try{
+      if(navigator.permissions&&navigator.permissions.query){
+        navigator.permissions.query({name:"notifications"})
+          .then(st=>{ status=st; st.onchange=sync; }).catch(()=>{});
+      }
+    }catch(e){}
+    return()=>{ document.removeEventListener("visibilitychange",sync); if(status) status.onchange=null; };
+  },[]);
+
+  const BLOCKED="Notifications are switched off for Nemo in your browser or phone settings. Turn them on there, then tap again.";
   const toggle=()=>{
-    if(active){ apply(false); return; }              // turning OFF never needs permission
-    if(perm==="granted"){ apply(true); return; }     // already allowed — just switch back on
-    requestNotifPerm(ok=>{ setPerm(ok?"granted":"denied"); apply(ok); });
+    // Turning OFF is only ever a local preference, so it must work in every state. It used to
+    // be impossible the moment permission was denied, because the switch was replaced by text.
+    if(on){ apply(false); setNote(""); return; }
+    if(perm==="granted"){ apply(true); setNote(""); return; }
+    if(perm==="unsupported"){ setNote("This browser can't show notifications."); return; }
+    if(perm==="denied"){ setNote(BLOCKED); return; }
+    requestNotifPerm(res=>{
+      setPerm(res);
+      if(res==="granted"){ apply(true); setNote(""); }
+      else if(res==="denied") setNote(BLOCKED);
+      else if(res==="unsupported") setNote("This browser can't show notifications.");
+      // Dismissed rather than answered: nothing is blocked and it can simply be asked again.
+      else setNote("Not allowed yet — tap to ask again.");
+    });
   };
-  // Blocked at the browser level: say so rather than offering a switch that cannot move.
-  if(perm==="denied") return(
-    <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.textSub,fontWeight:600}}>
-      <span>🔕</span> Blocked in browser
-    </div>
-  );
+
+  const off = perm==="unsupported";
   return(
-    <button className="press" onClick={toggle} role="switch" aria-checked={active}
-      aria-label={active?"Turn off new-guide notifications":"Turn on new-guide notifications"}
-      style={{display:"flex",alignItems:"center",gap:8,background:active?"#dcfce7":C.accentLight,border:`1px solid ${active?"#86efac":C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:active?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-      <span>{active?"🔔":"🔕"}</span>
-      {/* One word. The switch beside it is what says on or off — spelling that out again in
-          the label made a control the size of a sentence, and the aria-label still carries
-          the full meaning for anyone who cannot see the track. */}
-      <span>Notification</span>
-      {/* A visible track, so it reads as something that can be switched back */}
-      <span style={{width:26,height:15,borderRadius:99,background:active?"#22c55e":"#cbd5e1",position:"relative",flexShrink:0,transition:"background .2s ease"}}>
-        <span style={{position:"absolute",top:2,left:active?13:2,width:11,height:11,borderRadius:"50%",background:"#fff",transition:"left .2s ease"}}/>
-      </span>
-    </button>
+    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
+      <button className="press" onClick={toggle} role="switch" aria-checked={active} disabled={off}
+        aria-label={active?"Turn off new-guide notifications":"Turn on new-guide notifications"}
+        style={{display:"flex",alignItems:"center",gap:8,background:active?"#dcfce7":C.accentLight,border:`1px solid ${active?"#86efac":C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:active?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:off?"not-allowed":"pointer",opacity:off?.55:1}}>
+        <span>{active?"🔔":"🔕"}</span>
+        {/* One word. The switch beside it is what says on or off — spelling that out again in
+            the label made a control the size of a sentence, and the aria-label still carries
+            the full meaning for anyone who cannot see the track. */}
+        <span>Notification</span>
+        {/* A visible track, so it reads as something that can be switched back */}
+        <span style={{width:26,height:15,borderRadius:99,background:active?"#22c55e":"#cbd5e1",position:"relative",flexShrink:0,transition:"background .2s ease"}}>
+          <span style={{position:"absolute",top:2,left:active?13:2,width:11,height:11,borderRadius:"50%",background:"#fff",transition:"left .2s ease"}}/>
+        </span>
+      </button>
+      {note&&<div role="status" style={{fontSize:10,color:C.textSub,fontWeight:600,lineHeight:1.45,maxWidth:210,textAlign:"right"}}>{note}</div>}
+    </div>
   );
 }
 
@@ -8131,7 +8189,8 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   const toggleRemind=()=>{
     if(tank.remind){ persist({...tank,remind:false}); return; }
     if(perm==="granted"){ persist({...tank,remind:true}); return; }
-    requestNotifPerm(ok=>{ setPerm(ok?"granted":"denied"); persist({...tank,remind:ok}); });
+    // A dismissed prompt leaves the permission askable, so it must not be stored as a denial.
+    requestNotifPerm(res=>{ setPerm(res); persist({...tank,remind:res==="granted"}); });
   };
   const weekly=useMemo(()=>{
     if(!tank.litres) return [];
