@@ -1,0 +1,78 @@
+name: Deploy website
+
+# Deliberately manual. The store owner runs this from the Actions tab when they
+# decide to go live — nothing deploys on its own from a push, because "the code
+# changed" and "I am ready for customers to see this" are different decisions,
+# and during a payment rollout that difference matters.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type DEPLOY to confirm you want this live on nemoaquastore.in'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never let two deploys race each other onto the same Worker.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Refuse unless confirmed
+        # A misclick in the Actions tab should not reach production.
+        if: ${{ github.event.inputs.confirm != 'DEPLOY' }}
+        run: |
+          echo "::error::Type DEPLOY in the confirmation box to run this. Nothing has been deployed."
+          exit 1
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      # The same gate the quality workflow applies, run again here rather than
+      # trusted from an earlier run: this deploys whatever main holds right now.
+      - name: Run regression tests
+        run: npm test
+
+      - name: Check Firebase rules coverage
+        run: npm run check:rules
+
+      - name: Build and validate Cloudflare package
+        run: npm run cf:check
+
+      - name: Confirm generated deployment files are committed
+        # A stale app.js is invisible at runtime — the site silently serves old
+        # code — so a build that differs from what is committed fails here.
+        run: git diff --exit-code -- app.js admin.js version.json sw.js cf-dist
+
+      - name: Deploy to Cloudflare
+        # Payment keys are NOT set here. They live in Cloudflare's own secret
+        # store, set once by the owner in the dashboard, and survive every
+        # deploy — so this token never needs to see them.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          npx wrangler deploy
+
+      - name: Done
+        run: echo "Deployed. Check https://www.nemoaquastore.in"

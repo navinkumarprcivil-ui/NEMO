@@ -25,12 +25,26 @@
     "PUBLIC_SITE_URL": "https://www.nemoaquastore.in",
     "CASHFREE_ENV": "production"
   },
+  // Documentation for whoever sets this up next. These are set in the Cloudflare
+  // dashboard (Workers & Pages -> nemo-aqua-store -> Settings -> Variables and Secrets),
+  // never in this file and never in the repository. They survive every deploy.
   "secrets": {
     "required": [
-      "CASHFREE_APP_ID",
-      "CASHFREE_SECRET_KEY",
       "FIREBASE_SERVICE_ACCOUNT",
-      "CRON_SECRET"
+      "CRON_SECRET",
+      "PHONEPE_CLIENT_ID",
+      "PHONEPE_CLIENT_SECRET",
+      "PHONEPE_CLIENT_VERSION",
+      "PHONEPE_WEBHOOK_USERNAME",
+      "PHONEPE_WEBHOOK_PASSWORD"
+    ],
+    "optional": [
+      "RAZORPAY_KEY_ID",
+      "RAZORPAY_KEY_SECRET",
+      "RAZORPAY_WEBHOOK_SECRET",
+      "PHONEPE_ENV",
+      "CASHFREE_APP_ID",
+      "CASHFREE_SECRET_KEY"
     ]
   },
   "triggers": {
