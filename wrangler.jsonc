@@ -37,15 +37,11 @@
       "PHONEPE_CLIENT_VERSION",
       "PHONEPE_WEBHOOK_USERNAME",
       "PHONEPE_WEBHOOK_PASSWORD"
-    ],
-    "optional": [
-      "RAZORPAY_KEY_ID",
-      "RAZORPAY_KEY_SECRET",
-      "RAZORPAY_WEBHOOK_SECRET",
-      "PHONEPE_ENV",
-      "CASHFREE_APP_ID",
-      "CASHFREE_SECRET_KEY"
     ]
+    // Optional, set the same way when wanted:
+    //   RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET  (fallback gateway)
+    //   PHONEPE_ENV                                                     ("production" to go live)
+    // Wrangler rejects unknown keys inside "secrets", so this stays a comment.
   },
   "triggers": {
     "crons": ["*/15 * * * *"]

@@ -72,6 +72,16 @@ jobs:
             echo "::error::CLOUDFLARE_API_TOKEN is not set. Add it under Settings → Secrets and variables → Actions."
             exit 1
           fi
+          # Copying an ID out of a dashboard drags invisible characters along with it —
+          # a U+2028 line separator is what failed the first run of this workflow, with an
+          # error naming a value that looked correct on screen. Strip anything that is not a
+          # legal ID character rather than making a person hunt for a character they cannot see.
+          CLEAN_ACCOUNT_ID=$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -cd '[:alnum:]_-')
+          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -z "$CLEAN_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID contains no usable characters. Re-add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          export CLOUDFLARE_ACCOUNT_ID="$CLEAN_ACCOUNT_ID"
           npx wrangler deploy
 
       - name: Done
