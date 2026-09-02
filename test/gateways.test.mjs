@@ -117,3 +117,62 @@ test('only fully configured providers are offered, in preference order', () => {
   assert.deepEqual(availableProviders(), ['razorpay']);
   delete process.env.PAYMENT_PROVIDER_ORDER;
 });
+
+/* ───────────────────────────── PhonePe (PG v2) ──────────────────────────── */
+
+process.env.PHONEPE_CLIENT_ID = 'TESTCLIENT';
+process.env.PHONEPE_CLIENT_SECRET = 'test_client_secret';
+process.env.PHONEPE_WEBHOOK_USERNAME = 'nemo_hook';
+process.env.PHONEPE_WEBHOOK_PASSWORD = 'hook_pass';
+
+const { phonepeMode, phonepeOrderIdFor, phonepeWebhookAuthValid } = await import('../lib/gateways.mjs');
+
+test('PhonePe defaults to sandbox — going live must be deliberate', () => {
+  delete process.env.PHONEPE_ENV;
+  assert.equal(phonepeMode(), 'sandbox');
+  process.env.PHONEPE_ENV = 'anything-else';
+  assert.equal(phonepeMode(), 'sandbox', 'only the exact string "production" may mean live');
+  process.env.PHONEPE_ENV = 'production';
+  assert.equal(phonepeMode(), 'production');
+  delete process.env.PHONEPE_ENV;
+});
+
+test('the PhonePe merchant order id is sanitised and length-capped', () => {
+  assert.equal(phonepeOrderIdFor('abc123'), 'nemo_abc123');
+  assert.ok(!/[^A-Za-z0-9_-]/.test(phonepeOrderIdFor('a/b c:d#e')));
+  assert.ok(phonepeOrderIdFor('x'.repeat(300)).length <= 63);
+});
+
+test('the PhonePe webhook credential is checked, and accepts the documented header forms', () => {
+  const good = crypto.createHash('sha256').update('nemo_hook:hook_pass').digest('hex');
+  assert.equal(phonepeWebhookAuthValid(good), true);
+  assert.equal(phonepeWebhookAuthValid(good.toUpperCase()), true, 'hex case must not matter');
+  assert.equal(phonepeWebhookAuthValid(`SHA256 ${good}`), true, 'an explicit scheme prefix is accepted');
+  assert.equal(phonepeWebhookAuthValid(crypto.createHash('sha256').update('nemo_hook:wrong').digest('hex')), false);
+  for (const bad of ['', null, undefined, 'deadbeef']) assert.equal(phonepeWebhookAuthValid(bad), false);
+});
+
+test('PhonePe is preferred by default but only when it is configured', () => {
+  delete process.env.PAYMENT_PROVIDER_ORDER;
+  assert.deepEqual(availableProviders(), ['phonepe', 'razorpay']);
+  const id = process.env.PHONEPE_CLIENT_ID;
+  process.env.PHONEPE_CLIENT_ID = '';
+  assert.deepEqual(availableProviders(), ['razorpay'], 'an unconfigured PhonePe must fall through to Razorpay');
+  process.env.PHONEPE_CLIENT_ID = id;
+});
+
+test('a PhonePe webhook is parsed only when its credential holds', () => {
+  const pp = providerById('phonepe');
+  const raw = JSON.stringify({ event: 'checkout.order.completed', payload: { merchantOrderId: 'nemo_o1', state: 'COMPLETED' } });
+  const good = crypto.createHash('sha256').update('nemo_hook:hook_pass').digest('hex');
+  assert.deepEqual(pp.parseWebhook(raw, { authorization: good }),
+    { provider: 'phonepe', event: 'checkout.order.completed', gatewayOrderId: 'nemo_o1' });
+  assert.equal(pp.parseWebhook(raw, {}), null);
+  assert.equal(pp.parseWebhook(raw, { authorization: 'deadbeef' }), null);
+});
+
+test('an order is still refunded by the gateway that created it, now three deep', () => {
+  assert.equal(providerForOrder({ gateway: 'phonepe' }), 'phonepe');
+  assert.equal(providerForOrder({ gateway: 'razorpay' }), 'razorpay');
+  assert.equal(providerForOrder({}), 'cashfree');
+});
