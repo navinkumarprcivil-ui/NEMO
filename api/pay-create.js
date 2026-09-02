@@ -1,63 +1,63 @@
 import {
-  cashfreeMode,
-  cashfreeOrderIdFor,
-  createCashfreeOrder,
   dbPatch,
-  fetchCashfreeOrder,
-  gatewayReady,
   isPaymentAdmin,
   money,
   orderPath,
   readOrder,
-  stableUuid,
   verifyIdToken,
-  writePaymentMapping,
 } from '../lib/payments.mjs';
+import {
+  allProvidersSandbox,
+  availableProviders,
+  finalizePayment,
+  paymentsReady,
+  providerById,
+  writeGatewayMapping,
+} from '../lib/gateways.mjs';
 
 const bearer = req => String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-const PAYMENT_HOSTS = new Set([
-  'www.nemoaquastore.in',
-  'nemoaquastore.in',
-]);
-const CASHFREE_ORDER_WINDOW_MS = 20 * 60 * 1000;
+const PAYMENT_HOSTS = new Set(['www.nemoaquastore.in', 'nemoaquastore.in']);
+const PAYMENT_WINDOW_MS = 20 * 60 * 1000;
+
 const publicSite = req => {
   const configured = String(process.env.PUBLIC_SITE_URL || 'https://www.nemoaquastore.in').replace(/\/$/, '');
   const host = String(req.headers.host || req.headers['x-forwarded-host'] || '').split(',')[0].trim().split(':')[0].toLowerCase();
   return PAYMENT_HOSTS.has(host) ? `https://${host}` : configured;
 };
-const safePhone = value => {
-  const digits = String(value || '').replace(/\D/g, '');
-  return digits.slice(-10);
-};
+const safePhone = value => String(value || '').replace(/\D/g, '').slice(-10);
 
-const publicCashfreeError = error => {
+/** Never leak gateway internals to the browser; map to something a shopper can act on. */
+const publicError = error => {
   const status = Number(error?.status || 0);
-  const code = String(error?.code || '').toLowerCase();
-  const message = String(error?.message || '').toLowerCase();
-  if (status === 401 || status === 403 || /authentication|client[_ -]?id|secret/.test(`${code} ${message}`)) {
-    return 'cashfree-credentials-rejected';
+  const text = `${error?.code || ''} ${error?.message || ''}`.toLowerCase();
+  if (status === 401 || status === 403 || /unauthor|authentication|client[_ -]?id|secret|credential/.test(text)) {
+    return 'gateway-credentials-rejected';
   }
-  if (/whitelist|domain|package/.test(`${code} ${message}`)) return 'cashfree-checkout-not-approved';
   if (status === 429) return 'gateway-busy';
   return 'payment-session-failed';
 };
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
+    const ids = availableProviders();
     res.status(200).json({
-      ready: gatewayReady(),
-      provider: 'cashfree',
-      mode: cashfreeMode(),
+      ready: paymentsReady(),
+      providers: ids.map(id => ({ id, label: providerById(id)?.label || id, mode: providerById(id)?.mode() })),
+      // Retained so an older cached client keeps understanding the response.
+      provider: ids[0] || '',
+      mode: providerById(ids[0])?.mode() || '',
       currency: 'INR',
     });
     return;
   }
   if (req.method !== 'POST') { res.status(405).json({ error: 'method-not-allowed' }); return; }
-  if (!gatewayReady()) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
+  if (!paymentsReady()) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
 
   const uid = await verifyIdToken(bearer(req));
   if (!uid) { res.status(401).json({ error: 'sign-in-required' }); return; }
-  if (cashfreeMode() === 'sandbox' && !(await isPaymentAdmin(uid))) {
+  // A test gateway must never take a real customer's money, so while every configured
+  // provider is in sandbox mode checkout is open to administrators only.
+  if (allProvidersSandbox() && !(await isPaymentAdmin(uid))) {
     res.status(403).json({ error: 'sandbox-admin-only' });
     return;
   }
@@ -86,83 +86,81 @@ export default async function handler(req, res) {
     const amount = money(order.amountDue ?? ((Number(order.total) || 0) + (Number(order.fee) || 0)));
     if (!(amount >= 1)) { res.status(409).json({ error: 'invalid-order-amount' }); return; }
     const phone = safePhone(order.userPhone || order.address?.phone);
-    if (!/^[6-9]\d{9}$/.test(phone)) {
-      res.status(409).json({ error: 'valid-phone-required' });
-      return;
-    }
+    if (!/^[6-9]\d{9}$/.test(phone)) { res.status(409).json({ error: 'valid-phone-required' }); return; }
 
-    const cashfreeOrderId = String(order.gateway === 'cashfree' && order.gatewayOrderId || cashfreeOrderIdFor(orderId));
-    let gatewayOrder = null;
-    let paymentDeadline = deadline;
-    if (order.gateway === 'cashfree' && order.gatewayOrderId) {
-      gatewayOrder = await fetchCashfreeOrder(cashfreeOrderId);
-      const gatewayDeadline = Date.parse(String(gatewayOrder?.order_expiry_time || ''));
-      if (Number.isFinite(gatewayDeadline)) paymentDeadline = Math.max(paymentDeadline || 0, gatewayDeadline);
-    } else {
-      const site = publicSite(req);
-      const returnUrl = `${site}/?payment_return=cashfree&order_id=${encodeURIComponent(orderId)}`;
-      const notifyUrl = `${site}/api/pay-webhook`;
-      // Cashfree production rejects an expiry that is 15 minutes or less away. Start a fresh
-      // 20-minute reservation when checkout opens and persist the same deadline on the Nemo
-      // order, so stock cannot auto-release while the gateway can still accept payment.
-      paymentDeadline = Math.max(deadline || 0, Date.now() + CASHFREE_ORDER_WINDOW_MS);
-      const body = {
-        order_id: cashfreeOrderId,
-        order_amount: amount,
-        order_currency: 'INR',
-        customer_details: {
-          customer_id: userUid.slice(0, 50),
-          customer_name: String(order.address?.name || '').slice(0, 85),
-          customer_email: String(order.userEmail || '').slice(0, 85) || undefined,
-          customer_phone: phone,
-        },
-        order_meta: { return_url: returnUrl, notify_url: notifyUrl },
-        order_expiry_time: new Date(paymentDeadline).toISOString(),
-        order_note: `Nemo order ${String(order.orderNo || orderId)}`.slice(0, 200),
-      };
+    /* Which gateway. An order that already has one keeps it: switching mid-order would
+       strand the session already open at the first gateway, and a customer who paid it
+       would have paid an order we had stopped watching. Only a fresh order gets a choice. */
+    const stuck = order.gateway && order.gatewayOrderId ? [String(order.gateway)] : availableProviders();
+    if (!stuck.length) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
+
+    const expiresAt = Math.max(deadline || 0, Date.now() + PAYMENT_WINDOW_MS);
+    const site = publicSite(req);
+    const returnUrl = `${site}/?payment_return=1&order_id=${encodeURIComponent(orderId)}`;
+
+    let session = null;
+    let lastError = null;
+    for (const id of stuck) {
+      const provider = providerById(id);
+      if (!provider?.ready()) continue;
       try {
-        gatewayOrder = await createCashfreeOrder(body, stableUuid(`create:${userUid}:${orderId}`));
+        const created = await provider.createSession({
+          order, orderId, userUid, amount, phone, expiresAt, returnUrl,
+        });
+        // The gateway says this order is already paid — settle it rather than charging twice.
+        if (created?.alreadyPaid) {
+          await finalizePayment(id, userUid, orderId, created.gatewayOrderId);
+          res.status(200).json({ alreadyPaid: true, provider: id });
+          return;
+        }
+        session = { ...created, providerId: id };
+        break;
       } catch (error) {
-        if (error?.code !== 'order_already_exists') throw error;
-        gatewayOrder = await fetchCashfreeOrder(cashfreeOrderId);
+        // Failover is the whole point: one gateway refusing must not end checkout.
+        lastError = error;
+        console.error(JSON.stringify({
+          event: 'pay_create_provider_failed',
+          provider: id,
+          status: Number(error?.status || 0),
+          message: String(error?.message || error).slice(0, 240),
+        }));
       }
     }
-    if (!gatewayOrder?.payment_session_id || gatewayOrder.order_id !== cashfreeOrderId) {
-      throw new Error('cashfree-session-missing');
-    }
-    if (!['ACTIVE', 'PAID'].includes(String(gatewayOrder.order_status || ''))) {
-      res.status(409).json({ error: 'payment-window-closed' });
-      return;
-    }
+    if (!session) throw lastError || new Error('no-gateway-available');
+
     await Promise.all([
       dbPatch(orderPath(userUid, orderId), {
-        gateway: 'cashfree',
-        gatewayMode: cashfreeMode(),
-        gatewayOrderId: cashfreeOrderId,
-        paymentDeadline,
+        gateway: session.providerId,
+        gatewayMode: session.mode,
+        gatewayOrderId: session.gatewayOrderId,
+        paymentDeadline: expiresAt,
         gatewayCreatedAt: order.gatewayCreatedAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }),
-      writePaymentMapping(cashfreeOrderId, userUid, orderId),
+      writeGatewayMapping(session.providerId, session.gatewayOrderId, userUid, orderId),
     ]);
+
     res.status(200).json({
-      provider: 'cashfree',
-      mode: cashfreeMode(),
-      paymentSessionId: gatewayOrder.payment_session_id,
-      cashfreeOrderId,
+      provider: session.providerId,
+      mode: session.mode,
+      gatewayOrderId: session.gatewayOrderId,
+      // Razorpay opens a modal and needs its publishable key; PhonePe is a redirect.
+      keyId: session.keyId || undefined,
+      redirectUrl: session.redirectUrl || undefined,
       amount,
       currency: 'INR',
       orderNo: order.orderNo || orderId,
+      customerName: String(order.address?.name || '').slice(0, 85),
+      customerPhone: phone,
     });
   } catch (error) {
-    const publicError = publicCashfreeError(error);
+    const publicCode = publicError(error);
     console.error(JSON.stringify({
       event: 'pay_create_failed',
       status: Number(error?.status || 0),
-      code: String(error?.code || '').slice(0, 80),
       message: String(error?.message || error).slice(0, 240),
-      publicError,
+      publicError: publicCode,
     }));
-    res.status(502).json({ error: publicError });
+    res.status(502).json({ error: publicCode });
   }
 }

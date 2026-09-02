@@ -159,10 +159,10 @@ function storeCopy(saved, whenOn, whenOff){
   return (!v || FISHY_COPY_RE.test(v)) ? whenOff : v;
 }
 
-const ORDER_STATUSES = ["Confirmed","Shipped","Delivered"]; // Cashfree confirms; admin ships and delivers
+const ORDER_STATUSES = ["Confirmed","Shipped","Delivered"]; // the gateway confirms; admin ships and delivers
 const ALL_STATUSES   = ["Awaiting Payment","Payment Review","Confirmed","Shipped","Delivered","Cancelled"];
 const ADMIN_ORDER_FILTERS = ["All","Order Placed","Shipped","Delivered","Past Orders","Return/Replacement"];
-const PAY_WINDOW_MIN = 20; // Cashfree requires order expiry to be more than 15 minutes
+const PAY_WINDOW_MIN = 20; // gateways reject an expiry under ~15 minutes; 20 keeps a margin
 const DEFAULT_STOCK  = 10;
 const MAX_PER_ORDER  = 10;
 // ── Returns / self-cancel policy helpers ──────────────────────────────
@@ -612,8 +612,18 @@ function normalizeSettings(s){
   const privacy=String(fixed.privacyPolicy||"");
   if(/payment reference ID and screenshot you submit so we can verify your payment/i.test(privacy)){
     fixed={...fixed,privacyPolicy:privacy
-      .replace(/plus the payment reference ID and screenshot you submit so we can verify your payment\./i,"plus the verified payment status returned by Cashfree.")
-      .replace(/Payments are processed through your own UPI app or our secure payment gateway;/i,"Payments are processed securely by Cashfree;")};
+      .replace(/plus the payment reference ID and screenshot you submit so we can verify your payment\./i,"plus the verified payment status returned by our payment gateway.")
+      .replace(/Payments are processed through your own UPI app or our secure payment gateway;/i,"Payments are processed securely by our PCI-compliant payment gateway (PhonePe or Razorpay);")};
+  }
+  /* Cashfree stopped serving this store, so a saved privacy policy naming it as the payment
+     processor is now simply untrue. Unlike the live-fish policy text — which is temporarily
+     inapplicable and must come back verbatim — this wording is wrong and should be corrected
+     in place, so it deliberately runs here in normalizeSettings and is saved back. */
+  if(/Cashfree/i.test(String(fixed.privacyPolicy||""))){
+    fixed={...fixed,privacyPolicy:String(fixed.privacyPolicy)
+      .replace(/the verified payment status returned by Cashfree/gi,"the verified payment status returned by our payment gateway")
+      .replace(/Payments are processed securely by Cashfree;/gi,"Payments are processed securely by our PCI-compliant payment gateway (PhonePe or Razorpay);")
+      .replace(/\bCashfree\b/g,"our payment gateway")};
   }
   if(/vote for the same tank more than once per day/i.test(String(fixed.tankRewardRules||""))){
     fixed={...fixed,tankRewardRules:String(fixed.tankRewardRules).replace(/vote for the same tank more than once per day/gi,"vote more than once for the same tank image")};
@@ -1965,7 +1975,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   /* No store-wide GST rate or HSN: both are per product (see the product editor). */
   jurisdiction: "Salem, Tamil Nadu",
   termsPolicy: "By placing an order you agree to these terms. "+STORE_NAME+" Aqua Store is a home-based proprietary micro-enterprise (Udyam-registered) trading in aquarium livestock and supplies. All orders are subject to stock availability and our acceptance of your payment. Prices are in INR and inclusive of applicable taxes. We are currently a small enterprise not registered under GST, so no GST is charged at present; this notice and your invoice will be updated once we register for GST, at which point your bill will be issued as a GST Tax Invoice. Live animals are perishable goods sold under our Live Arrival Guarantee, which is your sole and exclusive remedy for any transit loss. To the maximum extent permitted by law, our total liability for any order is limited to the amount actually paid for that order; we are not liable for indirect, incidental or consequential losses, nor for any loss arising after livestock has been introduced to your tank or system. We are not responsible for delays or failures caused by courier partners, weather, power/water conditions at your premises, or other events beyond our reasonable control. "+COURIER_COLLECT_TERM+" These terms are governed by the laws of India and subject to the exclusive jurisdiction of the courts at Salem, Tamil Nadu.",
-  privacyPolicy: "We collect only the details needed to fulfil your order — your name, contact number, delivery address and email, plus the verified payment status returned by Cashfree. This information is used solely to process, deliver and provide support for your orders. We do not sell your data or share it with anyone except our delivery partners and payment provider, and only as needed to complete your order. Payments are processed securely by Cashfree; we never see or store your card, UPI PIN or bank credentials. You can ask us to delete your stored account data at any time by messaging us on WhatsApp.",
+  privacyPolicy: "We collect only the details needed to fulfil your order — your name, contact number, delivery address and email, plus the verified payment status returned by our payment gateway. This information is used solely to process, deliver and provide support for your orders. We do not sell your data or share it with anyone except our delivery partners and payment provider, and only as needed to complete your order. Payments are processed securely by our PCI-compliant payment gateway (PhonePe or Razorpay); we never see or store your card, UPI PIN or bank credentials. You can ask us to delete your stored account data at any time by messaging us on WhatsApp.",
   liveGuaranteePrice: 150,        // legacy flat fallback
   liveGuaranteePriceTN: 150,      // Inside Tamil Nadu
   liveGuaranteePriceSouth: 200,   // South India
@@ -3547,15 +3557,25 @@ async function googleSignIn(){
   const u=res.user;
   return { name:u.displayName||"Customer", email:u.email||"", phone:normalizePhone(u.phoneNumber||""), uid:u.uid, photoURL:u.photoURL||"", method:"google", loginAt:new Date().toISOString() };
 }
-/* ═══════════════════ PAYMENT GATEWAY (Cashfree) ═══════════════════
-   Cashfree is the store's only customer checkout. The API keys remain on the server;
-   /api/pay-create reports whether that secure server-side configuration is ready.
+/* ═══════════════════ PAYMENT GATEWAY ═══════════════════
+   The store takes payment through whichever gateway the server picked for that order —
+   PhonePe or Razorpay — and the API keys never leave the server. /api/pay-create reports
+   which providers are configured and opens a session for one of them.
 
-   Everything that matters is decided on the server. Cashfree's popup result is
-   only a cue to ask our server to check the order directly with Cashfree; the
-   signed webhook is a second, asynchronous path. A closed tab, lost connection or
-   tampered client therefore cannot mark an order paid. */
-let PAY_GATEWAY = { ready:false, checked:false, provider:"", mode:"" };
+   Everything that matters is decided on the server. A gateway's own result, whether a modal
+   callback or a redirect back to the site, is only a cue to ask our server to check the order
+   directly with that gateway; the signed webhook is a second, asynchronous path. A closed tab,
+   a lost connection or a tampered client therefore cannot mark an order paid.
+
+   The two gateways differ in shape, and the code has to carry that difference honestly:
+   Razorpay opens a modal over the page, PhonePe navigates away and comes back. */
+/* A readable name for whichever gateway an order used. Past orders keep naming the gateway
+   that actually took the money, including ones no longer in service — an invoice that renamed
+   its processor after the fact would not match the customer's bank statement. */
+const GATEWAY_LABEL={phonepe:"PhonePe",razorpay:"Razorpay",cashfree:"Cashfree"};
+function gatewayLabel(g){ return GATEWAY_LABEL[String(g||"").toLowerCase()]||"Online"; }
+
+let PAY_GATEWAY = { ready:false, checked:false, provider:"", providers:[], mode:"" };
 async function payGatewayStatus(force=false){
   if(force) PAY_GATEWAY.checked=false;
   if(PAY_GATEWAY.checked) return PAY_GATEWAY;
@@ -3564,51 +3584,67 @@ async function payGatewayStatus(force=false){
     const r = await withTimeout(fetch("/api/pay-create",{method:"GET"}), 5000, null);
     if(r && r.ok){
       const j = await r.json();
-      PAY_GATEWAY={...PAY_GATEWAY,ready:!!j.ready,provider:j.provider||"",mode:j.mode||""};
+      PAY_GATEWAY={...PAY_GATEWAY,ready:!!j.ready,provider:j.provider||"",providers:j.providers||[],mode:j.mode||""};
     }
   }catch(e){ /* PaymentPanel offers a safe retry; no manual-payment fallback is exposed. */ }
   return PAY_GATEWAY;
 }
-/* Cashfree's own script, fetched only when a payment is actually opened — an
+
+/* Razorpay's checkout script, fetched only when a payment is actually opened — an
    unconfigured store and every non-checkout page pay nothing for it. */
-let CASHFREE_SCRIPT=null;
-function loadCashfreeScript(){
-  if(CASHFREE_SCRIPT) return CASHFREE_SCRIPT;
-  CASHFREE_SCRIPT = new Promise((resolve,reject)=>{
-    if(typeof window!=="undefined" && window.Cashfree) return resolve(true);
+let RAZORPAY_SCRIPT=null;
+function loadRazorpayScript(){
+  if(RAZORPAY_SCRIPT) return RAZORPAY_SCRIPT;
+  RAZORPAY_SCRIPT = new Promise((resolve,reject)=>{
+    if(typeof window!=="undefined" && window.Razorpay) return resolve(true);
     const s=document.createElement("script");
-    s.src="https://sdk.cashfree.com/js/v3/cashfree.js"; s.async=true;
+    s.src="https://checkout.razorpay.com/v1/checkout.js"; s.async=true;
     s.onload=()=>resolve(true);
-    s.onerror=()=>{ CASHFREE_SCRIPT=null; reject(new Error("checkout-script-failed")); };
+    s.onerror=()=>{ RAZORPAY_SCRIPT=null; reject(new Error("checkout-script-failed")); };
     document.head.appendChild(s);
   });
-  return CASHFREE_SCRIPT;
+  return RAZORPAY_SCRIPT;
 }
+
+/* PhonePe leaves the site, so the order being paid has to survive the round trip. The URL
+   carries it back, but a customer can land on a bare URL (a share, a restored tab), so the
+   id is also parked here as a fallback. Cleared as soon as it has been acted on. */
+const PAY_RETURN_KEY="nemo-pay-return";
+function rememberPaymentReturn(orderId){ try{ localStorage.setItem(PAY_RETURN_KEY,String(orderId)); }catch(e){} }
+function takePaymentReturn(){
+  let fromUrl="";
+  try{
+    const q=new URLSearchParams(window.location.search);
+    if(q.get("payment_return")) fromUrl=q.get("order_id")||"";
+  }catch(e){}
+  let stored=""; try{ stored=localStorage.getItem(PAY_RETURN_KEY)||""; }catch(e){}
+  const orderId=fromUrl||stored;
+  if(!orderId) return "";
+  try{ localStorage.removeItem(PAY_RETURN_KEY); }catch(e){}
+  try{ window.history.replaceState({},"",window.location.pathname); }catch(e){}
+  return orderId;
+}
+
+/** Ask our server whether this order was really paid. The only thing that confirms an order. */
+async function verifyPaymentForOrder(userUid, orderId, extra){
+  if(!FB_OK||!FB_AUTH||!FB_AUTH.currentUser||FB_AUTH.currentUser.uid!==userUid) throw new Error("sign-in-required");
+  const token=await FB_AUTH.currentUser.getIdToken();
+  const r=await fetch("/api/pay-verify",{
+    method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token},
+    body:JSON.stringify({userUid,orderId,...(extra||{})}),
+  });
+  const checked=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(checked.error||"payment-verification-failed");
+  return checked;
+}
+
 /**
  * Open the gateway for an order that is already in the database.
  *
- * The Firebase ID token proves which customer owns the order. When the modal
- * closes, /api/pay-verify reads Cashfree's order status server-side; no field from
- * the browser can confirm payment.
+ * The Firebase ID token proves which customer owns the order. Whatever the gateway hands
+ * back, /api/pay-verify reads the real status server-side; no field from the browser can
+ * confirm payment.
  */
-function cashfreeCheckoutWasClosed(result){
-  const error=result&&result.error;
-  if(!error||result.paymentDetails) return false;
-  const detail=[error.code,error.type,error.reason,error.message,error.description,typeof error==="string"?error:""]
-    .filter(Boolean).join(" ").toLowerCase();
-  return /close|cancel|dismiss|abort|user[_ -]?drop|dropped/.test(detail);
-}
-
-/* Cashfree may reject checkout before a modal is rendered (for example an inactive
-   whitelist or invalid session). Keep the customer-facing reference short and safe:
-   codes/reasons are useful, while free-form gateway payloads do not belong in the UI. */
-function cashfreeCheckoutFailureCode(result){
-  const error=result&&result.error;
-  if(!error||result.paymentDetails) return "";
-  const raw=error.code||error.type||error.reason||"checkout-rejected";
-  return String(raw).replace(/[^A-Za-z0-9_-]/g,"-").replace(/-+/g,"-").slice(0,60)||"checkout-rejected";
-}
-
 async function payWithGateway(order){
   /* The visible customer profile is cached for fast boot; payment authority is not. It must
      be the live, non-anonymous Firebase account that owns this exact order. */
@@ -3624,34 +3660,61 @@ async function payWithGateway(order){
     throw new Error(j.error||"create-failed");
   }
   const cfg = await res.json();
-  await loadCashfreeScript();
-  const cashfree=window.Cashfree({mode:cfg.mode==="production"?"production":"sandbox"});
-  const checkoutResult=await cashfree.checkout({
-    paymentSessionId:cfg.paymentSessionId,
-    redirectTarget:"_modal",
+  // The gateway already had this order as paid — settle rather than charge again.
+  if(cfg.alreadyPaid){
+    const checked=await verifyPaymentForOrder(order.userUid,order.id);
+    return checked.mode==="sandbox"?"test-confirmed":"confirmed";
+  }
+
+  if(cfg.provider==="phonepe"){
+    if(!cfg.redirectUrl) throw new Error("payment-session-failed");
+    // Leaving the site: park the order id, then navigate. The return is handled on boot.
+    rememberPaymentReturn(order.id);
+    window.location.assign(cfg.redirectUrl);
+    return "redirected";
+  }
+
+  if(cfg.provider!=="razorpay") throw new Error("gateway-unavailable");
+  await loadRazorpayScript();
+  const result=await new Promise((resolve)=>{
+    let settled=false;
+    const done=(v)=>{ if(!settled){ settled=true; resolve(v); } };
+    const rzp=new window.Razorpay({
+      key:cfg.keyId,
+      order_id:cfg.gatewayOrderId,
+      // Paise, and only a display value — Razorpay charges what the ORDER says, which the
+      // server created. A wrong number here cannot change what is taken.
+      amount:Math.round(Number(cfg.amount||0)*100),
+      currency:cfg.currency||"INR",
+      name:STORE_NAME+" Aqua Store",
+      description:"Order "+(cfg.orderNo||order.id),
+      prefill:{ name:cfg.customerName||"", contact:cfg.customerPhone||"" },
+      theme:{ color:C.primary },
+      // Dismissing the modal is a normal outcome, not an error.
+      modal:{ ondismiss:()=>done({dismissed:true}) },
+      handler:(payload)=>done({payload:payload||{}}),
+    });
+    rzp.on("payment.failed",(e)=>done({failed:e&&e.error||{}}));
+    rzp.open();
   });
-  if(checkoutResult&&checkoutResult.redirect) return "redirected";
-  if(checkoutResult&&checkoutResult.error&&!checkoutResult.paymentDetails){
-    if(cashfreeCheckoutWasClosed(checkoutResult)) throw new Error("dismissed");
-    const code=cashfreeCheckoutFailureCode(checkoutResult);
-    console.error("Cashfree checkout rejected",code);
+
+  if(result.failed){
+    const code=String(result.failed.code||result.failed.reason||"checkout-rejected")
+      .replace(/[^A-Za-z0-9_-]/g,"-").replace(/-+/g,"-").slice(0,60);
     throw new Error("checkout-rejected:"+code);
   }
-  if(!FB_AUTH.currentUser||FB_AUTH.currentUser.uid!==order.userUid) throw new Error("sign-in-required");
-  const freshToken=await FB_AUTH.currentUser.getIdToken();
-  const verify=await fetch("/api/pay-verify",{
-    method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+freshToken},
-    body:JSON.stringify({userUid:order.userUid,orderId:order.id}),
-  });
-  const checked=await verify.json().catch(()=>({}));
-  if(!verify.ok){
-    if(checked.error==="payment-not-complete"&&cashfreeCheckoutWasClosed(checkoutResult)) throw new Error("dismissed");
-    throw new Error(checked.error||"payment-verification-failed");
-  }
+  // Even a dismissal is worth one verification: the customer may have completed the payment
+  // in a UPI app and closed the modal before it caught up.
+  const checked=await verifyPaymentForOrder(order.userUid,order.id,
+    result.payload?{razorpayPaymentId:result.payload.razorpay_payment_id,razorpaySignature:result.payload.razorpay_signature}:null)
+    .catch(err=>{
+      if(result.dismissed&&String(err.message)==="payment-not-complete") throw new Error("dismissed");
+      throw err;
+    });
   return checked.mode==="sandbox"?"test-confirmed":"confirmed";
 }
-/** Admin-only: send a refund back through Cashfree. Authorised by the admin's
-    Firebase ID token, which the server verifies. */
+/** Admin-only: send a refund back through the gateway that took the money. The server
+    dispatches on the order's own record; authorised by the admin's Firebase ID token. */
 async function refundViaGateway(order, amount, reason){
   if(!FB_OK||!FB_AUTH||!FB_AUTH.currentUser) throw new Error("sign-in-required");
   const token = await FB_AUTH.currentUser.getIdToken();
@@ -4743,7 +4806,7 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
         ${custId?`<tr><td class="k">CUSTOMER ID</td><td>${custId}</td></tr>`:""}
         ${cn?"":`<tr><td class="k">STATUS</td><td>${E(o.status||"—")}</td></tr>`}
         ${hasGst?`<tr><td class="k">PLACE OF SUPPLY</td><td>${placeOfSupply}</td></tr><tr><td class="k">REVERSE CHARGE</td><td>No</td></tr>`:""}
-        ${cn?"":`<tr><td class="k">PAYMENT MODE</td><td>${E(o.paymentMode||(o.gateway==="cashfree"?"Online (Cashfree)":"Online"))}</td></tr><tr><td class="k">PAYMENT STATUS</td><td>${isPaid?"PAID":"PAYMENT DUE"}</td></tr>`}
+        ${cn?"":`<tr><td class="k">PAYMENT MODE</td><td>${E(o.paymentMode||(o.gateway?`Online (${gatewayLabel(o.gateway)})`:"Online"))}</td></tr><tr><td class="k">PAYMENT STATUS</td><td>${isPaid?"PAID":"PAYMENT DUE"}</td></tr>`}
         ${o.txnId?`<tr><td class="k">PAYMENT REF</td><td>${E(o.txnId)}</td></tr>`:""}
       </table>
     </div>
@@ -7124,7 +7187,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 </div>
               )}
               {o.status==="Payment Review"&&(
-                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>{o.gateway==="cashfree"?(o.testPayment?"Cashfree test payment recorded — not a fulfilment order.":"Cashfree payment recorded — this older order still needs admin review."):`🔎 Payment submitted${o.txnId?` (Ref: ${o.txnId})`:""} — under verification.`}</div>
+                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>{o.gateway?(o.testPayment?`${gatewayLabel(o.gateway)} test payment recorded — not a fulfilment order.`:`${gatewayLabel(o.gateway)} payment recorded — this order still needs admin review.`):`🔎 Payment submitted${o.txnId?` (Ref: ${o.txnId})`:""} — under verification.`}</div>
               )}
               {o.status==="Cancelled"&&(
                 <div style={{marginTop:10}}>
@@ -10159,7 +10222,7 @@ function Collapsible({title, icon="", subtitle="", open=false, tone="plain", chi
   );
 }
 
-/* ═══════════════════ PAYMENT PANEL (Cashfree checkout) ═══════════════════ */
+/* ═══════════════════ PAYMENT PANEL (gateway checkout) ═══════════════════ */
 function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, compact=false}){
   const grand = order.amountDue ?? (order.total+order.fee);
   const [now,setNow]=useState(Date.now());
@@ -10211,11 +10274,12 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
       else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote("⚠ Secure payment is temporarily unavailable. Please retry shortly."); }
       else if(m==="sandbox-admin-only"){ setGatewayOn(false); setPayNote("⚠ Secure payment is temporarily unavailable."); }
       else if(m==="checkout-script-failed") setPayNote("⚠ Couldn't load the payment window — check your connection and try again.");
-      else if(m==="cashfree-checkout-not-approved") setPayNote("⚠ Cashfree checkout approval is not active yet. Nothing has been charged.");
-      else if(m==="cashfree-credentials-rejected") setPayNote("⚠ The payment service rejected its production credentials. Nothing has been charged.");
-      else if(m==="gateway-busy") setPayNote("⚠ Cashfree is temporarily busy. Nothing has been charged — please retry shortly.");
-      else if(m==="payment-session-failed") setPayNote("⚠ Cashfree couldn't create a payment session. Nothing has been charged. Reference: payment-session-failed.");
-      else if(m.startsWith("checkout-rejected:")) setPayNote("⚠ Cashfree rejected the checkout before it opened. Nothing has been charged. Reference: "+m.slice(18));
+      else if(m==="gateway-credentials-rejected") setPayNote("⚠ The payment service rejected its credentials. Nothing has been charged.");
+      else if(m==="gateway-unavailable") setPayNote("⚠ The payment service for this order is unavailable. Nothing has been charged.");
+      else if(m==="gateway-busy") setPayNote("⚠ The payment service is temporarily busy. Nothing has been charged — please retry shortly.");
+      else if(m==="payment-session-failed") setPayNote("⚠ We couldn't open a payment session. Nothing has been charged. Reference: payment-session-failed.");
+      else if(m==="payment-signature-invalid") setPayNote("⚠ That payment result could not be verified. Nothing has been charged. Please retry.");
+      else if(m.startsWith("checkout-rejected:")) setPayNote("⚠ The payment service rejected the checkout before it opened. Nothing has been charged. Reference: "+m.slice(18));
       else setPayNote("⚠ Payment didn't go through. Nothing has been charged — please try again.");
     }finally{ setPayBusy(false); }
   };
@@ -10264,7 +10328,7 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
             Present only once the server holds keys. One button, and then nothing
             for the customer to do: no reference to copy out of their bank app, no
             screenshot, no waiting a day or two for someone to look at it. The
-            payment records itself when Cashfree's webhook lands, which reaches this
+            payment records itself when the gateway's webhook lands, which reaches this
             screen through the live order listener. */}
         {gatewayOn?(
           <>
@@ -10281,7 +10345,7 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
             </button>
             <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:9,lineHeight:1.5}}>
               {gatewayMode==="sandbox"
-                ?"Uses Cashfree's sandbox payment details. Cancel this test order afterwards to release its reserved stock."
+                ?"Uses the gateway's sandbox payment details. Cancel this test order afterwards to release its reserved stock."
                 :"UPI · Cards · Netbanking · Wallets · Auto-verified"}
             </div>
             {payNote&&<div style={{fontSize:12,fontWeight:700,marginTop:10,textAlign:"center",lineHeight:1.5,color:payNote[0]==="⚠"?C.danger:C.success}}>{payNote}</div>}
@@ -10289,7 +10353,7 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
         ):(
           <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px",textAlign:"center"}}>
             <div style={{fontSize:12.5,color:"#9a3412",fontWeight:700,lineHeight:1.5}}>
-              {gatewayChecking?"Checking secure payment…":"⚠ Secure Cashfree payment is temporarily unavailable."}
+              {gatewayChecking?"Checking secure payment…":"⚠ Secure online payment is temporarily unavailable."}
             </div>
             {!gatewayChecking&&(
               <button className="press" onClick={retryGateway}
@@ -10762,7 +10826,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
        "Awaiting Payment": the customer may cancel on the very next screen, or simply walk away
        and let the payment window close it. Mail sent now is mail about an order that in a
        good number of cases never existed, and the customer is still sitting in front of the
-       payment screen, so it tells them nothing they cannot see. Cashfree's verified
+       payment screen, so it tells them nothing they cannot see. The gateway's verified
        payment update is the point at which the paid order becomes actionable. */
     // Count today's promo usage toward the admin's daily caps
     if(couponApplied) bumpPromoUsage("coupon");
@@ -12891,10 +12955,10 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   };
   /* Gateway refund — one tap, money on its way back, no bank app and no typing a
      UPI reference into the box below. Offered only for orders the gateway actually
-     collected: an order paid by manual UPI has no Cashfree payment to reverse,
+     collected: an order paid by manual UPI has no gateway payment to reverse,
      and the editor underneath stays for those. */
   const [refundBusy,setRefundBusy]=useState(false);
-  const gatewayPaid=!!(o.gatewayPaymentId||(o.gateway==="cashfree"&&o.txnId));
+  const gatewayPaid=!!(o.gatewayPaymentId||(o.gateway&&o.txnId));
   const alreadyRefunded=o.paymentStatus==="Refunded";
   const sendGatewayRefund=async()=>{
     const full=Number(amtDue)||0;
@@ -12902,7 +12966,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
     if(typed===null) return;                      // cancelled the prompt
     const amt=Number(typed);
     if(!(amt>0)){ showToast("Enter an amount greater than zero","error"); return; }
-    if(!window.confirm(`Confirm Cashfree refund of ₹${amt} for ${o.orderNo||orderId(o.id)}?\n\nThis cannot be undone.`)) return;
+    if(!window.confirm(`Confirm ${gatewayLabel(o.gateway)} refund of ₹${amt} for ${o.orderNo||orderId(o.id)}?\n\nThis cannot be undone.`)) return;
     setRefundBusy(true);
     try{
       const r=await refundViaGateway(o, amt, "Refund for order "+(o.orderNo||""));
@@ -12923,7 +12987,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         m==="sign-in-required" ? "Sign in with Google first — a refund needs a verified admin" :
         m==="no-gateway-payment" ? "No gateway payment on this order — record the refund manually below" :
         m==="gateway-not-configured" ? "Payment gateway isn't configured yet" :
-        "Refund failed — nothing was sent. Check the Cashfree dashboard before retrying","error");
+        `Refund failed — nothing was sent. Check the ${gatewayLabel(o.gateway)} dashboard before retrying`,"error");
     }finally{ setRefundBusy(false); }
   };
   const gatewayRefundButton=()=>(!gatewayPaid?null:(
@@ -13301,7 +13365,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 
         {/* Payment — prepayment verification */}
         <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${C.border}`}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>💳 {o.gateway==="cashfree"?"Cashfree Payment":"Payment Verification"}</div>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>💳 {o.gateway?`${gatewayLabel(o.gateway)} Payment`:"Payment Verification"}</div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:C.text}}>Amount: ₹{o.amountDue??(o.total+o.fee)}</div>
@@ -13336,7 +13400,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             )
           )}
           {o.gateway==="cashfree"&&o.testPayment&&<div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,marginTop:8}}>Sandbox test payment — excluded from fulfilment.</div>}
-          {o.gateway==="cashfree"&&!o.testPayment&&verified&&<div style={{fontSize:11.5,color:C.success,fontWeight:600,marginTop:8}}>Cashfree verified this payment and confirmed the order automatically.</div>}
+          {o.gateway&&!o.testPayment&&verified&&<div style={{fontSize:11.5,color:C.success,fontWeight:600,marginTop:8}}>{gatewayLabel(o.gateway)} verified this payment and confirmed the order automatically.</div>}
           {o.gateway!=="cashfree"&&verified&&<div style={{fontSize:11.5,color:C.success,fontWeight:600,marginTop:8}}>Payment verified — order confirmed &amp; moved to processing.</div>}
         </div>
 
@@ -14154,10 +14218,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               which makes the dashboard where they belong. Orders now opens on the list. */}
           {/* DOA insights — loss patterns by species × zone × season */}
           <DoaInsights orders={orders}/>
-          {/* Payment destination — Cashfree credentials live only on the Worker. */}
+          {/* Payment destination — gateway credentials live only on the Worker. */}
           <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",marginBottom:14}}>
             <div style={{fontSize:11,fontWeight:800,color:"#15803d",letterSpacing:.4,marginBottom:5}}>💰 ONLINE PAYMENTS</div>
-            <div style={{fontSize:13,fontWeight:700,color:"#166534"}}>Cashfree integrated checkout</div>
+            <div style={{fontSize:13,fontWeight:700,color:"#166534"}}>Integrated gateway checkout</div>
             <div style={{fontSize:10.5,color:"#15803d",marginTop:3,lineHeight:1.5}}>Production credentials and automatic verification are managed securely by the Cloudflare Worker.</div>
             {settings.upiId&&<div style={{fontSize:10.5,color:"#15803d",marginTop:5}}>Invoice UPI reference: <span style={{fontFamily:"monospace"}}>{settings.upiId}</span></div>}
           </div>
@@ -15365,7 +15429,7 @@ function SettingsPanel({settings,onSave,products=[]}){
       {secOpen&&sec==="payship"&&(<>
       {/* Payment */}
       <Collapsible icon="💳" title="Online Payment">
-        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}><b>Customer payments use the integrated Cashfree checkout.</b> Its production credentials are stored securely on Cloudflare and are never entered here. The optional UPI details below are printed on invoices only.</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}><b>Customer payments use the integrated gateway checkout (PhonePe, with Razorpay as fallback).</b> Their production credentials are stored securely on Cloudflare and are never entered here. The optional UPI details below are printed on invoices only.</div>
         {field("UPI ID (invoice only)","upiId","yourname@oksbi","Optional business UPI reference printed on invoices; it is not a checkout fallback.")}
         {field("UPI Display Name","upiName","Nemo Aqua Store")}
         {/* Printed in the "Bank & Payment Details" box on every invoice — a business buyer's
@@ -17105,6 +17169,37 @@ function NemoStore(){
       try{ window.history.replaceState({},"",window.location.pathname); }catch(e){}
     }
   },[products,shopProducts]);
+  /* Coming back from a gateway that navigated away rather than opening a modal (PhonePe).
+     The return itself proves nothing — a customer can reach this URL by typing it — so it is
+     only a cue to ask our server to check the order with the gateway.
+
+     Deliberately gated on Firebase auth being ready: verification is authorised by the
+     customer's own ID token, so running it early would fail. If auth never arrives, this
+     simply never runs and the signed webhook settles the order server-side instead, which
+     is why that second path exists. */
+  const payReturnRef = useRef(false);
+  useEffect(()=>{
+    if(payReturnRef.current) return;
+    if(!FB_OK||!FB_AUTH||!FB_AUTH.currentUser) return;
+    const orderId=takePaymentReturn();
+    if(!orderId) return;
+    payReturnRef.current=true;
+    const uid=FB_AUTH.currentUser.uid;
+    (async()=>{
+      try{
+        const checked=await verifyPaymentForOrder(uid,orderId);
+        showToast(checked.mode==="sandbox"?"Test payment recorded":"Payment confirmed \u{1F389}");
+      }catch(e){
+        const m=String((e&&e.message)||"");
+        showToast(m==="payment-not-complete"
+          ? "Payment was not completed. Nothing has been charged."
+          : "We could not confirm the payment yet — check My Orders in a moment.","error");
+      }
+      try{ await cloudSync(); }catch(e){}
+      nav("orders");
+    })();
+  },[user,fbReady]);
+
   // Page deep links (?page=shop|orders|cart|guides|tools) — used by PWA app shortcuts
   useEffect(()=>{
     try{

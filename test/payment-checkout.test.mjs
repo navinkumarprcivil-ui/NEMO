@@ -23,16 +23,22 @@ test('payment requires the live non-anonymous owner session', () => {
 test('checkout and server failures expose safe diagnostic references', () => {
   assert.match(app, /checkout-rejected:/);
   assert.match(app, /payment-session-failed/);
-  assert.match(payCreate, /cashfree-credentials-rejected/);
-  assert.match(payCreate, /cashfree-checkout-not-approved/);
+  // Provider-agnostic now: which gateway ran depends on the order, so the shopper-facing
+  // reference must not name one. What matters is that it is a short safe code and never a
+  // raw gateway payload.
+  assert.match(payCreate, /gateway-credentials-rejected/);
+  assert.match(payCreate, /gateway-busy/);
+  assert.doesNotMatch(app, /\bCashfree (is|couldn|rejected|checkout approval)/);
 });
 
-test('Cashfree and Nemo use a production-safe payment expiry window', () => {
+test('the gateway and Nemo use a production-safe payment expiry window', () => {
+  // Gateways reject an expiry that is only a few minutes out, and the reservation must
+  // outlive the window the shopper is given, or stock releases while payment is still open.
   assert.match(app, /const PAY_WINDOW_MIN = 20;/);
-  assert.match(payCreate, /const CASHFREE_ORDER_WINDOW_MS = 20 \* 60 \* 1000;/);
-  assert.match(payCreate, /paymentDeadline = Math\.max\(deadline \|\| 0, Date\.now\(\) \+ CASHFREE_ORDER_WINDOW_MS\)/);
-  assert.match(payCreate, /order_expiry_time: new Date\(paymentDeadline\)\.toISOString\(\)/);
-  assert.match(payCreate, /paymentDeadline,/);
+  assert.match(payCreate, /const PAYMENT_WINDOW_MS = 20 \* 60 \* 1000;/);
+  assert.match(payCreate, /const expiresAt = Math\.max\(deadline \|\| 0, Date\.now\(\) \+ PAYMENT_WINDOW_MS\)/);
+  // The same deadline is persisted on the Nemo order, not just handed to the gateway.
+  assert.match(payCreate, /paymentDeadline: expiresAt,/);
 });
 
 test('customer checkout has no manual proof or payment-link fallback', () => {
@@ -40,7 +46,7 @@ test('customer checkout has no manual proof or payment-link fallback', () => {
   assert.doesNotMatch(app, /Tap to upload screenshot/);
   assert.doesNotMatch(app, /Submit Payment & Confirm Order/);
   assert.doesNotMatch(app, /Enter your payment reference and attach a screenshot/);
-  assert.match(app, /Cashfree integrated checkout/);
+  assert.match(app, /Integrated gateway checkout/);
   assert.match(app, /Retry secure payment/);
   assert.match(app, /verified payment status returned by Cashfree/);
   assert.match(app, /const outcome=await payWithGateway\(order\);/);

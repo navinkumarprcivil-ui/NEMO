@@ -1,63 +1,71 @@
+import { dbGet, dbPatch, stableUuid } from '../lib/payments.mjs';
 import {
-  dbGet,
-  dbPatch,
-  finalizeCashfreePayment,
-  gatewayReady,
-  rawBody,
-  readPaymentMapping,
-  stableUuid,
-  webhookSignatureValid,
-} from '../lib/payments.mjs';
+  availableProviders,
+  finalizePayment,
+  paymentsReady,
+  providerById,
+  providerForOrder,
+  readGatewayMapping,
+} from '../lib/gateways.mjs';
+import { rawBody } from '../lib/payments.mjs';
 
 export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).end(); return; }
-  if (!gatewayReady()) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
+  if (!paymentsReady()) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
   try {
     const raw = await rawBody(req);
-    const timestamp = String(req.headers['x-webhook-timestamp'] || '');
-    const signature = String(req.headers['x-webhook-signature'] || '');
-    const webhookVersion = String(req.headers['x-webhook-version'] || '');
-    if (!timestamp || !signature || !webhookVersion) {
-      res.status(400).json({ error: 'missing-webhook-headers' });
-      return;
+
+    /* Which gateway sent this. Each provider verifies its OWN signature or credential and
+       returns null otherwise, so asking them in turn is safe: an unsigned or wrongly signed
+       body is rejected by every one of them and never reaches an order. */
+    let parsed = null;
+    for (const id of availableProviders()) {
+      const hit = providerById(id)?.parseWebhook(raw, req.headers);
+      if (hit) { parsed = hit; break; }
     }
-    if (!webhookSignatureValid(raw, timestamp, signature)) {
-      res.status(401).json({ error: 'invalid-signature' });
-      return;
-    }
-    const event = JSON.parse(raw);
-    if (event?.type !== 'PAYMENT_SUCCESS_WEBHOOK' || event?.data?.payment?.payment_status !== 'SUCCESS') {
+    if (!parsed) { res.status(401).json({ error: 'invalid-signature' }); return; }
+
+    /* The body is trusted only to NAME a gateway order. Which customer order that is comes
+       from the mapping we wrote when the session was created — never from the body, which
+       would let anyone who can POST choose an order to mark paid. */
+    const mapping = await readGatewayMapping(parsed.gatewayOrderId);
+    if (!mapping?.userUid || !mapping?.orderId) {
+      // Unknown order: acknowledge so the gateway stops retrying something we cannot act on.
       res.status(200).json({ ok: true, ignored: true });
       return;
     }
-    const cashfreeOrderId = String(event?.data?.order?.order_id || '');
-    const mapping = await readPaymentMapping(cashfreeOrderId);
-    if (!mapping?.userUid || !mapping?.orderId || mapping.cashfreeOrderId !== cashfreeOrderId) {
+    if (mapping.provider && mapping.provider !== parsed.provider) {
+      // A signed event from the wrong gateway for this order. Refuse rather than settle it.
       res.status(200).json({ ok: true, ignored: true });
       return;
     }
-    const suppliedIdempotency = String(req.headers['x-idempotency-key'] || req.headers['x-idempotency-header'] || '');
-    const eventId = suppliedIdempotency || stableUuid(`${timestamp}:${signature}`);
+
+    /* Replayed deliveries are normal — every gateway retries. The event id makes settlement
+       happen once; finalizePayment is idempotent regardless, this just saves the API calls. */
+    const eventId = stableUuid(`${parsed.provider}:${parsed.gatewayOrderId}:${parsed.event}`);
     const eventPath = `paymentWebhookEvents/${encodeURIComponent(eventId)}`;
     const previous = await dbGet(eventPath).catch(() => null);
-    if (previous?.processed === true) {
-      res.status(200).json({ ok: true, duplicate: true });
-      return;
-    }
-    const result = await finalizeCashfreePayment(mapping.userUid, mapping.orderId, cashfreeOrderId);
+    if (previous?.processed === true) { res.status(200).json({ ok: true, duplicate: true }); return; }
+
+    const providerId = providerForOrder({ gateway: mapping.provider || parsed.provider });
+    const result = await finalizePayment(providerId, mapping.userUid, mapping.orderId, parsed.gatewayOrderId);
     await dbPatch(eventPath, {
       processed: true,
-      cashfreeOrderId,
+      provider: parsed.provider,
+      event: parsed.event,
+      gatewayOrderId: parsed.gatewayOrderId,
       paymentId: result.gatewayPaymentId,
-      webhookVersion,
       processedAt: Date.now(),
     });
     res.status(200).json({ ok: true });
   } catch (error) {
-    console.error('pay-webhook', error?.message || error);
-    // A non-2xx response lets Cashfree retry transient verification/database failures.
+    const message = String(error?.message || error);
+    /* A payment that is simply not complete yet is not a failure of ours — acknowledge it,
+       or the gateway retries a pending payment forever. Real faults return 500 so it retries. */
+    if (message === 'payment-not-complete') { res.status(200).json({ ok: true, pending: true }); return; }
+    console.error('pay-webhook', message);
     res.status(500).json({ error: 'webhook-processing-failed' });
   }
 }

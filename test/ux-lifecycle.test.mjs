@@ -50,7 +50,9 @@ test('admin analytics are collapsible, include today data and omit abandoned car
 test('policy and confirmation safeguards match the current store rules', () => {
   assert.match(app, /Dead-on-Arrival claims require one continuous unboxing video sent on WhatsApp within 2 hours/);
   assert.match(app, /Unused accessories and equipment in original, undamaged packaging may be returned within 3 days/);
-  assert.match(app, /Confirm Cashfree refund/);
+  // The refund confirmation names whichever gateway took the money, so an admin refunding a
+  // historical order is told which dashboard it will land in — not a hard-coded provider.
+  assert.match(app, /Confirm \$\{gatewayLabel\(o\.gateway\)\} refund of/);
   assert.match(app, /Customers will no longer be able to use or see it/);
 });
 
