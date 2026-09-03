@@ -7,7 +7,7 @@ Production:
 - Store: https://www.nemoaquastore.in
 - Apex redirect: https://nemoaquastore.in → https://www.nemoaquastore.in
 - Hosting and server routes: Cloudflare Workers
-- Payments: Cashfree sandbox until production approval is complete
+- Payments: PhonePe and Razorpay, both live; primary gateway selectable in Admin Settings
 
 ## Architecture
 
@@ -78,12 +78,13 @@ The temporary `workers.dev` route is disabled.
 
 Configure secrets in Cloudflare; never commit or paste their values into repository files:
 
-- `CASHFREE_APP_ID`
-- `CASHFREE_SECRET_KEY`
+- `PHONEPE_CLIENT_ID`, `PHONEPE_CLIENT_SECRET`, `PHONEPE_CLIENT_VERSION`
+- `PHONEPE_WEBHOOK_USERNAME`, `PHONEPE_WEBHOOK_PASSWORD`
+- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
 - `FIREBASE_SERVICE_ACCOUNT`
 - `CRON_SECRET`
 
-`CASHFREE_ENV` must remain `sandbox` until Cashfree approves the website and sandbox checkout, webhook delivery and server-side verification all pass.
+Add these as Cloudflare **Secret** entries. Non-secret values such as `PHONEPE_ENV` belong in the `vars` block of `wrangler.jsonc` — ad-hoc dashboard **Text** variables were not taking effect on this Worker. See `docs/PAYMENTS.md`.
 
 ## Firebase
 
@@ -99,7 +100,7 @@ Authorized production domains should include:
 Do not commit:
 
 - Firebase service-account JSON
-- Cashfree secret keys
+- Gateway API keys and webhook secrets
 - Cloudflare API tokens
 - Android signing keystores or passwords
 - Local `.env*` or `.dev.vars*` files

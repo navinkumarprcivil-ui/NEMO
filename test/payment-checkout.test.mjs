@@ -6,6 +6,9 @@ const index = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../app.jsx', import.meta.url), 'utf8');
 const payCreate = readFileSync(new URL('../api/pay-create.js', import.meta.url), 'utf8');
 const payments = readFileSync(new URL('../lib/payments.mjs', import.meta.url), 'utf8');
+/* Settlement moved to the multi-gateway layer when the single-gateway module was retired;
+   these assertions follow the code rather than the filename. */
+const gateways = readFileSync(new URL('../lib/gateways.mjs', import.meta.url), 'utf8');
 
 test('Firebase compat modules are deferred in dependency order', () => {
   const tags = [...index.matchAll(/<script\s+([^>]*firebasejs\/10\.12\.5\/firebase-([^"/]+)-compat\.js[^>]*)><\/script>/g)]
@@ -52,7 +55,7 @@ test('customer checkout has no manual proof or payment-link fallback', () => {
   assert.match(app, /const outcome=await payWithGateway\(order\);/);
 });
 
-test('checkout uses the compact Cashfree copy and actions', () => {
+test('checkout uses the compact gateway copy and actions', () => {
   assert.match(app, /placing\?"Checking stock…":"Place Order"/);
   assert.match(app, />Complete payment</);
   assert.match(app, /UPI · Cards · Netbanking · Wallets · Auto-verified/);
@@ -67,9 +70,9 @@ test('checkout uses the compact Cashfree copy and actions', () => {
 });
 
 test('verified production payments confirm orders automatically', () => {
-  assert.match(payments, /paymentStatus: sandbox \? 'Test Paid' : 'Verified'/);
-  assert.match(payments, /status: sandbox \? 'Payment Review' : 'Confirmed'/);
-  assert.match(payments, /await settleReferralsAfterPayment\(order, userUid, orderId\)/);
+  assert.match(gateways, /paymentStatus: sandbox \? 'Test Paid' : 'Verified'/);
+  assert.match(gateways, /status: sandbox \? 'Payment Review' : 'Confirmed'/);
+  assert.match(gateways, /await settleReferralsAfterPayment\(order, userUid, orderId\)/);
   assert.match(app, /const ORDER_STATUSES = \["Confirmed","Shipped","Delivered"\]/);
   assert.match(app, /your order is confirmed automatically/);
 });

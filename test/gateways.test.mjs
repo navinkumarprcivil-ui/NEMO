@@ -3,13 +3,14 @@
  *
  * Two classes of bug are worth real tests here, because both are silent and both cost money:
  *
- *   1. Money units. Cashfree speaks rupees, Razorpay speaks integer paise. A float or a
- *      missing ×100 does not throw — it charges the wrong amount.
+ *   1. Money units. Orders are priced in rupees, both gateways charge in integer paise.
+ *      A float or a missing ×100 does not throw — it charges the wrong amount.
  *   2. Signatures. Verification that always returns true is indistinguishable from working
  *      code right up until someone forges a payment callback.
  *
- * Routing gets the same attention: an existing Cashfree order must keep going to Cashfree
- * after the preferred gateway changes, or historical orders stop being refundable.
+ * Routing gets the same attention: an order must keep going to the gateway that took its
+ * money after the preferred gateway changes, or historical orders stop being refundable.
+ * That includes orders from the retired gateway, whose id is still recorded on them.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

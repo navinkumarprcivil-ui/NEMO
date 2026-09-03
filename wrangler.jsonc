@@ -23,12 +23,11 @@
   },
   "vars": {
     "PUBLIC_SITE_URL": "https://www.nemoaquastore.in",
-    "CASHFREE_ENV": "production",
     // Not a secret — just which PhonePe environment to call. Declared here rather than
     // as a dashboard "Text" variable because dashboard-added plaintext vars on this Worker
     // were not taking effect at request time (client id/secret, which are Secrets, did);
     // vars declared in this file are deployed through the same path already proven to work
-    // for the two lines above.
+    // for the line above.
     "PHONEPE_ENV": "production"
   },
   // Documentation for whoever sets this up next. These are set in the Cloudflare

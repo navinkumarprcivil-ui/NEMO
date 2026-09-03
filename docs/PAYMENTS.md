@@ -1,50 +1,109 @@
-# Cashfree payment integration
+# Payment gateway integration
 
-Nemo uses Cashfree Hosted Web Checkout through the Cloudflare Worker. The integration stays in sandbox until Cashfree approves the live website and the sandbox checkout, webhook, and server-side verification all pass.
+Nemo takes card/UPI/netbanking payments through two gateways — **PhonePe** (PG v2 Standard
+Checkout) and **Razorpay** — behind one checkout. Both run in production. The code lives in
+`lib/gateways.mjs`; `lib/payments.mjs` holds the database plumbing they share.
+
+A third gateway, Cashfree, was retired once both of these were verified end to end. Its code is
+gone, but `providerForOrder` still returns `'cashfree'` for orders that recorded it, so those
+historical orders keep resolving to a gateway that no longer exists rather than being silently
+re-pointed at a live one. That is deliberate: they are GST records, and refunding one through
+the wrong gateway would be worse than refusing.
+
+## Which gateway is used
+
+Checkout tries one gateway and falls back to the other if it cannot open a session. The order
+is decided by, in priority:
+
+1. `PAYMENT_PROVIDER_ORDER` — a comma-separated ops-level override, normally unset.
+2. `settings.paymentPrimary` in the database — set from **Admin → Settings → 💳 Online
+   Payment → Primary gateway**. Takes effect immediately, no deploy needed.
+3. PhonePe first, as the built-in default.
+
+Verification, webhooks and refunds never use this preference. They dispatch on the gateway
+recorded on the order itself, so changing the primary cannot strand an existing order.
 
 ## Cloudflare configuration
 
-Keep secret values in Cloudflare Workers **Settings → Variables and Secrets**; never commit them:
+Gateway credentials are **Secrets** in Cloudflare Workers → **Settings → Variables and
+secrets**, never committed:
 
-- `CASHFREE_APP_ID` — Test App ID while the store is in sandbox.
-- `CASHFREE_SECRET_KEY` — matching Test Secret Key.
-- `FIREBASE_SERVICE_ACCOUNT` — Firebase service-account JSON, either raw JSON or base64-encoded.
+- `PHONEPE_CLIENT_ID`, `PHONEPE_CLIENT_SECRET`, `PHONEPE_CLIENT_VERSION`
+- `PHONEPE_WEBHOOK_USERNAME`, `PHONEPE_WEBHOOK_PASSWORD`
+- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
+- `FIREBASE_SERVICE_ACCOUNT` — service-account JSON, raw or base64.
 
-The repository keeps these non-secret values in `wrangler.jsonc`:
+> **Add plaintext variables in `wrangler.jsonc`, not the dashboard.** Ad-hoc **Text** variables
+> typed into this Worker's dashboard did not take effect at request time — `PHONEPE_ENV` was set
+> to `production` there and the Worker still reported `sandbox` after repeated saves and a hard
+> refresh. Dashboard **Secret** entries did take effect immediately. Non-secret values therefore
+> live in the `vars` block of `wrangler.jsonc` and ship with the deploy.
 
-- `CASHFREE_ENV` — must remain `sandbox` until production approval.
+Non-secret values in `wrangler.jsonc`:
+
+- `PHONEPE_ENV` — `production`; anything other than the exact string `production` means sandbox.
 - `PUBLIC_SITE_URL` — `https://www.nemoaquastore.in`.
 
-Optional Worker variables are `PAYMENT_ADMIN_UIDS` (comma-separated Firebase admin UIDs) and `CASHFREE_API_VERSION` (defaults to `2025-01-01`).
+Razorpay has no equivalent switch: its mode is derived from the key prefix, so an `rzp_live_…`
+key *is* production and an `rzp_test_…` key *is* sandbox. The two can never disagree.
 
-## Sandbox behaviour
+Optional: `PAYMENT_ADMIN_UIDS` (comma-separated Firebase UIDs) and `PAYMENT_PROVIDER_ORDER`.
 
-- Only a signed-in Nemo admin can see and call the sandbox checkout.
-- Normal customers continue to see the current manual UPI flow.
-- The checkout is labelled **Cashfree Sandbox · Test Mode** and uses Cashfree's official test instruments.
-- A successful test is stored as `Test Paid` / `Payment Review`. It does not activate fulfilment, referral codes, or reward coins.
-- Cancel the test order afterwards so its locally reserved stock is released through the normal admin flow.
+## Webhooks
 
-## Cashfree Test Mode setup
+Both gateways POST to `https://www.nemoaquastore.in/api/pay-webhook`. Each provider verifies its
+own credential and returns `null` otherwise, so the endpoint can safely offer the body to each in
+turn — an unsigned body is rejected by all of them.
 
-1. Whitelist `https://www.nemoaquastore.in` for Hosted Web Checkout.
-2. Add `https://www.nemoaquastore.in/api/pay-webhook` as the Test webhook.
-3. Enable the Payment Success event and select a webhook version supported by the account.
-4. Send a dashboard test webhook and confirm HTTP 200.
-5. Sign in to the live store with an owner/admin account, create a test order, and open **Cashfree Sandbox · Test Mode**.
-6. Complete a Cashfree test payment and confirm the order becomes `Test Paid` / `Payment Review`.
-7. Confirm both return verification and the webhook are idempotent, then cancel the test order to release reserved stock.
+- **Razorpay** signs the raw body with HMAC-SHA256 using `RAZORPAY_WEBHOOK_SECRET`.
+- **PhonePe** sends `SHA256("username:password")` in the `Authorization` header. There is no body
+  signature, which is why the order id is never trusted from the body.
 
-The public readiness endpoint is `GET https://www.nemoaquastore.in/api/pay-create`. It reports whether the Worker has the required server credentials but never exposes them.
+**Subscribe to as few events as possible.** `parseWebhook` resolves the order from
+`payload.payment.entity` / `payload.order.entity` (Razorpay) or `payload.merchantOrderId`
+(PhonePe). An event carrying neither is rejected with a 401, and a gateway that sees enough
+failed deliveries will deactivate the webhook — taking the real payment notifications with it.
 
-## Production activation checklist
+- Razorpay: `payment.captured`, `order.paid`, `payment.failed`.
+- PhonePe: the order completed/failed pair for Standard Checkout. Do not subscribe refund,
+  dispute, settlement, subscription or payment-page events.
 
-Do not start these steps until Cashfree approves the website and live payments:
+Refund events used to be actively dangerous, not merely noisy: neither gateway retires the
+underlying payment when money goes back (a PhonePe order stays `COMPLETED`; a Razorpay payment
+stays `captured` after a *partial* refund), so a refund webhook passed every check in `confirm()`
+and `finalizePayment` overwrote the refund with a fresh `Verified` / `Confirmed`. That is now
+guarded — `finalizePayment` withholds the status fields once `refundedAmount` is above zero — but
+the events still cost pointless API calls and should stay unsubscribed.
 
-1. Finish the sandbox checklist above.
-2. Add the same webhook URL in Cashfree Production Mode and enable Payment Success.
-3. Replace only the Worker Cashfree secrets with the **live** App ID and Secret Key.
-4. Change `CASHFREE_ENV` in `wrangler.jsonc` to `production`, review the diff, and deploy from `main`.
-5. Perform one low-value real transaction, verify the order becomes `Gateway Paid — Review` / `Payment Review`, approve it in Nemo Admin, and refund the test purchase.
+## Refunds
 
-The browser never receives the Cashfree secret. Order creation, payment confirmation, amount validation, webhook verification, and refunds run server-side. Even a verified live payment stays in Payment Review until the owner accepts the order.
+Admin → Orders offers two paths:
+
+- **Auto / Gateway** — calls the gateway's refund API through `api/pay-refund.js`. Verified
+  working on Razorpay.
+- **Manual UPI** — records a refund that was actually made elsewhere. Use this when the gateway's
+  API refuses.
+
+PhonePe's refund API currently returns `401 Authorization failed` for this merchant account, using
+the same OAuth credentials that successfully create real payments moments earlier. It is an
+account-level restriction, not a code fault — PhonePe's dashboard reports no settlement in the
+last 90 days, and refund API access typically unlocks after the first settlement cycle. Until it
+does, refund a PhonePe order from PhonePe's own dashboard and record it in Nemo with **Manual
+UPI**, and keep Razorpay as the primary gateway.
+
+## Verifying a deploy
+
+`GET https://www.nemoaquastore.in/api/pay-create` reports which gateways are configured, their
+order, and each one's mode. It never exposes a credential. Append a cache-busting query string
+(`?t=1`) when checking a change you just made.
+
+```json
+{"ready":true,
+ "providers":[{"id":"razorpay","label":"Razorpay","mode":"production"},
+              {"id":"phonepe","label":"PhonePe","mode":"production"}],
+ "provider":"razorpay","mode":"production","currency":"INR"}
+```
+
+The browser never receives a gateway secret. Order creation, payment confirmation, amount
+validation, webhook verification and refunds all run server-side, and a payment is only ever
+confirmed by asking the gateway directly — never by trusting the browser or the webhook body.
