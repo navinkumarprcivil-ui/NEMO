@@ -7,7 +7,8 @@ Production:
 - Store: https://www.nemoaquastore.in
 - Apex redirect: https://nemoaquastore.in → https://www.nemoaquastore.in
 - Hosting and server routes: Cloudflare Workers
-- Payments: PhonePe and Razorpay, both live; primary gateway selectable in Admin Settings
+- Payments: PhonePe and Razorpay, both live; primary gateway selectable in Admin Settings (`docs/PAYMENTS.md`)
+- Android app: Kotlin WebView wrapper, not a TWA — see `docs/ANDROID.md` before changing it
 
 ## Architecture
 

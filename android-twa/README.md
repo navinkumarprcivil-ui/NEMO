@@ -1,6 +1,13 @@
 # Nemo Aqua Store — Android / Play Store TWA backup
 
-This folder is the **source-of-truth backup needed to reconstruct the Android Trusted Web Activity (TWA)** for the existing Google Play app.
+> **This is a plan, not the shipped app.** The app on Google Play is a Kotlin **WebView
+> wrapper** built from a local Android Studio project, not a TWA — its launcher is
+> `.MainActivity`, and the config here has never produced a release (it still carries the
+> `versionCode: 1` / `1.0.0-backup` placeholder, while Play is on 11). Read
+> `../docs/ANDROID.md` before assuming otherwise; the difference changes how payments behave.
+
+This folder is the **configuration needed to rebuild the Android app as a Trusted Web Activity
+(TWA)**, should that migration be made.
 
 ## App identity — do not change
 
