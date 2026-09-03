@@ -28,20 +28,26 @@
   // Documentation for whoever sets this up next. These are set in the Cloudflare
   // dashboard (Workers & Pages -> nemo-aqua-store -> Settings -> Variables and Secrets),
   // never in this file and never in the repository. They survive every deploy.
+  //
+  // "required" here is enforced by wrangler ITSELF at deploy time — it refuses to deploy
+  // at all if one is missing, before the Worker's own code ever runs. That must stay limited
+  // to secrets nothing can run without. Payment gateway secrets belong in the comment below,
+  // not this list: the app is written to degrade gracefully with no gateway configured
+  // (paymentsReady() in lib/gateways.mjs returns false and checkout says "temporarily
+  // unavailable" instead of crashing), and that graceful path is exactly how this site is
+  // meant to ship BEFORE the owner has added PhonePe/Razorpay keys — deploy first, verify,
+  // add payment secrets after. Listing them as required here blocks that on-purpose sequence.
   "secrets": {
     "required": [
       "FIREBASE_SERVICE_ACCOUNT",
-      "CRON_SECRET",
-      "PHONEPE_CLIENT_ID",
-      "PHONEPE_CLIENT_SECRET",
-      "PHONEPE_CLIENT_VERSION",
-      "PHONEPE_WEBHOOK_USERNAME",
-      "PHONEPE_WEBHOOK_PASSWORD"
+      "CRON_SECRET"
     ]
-    // Optional, set the same way when wanted:
-    //   RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET  (fallback gateway)
-    //   PHONEPE_ENV                                                     ("production" to go live)
-    // Wrangler rejects unknown keys inside "secrets", so this stays a comment.
+    // Add when ready, set the same way in the Cloudflare dashboard:
+    //   PHONEPE_CLIENT_ID / PHONEPE_CLIENT_SECRET / PHONEPE_CLIENT_VERSION
+    //   PHONEPE_WEBHOOK_USERNAME / PHONEPE_WEBHOOK_PASSWORD / PHONEPE_ENV
+    //   RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET   (fallback gateway)
+    // Wrangler rejects unknown keys inside "secrets", so this stays a comment rather than
+    // an "optional" list.
   },
   "triggers": {
     "crons": ["*/15 * * * *"]
