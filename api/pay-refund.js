@@ -7,7 +7,7 @@ const bearer = req => String(req.headers.authorization || '').replace(/^Bearer\s
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'method-not-allowed' }); return; }
-  if (!paymentsReady()) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
+  if (!(await paymentsReady())) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
   const uid = await verifyIdToken(bearer(req));
   if (!uid) { res.status(401).json({ error: 'sign-in-required' }); return; }
   if (!(await isPaymentAdmin(uid))) { res.status(403).json({ error: 'not-admin' }); return; }

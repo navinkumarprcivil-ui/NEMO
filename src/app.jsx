@@ -1962,6 +1962,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   speedCourierRates: { TN:200, SouthIndia:300, CentralNorth:400 }, // ⚡ speed-courier add-on per zone; admin edits in Settings
   cartonPackingCharge: 0,         // flat carton-packing charge for live-fish parcels (₹). 0 = no charge; raise it in Settings later
   coAdminUid: "",                 // optional co-admin Google UID (also add it to database.rules.json + the Firebase console)
+  paymentPrimary: "phonepe",     // "phonepe" or "razorpay" — which gateway checkout tries first; the other is automatic failover
   couriers: [],                  // [{id,name,trackUrl}] — courier partners + their tracking-page links
   shippingRewardMin: 10,         // min ₹ overcharge before a shipping-reward code is auto-created
   liveFishRestrictNCIndia: true, // when true, live fish can't be ordered to Central/North India
@@ -15429,7 +15430,22 @@ function SettingsPanel({settings,onSave,products=[]}){
       {secOpen&&sec==="payship"&&(<>
       {/* Payment */}
       <Collapsible icon="💳" title="Online Payment">
-        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}><b>Customer payments use the integrated gateway checkout (PhonePe, with Razorpay as fallback).</b> Their production credentials are stored securely on Cloudflare and are never entered here. The optional UPI details below are printed on invoices only.</div>
+        <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}><b>Customer payments use the integrated gateway checkout (PhonePe and Razorpay).</b> Their production credentials are stored securely on Cloudflare and are never entered here. The optional UPI details below are printed on invoices only.</div>
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>Primary gateway</div>
+          <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Checkout tries this one first. The other is used automatically if it can't create a session for a customer — no code change or app update needed to switch.</div>
+          <div style={{display:"flex",gap:8}}>
+            {[["phonepe","PhonePe"],["razorpay","Razorpay"]].map(([k,l])=>{
+              const active=(f.paymentPrimary||"phonepe")===k;
+              return (
+                <button key={k} className="press" type="button" onClick={()=>set("paymentPrimary",k)}
+                  style={{flex:1,padding:"10px",borderRadius:10,border:`1.5px solid ${active?C.primary:C.border}`,background:active?C.primary:"transparent",color:active?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  {l}{active?" · Primary":""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         {field("UPI ID (invoice only)","upiId","yourname@oksbi","Optional business UPI reference printed on invoices; it is not a checkout fallback.")}
         {field("UPI Display Name","upiName","Nemo Aqua Store")}
         {/* Printed in the "Bank & Payment Details" box on every invoice — a business buyer's

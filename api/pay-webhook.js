@@ -13,7 +13,7 @@ export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).end(); return; }
-  if (!paymentsReady()) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
+  if (!(await paymentsReady())) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
   try {
     const raw = await rawBody(req);
 
@@ -21,7 +21,7 @@ export default async function handler(req, res) {
        returns null otherwise, so asking them in turn is safe: an unsigned or wrongly signed
        body is rejected by every one of them and never reaches an order. */
     let parsed = null;
-    for (const id of availableProviders()) {
+    for (const id of await availableProviders()) {
       const hit = providerById(id)?.parseWebhook(raw, req.headers);
       if (hit) { parsed = hit; break; }
     }

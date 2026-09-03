@@ -39,9 +39,9 @@ const publicError = error => {
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
-    const ids = availableProviders();
+    const ids = await availableProviders();
     res.status(200).json({
-      ready: paymentsReady(),
+      ready: (await paymentsReady()),
       providers: ids.map(id => ({ id, label: providerById(id)?.label || id, mode: providerById(id)?.mode() })),
       // Retained so an older cached client keeps understanding the response.
       provider: ids[0] || '',
@@ -51,13 +51,13 @@ export default async function handler(req, res) {
     return;
   }
   if (req.method !== 'POST') { res.status(405).json({ error: 'method-not-allowed' }); return; }
-  if (!paymentsReady()) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
+  if (!(await paymentsReady())) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
 
   const uid = await verifyIdToken(bearer(req));
   if (!uid) { res.status(401).json({ error: 'sign-in-required' }); return; }
   // A test gateway must never take a real customer's money, so while every configured
   // provider is in sandbox mode checkout is open to administrators only.
-  if (allProvidersSandbox() && !(await isPaymentAdmin(uid))) {
+  if ((await allProvidersSandbox()) && !(await isPaymentAdmin(uid))) {
     res.status(403).json({ error: 'sandbox-admin-only' });
     return;
   }
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
     /* Which gateway. An order that already has one keeps it: switching mid-order would
        strand the session already open at the first gateway, and a customer who paid it
        would have paid an order we had stopped watching. Only a fresh order gets a choice. */
-    const stuck = order.gateway && order.gatewayOrderId ? [String(order.gateway)] : availableProviders();
+    const stuck = order.gateway && order.gatewayOrderId ? [String(order.gateway)] : await availableProviders();
     if (!stuck.length) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
 
     const expiresAt = Math.max(deadline || 0, Date.now() + PAYMENT_WINDOW_MS);

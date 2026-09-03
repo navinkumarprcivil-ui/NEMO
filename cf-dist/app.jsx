@@ -1962,6 +1962,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   speedCourierRates: { TN:200, SouthIndia:300, CentralNorth:400 }, // ⚡ speed-courier add-on per zone; admin edits in Settings
   cartonPackingCharge: 0,         // flat carton-packing charge for live-fish parcels (₹). 0 = no charge; raise it in Settings later
   coAdminUid: "",                 // optional co-admin Google UID (also add it to database.rules.json + the Firebase console)
+  paymentPrimary: "phonepe",     // "phonepe" or "razorpay" — which gateway checkout tries first; the other is automatic failover
   couriers: [],                  // [{id,name,trackUrl}] — courier partners + their tracking-page links
   shippingRewardMin: 10,         // min ₹ overcharge before a shipping-reward code is auto-created
   liveFishRestrictNCIndia: true, // when true, live fish can't be ordered to Central/North India
@@ -7522,7 +7523,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.ee1cb061";
+const APP_BUILD = "v90.3ba77479";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true

@@ -104,17 +104,17 @@ test('an order is verified and refunded by the gateway that created it', () => {
   assert.equal(providerForOrder(null), 'cashfree');
 });
 
-test('only fully configured providers are offered, in preference order', () => {
+test('only fully configured providers are offered, in preference order', async () => {
   process.env.PAYMENT_PROVIDER_ORDER = 'razorpay,cashfree';
-  assert.deepEqual(availableProviders(), ['razorpay']);
+  assert.deepEqual(await availableProviders(), ['razorpay']);
   // A provider with no secret must never be offered — failover would route shoppers into it.
   const secret = process.env.RAZORPAY_KEY_SECRET;
   process.env.RAZORPAY_KEY_SECRET = '';
-  assert.deepEqual(availableProviders(), []);
+  assert.deepEqual(await availableProviders(), []);
   process.env.RAZORPAY_KEY_SECRET = secret;
   // An unknown name in the preference list is ignored rather than crashing checkout.
   process.env.PAYMENT_PROVIDER_ORDER = 'nonesuch,razorpay';
-  assert.deepEqual(availableProviders(), ['razorpay']);
+  assert.deepEqual(await availableProviders(), ['razorpay']);
   delete process.env.PAYMENT_PROVIDER_ORDER;
 });
 
@@ -152,13 +152,21 @@ test('the PhonePe webhook credential is checked, and accepts the documented head
   for (const bad of ['', null, undefined, 'deadbeef']) assert.equal(phonepeWebhookAuthValid(bad), false);
 });
 
-test('PhonePe is preferred by default but only when it is configured', () => {
+test('PhonePe is preferred by default but only when it is configured', async () => {
   delete process.env.PAYMENT_PROVIDER_ORDER;
-  assert.deepEqual(availableProviders(), ['phonepe', 'razorpay']);
+  // No FIREBASE_SERVICE_ACCOUNT in the test environment, so the admin's Settings preference
+  // can't be read here — availableProviders() falls back to its own default, PhonePe first.
+  assert.deepEqual(await availableProviders(), ['phonepe', 'razorpay']);
   const id = process.env.PHONEPE_CLIENT_ID;
   process.env.PHONEPE_CLIENT_ID = '';
-  assert.deepEqual(availableProviders(), ['razorpay'], 'an unconfigured PhonePe must fall through to Razorpay');
+  assert.deepEqual(await availableProviders(), ['razorpay'], 'an unconfigured PhonePe must fall through to Razorpay');
   process.env.PHONEPE_CLIENT_ID = id;
+});
+
+test('an explicit PAYMENT_PROVIDER_ORDER always wins over the Settings preference', async () => {
+  process.env.PAYMENT_PROVIDER_ORDER = 'razorpay,phonepe';
+  assert.deepEqual(await availableProviders(), ['razorpay', 'phonepe']);
+  delete process.env.PAYMENT_PROVIDER_ORDER;
 });
 
 test('a PhonePe webhook is parsed only when its credential holds', () => {
