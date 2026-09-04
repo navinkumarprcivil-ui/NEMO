@@ -226,6 +226,19 @@
         ".write": "auth != null && (auth.uid === $uid || (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2'))"
       }
     },
+    "pushTokens": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "$device": {
+          ".validate": "!newData.exists() || newData.hasChildren(['token', 'at'])",
+          "token": { ".validate": "newData.isString() && newData.val().length > 20 && newData.val().length <= 4096" },
+          "platform": { ".validate": "newData.isString() && newData.val().length <= 32" },
+          "at": { ".validate": "newData.isNumber()" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
     "abandonedCarts": {
       ".read": "auth != null && ((auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2' || (auth.uid === root.child('adminAccess/coAdminUid').val() && root.child('adminAccess/permissions/orders').val() === true)))",
       "$uid": {

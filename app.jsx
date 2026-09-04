@@ -1482,6 +1482,59 @@ function tryInitFirebase(){
    then back off to the old cadence for the long tail. Same ~10s overall budget as before. */
 (function pollFB(n){ if(tryInitFirebase()||n<=0) return; setTimeout(()=>pollFB(n-1), n>30?60:250); })(70);
 
+/* ── Native push registration ───────────────────────────────────────────────
+   Only the Android wrapper can hold an FCM token — the WebView it renders in has no Push
+   API of its own, which is the same absence that makes notifPermNow() report "unsupported"
+   in the app. So Kotlin fetches the token and hands it here, and the site stores it under
+   whoever is signed in. That matters: orders are keyed by uid, so registering through the
+   web layer is what lets the sender address "the customer who placed order X" rather than
+   "some device". Doing it natively would need a second auth session to learn the same uid.
+
+   Keyed by a device id the browser makes once, not by the token: a refreshed token then
+   replaces its own row instead of leaving the previous one behind to be retried forever.
+
+   Every failure here is silent. A customer who cannot register still has a store to shop
+   in, and the next time the app opens it tries again. */
+const DEVICE_ID_KEY="nemo-device-id";
+function nemoDeviceId(){
+  try{
+    let id=localStorage.getItem(DEVICE_ID_KEY);
+    if(!id){
+      id=(typeof crypto!=="undefined"&&crypto.randomUUID)
+        ? crypto.randomUUID()
+        : "d"+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+      localStorage.setItem(DEVICE_ID_KEY,id);
+    }
+    return id;
+  }catch(e){ return ""; }
+}
+let pendingPushToken="";
+function savePushToken(){
+  if(!pendingPushToken||!FB_OK||!FB_DB||!FB_AUTH) return;
+  let uid="";
+  try{ uid=(FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||""; }catch(e){}
+  if(!uid) return;
+  const dev=nemoDeviceId();
+  if(!dev) return;
+  try{
+    FB_DB.ref("pushTokens/"+uid+"/"+dev)
+      .set({token:pendingPushToken,platform:"android",at:Date.now()})
+      .catch(()=>{});
+  }catch(e){}
+}
+if(typeof window!=="undefined"){
+  /* Called by MainActivity once FirebaseMessaging hands it a token, and again on refresh. */
+  window.__nemoPushToken=function(token){
+    const t=String(token||"").trim();
+    if(t.length<=20) return;
+    pendingPushToken=t;
+    savePushToken();
+  };
+  /* The token usually arrives before anyone is signed in — the page is still booting. This
+     is what stores it once auth resolves. */
+  window.addEventListener("nemo-fb-ready",savePushToken);
+}
+
 /* The Firebase scripts load async, so on a cold cache the app can boot before FB_OK is true.
    Wait a bounded moment for the connection rather than deciding there's no cloud yet — but
    never longer than `ms`, because a shopper with no connection still has a store to browse. */
