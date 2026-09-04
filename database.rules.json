@@ -356,8 +356,8 @@
     "referrals": {
       "$code": {
         ".read": "auth != null",
-        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (!data.exists() && newData.child('owner').val() === auth.uid && newData.child('kind').val() === 'order' && newData.child('active').val() === false && newData.child('used').val() === false) || (data.exists() && data.child('used').val() != true && newData.child('owner').val() === data.child('owner').val() && newData.child('kind').val() === data.child('kind').val() && newData.child('active').val() === data.child('active').val() && newData.child('used').val() === data.child('used').val() && newData.child('sourceOrderId').val() === data.child('sourceOrderId').val() && newData.child('sourceOrderUid').val() === data.child('sourceOrderUid').val() && newData.child('redemptions').val() === data.child('redemptions').val()) )",
-        ".validate": "!newData.exists() || (newData.child('owner').isString() && (newData.child('kind').val() === 'customer' || newData.child('kind').val() === 'order') && newData.child('active').isBoolean() && (!data.exists() || newData.child('owner').val() === data.child('owner').val()))"
+        ".write": "auth != null && ( (auth.uid === 'cI2HmMt6FdR7fO7uUnugH85GeZt2') || (data.exists() && data.child('used').val() != true && newData.child('owner').val() === data.child('owner').val() && newData.child('kind').val() === data.child('kind').val() && newData.child('active').val() === data.child('active').val() && newData.child('used').val() === data.child('used').val() && newData.child('sourceOrderId').val() === data.child('sourceOrderId').val() && newData.child('sourceOrderUid').val() === data.child('sourceOrderUid').val() && newData.child('redemptions').val() === data.child('redemptions').val()) )",
+        ".validate": "!newData.exists() || (newData.child('owner').isString() && newData.child('kind').val() === 'customer' && newData.child('active').isBoolean() && (!data.exists() || newData.child('owner').val() === data.child('owner').val()))"
       }
     },
     "visitorLog": {

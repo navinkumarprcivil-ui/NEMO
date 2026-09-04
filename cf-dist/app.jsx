@@ -2006,12 +2006,15 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   walletMinOrder: 500,          // min order subtotal (₹) to redeem wallet coins
   walletValidityMonths: 0,      // coin validity in months after last wallet activity; 0 = never expire. Customer is warned 1 month before.
   maxDiscountPct: 25,           // hard cap: coupon + referral + loyalty together can't exceed this % of cart subtotal
-  /* Referral */
+  /* Referral. One code per customer: you unlock yours by spending, friends redeem it, and you
+     are paid in reward coins when what they bought actually reaches them. */
   referralEnabled: true,
-  referralDiscount: 50,
-  referralCoins: 0,       // legacy field; the retired refer-a-friend payout is no longer used
-  referralLifetimeSpendMin: 1000, // snapshotted when a new customer first signs in
-  orderReferralMinOrder: 1000,    // qualifying paid order earns one single-use code
+  referralLifetimeSpendMin: 1000, // successful lifetime spend that unlocks a customer's own code
+  referralDiscountType: "flat",   // "flat" → referralDiscount rupees; "percent" → referralDiscountPct of subtotal
+  referralDiscount: 50,           // ₹ off the friend's cart when the type is flat
+  referralDiscountPct: 5,         // % off the friend's cart when the type is percent
+  referralRedeemMinOrder: 0,      // friend's cart subtotal (₹) must reach this before the code applies
+  referralCoins: 0,               // reward coins paid to the code's OWNER once the referred order is delivered
   referralMinOrder: 0,    // legacy fallback retained so old saved settings continue to load
   /* Daily promo caps — limit how many customers can redeem each offer per day (0 = unlimited) */
   couponDailyLimit: 0,
@@ -2162,9 +2165,36 @@ function lifetimeReferralLimit(settings){
   const n=Number(settings&&settings.referralLifetimeSpendMin);
   return Math.max(0,Number.isFinite(n)?n:Number(settings&&settings.referralMinOrder)||0);
 }
-function orderReferralLimit(settings){
-  const n=Number(settings&&settings.orderReferralMinOrder);
+/* The friend's side of the deal: how big their cart has to be before a code applies, and what
+   it takes off. Both are the owner's to set, and both are read wherever the discount is shown
+   or charged, so the number quoted on the referral card, in checkout and on the order can never
+   drift apart. A percentage is rounded down — the store never rounds a discount in its own
+   favour by accident, and never off a cart that has not met the minimum. */
+function referralRedeemMin(settings){
+  const n=Number(settings&&settings.referralRedeemMinOrder);
   return Math.max(0,Number.isFinite(n)?n:Number(settings&&settings.referralMinOrder)||0);
+}
+function referralDiscountFor(subtotal,settings){
+  const base=Math.max(0,Number(subtotal)||0);
+  if(base<referralRedeemMin(settings)) return 0;
+  if(String(settings&&settings.referralDiscountType)==="percent"){
+    const pct=Math.max(0,Math.min(100,Number(settings&&settings.referralDiscountPct)||0));
+    return Math.floor(base*pct/100);
+  }
+  return Math.max(0,Math.round(Number((settings&&settings.referralDiscount)??50)||0));
+}
+/* What the OWNER of a code is paid when an order that used it is delivered. */
+function referralOwnerCoins(settings){
+  return Math.max(0,Math.round(Number(settings&&settings.referralCoins)||0));
+}
+/* The friend-facing offer as one phrase. Written once so the referral card, the share message
+   and checkout cannot end up quoting three different numbers after a settings change. */
+function referralOfferLine(settings){
+  const off=String(settings&&settings.referralDiscountType)==="percent"
+    ? `${Math.max(0,Math.min(100,Number(settings&&settings.referralDiscountPct)||0))}% off`
+    : `₹${Math.max(0,Math.round(Number((settings&&settings.referralDiscount)??50)||0))} off`;
+  const min=referralRedeemMin(settings);
+  return min>0?`${off} on orders over ₹${min.toLocaleString("en-IN")}`:off;
 }
 function localReferralProfile(uid,settings){
   const key="nemo-ref-profile-"+uid;
@@ -2193,13 +2223,6 @@ async function ensureReferralProfile(uid,settings){
     });
     return result&&result.snapshot&&result.snapshot.val();
   }catch(e){ return localReferralProfile(uid,settings); }
-}
-async function createReferralRecord(code,record){
-  if(!FB_OK) return true;
-  try{
-    const tx=await FB_DB.ref("referrals/"+code).transaction(cur=>cur?undefined:record);
-    return !!(tx&&tx.committed);
-  }catch(e){ return false; }
 }
 async function customerReferralStatus(uid,settings,orders){
   const profile=await ensureReferralProfile(uid,settings);
@@ -2235,37 +2258,13 @@ async function snapshotExistingReferralProfiles(orders,settings){
   const uids=[...new Set((orders||[]).map(o=>o&&o.userUid).filter(Boolean))];
   await Promise.allSettled(uids.map(uid=>ensureReferralProfile(uid,settings)));
 }
-/* Create a pending order-earned code. It is activated only after this source order's payment
-   succeeds, so an unpaid/cancelled order never hands out a usable discount. */
-async function createOrderReferralCode(ownerUid,orderId,orderTotal,settings){
-  const min=orderReferralLimit(settings);
-  if(!ownerUid||!orderId||Number(orderTotal)<min) return "";
-  for(let i=0;i<6;i++){
-    const code=genRefCode();
-    const record={owner:ownerUid,kind:"order",active:false,used:false,sourceOrderId:orderId,sourceOrderUid:ownerUid,
-      sourceAmount:Number(orderTotal)||0,qualifyingLimit:min,discount:Number(settings&&settings.referralDiscount)||0,createdAt:Date.now()};
-    if(await createReferralRecord(code,record)) return code;
-  }
-  return "";
-}
-async function activateEarnedReferral(code,sourceOrderId){
-  const c=cleanRefCode(code); if(!FB_OK||!REF_CODE_RE.test(c)) return;
-  try{
-    await FB_DB.ref("referrals/"+c).transaction(r=>{
-      if(!r||r.kind!=="order"||r.used||r.sourceOrderId!==sourceOrderId) return;
-      return {...r,active:true,activatedAt:r.activatedAt||Date.now()};
-    });
-  }catch(e){}
-}
-async function deactivateEarnedReferral(code,sourceOrderId){
-  const c=cleanRefCode(code); if(!FB_OK||!REF_CODE_RE.test(c)) return;
-  try{
-    await FB_DB.ref("referrals/"+c).transaction(r=>{
-      if(!r||r.kind!=="order"||r.sourceOrderId!==sourceOrderId||r.used) return r;
-      return {...r,active:false,cancelled:true,cancelledAt:Date.now()};
-    });
-  }catch(e){}
-}
+/* There were once two kinds of referral code: this permanent one, and a single-use code minted
+   by every order over a threshold. The two taught customers contradictory things — one code is
+   yours and you share it, the other appears on an order, expires on first use, and is gone —
+   and the per-order code paid nobody anything. It is retired. `kind:"order"` records left in the
+   database are simply no longer honoured: validateReferral falls through to "no longer
+   supported", which is the truth, rather than half-working. */
+
 /* Validate without consuming. Consumption happens only after verified payment. */
 async function validateReferral(code, uid){
   const c=cleanRefCode(code);
@@ -2279,37 +2278,35 @@ async function validateReferral(code, uid){
     const r=snap.val();
     if(r.owner===uid) return {ok:false, msg:"You can't use your own referral code"};
     if(r.active!==true) return {ok:false, msg:"This referral code is not active yet"};
-    if(r.kind==="order"){
-      if(r.used) return {ok:false, msg:"This referral code has already been used"};
-      if(r.pendingOrderId&&Number(r.reservedUntil)>Date.now()) return {ok:false,msg:"This code is currently being used"};
-    }else if(r.kind==="customer"){
+    if(r.kind==="customer"){
       if(r.redemptions&&r.redemptions[uid]) return {ok:false,msg:"You've already used this customer's referral code"};
       if(r.pendingBy&&r.pendingBy[uid]&&Number(r.pendingBy[uid].until)>Date.now()) return {ok:false,msg:"This code is already attached to your pending order"};
     }else return {ok:false,msg:"This referral code is no longer supported"};
     return {ok:true,record:r,code:c};
   }catch(e){ return {ok:false, msg:"Couldn't verify code — try again"}; }
 }
+/* Returns {ok, owner}. The owner uid comes back because the caller has to stamp it on the
+   order: the reward is paid to whoever owned the code AT RESERVATION, and by delivery time the
+   code record may have moved on. Returning it from inside the transaction means the uid we
+   record is the one the write actually saw, not a re-read that could disagree. */
 async function reserveReferral(code,uid,orderId){
-  const c=cleanRefCode(code); if(!FB_OK||!REF_CODE_RE.test(c)||!uid||!orderId) return false;
+  const c=cleanRefCode(code); if(!FB_OK||!REF_CODE_RE.test(c)||!uid||!orderId) return {ok:false,owner:""};
+  let owner="";
   try{
     const tx=await FB_DB.ref("referrals/"+c).transaction(r=>{
+      owner="";
       if(!r||r.active!==true||r.owner===uid) return;
       const until=Date.now()+PAY_WINDOW_MIN*60*1000;
-      if(r.kind==="order"){
-        // A single-use code belongs to the first pending order, even when the same shopper
-        // opens a second checkout. Only an idempotent retry for that exact order may refresh it.
-        if(r.used||(r.pendingOrderId&&r.pendingOrderId!==orderId&&Number(r.reservedUntil)>Date.now())) return;
-        return {...r,reservedBy:uid,pendingOrderId:orderId,reservedUntil:until};
-      }
       if(r.kind==="customer"){
         if(r.redemptions&&r.redemptions[uid]) return;
         const existing=r.pendingBy&&r.pendingBy[uid];
         if(existing&&existing.orderId!==orderId&&Number(existing.until)>Date.now()) return;
+        owner=String(r.owner||"");
         return {...r,pendingBy:{...(r.pendingBy||{}),[uid]:{orderId,until}}};
       }
     });
-    return !!(tx&&tx.committed);
-  }catch(e){ return false; }
+    return (tx&&tx.committed)?{ok:true,owner}:{ok:false,owner:""};
+  }catch(e){ return {ok:false,owner:""}; }
 }
 async function finalizeReferralOnPayment(code,uid,orderId){
   const c=cleanRefCode(code); if(!FB_OK||!REF_CODE_RE.test(c)||!uid||!orderId) return false;
@@ -2318,11 +2315,6 @@ async function finalizeReferralOnPayment(code,uid,orderId){
     const tx=await FB_DB.ref("referrals/"+c).transaction(r=>{
       consumed=false;
       if(!r||r.active!==true) return;
-      if(r.kind==="order"){
-        if(r.used||r.pendingOrderId!==orderId||r.reservedBy!==uid) return;
-        consumed=true;
-        return {...r,used:true,active:false,usedBy:uid,paidOrderId:orderId,usedAt:Date.now(),reservedBy:null,pendingOrderId:null,reservedUntil:null};
-      }
       if(r.kind==="customer"){
         if(r.redemptions&&r.redemptions[uid]) return;
         if(!r.pendingBy||!r.pendingBy[uid]||r.pendingBy[uid].orderId!==orderId) return;
@@ -2341,10 +2333,6 @@ async function releaseReferralReservation(code,uid,orderId){
   try{
     await FB_DB.ref("referrals/"+c).transaction(r=>{
       if(!r) return r;
-      if(r.kind==="order"){
-        if(r.used||r.pendingOrderId!==orderId) return r;
-        return {...r,reservedBy:null,pendingOrderId:null,reservedUntil:null};
-      }
       if(r.kind==="customer"){
         const pending={...(r.pendingBy||{})};
         if(pending[uid]&&pending[uid].orderId===orderId) delete pending[uid];
@@ -3612,17 +3600,39 @@ function loadRazorpayScript(){
    carries it back, but a customer can land on a bare URL (a share, a restored tab), so the
    id is also parked here as a fallback. Cleared as soon as it has been acted on. */
 const PAY_RETURN_KEY="nemo-pay-return";
-function rememberPaymentReturn(orderId){ try{ localStorage.setItem(PAY_RETURN_KEY,String(orderId)); }catch(e){} }
-function takePaymentReturn(){
-  let fromUrl="";
+/* A marker older than this was abandoned, not returned from. Without it a customer who left
+   the gateway and never came back would be sent to Orders on every future boot, because the
+   marker is only cleared by a return that actually reaches the verification step. */
+const PAY_RETURN_TTL_MS=2*60*60*1000;
+function rememberPaymentReturn(orderId){
+  try{ localStorage.setItem(PAY_RETURN_KEY,JSON.stringify({id:String(orderId),at:Date.now()})); }catch(e){}
+}
+function forgetPaymentReturn(){ try{ localStorage.removeItem(PAY_RETURN_KEY); }catch(e){} }
+function storedPaymentReturn(){
+  let raw=""; try{ raw=localStorage.getItem(PAY_RETURN_KEY)||""; }catch(e){ return ""; }
+  if(!raw) return "";
+  // Markers written before this carried a bare order id; read those too rather than stranding
+  // a payment that is in flight across the upgrade.
+  let id=raw,at=0;
+  if(raw.charAt(0)==="{"){ try{ const v=JSON.parse(raw); id=String(v.id||""); at=Number(v.at)||0; }catch(e){ return ""; } }
+  if(!id) return "";
+  if(at&&Date.now()-at>PAY_RETURN_TTL_MS){ forgetPaymentReturn(); return ""; }
+  return id;
+}
+/* Read-only: is a payment on its way back to us? Boot needs the answer before Firebase auth
+   has arrived, so the customer lands on their order instead of watching the home page while
+   verification runs. Consuming the marker stays with takePaymentReturn below. */
+function pendingPaymentReturn(){
   try{
     const q=new URLSearchParams(window.location.search);
-    if(q.get("payment_return")) fromUrl=q.get("order_id")||"";
+    if(q.get("payment_return")) return q.get("order_id")||storedPaymentReturn();
   }catch(e){}
-  let stored=""; try{ stored=localStorage.getItem(PAY_RETURN_KEY)||""; }catch(e){}
-  const orderId=fromUrl||stored;
+  return storedPaymentReturn();
+}
+function takePaymentReturn(){
+  const orderId=pendingPaymentReturn();
   if(!orderId) return "";
-  try{ localStorage.removeItem(PAY_RETURN_KEY); }catch(e){}
+  forgetPaymentReturn();
   try{ window.history.replaceState({},"",window.location.pathname); }catch(e){}
   return orderId;
 }
@@ -3678,6 +3688,13 @@ async function payWithGateway(order){
 
   if(cfg.provider!=="razorpay") throw new Error("gateway-unavailable");
   await loadRazorpayScript();
+  /* Razorpay opens a modal and normally settles in this same page, so the marker below looks
+     redundant — and on desktop it is. On the Android app it is not: paying by UPI hands off to
+     GPay/PhonePe/Paytm, and Android is free to destroy the WebView behind it. The customer
+     comes back to a cold boot with a completed payment and no promise left to resolve. The
+     marker is what makes that boot land on their order and verify it, instead of the home page.
+     Cleared the moment this promise settles, so a normal desktop payment never leaves one. */
+  rememberPaymentReturn(order.id);
   const result=await new Promise((resolve)=>{
     let settled=false;
     const done=(v)=>{ if(!settled){ settled=true; resolve(v); } };
@@ -3699,6 +3716,7 @@ async function payWithGateway(order){
     rzp.on("payment.failed",(e)=>done({failed:e&&e.error||{}}));
     rzp.open();
   });
+  forgetPaymentReturn(); // this page is settling it; no cold boot has to pick it up
 
   if(result.failed){
     const code=String(result.failed.code||result.failed.reason||"checkout-rejected")
@@ -6226,15 +6244,26 @@ function StatusBadge({status}){
   const s=m[status]||m.Placed;
   return <span style={{fontSize:10,fontWeight:700,color:s.c,background:s.bg,padding:"3px 10px",borderRadius:20}}>{s.icon} {status}</span>;
 }
+/* The stage badge answers "where has my order got to?". An order nobody has paid for has not
+   got anywhere — badging it "Orders Placed" told the customer the store was already acting on
+   it, which is exactly what "Pay later" means it is not. While payment is still outstanding the
+   badge shows the payment state instead. Only the badge changes: the order still groups under
+   Orders Placed in the tabs, which is where a customer goes looking for it. The override is
+   scoped to that one stage so a cancelled or archived order can never be relabelled as pending. */
 function CustomerStageBadge({order}){
   const stage=customerOrderStage(order);
-  const m={
+  const unpaid=stage==="Orders Placed"?{
+    "Awaiting Payment":{c:"#b45309",bg:"#fef3c7",icon:"⏳"},
+    "Payment Review":{c:"#7c3aed",bg:"#ede9fe",icon:"🔎"},
+  }[order&&order.status]:null;
+  const label=unpaid?order.status:stage;
+  const m=unpaid||{
     "Orders Placed":{c:"#1d4ed8",bg:"#dbeafe",icon:"📦"},
     Shipped:{c:"#c2410c",bg:"#fff7ed",icon:"🚚"},
     Delivered:{c:"#15803d",bg:"#dcfce7",icon:"✓"},
     "Past Orders":{c:"#475569",bg:"#f1f5f9",icon:"🗂️"},
   }[stage];
-  return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:m.bg,color:m.c,borderRadius:20,padding:"4px 10px",fontSize:10.5,fontWeight:800,whiteSpace:"nowrap"}}>{m.icon} {stage}</span>;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:m.bg,color:m.c,borderRadius:20,padding:"4px 10px",fontSize:10.5,fontWeight:800,whiteSpace:"nowrap"}}>{m.icon} {label}</span>;
 }
 function CategoryPills({selected,onSelect,all,counts}){
   const list=all?["All",...SHOP_CATEGORIES]:SHOP_CATEGORIES;
@@ -6732,33 +6761,6 @@ function ProductReviewPrompt({order, products=[], mediaCache={}, reviewedSet=[],
   );
 }
 
-/* A qualifying order's code is displayed only while the server says it is active and unused.
-   The live listener removes the card immediately after the referred order's payment succeeds. */
-function OrderReferralCode({order}){
-  const code=cleanRefCode(order&&order.earnedReferralCode);
-  const [visible,setVisible]=useState(false);
-  const [copied,setCopied]=useState(false);
-  useEffect(()=>{
-    if(!code||!paymentSucceeded(order)){ setVisible(false); return; }
-    if(!(FB_OK&&FB_DB)){ setVisible(true); return; }
-    const ref=FB_DB.ref("referrals/"+code);
-    const cb=ref.on("value",s=>{ const r=s&&s.val(); setVisible(!!(r&&r.kind==="order"&&r.active===true&&!r.used)); },()=>setVisible(false));
-    return ()=>{ try{ref.off("value",cb);}catch(e){} };
-  },[code,order&&order.status,order&&order.paymentStatus]);
-  if(!visible) return null;
-  return(
-    <div style={{marginTop:10,background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:12,padding:"12px",color:"white"}}>
-      <div style={{fontSize:12.5,fontWeight:800,marginBottom:3}}>🎟️ Single-use referral code</div>
-      <div style={{fontSize:10.8,opacity:.9,lineHeight:1.45,marginBottom:8}}>Anyone can use this once at checkout. It disappears after that order's payment succeeds.</div>
-      <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.55)",borderRadius:9,padding:"8px 10px",fontFamily:"monospace",fontSize:14,fontWeight:800,letterSpacing:1.5,textAlign:"center"}}>{code}</div>
-        <button className="press" onClick={()=>{ try{navigator.clipboard.writeText(code);}catch(e){} setCopied(true);setTimeout(()=>setCopied(false),1800); }}
-          style={{background:copied?"white":"rgba(255,255,255,.24)",border:"1px solid rgba(255,255,255,.4)",borderRadius:9,padding:"9px 12px",color:copied?"#6d28d9":"white",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied?"✓ Copied":"Copy"}</button>
-      </div>
-    </div>
-  );
-}
-
 /* ═══════════════════ ORDER HISTORY PAGE ═══════════════════ */
 /* Customer self-cancel button — shown only while the order is inside the cancel window */
 function SelfCancelBtn({o, onCancel}){
@@ -7129,7 +7131,6 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 <span style={{fontSize:12,color:C.textSub}}>Grand Total</span>
                 <span style={{fontFamily:PRICE_FONT,fontSize:16,fontWeight:800,color:C.primary}}>₹{o.amountDue??(o.total+o.fee)}</span>
               </div>
-              <OrderReferralCode order={o}/>
               {["Confirmed","Shipped"].includes(o.status)&&!o.closed&&(()=>{
                 const eta=etaInfo(o); if(!eta) return null;
                 const d=eta.daysLeft;
@@ -7523,7 +7524,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.3ba77479";
+const APP_BUILD = "v90.907090ee";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7613,10 +7614,10 @@ function ReferralDrawerCard({open,user,settings={},orders=[],nav,onClose}){
       <div style={{fontSize:12.5,fontWeight:800,marginBottom:3}}>🎟️ {status.unlocked?"Your referral code":"Referral code locked"}</div>
       {status.unlocked?(
         <>
-          <div style={{fontSize:10.8,opacity:.9,lineHeight:1.45,marginBottom:8}}>Friends get ₹{Number(settings.referralDiscount||0)} off when they use this at checkout.</div>
+          <div style={{fontSize:10.8,opacity:.9,lineHeight:1.45,marginBottom:8}}>Friends get {referralOfferLine(settings)} when they use this at checkout.{referralOwnerCoins(settings)>0?` You earn ${referralOwnerCoins(settings)} reward coins once their order is delivered.`:""}</div>
           <div style={{display:"flex",alignItems:"center",gap:7}}>
             <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.55)",borderRadius:8,padding:"8px 7px",fontFamily:"monospace",fontSize:13,fontWeight:800,letterSpacing:1.2,textAlign:"center"}}>{status.code}</div>
-            <button className="press" onClick={()=>{ try{navigator.clipboard.writeText(status.code);}catch(e){} try{navigator.share&&navigator.share({text:`Use ${status.code} at ${STORE_NAME} and get ₹${Number(settings.referralDiscount||0)} off.`});}catch(e){} setCopied(true);setTimeout(()=>setCopied(false),1800); }}
+            <button className="press" onClick={()=>{ try{navigator.clipboard.writeText(status.code);}catch(e){} try{navigator.share&&navigator.share({text:`Use ${status.code} at ${STORE_NAME} and get ${referralOfferLine(settings)}.`});}catch(e){} setCopied(true);setTimeout(()=>setCopied(false),1800); }}
               style={{background:copied?"white":"rgba(255,255,255,.24)",color:copied?"#6d28d9":"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"9px 10px",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied?"✓ Copied":"Share"}</button>
           </div>
         </>
@@ -10591,7 +10592,9 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
   const couponBen=couponApplied?couponBenefit(couponApplied,total):{discount:0,coins:0};
   const couponCoins=couponBen.coins;
   let couponDiscount=Math.min(couponBen.discount,total+lgPrice);
-  let refDiscount=refApplied?Math.min(Number(settings.referralDiscount??50),Math.max(0,total+lgPrice-couponDiscount)):0;
+  // referralDiscountFor owns both the rule (flat or percent) and the minimum, so the number the
+  // cart takes off is the same one the referral card and checkout quote.
+  let refDiscount=refApplied?Math.min(referralDiscountFor(total,settings),Math.max(0,total+lgPrice-couponDiscount)):0;
   /* Coins may only pay for what is still left to pay. loyaltyDiscount was bounded by the
      owner's per-order coin limit but never by the order itself, so a small order — especially
      one already carrying a coupon — could swallow far more coins than it was worth: redeem 100
@@ -10627,6 +10630,16 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
       setCouponMsg({text:`Coupon removed — the cart is now under the ₹${min} minimum for it.`,ok:false});
     }
   },[total,couponApplied]);
+  // Same story for a referral code: it has its own minimum, and the cart can shrink under it
+  // after the code was applied. Drop it and say so, rather than quietly discounting anyway.
+  useEffect(()=>{
+    if(!refApplied) return;
+    const min=referralRedeemMin(settings);
+    if(min>0 && total<min){
+      setRefApplied(false);
+      setRefMsg({text:`Referral code removed — the cart is now under the ₹${min} minimum for it.`,ok:false});
+    }
+  },[total,refApplied,settings]);
   /* Coupon, referral and wallet all lived only on step 1, below the address form — so the
      place a customer actually looks for a discount box, the Review screen with the total on
      it, had none, and plenty simply never scrolled far enough on the address page to find one.
@@ -10737,6 +10750,13 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
   const applyReferral=async()=>{
     if(couponApplied && settings.allowCouponWithReferral!==true){ setRefMsg({text:"You can use a coupon or a referral code — not both. Remove the coupon first.",ok:false}); return; }
     if(settings.referralEnabled===false){ setRefMsg({text:"Referral program is currently off",ok:false}); return; }
+    // Checked before the code is looked up: telling someone their cart is too small costs no
+    // round trip, and it must not read as "your friend's code is bad" when the code is fine.
+    const refMin=referralRedeemMin(settings);
+    if(refMin>0 && total<refMin){
+      setRefMsg({text:`Add ₹${refMin-total} more to use a referral code (minimum ₹${refMin}).`,ok:false});
+      setRefApplied(false); return;
+    }
     if(await promoLimitReached("referral", settings.referralDailyLimit)){
       setRefMsg({text:"Today's referral quota is full — please try tomorrow.",ok:false}); setRefApplied(false); return;
     }
@@ -10744,7 +10764,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
     if(!r.ok){ setRefMsg({text:r.msg,ok:false}); setRefApplied(false); return; }
     setRefInput(r.code);
     setRefApplied(true);
-    setRefMsg({text:`✓ Referral applied — ₹${Number(settings.referralDiscount??50)} off!`,ok:true});
+    setRefMsg({text:`✓ Referral applied — ₹${referralDiscountFor(total,settings)} off!`,ok:true});
   };
 
   const validate=()=>{
@@ -10786,18 +10806,14 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
     const orderNo=await nextOrderNo(now);
     const uid2=userKey(user);
     const appliedRefCode=refApplied?cleanRefCode(refInput):"";
+    let appliedRefOwner="";
     if(appliedRefCode){
       const reserved=await reserveReferral(appliedRefCode,uid2,id);
-      if(!reserved){
+      if(!reserved.ok){
         setRefApplied(false); setRefMsg({text:"This referral code is no longer available — please try another one.",ok:false});
         setPlaceErr("The referral code could not be reserved. No order was placed."); setPlacing(false); return;
       }
-    }
-    const qualifiesForOrderCode=settings.referralEnabled!==false&&grand>=orderReferralLimit(settings);
-    const earnedReferralCode=qualifiesForOrderCode?await createOrderReferralCode(uid2,id,grand,settings):"";
-    if(qualifiesForOrderCode&&!earnedReferralCode){
-      if(appliedRefCode) await releaseReferralReservation(appliedRefCode,uid2,id);
-      setPlaceErr("We couldn't generate this order's referral code. Please check your connection and try again; no order was placed."); setPlacing(false); return;
+      appliedRefOwner=reserved.owner;
     }
     const checkoutAddress={...addr,whatsapp:addr.waUpdates?addr.whatsapp:""};
     const order={
@@ -10812,7 +10828,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
       liveGuarantee:guaranteeActive,liveGuaranteeFee:0,
       coupon:couponApplied?couponCode.trim():"",couponDiscount,
       referralCode:appliedRefCode, referralDiscount:refDiscount,
-      earnedReferralCode,
+      /* Whose code it was, captured at placement. The reward is paid on delivery, which can be
+         days later, and by then the code may have been re-read, re-issued or the owner's
+         profile changed — the order has to carry its own answer. */
+      referralOwnerUid:appliedRefOwner,
       loyaltyDiscount:loyaltyRedeemed?loyaltyDiscount:0,
       loyaltyCoinsUsed:loyaltyRedeemed?loyaltyCoinsUsed:0,
       thermacolFee: hasLiveFish?thermacolFeeFor(cart,packing,settings):0,
@@ -10835,7 +10854,6 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
       const redeemed=await redeemPoints(uid2, ptsUsed, id);
       if(!redeemed){
         if(appliedRefCode) await releaseReferralReservation(appliedRefCode,uid2,id);
-        if(earnedReferralCode) await deactivateEarnedReferral(earnedReferralCode,id);
         setPlaceErr("Your reward coins could not be applied. Please check your connection and try again; no order was placed.");
         setPlacing(false); return;
       }
@@ -12788,6 +12806,12 @@ function NemoStore(){
      customer's own ID token, so running it early would fail. If auth never arrives, this
      simply never runs and the signed webhook settles the order server-side instead, which
      is why that second path exists. */
+  /* Land on Orders the instant we can see a payment coming back — before Firebase auth is up
+     and long before /api/pay-verify answers. Verification below still decides what the order
+     SAYS; this only decides which page the customer is looking at while it runs, and the
+     answer was the home page, which reads as "my payment went nowhere". Read-only, so the
+     marker is still there for the effect below to consume. */
+  useEffect(()=>{ if(pendingPaymentReturn()) nav("orders"); },[]);
   const payReturnRef = useRef(false);
   useEffect(()=>{
     if(payReturnRef.current) return;
@@ -13510,7 +13534,6 @@ function NemoStore(){
     const prevStatus=old?old.status:"";
     const becamePaid=paymentSucceeded(updated)&&!paymentSucceeded(old);
     if(becamePaid){
-      if(updated.earnedReferralCode) await activateEarnedReferral(updated.earnedReferralCode,updated.id);
       if(updated.referralCode){
         const consumed=await finalizeReferralOnPayment(updated.referralCode,updated.userUid,updated.id);
         if(consumed&&!updated.referralUsageCounted){ bumpPromoUsage("referral"); updated={...updated,referralUsageCounted:true}; }
@@ -13532,6 +13555,20 @@ function NemoStore(){
           if(credited) updated={...updated,pointsEarned:pts};
         }
       }
+      /* (b) the OWNER of the referral code earns theirs — a different customer from the buyer.
+         Paid here, on delivery, rather than on payment: a referral that is cancelled or refunded
+         before it arrives never happened, and paying at delivery means there is nothing to claw
+         back in the ordinary case. adminCreditLoyalty is idempotent per entryId, so a re-save of
+         a delivered order cannot pay twice. `referralOwnerUid` was stamped on the order when the
+         code was reserved, so a code that has since changed hands still pays the right person. */
+      if(settings.referralEnabled!==false && updated.referralOwnerUid && !updated.referralCoinsPaid){
+        const coins=referralOwnerCoins(settings);
+        if(coins>0){
+          const credited=await adminCreditLoyalty(updated.referralOwnerUid, coins, "refer:"+updated.id,
+            "Referral reward — order "+(updated.orderNo||updated.id), settings.walletValidityMonths);
+          if(credited) updated={...updated,referralCoinsPaid:coins};
+        }
+      }
     }
     // ── On CANCEL: restock once and idempotently claw back anything this order earned. ──
     // Running the wallet reconciliation on every later save means a temporary Firebase error
@@ -13542,6 +13579,12 @@ function NemoStore(){
       if(Number(updated.pointsEarned)>0 && updated.userUid){
         const removed=await silentlyRemoveLoyaltyCredit(updated.userUid,"earn:"+updated.id,Number(updated.pointsEarned));
         if(removed) updated={...updated,pointsEarned:0,pointsReversed:true};
+      }
+      // A referral reward is only ever paid at delivery, so this reverses the rare case of an
+      // order cancelled AFTER it was delivered — a return resolved as a cancellation, say.
+      if(Number(updated.referralCoinsPaid)>0 && updated.referralOwnerUid){
+        const removed=await silentlyRemoveLoyaltyCredit(updated.referralOwnerUid,"refer:"+updated.id,Number(updated.referralCoinsPaid));
+        if(removed) updated={...updated,referralCoinsPaid:0,referralCoinsReversed:true};
       }
       if(updated.shippingReward&&updated.userUid){
         const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
@@ -13559,7 +13602,6 @@ function NemoStore(){
         await silentlyRemoveLoyaltyCredit(updated.userUid,"return:"+updated.id,Math.ceil(returnItemsValue(updated)/coinVal));
       }
       if(updated.referralCode) await releaseReferralReservation(updated.referralCode,updated.userUid,updated.id);
-      if(updated.earnedReferralCode) await deactivateEarnedReferral(updated.earnedReferralCode,updated.id);
       // refund any wallet points the buyer SPENT on this order (they shouldn't lose points on a cancelled order)
       if(Number(updated.loyaltyDiscount)>0 && updated.userUid && !updated.loyaltyRefunded){
         const coinVal=Number(settings.loyaltyRedeemValue||1)||1;
@@ -13752,7 +13794,6 @@ function NemoStore(){
       if(restored) updated={...updated,loyaltyRefunded:true};
     }
     if(order.referralCode) await releaseReferralReservation(order.referralCode,order.userUid,order.id);
-    if(order.earnedReferralCode) await deactivateEarnedReferral(order.earnedReferralCode,order.id);
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     if(updated.loyaltyRefunded&&!order.loyaltyRefunded) await saveOneOrder(updated);
     showToast(paid?"Order cancelled — your refund will be processed":"Order cancelled");
@@ -13819,7 +13860,6 @@ function NemoStore(){
       if(restored) updated={...updated,loyaltyRefunded:true};
     }
     if(order.referralCode) await releaseReferralReservation(order.referralCode,order.userUid,order.id);
-    if(order.earnedReferralCode) await deactivateEarnedReferral(order.earnedReferralCode,order.id);
     setOrders(prev=>prev.map(o=>o.id===updated.id?updated:o));
     if(updated.loyaltyRefunded&&!order.loyaltyRefunded) await saveOneOrder(updated);
     restock(order);
