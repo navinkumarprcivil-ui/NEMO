@@ -120,16 +120,42 @@ const CATEGORIES  = Object.keys(CAT_META);
    Razorpay restricts selling live animals, not writing about them.
 
    ── To bring live fish back ──────────────────────────────────────────────
-       LIVE_FISH_ENABLED = true          (here, and in lib/catalog.mjs)
-       node scripts/build.mjs && npm run check
+   Admin → Settings → Store → "Sell live fish". No deploy, no code change. The
+   switch restores the catalogue, shop, search, category filters, checkout, the
+   Live Arrival Guarantee, the DOA flow and the live-fish shipping logic.
+   `lib/catalog.mjs` reads the same `settings.liveFishEnabled` for the
+   server-rendered /p/ pages, the sitemap and share previews, so the storefront
+   and Google cannot disagree. docs/LIVE_FISH_BACKOUT.md lists every gated site.
 
-   That flip restores the catalogue, shop, search, category filters, checkout,
-   the Live Arrival Guarantee, the DOA flow and the live-fish shipping logic.
-   `lib/catalog.mjs` carries the same switch for the server-rendered /p/ pages
-   and the sitemap; both must be flipped together, and
-   test/live-fish-switch.test.mjs fails the build if they drift apart.
-   docs/LIVE_FISH_BACKOUT.md documents every gated site and how to reverse it. */
-const LIVE_FISH_ENABLED = false;
+   The one thing the switch does NOT reach is the static SEO block in index.html
+   — the <title>, meta description and <noscript> a crawler reads before any
+   script runs. It is deliberately fish-free while the store does not sell them,
+   and restoring live fish should be paired with restoring that copy by hand.
+
+   ── Why this is a module variable and not React state ────────────────────
+   It is read from module-level helpers (isShoppable, shopCategories, policyText)
+   that have no component to give them props, and by pure functions used far from
+   any render. Seeding it synchronously from the cached settings blob means a
+   returning visitor has the right answer before the first line of the app runs;
+   a first-ever visitor gets the default until the cloud settings land, which is
+   behind the splash. `applyLiveFishSwitch` is called wherever settings are set,
+   BEFORE setSettings, so the render that follows already sees the new value. */
+function readCachedLiveFishSwitch(){
+  try{
+    const raw=localStorage.getItem("nemo-settings");
+    if(raw){ const v=JSON.parse(raw); if(typeof v.liveFishEnabled==="boolean") return v.liveFishEnabled; }
+  }catch(e){}
+  return false;
+}
+let LIVE_FISH_ENABLED = readCachedLiveFishSwitch();
+/* Returns true when the value actually moved, so a caller can force the one extra render a
+   change needs if it happens outside the normal settings flow. */
+function applyLiveFishSwitch(settings){
+  const next=!!(settings&&settings.liveFishEnabled===true);
+  if(next===LIVE_FISH_ENABLED) return false;
+  LIVE_FISH_ENABLED=next;
+  return true;
+}
 const LIVE_FISH_CATEGORY = "Live Fish";
 const isLiveFishCategory = (c) => c === LIVE_FISH_CATEGORY;
 /* True when a product may appear on a shopping surface. Admin and order history
@@ -138,16 +164,19 @@ const isLiveFishCategory = (c) => c === LIVE_FISH_CATEGORY;
 const isShoppable = (p) => LIVE_FISH_ENABLED || !isLiveFishCategory(p && p.category);
 const shoppable = (list) => LIVE_FISH_ENABLED ? (list || []) : (list || []).filter(isShoppable);
 /* Categories the storefront offers. CATEGORIES itself stays complete so the admin
-   product form can still file a product under Live Fish while the switch is off. */
-const SHOP_CATEGORIES = LIVE_FISH_ENABLED ? CATEGORIES : CATEGORIES.filter(c => !isLiveFishCategory(c));
+   product form can still file a product under Live Fish while the switch is off.
+   A function rather than a constant: a constant would be computed once at script load and
+   would then be wrong for the whole session of anyone who visits just after the owner flips
+   the switch — the case the switch exists for. */
+const shopCategories = () => LIVE_FISH_ENABLED ? CATEGORIES : CATEGORIES.filter(c => !isLiveFishCategory(c));
 /* Policy pages that exist only to describe shipping live animals — the Live Arrival Guarantee
    and the Acclimatization Guide ("settle your new arrivals in safely"). They leave the policy
    menus with the fish and come back with them. Note this is the one place where a piece of
    fishkeeping *guidance* is hidden: keeping a page about acclimatizing the fish we shipped you,
    while the store says it does not sell live animals, is the kind of contradiction a payment
    review is looking for. The care guides section itself is untouched. */
-const HIDDEN_POLICY_ROUTES = LIVE_FISH_ENABLED ? [] : ["policy-guarantee","policy-acclimatize"];
-const policyLinks = (links) => (links || []).filter(l => !HIDDEN_POLICY_ROUTES.includes(l.to));
+const hiddenPolicyRoutes = () => LIVE_FISH_ENABLED ? [] : ["policy-guarantee","policy-acclimatize"];
+const policyLinks = (links) => (links || []).filter(l => !hiddenPolicyRoutes().includes(l.to));
 /* Marketing copy the owner has saved in Firebase may name fish — the home hero is the first
    thing both a shopper and a payment reviewer read. Rather than rewriting what the owner
    saved (it has to come back verbatim), the storefront falls back to fish-free wording for
@@ -1966,6 +1995,12 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   couriers: [],                  // [{id,name,trackUrl}] — courier partners + their tracking-page links
   shippingRewardMin: 10,         // min ₹ overcharge before a shipping-reward code is auto-created
   liveFishRestrictNCIndia: true, // when true, live fish can't be ordered to Central/North India
+  /* The live-fish master switch. Off ships a dry-goods-only store: no fish products, no fish
+     categories, no Live Arrival Guarantee, no DOA claims, no live-fish shipping or packing, and
+     fish-free wording wherever the owner's own copy names fish. Nothing is deleted — every
+     product, order, claim and refund stays exactly where it is. See the block above the
+     LIVE_FISH_ENABLED declaration for what the switch does not reach. */
+  liveFishEnabled: false,
   /* Business / legal identity (shown on About page + invoice). No PAN/personal data is ever displayed. */
   legalName: "NEMO AQUA STORE",
   legalEntity: "Proprietorship · Udyam-registered Micro Enterprise",
@@ -6296,8 +6331,9 @@ function CustomerStageBadge({order}){
   return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:m.bg,color:m.c,borderRadius:20,padding:"4px 10px",fontSize:10.5,fontWeight:800,whiteSpace:"nowrap"}}>{m.icon} {label}</span>;
 }
 function CategoryPills({selected,onSelect,all,counts}){
-  const list=all?["All",...SHOP_CATEGORIES]:SHOP_CATEGORIES;
-  const icons={All:"🌊",...Object.fromEntries(SHOP_CATEGORIES.map(c=>[c,CAT_META[c].emoji]))};
+  const cats=shopCategories();
+  const list=all?["All",...cats]:cats;
+  const icons={All:"🌊",...Object.fromEntries(cats.map(c=>[c,CAT_META[c].emoji]))};
   return(
     <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
       {list.map(c=>(
@@ -7573,7 +7609,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.dbf93e72";
+const APP_BUILD = "v90.308cba09";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7716,7 +7752,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
             <span style={{fontSize:22,width:28,textAlign:"center"}}>🌊</span>
             <span style={{fontSize:14.5,fontWeight:800,color:C.text}}>All Products</span>
           </button>
-          {SHOP_CATEGORIES.map(cat=>(
+          {shopCategories().map(cat=>(
             <button key={cat} className="press" onClick={()=>onSelect(cat)}
               style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderTop:`1px solid ${C.border}`,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
               <span style={{fontSize:22,width:28,textAlign:"center"}}>{CAT_META[cat].emoji}</span>
@@ -9110,7 +9146,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             {/* Shop */}
             <div>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Shop</div>
-              {SHOP_CATEGORIES.map(cat=>(
+              {shopCategories().map(cat=>(
                 <button key={cat} className="press" onClick={()=>{setCategory(cat);nav("shop");}}
                   style={{display:"flex",alignItems:"center",gap:7,background:"none",border:"none",padding:"5px 0",fontSize:13,fontWeight:600,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",cursor:"pointer",width:"100%"}}>
                   <span style={{fontSize:14}}>{CAT_META[cat].emoji}</span>{cat}
@@ -9252,7 +9288,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
   const catCounts=useMemo(()=>{
     const q=(query||"").trim();
     const match=p=>!q||smartMatch(q,p);
-    const m={All:0}; SHOP_CATEGORIES.forEach(c=>m[c]=0);
+    const m={All:0}; shopCategories().forEach(c=>m[c]=0);
     products.forEach(p=>{ if(match(p)){ m.All++; if(m[p.category]!=null) m[p.category]++; } });
     return m;
   },[products,query]);
@@ -12338,9 +12374,10 @@ const POLICY_META_ALL = {
 /* Built by filtering the complete map rather than by assembling a shorter one, so the order the
    policies appear in comes back exactly as it was when live fish do. An old bookmark to a hidden
    policy falls through to Terms below rather than rendering an empty page. */
-const POLICY_META = LIVE_FISH_ENABLED ? POLICY_META_ALL : Object.fromEntries(
+const policyMeta = () => LIVE_FISH_ENABLED ? POLICY_META_ALL : Object.fromEntries(
   Object.entries(POLICY_META_ALL).filter(([k]) => k!=="guarantee" && k!=="acclimatize"));
 function PolicyPage({nav,goBack,settings={},which}){
+  const POLICY_META=policyMeta();
   const s={...DEFAULT_SETTINGS,...settings};
   const meta=POLICY_META[which]||POLICY_META.terms;
   const others=Object.keys(POLICY_META).filter(k=>k!==which);
@@ -12543,7 +12580,12 @@ function NemoStore(){
   const [orders,setOrders]         = useState([]);
   const [requests,setRequests]     = useState([]);
   const [guides,setGuides]         = useState([]);
-  const [settings,setSettings]     = useState(DEFAULT_SETTINGS);
+  const [settings,setSettingsState] = useState(DEFAULT_SETTINGS);
+  /* Every settings write goes through here. LIVE_FISH_ENABLED is a module variable — it is read
+     by helpers and pure functions that have no component to take props — so it has to be brought
+     up to date BEFORE the render that follows, not in an effect afterwards. Wrapping the setter
+     rather than patching each call site means a settings write added later cannot forget. */
+  const setSettings = (next) => { applyLiveFishSwitch(next); setSettingsState(next); };
   const [settingsReady,setSettingsReady] = useState(false);
   const [user,setUser]             = useState(null);
   const [authReturn,setAuthReturn] = useState("orders"); // where to go after login

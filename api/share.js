@@ -27,7 +27,7 @@
  * exactly the bug being fixed.
  */
 
-import { LIVE_FISH_ENABLED } from '../lib/catalog.mjs';
+import { LIVE_FISH_ENABLED, loadStoreSettings } from '../lib/catalog.mjs';
 
 const DB = 'https://nemo-aqua-store-default-rtdb.asia-southeast1.firebasedatabase.app';
 const SITE = 'https://www.nemoaquastore.in';
@@ -84,17 +84,26 @@ export default async function handler(req, res) {
   const id = String((req.query && req.query.id) || '').trim();
   const target = id ? `${SITE}/?p=${encodeURIComponent(id)}` : SITE;
 
+  /* Started before the branch below, and awaited whichever way it goes: the live-fish switch
+     lives in the store's settings, and the site-level card renders from it too — so loading it
+     only inside the product branch would leave a bare /s/ link reading whatever the last
+     request in this isolate happened to set. Started rather than awaited so it overlaps the
+     product fetch instead of putting a second round trip in front of a waiting scraper.
+     loadStoreSettings swallows its own failures and returns {}, so this never rejects. */
+  const settingsLoaded = loadStoreSettings().catch(() => ({}));
+
   let product = null;
   if (/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
     try {
-      const productResponse = await fetch(`${DB}/products/${encodeURIComponent(id)}.json`, {
-        signal: AbortSignal.timeout(4000),
-      });
+      const [productResponse] = await Promise.all([
+        fetch(`${DB}/products/${encodeURIComponent(id)}.json`, { signal: AbortSignal.timeout(4000) }),
+        settingsLoaded,
+      ]);
       if (productResponse.ok) product = await productResponse.json();
-      // An old share link to a product that is no longer offered — a live fish while
-      // LIVE_FISH_ENABLED is off — must not preview it with its name and price. Dropping
-      // the product falls through to the site-level card below, which is still a working
-      // link. The flag is imported so there is no second copy of it to keep in step.
+      // An old share link to a product that is no longer offered — a live fish while the
+      // switch is off — must not preview it with its name and price. Dropping the product
+      // falls through to the site-level card below, which is still a working link. The flag
+      // is imported so there is no second copy of it to keep in step.
       if (!LIVE_FISH_ENABLED && product && product.category === 'Live Fish') product = null;
     } catch (e) {
       // A slow or unreachable database must not make the link dead. Falling
@@ -102,6 +111,7 @@ export default async function handler(req, res) {
     }
   }
 
+  await settingsLoaded; // the site-level card below reads the switch as well
   const title = product && product.name ? `${product.name} — ₹${priceOf(product)}` : STORE;
   const description =
     product && product.desc

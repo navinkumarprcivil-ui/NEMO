@@ -1,161 +1,164 @@
 /**
  * The live-fish master switch.
  *
- *   node test/live-fish-switch.test.mjs
+ *   node --test test/live-fish-switch.test.mjs
  *
- * Live fish are hidden behind one flag, `LIVE_FISH_ENABLED`, so that they can be brought
- * back in a month by flipping it rather than by re-doing the removal in reverse. That only
- * works if the flag is genuinely the single control, so this suite guards the three ways it
- * could quietly stop being one:
+ * Live fish are hidden behind one setting, `settings.liveFishEnabled`, set from Admin →
+ * Settings → Store, so the owner can bring them back without a deploy. That only works if the
+ * setting is genuinely the single control, so this suite guards the ways it could quietly stop
+ * being one:
  *
- *   1. Drift — the flag is declared in three files (app.jsx, its src/ mirror, and
- *      lib/catalog.mjs for the server-rendered /p/ pages and sitemap). If they disagree, the
- *      storefront and Google see different shops. Restoring must be all three or none.
- *   2. A stale build — `app.js` is a committed build artifact and `index.html` loads it on the
- *      fast path. Editing app.jsx without running `node scripts/build.mjs` changes nothing the
- *      site serves and nothing detects it, so the built bundle's flag is checked here too.
- *   3. A missed surface — the gates that actually hide the fish (the filtered product list on
- *      every shopping surface, the DOA entry point, the checkout live-fish half) are asserted
- *      to still be wired up.
+ *   1. A second copy of the answer. The switch used to be a constant declared in app.jsx, its
+ *      src/ mirror and lib/catalog.mjs, kept in step by this file. Any constant like that
+ *      coming back means the storefront and Google can show different shops again.
+ *   2. Reading it too late. The client seeds it from the cached settings blob at module load
+ *      and updates it in the settings SETTER, before the render that follows — not in an
+ *      effect afterwards, which would leave the storefront a render behind. The server
+ *      refreshes it in loadStoreSettings(), which every render path calls first.
+ *   3. A derived value frozen at load. Anything computed once from the switch at script load
+ *      (the category list, the policy map) is wrong for the whole session of anyone who
+ *      arrives just after the owner flips it — the case the switch exists for.
+ *   4. A missed surface. The gates that actually hide the fish are asserted to still be wired.
  *
- * Every assertion holds in BOTH states of the flag, so turning live fish back on does not
- * turn this suite red. See docs/LIVE_FISH_BACKOUT.md.
+ * Every assertion holds in BOTH states of the switch. See docs/LIVE_FISH_BACKOUT.md.
  */
 
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
-let failures = 0;
-const test = (name, fn) => {
-  try { fn(); console.log(`  ✓ ${name}`); }
-  catch (e) { failures++; console.error(`  ✗ ${name}\n    ${e.message}`); }
-};
-
-/** The flag as written in source. */
-function switchInSource(src, file) {
-  const m = src.match(/(?:export\s+)?const LIVE_FISH_ENABLED\s*=\s*(true|false)\s*;/);
-  assert.ok(m, `${file}: no "const LIVE_FISH_ENABLED = true|false;" declaration found`);
-  return m[1] === 'true';
-}
-/** The flag as it survives esbuild's minifier: `LIVE_FISH_ENABLED=!1` is false. */
-function switchInBundle(src, file) {
-  const m = src.match(/LIVE_FISH_ENABLED\s*=\s*(!0|!1|true|false)\s*[,;]/);
-  assert.ok(m, `${file}: no LIVE_FISH_ENABLED assignment found — did the build inline it away?`);
-  return m[1] === '!0' || m[1] === 'true';
-}
-
 const appJsx = read('app.jsx');
 const srcJsx = read('src/app.jsx');
 const catalog = read('lib/catalog.mjs');
+const share = read('api/share.js');
 const appJs = read('app.js');
 const indexHtml = read('index.html');
 
-const ENABLED = switchInSource(appJsx, 'app.jsx');
-
-console.log(`live fish switch — LIVE_FISH_ENABLED = ${ENABLED}`);
-
-console.log('the flag is one flag');
-test('app.jsx and src/app.jsx agree', () => {
-  assert.equal(switchInSource(srcJsx, 'src/app.jsx'), ENABLED,
-    'src/app.jsx must carry the same LIVE_FISH_ENABLED as app.jsx — the two files are kept in sync');
+test('the switch is a setting, not a constant compiled into the build', () => {
+  for (const [label, src] of [['app.jsx', appJsx], ['src/app.jsx', srcJsx], ['lib/catalog.mjs', catalog]]) {
+    assert.ok(!/(?:export\s+)?const LIVE_FISH_ENABLED\s*=/.test(src),
+      `${label} pins LIVE_FISH_ENABLED to a constant — the owner can no longer change it from Admin`);
+  }
+  assert.match(appJsx, /let LIVE_FISH_ENABLED = readCachedLiveFishSwitch\(\);/);
+  assert.match(catalog, /export let LIVE_FISH_ENABLED = false;/);
+  assert.match(appJsx, /liveFishEnabled: false,/, 'the setting needs a default in DEFAULT_SETTINGS');
 });
-test('lib/catalog.mjs agrees, so /p/ pages and the sitemap match the storefront', () => {
-  assert.equal(switchInSource(catalog, 'lib/catalog.mjs'), ENABLED,
-    'lib/catalog.mjs renders the product pages and sitemap; leaving it out of step would keep live fish in Google');
+
+test('the built bundle carries the runtime switch, not an inlined answer', () => {
+  // app.js is a committed build artifact that index.html loads on the fast path, so a stale
+  // build would keep serving the old, hard-wired behaviour with nothing to detect it.
+  assert.match(appJs, /readCachedLiveFishSwitch/,
+    'app.js is stale: run `node scripts/build.mjs` after changing app.jsx');
+  assert.match(appJs, /liveFishEnabled/);
 });
-test('the committed app.js build agrees — catches a stale build', () => {
-  assert.equal(switchInBundle(appJs, 'app.js'), ENABLED,
-    'app.js is stale: run `node scripts/build.mjs` after changing app.jsx, or the site keeps serving the old switch');
+
+test('the client knows the answer before its first render', () => {
+  // Seeded synchronously from the cached settings blob, so a returning visitor is right from
+  // the first line of the app; a first-ever visitor gets the default, behind the splash.
+  assert.match(appJsx, /function readCachedLiveFishSwitch\(\)\{[\s\S]{0,400}localStorage\.getItem\("nemo-settings"\)/);
+  // Applied in the setter — before the render that follows — not in an effect after it.
+  assert.match(appJsx, /const setSettings = \(next\) => \{ applyLiveFishSwitch\(next\); setSettingsState\(next\); \};/);
+  assert.ok(!/const \[settings,setSettings\]/.test(appJsx),
+    'a raw setSettings would bypass applyLiveFishSwitch');
+});
+
+test('the server refreshes the switch before it renders anything', () => {
+  assert.match(catalog, /export async function loadStoreSettings\(\)/);
+  assert.match(catalog, /LIVE_FISH_ENABLED = settings\.liveFishEnabled === true;/);
+  // loadCatalogue feeds the product pages, the shop index and the sitemap alike.
+  assert.match(catalog, /loadStoreSettings\(\),/);
+  assert.match(catalog, /\.filter\(\(p\) => LIVE_FISH_ENABLED \|\| p\.category !== LIVE_FISH_CATEGORY\)/);
+  // Share previews render without loadCatalogue, so they load the settings themselves — and
+  // must do it on BOTH paths, or a bare /s/ link reads whatever the last request in the
+  // isolate happened to leave behind.
+  assert.match(share, /const settingsLoaded = loadStoreSettings\(\)\.catch/);
+  assert.match(share, /await settingsLoaded; \/\/ the site-level card below reads the switch as well/);
+});
+
+test('an unreachable database fails closed, never open', () => {
+  // Advertising live animals for a shop that has switched them off is the failure the switch
+  // exists to prevent; a fish-free page for a shop that does sell them is recoverable.
+  assert.match(catalog, /\.catch\(\(\) => \(\{\}\)\) \|\| \{\};/);
+  assert.match(appJsx, /const next=!!\(settings&&settings\.liveFishEnabled===true\);/);
+  assert.match(appJsx, /\}catch\(e\)\{\}\n  return false;\n\}/, 'readCachedLiveFishSwitch must default to false');
+});
+
+test('values derived from the switch are computed per call, not once at load', () => {
+  for (const [label, src] of [['app.jsx', appJsx], ['src/app.jsx', srcJsx]]) {
+    assert.match(src, /const shopCategories = \(\) => LIVE_FISH_ENABLED \? CATEGORIES : CATEGORIES\.filter/,
+      `${label}: the category list must be a function`);
+    assert.match(src, /const hiddenPolicyRoutes = \(\) => LIVE_FISH_ENABLED \? \[\]/,
+      `${label}: the hidden policy routes must be a function`);
+    assert.match(src, /const policyMeta = \(\) => LIVE_FISH_ENABLED \? POLICY_META_ALL/,
+      `${label}: the policy map must be a function`);
+    assert.ok(!/const SHOP_CATEGORIES\s*=/.test(src), `${label} froze SHOP_CATEGORIES at load`);
+    assert.ok(!/const HIDDEN_POLICY_ROUTES\s*=/.test(src), `${label} froze HIDDEN_POLICY_ROUTES at load`);
+  }
 });
 
 /* Copy that only makes sense if the store sells live animals. A "fish tank" or "fish food" is
-   dry goods and stays, so this looks for the selling claims, not for the word "fish". */
-const SELLING_COPY = [
-  /live arrival guarantee/i,
-  /dead[- ]on[- ]arrival/i,
-  /\blivestock\b/i,
-  /aquarium fish/i,
-  /buy[^.<]{0,40}fish online/i,
-];
-/* The head and the noscript block — what a crawler and a payment reviewer read. The decorative
-   canvas below them animates a betta and a clownfish; that is branding for an aquarium shop,
-   not a product listing, and it deliberately stays. */
-const indexSeo = indexHtml.slice(0, indexHtml.indexOf('</noscript>') + 11);
-
-console.log('SEO copy in index.html');
-test('carries live-fish selling copy only while the switch is on', () => {
-  for (const re of SELLING_COPY) {
-    const hit = re.test(indexSeo);
-    if (!ENABLED) assert.ok(!hit, `index.html still advertises live fish: ${re}`);
-  }
-  // Whatever the flag, the shell must still describe the shop.
+   dry goods and stays, so this looks for the selling claims, not for the word "fish". The head
+   and noscript block are static — a crawler reads them before any script runs — so they cannot
+   follow a database setting, and restoring live fish means restoring this copy by hand. */
+test('the static SEO shell still describes the shop', () => {
+  const indexSeo = indexHtml.slice(0, indexHtml.indexOf('</noscript>') + 11);
   assert.match(indexSeo, /<meta name="description" content="[^"]{40,}"/);
 });
 
-console.log('the gates are wired up');
 test('every shopping surface reads the filtered product list', () => {
   // `shopProducts` is `products` minus the hidden categories. Order history is in this list
   // too: it renders a past order from the order's own `o.items` snapshot, and only consults
   // the catalogue to decide whether to offer "buy again", a tap-through to the product page
-  // or a review prompt — none of which may resurface a hidden product. Admin is the one
-  // surface that keeps the complete list, asserted the other way below.
+  // or a review prompt — none of which may resurface a hidden product.
   for (const tag of ['HomePage', 'ShopPage', 'DetailPage', 'CartPage', 'CheckoutPage', 'SavedPage', 'MiniCart', 'OrderHistoryPage']) {
-    // JSX props hold arrow functions, so a ">" is not a reliable tag terminator — scan a
-    // bounded window from the tag instead.
     const m = appJsx.match(new RegExp(`<${tag}\\s[\\s\\S]{0,900}?products=\\{(\\w+)\\}`));
     assert.ok(m, `${tag} is not passed a products prop any more — re-check the live-fish gate`);
     assert.equal(m[1], 'shopProducts', `${tag} must shop from shopProducts, not the unfiltered list`);
   }
 });
+
 test('admin keeps the complete catalogue', () => {
   // The owner still manages the hidden Live Fish products, and Admin is where a past order's
   // fish line items, DOA claim and refund are reviewed and resolved. Both need every product.
-  for (const tag of ['AdminHub']) {
-    const m = appJsx.match(new RegExp(`<${tag}\\s[\\s\\S]{0,900}?products=\\{(\\w+)\\}`));
-    assert.ok(m, `${tag} is not passed a products prop any more`);
-    assert.equal(m[1], 'products', `${tag} must keep the unfiltered list so past orders still render`);
-  }
+  const m = appJsx.match(/<AdminHub\s[\s\S]{0,900}?products=\{(\w+)\}/);
+  assert.ok(m, 'AdminHub is not passed a products prop any more');
+  assert.equal(m[1], 'products', 'AdminHub must keep the unfiltered list so past orders still render');
 });
+
 test('shopProducts is declared before anything reads it', () => {
   // A React dependency array is evaluated during render, at the point the useEffect call
   // appears — so a `[products, shopProducts]` above the `const shopProducts = useMemo(...)`
-  // is a temporal-dead-zone ReferenceError that crashes the app on first paint. Nothing in a
-  // source-level suite or in the build's parse check catches that, so it is asserted here.
+  // is a temporal-dead-zone ReferenceError that crashes the app on first paint.
   const decl = appJsx.indexOf('const shopProducts=useMemo(');
   assert.ok(decl > 0, 'shopProducts memo not found');
-  const firstUse = appJsx.indexOf('shopProducts');
-  assert.equal(firstUse, decl + 'const '.length,
+  assert.equal(appJsx.indexOf('shopProducts'), decl + 'const '.length,
     'shopProducts is read before it is declared — hoist the memo above its first use');
 });
+
 test('the cart drops hidden items before the first render', () => {
   assert.match(appJsx, /useState\(\(\)=>\{ try\{ return shoppable\(JSON\.parse\(localStorage\.getItem\("nemo-cart"\)/,
     'a basket saved before the switch was flipped must be filtered on load');
 });
+
 test('the DOA claim entry point is gated by the switch', () => {
   const fn = appJsx.slice(appJsx.indexOf('function doaEntryOpen('));
   assert.match(fn.slice(0, 600), /if\(!LIVE_FISH_ENABLED\) return false;/,
     'doaEntryOpen must refuse new claims while the switch is off (existing claims still render)');
 });
+
 test('the checkout live-fish half is gated by the switch', () => {
   assert.match(appJsx, /const hasLiveFish=LIVE_FISH_ENABLED && cart\.some/,
     'checkout must not price live-fish shipping or the guarantee while the switch is off');
 });
-test('the storefront category list is derived from the switch', () => {
-  assert.match(appJsx, /const SHOP_CATEGORIES = LIVE_FISH_ENABLED \? CATEGORIES : CATEGORIES\.filter/);
-  assert.match(appJsx, /const list=all\?\["All",\.\.\.SHOP_CATEGORIES\]:SHOP_CATEGORIES;/,
-    'the category chips must use SHOP_CATEGORIES');
+
+test('the category chips render from the derived list', () => {
+  assert.match(appJsx, /const list=all\?\["All",\.\.\.cats\]:cats;/);
+  assert.match(appJsx, /const cats=shopCategories\(\);/);
 });
-test('the server catalogue filters the hidden category at its single source', () => {
-  assert.match(catalog, /\.filter\(\(p\) => LIVE_FISH_ENABLED \|\| p\.category !== LIVE_FISH_CATEGORY\)/,
-    'loadCatalogue feeds the product pages, the shop index and the sitemap alike');
-});
-test('policy pages that describe shipping live animals follow the switch', () => {
-  assert.match(appJsx, /const HIDDEN_POLICY_ROUTES = LIVE_FISH_ENABLED \? \[\] : \["policy-guarantee","policy-acclimatize"\]/);
-  assert.match(appJsx, /const POLICY_META = LIVE_FISH_ENABLED \? POLICY_META_ALL/);
-});
-test('the owner\'s saved policy text is never rewritten, only rendered around', () => {
+
+test("the owner's saved policy text is never rewritten, only rendered around", () => {
   // The live-fish wording lives in Firebase and has to come back verbatim, so the switch
   // must not reach normalizeSettings — whose result is what Admin saves back.
   const norm = appJsx.slice(appJsx.indexOf('function normalizeSettings('));
@@ -164,5 +167,7 @@ test('the owner\'s saved policy text is never rewritten, only rendered around', 
     'normalizeSettings must stay switch-free: its result is saved back, so sanitising there would overwrite the owner\'s policies in Firebase');
 });
 
-console.log(failures ? `\n${failures} failing` : '\nall passing');
-process.exit(failures ? 1 : 0);
+test('the owner has somewhere to flip it', () => {
+  assert.match(appJsx, /onChange=\{e=>set\("liveFishEnabled",e\.target\.checked\)\}/);
+  assert.match(appJsx, /Sell live fish/);
+});
