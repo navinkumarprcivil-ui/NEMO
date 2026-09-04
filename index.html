@@ -1106,12 +1106,11 @@
 })();
 </script>
 
-<!-- ══ Drifting jellyfish — a couple of them, roaming the whole screen ══
-     They wander the way the betta and the clownfish do: each picks a spot at random, swims
-     over to it and picks another, so they cross the same water more than once instead of
-     running one-way traffic from the bottom edge to the top. Built as an SVG (not a flat
-     image) so the bell can actually contract and the tentacles trail: a real jellyfish swims
-     by squeezing its bell to surge, then glides while it relaxes. -->
+<!-- ══ Drifting jellyfish — a couple at a time, crossing slowly from bottom→top ══
+     Each one enters at a random point along the bottom and leaves at a different random point
+     along the top, wandering rather than ruling a line between them. Built as an SVG (not a
+     flat image) so the bell can actually contract and the tentacles trail: a real jellyfish
+     swims by squeezing its bell to surge, then glides while it relaxes. -->
 <div id="nemo-jelly" aria-hidden="true"></div>
 <style>
   #nemo-jelly{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;}
@@ -1205,23 +1204,13 @@
   window.addEventListener('touchstart',function(e){ var t=e.touches&&e.touches[0]; if(t) markPtr(t.clientX,t.clientY,1600); },{passive:true});
   window.addEventListener('touchmove',function(e){ var t=e.touches&&e.touches[0]; if(t) markPtr(t.clientX,t.clientY,400); },{passive:true});
 
-  // ── Two drifters, roaming the whole screen ─────────────────────────────────
-  /* They used to run one-way crossings: in at the bottom, out at the top, gone. That reads as
-     traffic rather than as an aquarium — the same journey every time, and never once passing
-     back through where you were looking. They swim like the betta and the clownfish now: each
-     one picks a spot at random, wanders over to it, picks another, and never leaves. The swim
-     itself is unchanged — a bell contraction that surges it forward, then a long glide while
-     the bell refills — it just steers along its own heading now instead of straight up. */
+  // ── A couple of drifters, each on its own crossing ─────────────────────────
+  // Each slot runs an independent cycle: spawn → cross → leave → wait → spawn again. Keeping
+  // them in separate slots means one leaving never disturbs the other's climb, and they drift
+  // out of step on their own instead of rising as a matched pair.
   var MAX=2;
-  var uid=0, live=[], raf=0, running=true, last=0, sized=false;
-
-  // Somewhere new to be. Kept off the very edges so a target never parks it against a wall.
-  function retarget(jf,W,H){
-    var m=Math.max(40,jf.w);
-    jf.tx=m+Math.random()*Math.max(1,W-m*2);
-    jf.ty=H*0.10+Math.random()*Math.max(1,H*0.70);
-    jf.tAt=(performance.now?performance.now():Date.now())+9000+Math.random()*9000;
-  }
+  var uid=0, live=[], slots=[], raf=0, running=true, last=0, seeded=false;
+  for(var si=0; si<MAX; si++) slots.push({d:null, at:0});
 
   // Two entering side by side reads as a pair rather than as drift, so a new one keeps clear
   // of whatever is already in the water.
@@ -1230,36 +1219,55 @@
     return false;
   }
 
-  function spawn(W,H){
+  function spawn(){
     uid++;
+    var W=window.innerWidth, H=window.innerHeight;
     // The betta and clownfish in the wallpaper render 72-78px wide; keep this well under half
-    // of that. The bell is ~84% of the SVG width, so a 34px svg gives a ~29px bell.
+    // of that. The bell is ~86% of the SVG width, so a 34px svg gives a ~29px bell.
     var w=26+Math.random()*7, h=w*(380/200);
     var box=document.createElement('div');
     box.innerHTML=svg(uid);
     var el=box.firstChild;
     host.appendChild(el);                          // append — never wipe the other drifter
     el.style.width=w+'px'; el.style.height=h+'px';
-    var m=w*0.7, span=Math.max(40,W-w*1.4), x0=m+Math.random()*span;
+    // Like the fish in the wallpaper, it crosses: enters at a random point along the bottom and
+    // leaves at a different random point along the top. Both ends can land anywhere across the
+    // width, so over a few drifters the whole screen gets used.
+    var m=w*0.6, span=Math.max(40,W-w*1.2), x0=m+Math.random()*span;
+    // A handful of tries to find a clear entry; on a window too narrow to separate them, take
+    // whatever came up rather than spin.
     for(var a=0; a<8 && crowded(x0,W); a++) x0=m+Math.random()*span;
+    // How far sideways it wants to end up — always a visible crossing, never a near-vertical
+    // line. If that would run it off one edge, send it the other way instead.
+    var reach=Math.max(60,W*0.18)+Math.random()*span*0.55, dir=Math.random()<0.5?-1:1;
+    var x1=x0+dir*reach;
+    if(x1<m||x1>m+span) x1=x0-dir*reach;
+    x1=Math.min(m+span,Math.max(m,x1));
+    var y0=H+h*0.6;                                // start just below the bottom edge
     var jf={
       el:el, w:w, h:h,
-      cx:x0, cy:H*0.15+Math.random()*H*0.6,        // bell centre, in page coordinates
-      vx:(Math.random()-0.5)*8, vy:(Math.random()-0.5)*8,
-      tx:0, ty:0, tAt:0,
-      baseCx:x0, push:0, pushDir:0,
-      vxs:0,                                       // smoothed sideways speed, for the bank
-      swayHz:0.012+Math.random()*0.008,            // one slow cycle over many seconds
+      y:y0, y0:y0,
+      travel:y0-(-h-10),                           // bottom edge → clear off the top
+      x0:x0, x1:x1, cx:x0, baseCx:x0, push:0, pushDir:0,
+      // It doesn't rule a straight line between the two — it meanders there. Two slow waves at
+      // unrelated rates never repeat the same shape twice, so each crossing wanders differently.
+      wan:Math.min(W*0.20,55+Math.random()*80),    // how wide the meander swings, in px
+      wf1:0.8+Math.random()*1.1,                   // slow swings per crossing
+      wf2:2.2+Math.random()*1.9,                   // faster ripple riding on top
+      wp1:Math.random()*Math.PI*2,
+      wp2:Math.random()*Math.PI*2,
+      lastCx:null, vxs:0,                            // smoothed sideways speed, for the bank
+      amp:4+Math.random()*3,                       // fine jitter on top of the meander
+      swayHz:0.012+Math.random()*0.008,            // under one slow cycle across the whole rise
       swayPh:Math.random()*Math.PI*2,
-      amp:3+Math.random()*3,                       // fine jitter on top of the steering
       pulseT:Math.random(),                        // where in the swim stroke it starts
       pulseDur:2.5+Math.random()*0.9,              // seconds per contraction cycle
+      rise:12+Math.random()*3,                     // net px/sec after the coast — just above the bubbles
       act:0,                                       // 0 = calm drift, 1 = stirred up by the pointer
       bell:el.querySelector('.jelly-bell'),
       arms:el.querySelector('.jelly-arms'),
       tents:el.querySelector('.jelly-tents')
     };
-    retarget(jf,W,H);
     // keep the artwork's own origin sensible for squash/stretch
     if(jf.bell){ jf.bell.style.transformBox='fill-box'; jf.bell.style.transformOrigin='center bottom'; }
     if(jf.arms){ jf.arms.style.transformBox='fill-box'; jf.arms.style.transformOrigin='top center'; }
@@ -1268,93 +1276,90 @@
     return jf;
   }
 
-  // One drifter, one frame.
-  function step(jf,dt,now,W,H){
-    // Swim stroke first — it decides how hard this frame can push. A contraction drives it
-    // forward; the long recovery that follows is a glide with nothing behind it, which is what
-    // makes a jellyfish look like a jellyfish rather than something being dragged on a string.
-    jf.pulseT+=dt/(jf.pulseDur/(1+jf.act*1.15)); if(jf.pulseT>1) jf.pulseT-=1;
-    var p=jf.pulseT, contract=0.42, thrust, squash;
-    if(p<contract){
-      var k=p/contract;
-      thrust=Math.sin(k*Math.PI);
-      squash=Math.sin(k*Math.PI);
-    } else {
-      var r=(p-contract)/(1-contract);
-      thrust=0;
-      squash=-0.35*Math.sin(r*Math.PI);            // slight over-relax, like a bell refilling
-    }
-
-    // Steer toward the spot it chose. Arriving, or simply having spent long enough on one
-    // heading, sends it somewhere else.
-    var ax=jf.tx-jf.cx, ay=jf.ty-jf.cy, ad=Math.hypot(ax,ay);
-    if(ad<45||now>jf.tAt){ retarget(jf,W,H); ax=jf.tx-jf.cx; ay=jf.ty-jf.cy; ad=Math.hypot(ax,ay)||1; }
-    var drive=45*(1+jf.act*1.5)*thrust;            // px/s², and only while the bell is squeezing
-    jf.vx+=(ax/ad)*drive*dt;
-    jf.vy+=(ay/ad)*drive*dt;
-
-    // Soft walls, in case a resize leaves it outside its own target range.
-    var mx=jf.w*0.7, myTop=jf.h*0.10, myBot=Math.max(myTop,H-jf.h*0.15);
-    if(jf.cx<mx) jf.vx+=34*dt; else if(jf.cx>W-mx) jf.vx-=34*dt;
-    if(jf.cy<myTop) jf.vy+=34*dt; else if(jf.cy>myBot) jf.vy-=34*dt;
-
-    // The glide. Water drags it down to a stall between strokes, which is the whole point.
-    var damp=Math.pow(0.68,dt);
-    jf.vx*=damp; jf.vy*=damp;
-    var sp=Math.hypot(jf.vx,jf.vy), MAXV=24*(1+jf.act*0.8);
-    if(sp>MAXV){ jf.vx*=MAXV/sp; jf.vy*=MAXV/sp; }
-    jf.cx+=jf.vx*dt; jf.cy+=jf.vy*dt;
-
-    // A slow sway on top, so a long straight run to a distant target still breathes.
+  // One drifter, one frame. Returns false once it has cleared the top and is done.
+  function step(jf,dt,now,W){
+    // Where it sits this frame. The start and end lanes only set the overall trend — between
+    // them it meanders, drifting off one way and then back, the way something with no say in
+    // where the water takes it does. The envelope pins the wander to zero at both ends so it
+    // still enters and leaves on the lanes it was given.
+    var t=(jf.y0-jf.y)/jf.travel; if(t<0)t=0; else if(t>1)t=1;
+    var ease=t*t*(3-2*t);                 // smoothstep — no corner at either end of the crossing
+    var env=Math.sin(Math.PI*t);
+    var wander=(Math.sin(t*Math.PI*2*jf.wf1+jf.wp1)*0.6+
+                Math.sin(t*Math.PI*2*jf.wf2+jf.wp2)*0.4)*jf.wan*env;
     jf.swayPh+=dt*Math.PI*2*jf.swayHz;
     var sway=Math.sin(jf.swayPh);
-    jf.baseCx=jf.cx+sway*jf.amp;
-
-    // Their paths are independent, so two of them can converge mid-screen — which reads as a
+    var base=jf.x0+(jf.x1-jf.x0)*ease+wander+sway*jf.amp;
+    jf.baseCx=base;
+    // Their meanders are independent, so two of them can converge mid-screen — which reads as a
     // collision, not as drift. Ease them apart as they close: nothing at arm's length, growing
-    // smoothly the nearer they get, and both feel it so the gap opens twice as fast. The side
-    // is settled once on first approach — recompute it every frame and the direction inverts
-    // the instant they cross, which snaps them apart instead of parting them.
+    // smoothly the nearer they get, and both feel it so the gap opens twice as fast.
+    // Measured between the un-nudged paths, so the nudge can't keep re-deciding its own size,
+    // and the side is settled once on first approach — recompute it every frame and the
+    // direction inverts the instant they cross, which snaps them apart instead of parting them.
     var want=0, meeting=false;
     for(var q=0;q<live.length;q++){
       var o=live[q]; if(o===jf) continue;
-      var ddx=jf.baseCx-o.baseCx, dist=Math.hypot(ddx,jf.cy-o.cy), R=200;
+      var ddx=base-o.baseCx, dist=Math.hypot(ddx,jf.y-o.y), R=280;
       if(dist<R){
         meeting=true;
-        if(!jf.pushDir) jf.pushDir=(ddx||(jf.cx-o.cx)||1)>0?1:-1;   // commit to a side
+        if(!jf.pushDir) jf.pushDir=(ddx||(jf.x0-o.x0)||1)>0?1:-1;   // commit to a side
         var f=1-dist/R;
-        want+=jf.pushDir*f*f*36;
+        want+=jf.pushDir*f*f*40;
       }
     }
     if(!meeting) jf.pushDir=0;            // clear of each other — ready to decide afresh
     jf.push+=(want-jf.push)*0.04;
-    var cx=jf.baseCx+jf.push;
+    var cx=base+jf.push;
+    // The meander must never carry it off the edge, whatever the window is doing right now.
     var lo=jf.w*0.6, hi=Math.max(lo,W-jf.w*0.6);
     if(cx<lo) cx=lo; else if(cx>hi) cx=hi;
+    jf.cx=cx;                             // published so the next spawn can keep its distance
+    var x=cx-jf.w/2;
+    // Banks toward wherever it's actually heading — smoothed, so the tilt follows the drift
+    // rather than twitching frame to frame.
+    /* Seeded on the first frame rather than at spawn. The published position carries the
+       sway, whose phase starts at random, so measuring the first frame against the spawn point
+       was a jump of several pixels divided by one frame — several hundred px/s of imaginary
+       sideways speed, which the smoothing then took most of a minute to forget. */
+    if(jf.lastCx===null) jf.lastCx=cx;
+    var vx=(cx-jf.lastCx)/Math.max(dt,0.001); jf.lastCx=cx;
+    jf.vxs+=(vx-jf.vxs)*0.06;
+    var lean=Math.max(-8,Math.min(8,jf.vxs*0.30));
 
-    /* Banks toward wherever it's actually heading, held to a small angle: with tentacles this
-       long, anything more reads as a jellyfish falling over.
-
-       Read straight off the velocity rather than differentiated from the rendered position.
-       The rendered position carries the sway and the separation nudge, and on a jelly's very
-       first frame the sway starts at a random phase — so the difference against the spawn
-       point was a jump of several pixels in one frame, which divided by dt looked like several
-       hundred px/s and left the smoothed value pinned at the clamp for a minute afterwards.
-       Every jellyfish swam permanently keeled over. The velocity has no such discontinuity. */
-    jf.vxs+=(jf.vx-jf.vxs)*0.06;
-    var lean=Math.max(-10,Math.min(10,jf.vxs*0.42));
-
-    // Pointer nearby (or a recent tap) stirs it up: it pulses harder and swims quicker, then
-    // settles back to its calm drift. Wakes fast, calms slowly — like a startled animal.
+    // Pointer nearby (or a recent tap) stirs it up: it pulses harder and climbs quicker,
+    // then settles back to its calm drift. Wakes fast, calms slowly — like a startled animal.
     var near=0;
     if(now<ptr.until){
-      var d=Math.hypot(ptr.x-cx, ptr.y-jf.cy), R2=78;
-      if(d<R2) near=1-d/R2;
+      var d=Math.hypot(ptr.x-(x+jf.w/2), ptr.y-(jf.y+jf.h*0.28)), R=78;
+      if(d<R) near=1-d/R;
     }
     jf.act+=(near-jf.act)*(near>jf.act?0.16:0.015);
 
-    var x=cx-jf.w/2, y=jf.cy-jf.h*0.18;   // the bell centre sits ~18% down the artwork
-    jf.el.style.transform='translate3d('+x.toFixed(1)+'px,'+y.toFixed(1)+'px,0) rotate('+lean.toFixed(2)+'deg)';
+    // Swim stroke: a contraction that pushes it along, then a longer recovery while the bell
+    // refills. The contrast is what keeps it alive rather than sliding, but it stays gentle.
+    jf.pulseT+=dt/(jf.pulseDur/(1+jf.act*1.15)); if(jf.pulseT>1) jf.pulseT-=1;
+    var p=jf.pulseT, contract=0.42, thrust, squash, sink=0;
+    if(p<contract){                       // power stroke — bell squeezes and it gains on the drift
+      var k=p/contract;
+      thrust=Math.sin(k*Math.PI);
+      squash=Math.sin(k*Math.PI);
+    } else {                              // recovery — bell refills and it coasts to a stall
+      var r=(p-contract)/(1-contract);
+      thrust=0;
+      squash=-0.35*Math.sin(r*Math.PI);   // slight over-relax, like a bell refilling
+      sink=Math.sin(r*Math.PI)*0.85+0.15; // eases in, so it doesn't stall the instant the stroke ends
+    }
+    // Pulse-and-glide, the way a jellyfish actually travels — but most of the climb now rides on
+    // the steady glide, with the contraction only nudging it along, so one stroke carries it
+    // about half as far as it used to. Net speed is unchanged (jf.rise px/sec): the drag at peak
+    // recovery exactly cancels the glide, so it hangs still for a beat instead of lurching.
+    var glide= jf.rise*0.55;
+    var up   = jf.rise*2.5*(1+jf.act*1.4)*thrust;
+    var down = jf.rise*0.55*(1-jf.act*0.5)*sink;   // stirred up, it holds its coast better
+    jf.y-=(glide+up-down)*dt;
+
+    jf.el.style.transform='translate3d('+x.toFixed(1)+'px,'+jf.y.toFixed(1)+'px,0) rotate('+lean.toFixed(2)+'deg)';
     // Bell works harder when it's stirred up.
     var amp=1+jf.act*0.45;
     if(jf.bell) jf.bell.style.transform='scale('+(1+squash*0.10*amp).toFixed(3)+','+(1-squash*0.16*amp).toFixed(3)+')';
@@ -1362,15 +1367,42 @@
     var lag=Math.sin((p-0.16)*Math.PI*2);
     if(jf.arms)  jf.arms.style.transform='scaleY('+(1+lag*0.07*amp).toFixed(3)+') skewX('+(sway*1.6).toFixed(2)+'deg)';
     if(jf.tents) jf.tents.style.transform='scaleY('+(1+lag*0.10*amp).toFixed(3)+') skewX('+(sway*2.6).toFixed(2)+'deg)';
+
+    return jf.y >= -jf.h-10;              // false once it has cleared the top
+  }
+
+  function retire(slot,now){
+    if(slot.d.el.parentNode) host.removeChild(slot.d.el);
+    var k=live.indexOf(slot.d); if(k>=0) live.splice(k,1);
+    slot.d=null;
+    slot.at=now+1200+Math.random()*1800;  // a beat before this slot sends up the next one
   }
 
   function frame(now){
     if(!running){ raf=0; return; }
     if(!last) last=now;
     var dt=Math.min(0.05,(now-last)/1000); last=now;
-    var W=window.innerWidth, H=window.innerHeight;
-    if(!sized){ sized=true; for(var i=0;i<MAX;i++) spawn(W,H); }
-    for(var s=0;s<live.length;s++) step(live[s],dt,now,W,H);
+    var W=window.innerWidth;
+    // First frame sets the clock: stagger the slots so they don't rise as a matched pair.
+    if(!seeded){ seeded=true; for(var i=0;i<slots.length;i++) slots[i].at=now+i*(2500+Math.random()*4500); }
+
+    var next=Infinity;
+    for(var s=0;s<slots.length;s++){
+      var slot=slots[s];
+      if(!slot.d){
+        if(now>=slot.at) slot.d=spawn();
+        else { if(slot.at<next) next=slot.at; continue; }
+      }
+      if(!step(slot.d,dt,now,W)){ retire(slot,now); if(slot.at<next) next=slot.at; }
+    }
+
+    // Nothing in the water and nothing due for a moment — let the browser idle until then
+    // rather than burning frames on an empty layer.
+    if(!live.length && next-now>250){
+      raf=0;
+      setTimeout(function(){ if(running&&!raf){ last=0; raf=requestAnimationFrame(frame); } }, next-now);
+      return;
+    }
     raf=requestAnimationFrame(frame);
   }
 
@@ -1380,15 +1412,13 @@
     if(!running){ if(raf) cancelAnimationFrame(raf); raf=0; }
     else start();
   });
-  // Narrowing the window must not strand one off-screen — pull it, and wherever it was
-  // heading, back inside the new frame.
+  // Narrowing the window must not strand an in-flight drifter off-screen — pull both ends of
+  // every crossing back inside the new width.
   window.addEventListener('resize',function(){
-    var W=window.innerWidth, H=window.innerHeight;
     for(var i=0;i<live.length;i++){
-      var d=live[i], m=d.w*0.7, hi=Math.max(m,W-m);
-      d.cx=Math.min(hi,Math.max(m,d.cx));
-      d.cy=Math.min(Math.max(0,H-d.h*0.15),Math.max(d.h*0.10,d.cy));
-      retarget(d,W,H);
+      var d=live[i], m=d.w*0.6, hi=Math.max(m,window.innerWidth-m);
+      d.x0=Math.min(hi,Math.max(m,d.x0));
+      d.x1=Math.min(hi,Math.max(m,d.x1));
     }
   },{passive:true});
   start();
