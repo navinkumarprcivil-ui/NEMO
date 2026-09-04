@@ -5674,7 +5674,7 @@ function Toast({msg,type,onDone}){
   const ok=type==="success";
   return(
     <div style={{position:"fixed",top:16,left:"50%",background:ok?C.success:C.danger,color:"white",
-      borderRadius:14,padding:"11px 20px",fontSize:13,fontWeight:700,zIndex:9999,
+      borderRadius:16,padding:"11px 20px",fontSize:13,fontWeight:700,zIndex:9999,
       fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",gap:8,
       boxShadow:"0 4px 20px rgba(0,0,0,.25)",whiteSpace:"nowrap",
       animation:"toastIn .3s ease both"}}>
@@ -5743,7 +5743,7 @@ function MiniCountdown({endsAt,compact=false}){
   if(compact)return(
     <div style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"3px 7px",marginTop:4}}>
       <span style={{fontSize:9,color:"#c2410c"}}>⏱</span>
-      <span style={{fontFamily:PRICE_FONT,fontSize:10.5,fontWeight:800,color:"#c2410c",letterSpacing:.5}}>
+      <span style={{fontFamily:PRICE_FONT,fontSize:10,fontWeight:800,color:"#c2410c",letterSpacing:.5}}>
         {h>0?`${fmt(h)}h `:""}{fmt(m)}:{fmt(s)}
       </span>
       <span style={{fontSize:9,color:"#9a3412",fontWeight:600}}>left</span>
@@ -5790,26 +5790,26 @@ function OfferBanners({settings,orders=[]}){
   const copy=(code)=>{ try{ navigator.clipboard.writeText(code); }catch(e){} setCopied(code); setTimeout(()=>setCopied(""),1600); };
   return(
     <div onClick={close} role="presentation" style={{position:"fixed",inset:0,zIndex:4200,background:"rgba(15,23,42,.56)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
-      <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Today's promotions" className="fade-rise" style={{position:"relative",width:"min(92vw,430px)",maxHeight:"82vh",overflowY:"auto",background:C.card,borderRadius:22,padding:"18px",boxShadow:"0 24px 70px rgba(15,23,42,.32)"}}>
-        <button className="press" onClick={close} aria-label="Close promotion" style={{position:"absolute",right:10,top:9,width:36,height:36,borderRadius:18,border:`1px solid ${C.border}`,background:"rgba(255,255,255,.94)",fontSize:20,fontWeight:800,color:C.text,zIndex:2}}>×</button>
+      <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Today's promotions" className="fade-rise" style={{position:"relative",width:"min(92vw,430px)",maxHeight:"82vh",overflowY:"auto",background:C.card,borderRadius:20,padding:"18px",boxShadow:"0 24px 70px rgba(15,23,42,.32)"}}>
+        <button className="press" onClick={close} aria-label="Close promotion" style={{position:"absolute",right:10,top:9,width:36,height:36,borderRadius:20,border:`1px solid ${C.border}`,background:"rgba(255,255,255,.94)",fontSize:20,fontWeight:800,color:C.text,zIndex:2}}>×</button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,fontSize:18,color:C.text,paddingRight:38,marginBottom:12}}>Today at Nemo</div>
         {list.map(c=>{
           const bg=c.bg||"#7c3aed";
           const worth=c.type==="coins"?`${c.value} reward coins`:c.type==="percent"?`${c.value}% off${c.maxDiscount>0?` (up to ₹${c.maxDiscount})`:""}`:`₹${c.value} off`;
           return(
-            <div key={c.id} style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:18,padding:"18px 16px",marginBottom:12,textAlign:"center",boxShadow:`0 8px 22px ${bg}33`}}>
-              <div style={{fontSize:30,lineHeight:1}}>{c.emoji||"🎉"}</div>
+            <div key={c.id} style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:20,padding:"18px 16px",marginBottom:12,textAlign:"center",boxShadow:`0 8px 22px ${bg}33`}}>
+              <div style={{fontSize:28,lineHeight:1}}>{c.emoji||"🎉"}</div>
               <div style={{fontSize:13,fontWeight:800,color:"rgba(255,255,255,.92)",marginTop:6,letterSpacing:.3}}>{c.name||"Special offer"}</div>
-              {c.value>0&&<div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"white",lineHeight:1.15,marginTop:2}}>{worth}</div>}
-              {(c.minOrder>0||c.firstOrderOnly)&&<div style={{fontSize:11.5,color:"rgba(255,255,255,.85)",marginTop:4}}>{c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}</div>}
+              {c.value>0&&<div style={{fontFamily:PRICE_FONT,fontSize:24,fontWeight:800,color:"white",lineHeight:1.15,marginTop:2}}>{worth}</div>}
+              {(c.minOrder>0||c.firstOrderOnly)&&<div style={{fontSize:11,color:"rgba(255,255,255,.85)",marginTop:4}}>{c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}</div>}
               {c.code&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:11,flexWrap:"wrap"}}>
                 <div style={{background:"rgba(255,255,255,.2)",borderRadius:8,padding:"5px 14px",border:"1px dashed rgba(255,255,255,.6)"}}><span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{c.code}</span></div>
-                <button className="press" onClick={()=>copy(c.code)} style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 13px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied===c.code?"✓ Copied":"Copy"}</button>
+                <button className="press" onClick={()=>copy(c.code)} style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:12,padding:"7px 13px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied===c.code?"✓ Copied":"Copy"}</button>
               </div>}
             </div>
           );
         })}
-        <div style={{fontSize:10.5,color:C.textSub,textAlign:"center"}}>Shown once per day. Tap outside this card or × to close.</div>
+        <div style={{fontSize:10,color:C.textSub,textAlign:"center"}}>Shown once per day. Tap outside this card or × to close.</div>
       </div>
     </div>
   );
@@ -5833,22 +5833,22 @@ function LoyaltyWidget({points,settings,onRedeem,redeemApplied,subtotal=0}){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:redeemApplied?0:5}}>
         <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
           <span style={{fontSize:18}}>👛</span>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13.5,fontWeight:800,color:"white",lineHeight:1.2,whiteSpace:"nowrap"}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:"white",lineHeight:1.2,whiteSpace:"nowrap"}}>
             {points} coins <span style={{fontWeight:600,opacity:.82}}>· ₹{totalWorth}</span>
           </div>
         </div>
         {!redeemApplied&&(
           <button className="press" onClick={onRedeem} disabled={!canRedeem}
-            style={{background:canRedeem?"rgba(255,255,255,.2)":"rgba(255,255,255,.08)",border:`1px solid ${canRedeem?"rgba(255,255,255,.5)":"rgba(255,255,255,.2)"}`,borderRadius:8,padding:"6px 9px",color:canRedeem?"white":"rgba(255,255,255,.55)",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:canRedeem?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
+            style={{background:canRedeem?"rgba(255,255,255,.2)":"rgba(255,255,255,.08)",border:`1px solid ${canRedeem?"rgba(255,255,255,.5)":"rgba(255,255,255,.2)"}`,borderRadius:8,padding:"6px 9px",color:canRedeem?"white":"rgba(255,255,255,.55)",fontSize:10,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:canRedeem?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
             {points<min?`Need ${min-points} coins`:!orderOk?`Min. order ₹${minOrder}`:`Use ₹${worth}`}
           </button>
         )}
       </div>
       {redeemApplied&&(
-        <div style={{fontSize:10.5,color:"rgba(255,255,255,.9)",fontWeight:700}}>✓ ₹{worth} wallet applied{points>maxCoins?` · max ${maxCoins} coins/order`:""}</div>
+        <div style={{fontSize:10,color:"rgba(255,255,255,.9)",fontWeight:700}}>✓ ₹{worth} wallet applied{points>maxCoins?` · max ${maxCoins} coins/order`:""}</div>
       )}
       {!redeemApplied&&canRedeem&&points>maxCoins&&(
-        <div style={{fontSize:9.5,color:"rgba(255,255,255,.8)",marginTop:3}}>Up to {maxCoins} coins (₹{Math.floor(maxCoins*val)}) per order</div>
+        <div style={{fontSize:9,color:"rgba(255,255,255,.8)",marginTop:3}}>Up to {maxCoins} coins (₹{Math.floor(maxCoins*val)}) per order</div>
       )}
       {!redeemApplied&&!canRedeem&&(
         <div style={{background:"rgba(0,0,0,.15)",borderRadius:8,height:3,overflow:"hidden",marginTop:3}}>
@@ -5987,20 +5987,20 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
     <div style={{marginBottom:26}}>
       {showGallery&&<React.Fragment>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>{contest?"🏆 Tank of the Month":"🪸 Customer Tanks"}</span>
+        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>{contest?"🏆 Tank of the Month":"🪸 Customer Tanks"}</span>
         {ranked.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{ranked.length} live</span>}
       </div>
 
       {minePending&&(
         <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={showcaseImgs(mine)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your new tank is awaiting approval. {mineApproved?"Your current approved photo stays live unless this replacement is approved.":"It will go live only after it meets the store rules and is approved."}</div>
+          <div style={{fontSize:11,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your new tank is awaiting approval. {mineApproved?"Your current approved photo stays live unless this replacement is approved.":"It will go live only after it meets the store rules and is approved."}</div>
         </div>
       )}
       {mineApproved&&(
         <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={showcaseImgs(mineApproved)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#15803d",fontWeight:600,lineHeight:1.45}}>
+          <div style={{fontSize:11,color:"#15803d",fontWeight:600,lineHeight:1.45}}>
             ✓ Your current tank is live{contest?<> · <b>🗳️ {votesFor(mineApproved)}</b></>:null}{showcaseHoursLeft(mineApproved,now)>0?<> · <b>🕒 {showcaseHoursLeft(mineApproved,now)}h</b></>:null}{minePending?" · replacement pending":""}.
           </div>
         </div>
@@ -6012,7 +6012,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
             const n=votesFor(s);
             const voted=hasVotedForTank(s,user&&user.uid,votes);
             return(
-              <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:142,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${contest&&voted?C.primary:C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
+              <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:142,borderRadius:16,overflow:"hidden",background:C.card,border:`1px solid ${contest&&voted?C.primary:C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
                 <div style={{position:"relative",height:104}}>
                   <TankSlides imgs={imgs} alt={s.ownerName} height={104}/>
                   {contest&&idx===0&&n>0&&<span style={{position:"absolute",top:6,left:6,background:"rgba(251,191,36,.95)",color:"#7c2d12",fontSize:9,fontWeight:800,borderRadius:20,padding:"2px 7px"}}>LEADING</span>}
@@ -6021,7 +6021,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
                 <div style={{padding:"7px 8px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.ownerName}</div>
                   {s.caption&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.caption}</div>}
-                  <div style={{fontSize:10.5,color:contest&&voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>🗳️ {n} · 🕒 {showcaseHoursLeft(s,now)}h</div>
+                  <div style={{fontSize:10,color:contest&&voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>🗳️ {n} · 🕒 {showcaseHoursLeft(s,now)}h</div>
                 </div>
               </div>
             );
@@ -6035,27 +6035,27 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text}}>📸 {minePending?"Update pending photos":mineApproved?"Submit replacement photos":"Customer Tank Showcase"}</div>
             <button type="button" className="press" disabled={!anyReward} onClick={()=>{if(anyReward)setRulesOpen(true);}}
               title={anyReward?"View customer tank reward rules":"Both monthly rewards are off"}
-              style={{background:anyReward?"#eff6ff":C.bg,color:anyReward?C.primary:C.textSub,border:`1px solid ${anyReward?C.accent:C.border}`,borderRadius:20,padding:"5px 10px",fontSize:10.5,fontWeight:800,flexShrink:0,cursor:anyReward?"pointer":"not-allowed",opacity:anyReward?1:.65}}>Rules</button>
+              style={{background:anyReward?"#eff6ff":C.bg,color:anyReward?C.primary:C.textSub,border:`1px solid ${anyReward?C.accent:C.border}`,borderRadius:20,padding:"5px 10px",fontSize:10,fontWeight:800,flexShrink:0,cursor:anyReward?"pointer":"not-allowed",opacity:anyReward?1:.65}}>Rules</button>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:9}}>
-            <div style={{fontSize:10.5,fontWeight:800,color:contest?"#15803d":C.textSub,background:contest?"#ecfdf5":C.bg,border:`1px solid ${contest?"#a7f3d0":C.border}`,borderRadius:9,padding:"7px 8px",lineHeight:1.35}}>
+            <div style={{fontSize:10,fontWeight:800,color:contest?"#15803d":C.textSub,background:contest?"#ecfdf5":C.bg,border:`1px solid ${contest?"#a7f3d0":C.border}`,borderRadius:8,padding:"7px 8px",lineHeight:1.35}}>
               🏆 Tank of the month: {contest?"ON":"OFF"}
             </div>
-            <div style={{fontSize:10.5,fontWeight:800,color:streakReward?"#15803d":C.textSub,background:streakReward?"#ecfdf5":C.bg,border:`1px solid ${streakReward?"#a7f3d0":C.border}`,borderRadius:9,padding:"7px 8px",lineHeight:1.35}}>
+            <div style={{fontSize:10,fontWeight:800,color:streakReward?"#15803d":C.textSub,background:streakReward?"#ecfdf5":C.bg,border:`1px solid ${streakReward?"#a7f3d0":C.border}`,borderRadius:8,padding:"7px 8px",lineHeight:1.35}}>
               🔥 Streak reward: {streakReward?"ON":"OFF"}
             </div>
           </div>
           {streakReward&&streak&&(
-            <div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>
+            <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>
               🔥 <b>{Number(monthlyStreak&&monthlyStreak.current)||0}-day streak</b> · Best {Number(monthlyStreak&&monthlyStreak.best)||0}
             </div>
           )}
           {preview.length>0&&(
             <div style={{display:"flex",gap:7,marginBottom:8,flexWrap:"wrap"}}>
               {preview.map((src,i)=>(
-                <div key={i} style={{position:"relative",width:82,height:62,borderRadius:10,overflow:"hidden"}}>
+                <div key={i} style={{position:"relative",width:82,height:62,borderRadius:12,overflow:"hidden"}}>
                   <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                  <button onClick={()=>setPreview(p=>p.filter((_,k)=>k!==i))} style={{position:"absolute",top:3,right:3,background:"rgba(0,0,0,.6)",color:"white",border:"none",borderRadius:7,padding:"1px 6px",fontSize:11,fontWeight:700,cursor:"pointer"}}>×</button>
+                  <button onClick={()=>setPreview(p=>p.filter((_,k)=>k!==i))} style={{position:"absolute",top:3,right:3,background:"rgba(0,0,0,.6)",color:"white",border:"none",borderRadius:8,padding:"1px 6px",fontSize:11,fontWeight:700,cursor:"pointer"}}>×</button>
                 </div>
               ))}
             </div>
@@ -6067,13 +6067,13 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
               <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{const chosen=Array.from(e.target.files||[]);e.target.value="";void handleFiles(chosen);}}/>
             </label>
           )}
-          <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,background:C.bg,marginBottom:6,color:C.text}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,background:C.bg,marginBottom:6,color:C.text}}>
             <span style={{fontSize:14}}>🐠</span>
             <span style={{fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user.name||"Aquarist"}</span>
           </div>
           <input value={caption} onChange={e=>setCaption(e.target.value.slice(0,100))} placeholder="Describe your tank… (optional)"
-            style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6}}/>
-          {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:note[0]==="🎉"?C.success:C.primary,fontWeight:600,marginBottom:6}}>{note}</div>}
+            style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6}}/>
+          {note&&<div style={{fontSize:11,color:note[0]==="⚠"?C.danger:note[0]==="🎉"?C.success:C.primary,fontWeight:600,marginBottom:6}}>{note}</div>}
           <button className="press" onClick={submit} disabled={uploading}
             style={{width:"100%",background:uploading?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             {uploading?"Uploading…":(minePending?"Update pending tank 🐠":mineApproved?"Send replacement for review 🐠":"Share my tank 🐠")}
@@ -6082,20 +6082,20 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
       )}
       {showUpload&&previousWinners&&(previousWinners.vote||previousWinners.streak)&&(
         <div style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"1px solid #fcd34d",borderRadius:16,padding:"13px",marginTop:10}}>
-          <div style={{fontSize:11.5,color:"#92400e",fontWeight:800,marginBottom:9}}>🏆 {totmMonthLabel(previousMonth)} rewards issued</div>
+          <div style={{fontSize:11,color:"#92400e",fontWeight:800,marginBottom:9}}>🏆 {totmMonthLabel(previousMonth)} rewards issued</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {previousWinners.vote&&(
-              <div style={{background:"rgba(255,255,255,.72)",borderRadius:11,padding:"10px 11px",color:"#78350f",lineHeight:1.5}}>
-                <div style={{fontSize:12.5,fontWeight:800}}>Tank of the month</div>
-                <div style={{fontSize:11.5}}>Receiver's name: <b>{previousWinners.vote.name}</b></div>
-                <div style={{fontSize:11.5}}>Reward coins: <b>{Number(previousWinners.vote.rewardCoins)||0}</b></div>
+              <div style={{background:"rgba(255,255,255,.72)",borderRadius:12,padding:"10px 11px",color:"#78350f",lineHeight:1.5}}>
+                <div style={{fontSize:12,fontWeight:800}}>Tank of the month</div>
+                <div style={{fontSize:11}}>Receiver's name: <b>{previousWinners.vote.name}</b></div>
+                <div style={{fontSize:11}}>Reward coins: <b>{Number(previousWinners.vote.rewardCoins)||0}</b></div>
               </div>
             )}
             {previousWinners.streak&&(
-              <div style={{background:"rgba(255,255,255,.72)",borderRadius:11,padding:"10px 11px",color:"#78350f",lineHeight:1.5}}>
-                <div style={{fontSize:12.5,fontWeight:800}}>Longest streak of the month</div>
-                <div style={{fontSize:11.5}}>Receiver name: <b>{previousWinners.streak.name}</b></div>
-                <div style={{fontSize:11.5}}>Reward coins: <b>{Number(previousWinners.streak.rewardCoins)||0}</b></div>
+              <div style={{background:"rgba(255,255,255,.72)",borderRadius:12,padding:"10px 11px",color:"#78350f",lineHeight:1.5}}>
+                <div style={{fontSize:12,fontWeight:800}}>Longest streak of the month</div>
+                <div style={{fontSize:11}}>Receiver name: <b>{previousWinners.streak.name}</b></div>
+                <div style={{fontSize:11}}>Reward coins: <b>{Number(previousWinners.streak.rewardCoins)||0}</b></div>
               </div>
             )}
           </div>
@@ -6103,12 +6103,12 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
       )}
       {rulesOpen&&anyReward&&(
         <Portal><div onClick={()=>setRulesOpen(false)} style={{position:"fixed",inset:0,background:"rgba(8,30,33,.65)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div onClick={e=>e.stopPropagation()} className="fade-in" style={{width:"100%",maxWidth:390,maxHeight:"78vh",overflowY:"auto",background:"white",borderRadius:18,padding:"20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+          <div onClick={e=>e.stopPropagation()} className="fade-in" style={{width:"100%",maxWidth:390,maxHeight:"78vh",overflowY:"auto",background:"white",borderRadius:20,padding:"20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10}}>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Customer Tank Reward Rules</div>
               <button type="button" onClick={()=>setRulesOpen(false)} aria-label="Close rules" style={{border:"none",background:C.bg,borderRadius:99,width:32,height:32,fontSize:18,cursor:"pointer"}}>×</button>
             </div>
-            <div style={{whiteSpace:"pre-wrap",fontSize:12.5,lineHeight:1.65,color:C.text}}>{String(settings.tankRewardRules||DEFAULT_SETTINGS.tankRewardRules)}</div>
+            <div style={{whiteSpace:"pre-wrap",fontSize:12,lineHeight:1.65,color:C.text}}>{String(settings.tankRewardRules||DEFAULT_SETTINGS.tankRewardRules)}</div>
             <div style={{marginTop:14,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 12px",fontSize:11,color:"#9a3412",lineHeight:1.5}}>Only photos approved by the store count toward your streak and monthly vote total. Rejected submissions do not count.</div>
           </div>
         </div></Portal>
@@ -6146,7 +6146,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
               <div style={{width:"100%",marginTop:14}}>
                 <button className="press" disabled={!!own||voted||voting===fullImg.id} onClick={()=>vote(fullImg)}
                   style={{width:"100%",background:own?"rgba(255,255,255,.14)":voted?"rgba(255,255,255,.92)":C.primary,color:own?"rgba(255,255,255,.7)":voted?C.success:"#fff",
-                          border:"none",borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:800,
+                          border:"none",borderRadius:16,padding:"13px",fontSize:13,fontWeight:800,
                           fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(own||voted)?"default":"pointer"}}>
                   {own?`🗳️ ${n}`
                      : voting===fullImg.id?"…"
@@ -6192,7 +6192,7 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
   return(
     <div style={{marginBottom:26}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>💬 Testimonials</span>
+        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>💬 Testimonials</span>
         {list.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{list.length} from our customers</span>}
       </div>
       {list.length>0&&(
@@ -6213,7 +6213,7 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
       )}
       {user?(
         mine?(
-          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}! It's live on our home page.</div>
+          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:16,padding:"12px 14px",fontSize:12,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}! It's live on our home page.</div>
         ):(
           <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:8}}>Share review</div>
@@ -6223,8 +6223,8 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
               ))}
             </div>
             <textarea value={text} onChange={e=>setText(e.target.value.slice(0,280))} placeholder="How was your experience with Nemo Aqua Store?"
-              rows={3} style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6,resize:"vertical",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
-            {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:C.success,fontWeight:600,marginBottom:6}}>{note}</div>}
+              rows={3} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6,resize:"vertical",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+            {note&&<div style={{fontSize:11,color:note[0]==="⚠"?C.danger:C.success,fontWeight:600,marginBottom:6}}>{note}</div>}
             <button className="press" onClick={submit} disabled={busy}
               style={{width:"100%",background:busy?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               {busy?"Posting…":"Share Review"}
@@ -6281,7 +6281,7 @@ function HeroHeader({title,subtitle,onBack,right,gradient,children}){
       <div style={{display:"flex",alignItems:"center",gap:12,position:"relative"}}>
         {onBack&&(
           <button className="press" onClick={onBack} aria-label="Back"
-            style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:13,width:44,height:44,color:"white",flexShrink:0,cursor:"pointer"}}>
+            style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:12,width:44,height:44,color:"white",flexShrink:0,cursor:"pointer"}}>
             <BackArrow/>
           </button>
         )}
@@ -6300,7 +6300,7 @@ function RestockBtn({product,user,restockSet,onSubscribe}){
   if((product.stockCount??DEFAULT_STOCK)>0||product.comingSoon)return null;
   return(
     <button className="press" onClick={()=>{if(!already&&onSubscribe)onSubscribe(product);}} disabled={already}
-      style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:already?"#dcfce7":"#fff7ed",color:already?"#15803d":"#c2410c",border:`1.5px solid ${already?"#86efac":"#fed7aa"}`,borderRadius:12,padding:"10px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:8}}>
+      style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:already?"#dcfce7":"#fff7ed",color:already?"#15803d":"#c2410c",border:`1.5px solid ${already?"#86efac":"#fed7aa"}`,borderRadius:12,padding:"10px 14px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:8}}>
       {already?"🔔 You'll be alerted when it's back!":"🔔 Notify me when back in stock"}
     </button>
   );
@@ -6371,7 +6371,7 @@ function GuideNotifBtn(){
     <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
       <button className="press" onClick={toggle} role="switch" aria-checked={active}
         aria-label={active?"Turn off new-guide notifications":"Turn on new-guide notifications"}
-        style={{display:"flex",alignItems:"center",gap:8,background:active?"#dcfce7":C.accentLight,border:`1px solid ${active?"#86efac":C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:active?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+        style={{display:"flex",alignItems:"center",gap:8,background:active?"#dcfce7":C.accentLight,border:`1px solid ${active?"#86efac":C.border}`,borderRadius:12,padding:"7px 12px",fontSize:11,fontWeight:700,color:active?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
         <span>{active?"🔔":"🔕"}</span>
         {/* One word. The switch beside it is what says on or off — spelling that out again in
             the label made a control the size of a sentence, and the aria-label still carries
@@ -6418,7 +6418,7 @@ function CustomerStageBadge({order}){
     Delivered:{c:"#15803d",bg:"#dcfce7",icon:"✓"},
     "Past Orders":{c:"#475569",bg:"#f1f5f9",icon:"🗂️"},
   }[stage];
-  return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:m.bg,color:m.c,borderRadius:20,padding:"4px 10px",fontSize:10.5,fontWeight:800,whiteSpace:"nowrap"}}>{m.icon} {label}</span>;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:m.bg,color:m.c,borderRadius:20,padding:"4px 10px",fontSize:10,fontWeight:800,whiteSpace:"nowrap"}}>{m.icon} {label}</span>;
 }
 function CategoryPills({selected,onSelect,all,counts}){
   const cats=shopCategories();
@@ -6430,11 +6430,11 @@ function CategoryPills({selected,onSelect,all,counts}){
         <button key={c} className="press" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={()=>onSelect(c)} style={{
           flexShrink:0,background:selected===c?"#ffffff":"#f8fafc",color:selected===c?C.text:C.textSub,
           border:`2px solid ${selected===c?C.accent:"transparent"}`,borderRadius:99,padding:"8px 16px",
-          fontSize:12.5,fontWeight:selected===c?700:600,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .3s cubic-bezier(0.34,1.56,0.64,1)",
+          fontSize:12,fontWeight:selected===c?700:600,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .3s cubic-bezier(0.34,1.56,0.64,1)",
           boxShadow:selected===c?"0 6px 18px rgba(14,165,233,.16)":"none",
           display:"flex",alignItems:"center",gap:5}}>
           <span>{icons[c]}</span>{c}
-          {counts&&<span style={{marginLeft:3,background:selected===c?"rgba(14,165,233,.14)":C.border,color:selected===c?C.primary:C.textSub,borderRadius:10,padding:"0 6px",fontSize:10,fontWeight:800,minWidth:14,textAlign:"center"}}>{counts[c]||0}</span>}
+          {counts&&<span style={{marginLeft:3,background:selected===c?"rgba(14,165,233,.14)":C.border,color:selected===c?C.primary:C.textSub,borderRadius:12,padding:"0 6px",fontSize:10,fontWeight:800,minWidth:14,textAlign:"center"}}>{counts[c]||0}</span>}
         </button>
       ))}
     </div>
@@ -6466,7 +6466,7 @@ function RatingSummary({reviews,avgRating}){
     <div style={{display:"flex",gap:16,alignItems:"center",background:C.card,borderRadius:16,padding:"16px",border:`1px solid ${C.border}`,marginBottom:16}}>
       {/* Big score */}
       <div style={{textAlign:"center",flexShrink:0}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:42,fontWeight:800,color:C.text,lineHeight:1}}>{avgRating.toFixed(1)}</div>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:40,fontWeight:800,color:C.text,lineHeight:1}}>{avgRating.toFixed(1)}</div>
         <ReviewStars value={Math.round(avgRating)} size={14}/>
         <div style={{fontSize:11,color:C.textSub,marginTop:4}}>{total} review{total!==1?"s":""}</div>
       </div>
@@ -6478,8 +6478,8 @@ function RatingSummary({reviews,avgRating}){
             <div key={star} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
               <span style={{fontSize:10,color:C.textSub,minWidth:10,textAlign:"right"}}>{star}</span>
               <span style={{fontSize:10,color:"#f59e0b"}}>★</span>
-              <div style={{flex:1,height:6,borderRadius:3,background:C.border,overflow:"hidden"}}>
-                <div style={{height:"100%",borderRadius:3,background:"#f59e0b",width:pct+"%",transition:"width .4s ease"}}/>
+              <div style={{flex:1,height:6,borderRadius:4,background:C.border,overflow:"hidden"}}>
+                <div style={{height:"100%",borderRadius:4,background:"#f59e0b",width:pct+"%",transition:"width .4s ease"}}/>
               </div>
               <span style={{fontSize:10,color:C.textSub,minWidth:16,textAlign:"right"}}>{count}</span>
             </div>
@@ -6531,11 +6531,11 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
   };
 
   return(
-    <div className="slide-up" style={{background:C.card,borderRadius:18,padding:"18px",border:`1.5px solid ${C.border}`,marginBottom:16}}>
+    <div className="slide-up" style={{background:C.card,borderRadius:20,padding:"18px",border:`1.5px solid ${C.border}`,marginBottom:16}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
         <span style={{fontSize:10,fontWeight:800,color:C.success,background:"#dcfce7",padding:"3px 9px",borderRadius:20}}>✓ VERIFIED PURCHASE</span>
       </div>
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,color:C.text,marginBottom:14}}>Write a Review</div>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:14}}>Write a Review</div>
 
       {/* Star picker */}
       <div style={{marginBottom:14}}>
@@ -6548,11 +6548,11 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
       </div>
 
       {/* Aspect ratings — optional, Flipkart-style */}
-      <div style={{marginBottom:16,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px"}}>
+      <div style={{marginBottom:16,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:16,padding:"12px 14px"}}>
         <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>Rate the details <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
         {[["health","🐟 Fish / Product Condition"],["packing","📦 Packing Quality"],["speed","🚚 Delivery Speed"],["value","💰 Value for Money"]].map(([k,label])=>(
           <div key={k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
-            <span style={{fontSize:12.5,color:C.text,fontWeight:600}}>{label}</span>
+            <span style={{fontSize:12,color:C.text,fontWeight:600}}>{label}</span>
             <ReviewStars value={aspects[k]||0} onChange={v=>setAspects(a=>({...a,[k]:v}))} size={19}/>
           </div>
         ))}
@@ -6575,14 +6575,14 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
         <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Add Photos <span style={{textTransform:"none",letterSpacing:0,fontWeight:600,color:C.textSub}}>(optional · shows others your fish arrived happy)</span></div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           {photos.map((src,i)=>(
-            <div key={i} style={{position:"relative",width:64,height:64,borderRadius:10,overflow:"hidden",border:`1px solid ${C.border}`}}>
+            <div key={i} style={{position:"relative",width:64,height:64,borderRadius:12,overflow:"hidden",border:`1px solid ${C.border}`}}>
               <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
               <button className="press" onClick={()=>setPhotos(p=>p.filter((_,j)=>j!==i))}
                 style={{position:"absolute",top:2,right:2,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:11,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             </div>
           ))}
           {photos.length<MAX_PHOTOS&&(
-            <label style={{width:64,height:64,borderRadius:10,border:`1.5px dashed ${C.border}`,background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",color:C.textSub,gap:2}}>
+            <label style={{width:64,height:64,borderRadius:12,border:`1.5px dashed ${C.border}`,background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",color:C.textSub,gap:2}}>
               {photoBusy?<Spinner/>:<><span style={{fontSize:18,lineHeight:1}}>📷</span><span style={{fontSize:9,fontWeight:700}}>Add</span></>}
               <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{addPhotos(e.target.files);e.target.value="";}}/>
             </label>
@@ -6629,7 +6629,7 @@ function CountdownBanner({endsAt, title="Limited Time Offer", subtitle="Don't mi
         <div style={{fontSize:11,fontWeight:700,opacity:.85,marginBottom:6,letterSpacing:.8}}>Ends in:</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:stockNote?12:14}}>
           {cells.map((c,i)=>(
-            <div key={i} className={c.l==="Secs"?"countdown-cell":""} style={{background:"rgba(255,255,255,.95)",color:C.coral,borderRadius:10,padding:"8px 4px",textAlign:"center"}}>
+            <div key={i} className={c.l==="Secs"?"countdown-cell":""} style={{background:"rgba(255,255,255,.95)",color:C.coral,borderRadius:12,padding:"8px 4px",textAlign:"center"}}>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,lineHeight:1}}>{c.v}</div>
               <div style={{fontSize:9,fontWeight:700,color:"#7a1a08",marginTop:3,textTransform:"uppercase",letterSpacing:.8}}>{c.l}</div>
             </div>
@@ -6652,7 +6652,7 @@ function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToC
   // order of several different options without going back and forth between them.
   const qtyOf=v=>(cart.find(i=>i.key===product.id+"|"+v.id)?.qty)||0;
   const stop=e=>{ e.stopPropagation(); };
-  const stepBtn={background:"none",border:"none",fontSize:17,fontWeight:700,lineHeight:1,cursor:"pointer",padding:"0 2px"};
+  const stepBtn={background:"none",border:"none",fontSize:16,fontWeight:700,lineHeight:1,cursor:"pointer",padding:"0 2px"};
   return(
     <div style={{marginBottom:18}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>{variantHeading(product)}</div>
@@ -6676,7 +6676,7 @@ function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToC
                 width:"100%",textAlign:"left",
                 background: out?"#f3f4f6":sel?C.accentLight:C.card,
                 border:`1.5px solid ${sel?C.primary:C.border}`,
-                borderRadius:14, padding:"12px 14px",
+                borderRadius:16, padding:"12px 14px",
                 display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
                 opacity:out?.55:1,cursor:out?"not-allowed":"pointer",
                 fontFamily:"'Plus Jakarta Sans',sans-serif",
@@ -6709,7 +6709,7 @@ function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToC
                           style={{...stepBtn,color:q>=maxV?C.textSub:C.primary,opacity:q>=maxV?.5:1,cursor:q>=maxV?"default":"pointer"}}>+</button>
                       </div>
                     : <button className="press" aria-label={`Add ${v.label} to cart`} onClick={e=>{stop(e);onSelect&&onSelect(v);addToCart(product,1,v);}}
-                        style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:99,padding:"7px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>+ Add</button>}
+                        style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:99,padding:"7px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>+ Add</button>}
             </div>
           );
         })}
@@ -6722,7 +6722,7 @@ function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToC
         const sum=lines.reduce((a,x)=>a+x.q*variantEffPrice(product,x.v),0);
         return(
           <div style={{marginTop:10,padding:"9px 13px",background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-            <span style={{fontSize:11.5,fontWeight:700,color:C.text}}>{lines.length} options · {units} item{units!==1?"s":""} in cart</span>
+            <span style={{fontSize:11,fontWeight:700,color:C.text}}>{lines.length} options · {units} item{units!==1?"s":""} in cart</span>
             <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{sum}</span>
           </div>
         );
@@ -6779,17 +6779,17 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
 
       <div style={{textAlign:"center",marginBottom:30,marginTop:20}}>
         <img src={STORE_LOGO} alt="Nemo" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:130,height:130,objectFit:"contain",margin:"0 auto",display:"block",filter:"drop-shadow(0 10px 24px rgba(8,54,64,.35))"}}/>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:26,fontWeight:800,color:C.text,marginTop:16,marginBottom:6}}>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginTop:16,marginBottom:6}}>
           {mode==="checkout"?"Sign in to checkout":"Welcome to Nemo"}
         </div>
-        <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.55,maxWidth:300,margin:"0 auto"}}>
+        <div style={{fontSize:13,color:C.textSub,lineHeight:1.55,maxWidth:300,margin:"0 auto"}}>
           Sign in with Google to place orders, track delivery, and review your purchases.
         </div>
       </div>
 
       <div style={{maxWidth:360,width:"100%",margin:"0 auto"}}>
         <button className="press" onClick={doGoogle} disabled={busy}
-          style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:700,color:C.text,boxShadow:"0 2px 10px rgba(0,0,0,.05)",opacity:busy?.7:1}}>
+          style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:16,padding:"15px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:700,color:C.text,boxShadow:"0 2px 10px rgba(0,0,0,.05)",opacity:busy?.7:1}}>
           {busy?<Spinner/>:<svg width="22" height="22" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>}
           {/* The spinner alone left the label reading "Continue with Google" while the tap was
               already being handled, which on a slow connection looks like nothing happened and
@@ -6797,16 +6797,16 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
           {busy?"Signing you in…":"Continue with Google"}
         </button>
 
-        {err&&<div style={{fontSize:12.5,color:showDemo?C.textSub:C.danger,fontWeight:500,marginTop:14,textAlign:"center",lineHeight:1.5,background:showDemo?C.accentLight:"transparent",borderRadius:12,padding:showDemo?"10px 14px":0}}>{err}</div>}
+        {err&&<div style={{fontSize:12,color:showDemo?C.textSub:C.danger,fontWeight:500,marginTop:14,textAlign:"center",lineHeight:1.5,background:showDemo?C.accentLight:"transparent",borderRadius:12,padding:showDemo?"10px 14px":0}}>{err}</div>}
 
         {!showDemo&&(
           <button className="press" onClick={()=>setShowDemo(true)}
-            style={{width:"100%",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:14,padding:"13px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13.5,fontWeight:700,color:C.textSub}}>
+            style={{width:"100%",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:16,padding:"13px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:700,color:C.textSub}}>
             👀 Explore with a demo account
           </button>
         )}
         {showDemo&&(
-          <div style={{fontSize:11.5,color:C.textSub,textAlign:"center",marginTop:14,lineHeight:1.5,background:C.accentLight,borderRadius:12,padding:"10px 14px"}}>
+          <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:14,lineHeight:1.5,background:C.accentLight,borderRadius:12,padding:"10px 14px"}}>
             Demo mode — browse and try every feature. Demo orders are simulated on this device only and are <b>not</b> real purchases.
           </div>
         )}
@@ -6814,11 +6814,11 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
           <div style={{marginTop:16}}>
             {DEMO_GOOGLE_ACCOUNTS.map(acc=>(
               <button key={acc.email} className="press" onClick={()=>onSuccess({name:acc.name,phone:acc.phone,email:acc.email,method:"demo",loginAt:new Date().toISOString(),keep:true})}
-                style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:10,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
-                <span style={{width:34,height:34,borderRadius:"50%",background:acc.color,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,flexShrink:0}}>{acc.name.charAt(0)}</span>
+                style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:16,padding:"12px 14px",marginBottom:10,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+                <span style={{width:34,height:34,borderRadius:"50%",background:acc.color,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,flexShrink:0}}>{acc.name.charAt(0)}</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13.5,fontWeight:700,color:C.text}}>{acc.name}</div>
-                  <div style={{fontSize:11.5,color:C.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{acc.email}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text}}>{acc.name}</div>
+                  <div style={{fontSize:11,color:C.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{acc.email}</div>
                 </div>
               </button>
             ))}
@@ -6843,7 +6843,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
         style={{background:C.card,width:"86%",maxWidth:340,height:"100%",padding:"22px 20px 28px",overflowY:"auto",boxShadow:"4px 0 30px rgba(10,36,38,.25)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>Filter &amp; Sort</div>
-          <button className="press" onClick={onClose} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,width:34,height:34,fontSize:17,color:C.textSub,cursor:"pointer"}}>✕</button>
+          <button className="press" onClick={onClose} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,width:34,height:34,fontSize:16,color:C.textSub,cursor:"pointer"}}>✕</button>
         </div>
         <button className="press" onClick={onClear} style={{background:"none",border:"none",fontSize:12,fontWeight:700,color:C.accent,fontFamily:"'Plus Jakarta Sans',sans-serif",padding:0,marginBottom:18,cursor:"pointer"}}>↺ Clear all filters</button>
 
@@ -6861,7 +6861,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
         <div style={{display:"flex",gap:8,marginBottom:22}}>
           {[{id:"all",l:"All"},{id:"instock",l:"In stock"},{id:"limited",l:"Limited"}].map(o=>(
             <button key={o.id} className="press" onClick={()=>setAvailability(o.id)}
-              style={{flex:1,padding:"9px 12px",borderRadius:14,border:`1.5px solid ${availability===o.id?C.primary:C.border}`,background:availability===o.id?C.primary:"transparent",color:availability===o.id?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{flex:1,padding:"9px 12px",borderRadius:16,border:`1.5px solid ${availability===o.id?C.primary:C.border}`,background:availability===o.id?C.primary:"transparent",color:availability===o.id?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               {o.l}
             </button>
           ))}
@@ -6877,7 +6877,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
           style={{width:"100%",accentColor:C.primary,marginBottom:24}}/>
 
         <button className="press" onClick={onClose}
-          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
           Show {count} result{count!==1?"s":""}
         </button>
       </div>
@@ -6903,13 +6903,13 @@ function ProductReviewPrompt({order, products=[], mediaCache={}, reviewedSet=[],
         return(
           <button key={prod.id} className="press" onClick={()=>onWriteReview&&onWriteReview(prod)}
             style={{width:"100%",display:"flex",alignItems:"center",gap:10,background:"white",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px",marginBottom:7,textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-            <div style={{width:38,height:38,borderRadius:9,flexShrink:0,overflow:"hidden",background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>
+            <div style={{width:38,height:38,borderRadius:8,flexShrink:0,overflow:"hidden",background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>
               {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
             </div>
-            <div style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
+            <div style={{flex:1,minWidth:0,fontSize:12,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
             {already
               ? <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ View review →</span>
-              : <span style={{fontSize:11.5,fontWeight:800,color:C.primary,flexShrink:0}}>Review →</span>}
+              : <span style={{fontSize:11,fontWeight:800,color:C.primary,flexShrink:0}}>Review →</span>}
           </button>
         );
       })}
@@ -6925,19 +6925,19 @@ function SelfCancelBtn({o, onCancel}){
   if(!confirm) return(
     <div style={{marginTop:10}}>
       <button className="press" onClick={()=>setConfirm(true)}
-        style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
         ✕ Cancel this order
       </button>
-      <div style={{fontSize:10.5,color:C.textSub,textAlign:"center",marginTop:5,lineHeight:1.4}}>You can cancel any time until we confirm your order.</div>
+      <div style={{fontSize:10,color:C.textSub,textAlign:"center",marginTop:5,lineHeight:1.4}}>You can cancel any time until we confirm your order.</div>
     </div>
   );
   return(
     <div style={{marginTop:10,background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
-      <div style={{fontSize:12.5,fontWeight:800,color:C.danger,marginBottom:4}}>Cancel this order?</div>
-      <div style={{fontSize:11.5,color:"#7f1d1d",lineHeight:1.5,marginBottom:10}}>{paid?"Your order will be cancelled and a refund of the paid amount will be processed to your original payment method.":"Your order will be cancelled."} This can't be undone.</div>
+      <div style={{fontSize:12,fontWeight:800,color:C.danger,marginBottom:4}}>Cancel this order?</div>
+      <div style={{fontSize:11,color:"#7f1d1d",lineHeight:1.5,marginBottom:10}}>{paid?"Your order will be cancelled and a refund of the paid amount will be processed to your original payment method.":"Your order will be cancelled."} This can't be undone.</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <button className="press" onClick={()=>setConfirm(false)} style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Keep order</button>
-        <button className="press" onClick={()=>{setConfirm(false);onCancel&&onCancel(o);}} style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, cancel</button>
+        <button className="press" onClick={()=>setConfirm(false)} style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Keep order</button>
+        <button className="press" onClick={()=>{setConfirm(false);onCancel&&onCancel(o);}} style={{background:C.danger,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, cancel</button>
       </div>
     </div>
   );
@@ -6960,7 +6960,7 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
   const pickPhoto=async(file)=>{ if(!file)return; setBusy(true); try{ const d=await compressImage(file,1100,.8); setPhoto(d); }catch(e){} setBusy(false); };
   const submit=async()=>{ if(!sel.length)return; await onRequestReturn(o,{itemIds:sel,reason:reason.trim(),resolution,photo}); setOpen(false); };
   const disclaimer=(
-    <div style={{fontSize:10.5,color:"#9a3412",lineHeight:1.55,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",marginBottom:10}}>
+    <div style={{fontSize:10,color:"#9a3412",lineHeight:1.55,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"9px 11px",marginBottom:10}}>
       <b>Eligible only for damaged dry goods.</b> Item must be unused and returned with all parts in the original packing cover. <b>Feeds, medicines, live fish, plants, pumps &amp; tubes are not eligible.</b> Refunds/coins exclude packing &amp; shipping charges.
     </div>
   );
@@ -6981,21 +6981,21 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
     const retAddr=(rr&&String(rr.returnAddress||"").trim())||settings.returnAddress||"Please contact us on WhatsApp for the return shipping address before sending the parcel.";
     return(
       <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-        <div style={{background:tone.bg,border:`1px solid ${tone.bd}`,borderRadius:10,padding:"11px 12px"}}>
+        <div style={{background:tone.bg,border:`1px solid ${tone.bd}`,borderRadius:12,padding:"11px 12px"}}>
           <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:3}}>↩️ Return / Replacement request</div>
-          <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>{STAT[rr.status]||"Submitted."}</div>
-          {rr.note&&<div style={{fontSize:11.5,color:C.text,marginTop:6,lineHeight:1.5}}><b>Note from store:</b> {rr.note}</div>}
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.55}}>{STAT[rr.status]||"Submitted."}</div>
+          {rr.note&&<div style={{fontSize:11,color:C.text,marginTop:6,lineHeight:1.5}}><b>Note from store:</b> {rr.note}</div>}
           {rr.status==="Approved"&&(
             <div style={{marginTop:10}}>
               <div style={{fontSize:11,fontWeight:800,color:C.text,marginBottom:4}}>📦 Courier it back to{rr.returnAddrLabel?` — ${rr.returnAddrLabel}`:""}:</div>
-              <div style={{fontSize:11.5,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5,background:"white",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{retAddr}</div>
+              <div style={{fontSize:11,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5,background:"white",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{retAddr}</div>
               <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Attach the consignment bill inside/with the parcel, then enter your courier partner &amp; consignment number below.</div>
               <input value={courier} onChange={e=>setCourier(e.target.value)} placeholder="Courier partner (e.g. DTDC, ST Courier)"
-                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:8}}/>
+                style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:8}}/>
               <input value={consign} onChange={e=>setConsign(e.target.value)} placeholder="Consignment / tracking number"
-                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:10,fontFamily:"monospace"}}/>
+                style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:10,fontFamily:"monospace"}}/>
               <button className="press" disabled={!courier.trim()||!consign.trim()} onClick={()=>onSubmitReturnShipment(o,{courier:courier.trim(),consignment:consign.trim()})}
-                style={{width:"100%",background:(courier.trim()&&consign.trim())?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Submit return shipment details</button>
+                style={{width:"100%",background:(courier.trim()&&consign.trim())?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Submit return shipment details</button>
             </div>
           )}
           {(rr.status==="Shipped"||rr.status==="Received & Verified"||rr.status==="Resolved")&&(rr.courier||rr.consignment)&&(
@@ -7009,12 +7009,12 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
               is a fact — but a customer being refunded should not still be told a replacement
               is on its way. */}
           {(rr.adminResolution||rr.resolution)==="replacement"&&(rr.replacementCourier||rr.replacementConsignment)&&(
-            <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"10px 12px"}}>
+            <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 12px"}}>
               <div style={{fontSize:12,fontWeight:800,color:"#065f46",marginBottom:3}}>🔁 Your replacement is on its way</div>
-              <div style={{fontSize:11.5,color:"#047857",lineHeight:1.55}}>Sent via <b>{rr.replacementCourier||"courier"}</b>{rr.replacementConsignment?<> · <span style={{fontFamily:"monospace"}}>{rr.replacementConsignment}</span></>:null}</div>
+              <div style={{fontSize:11,color:"#047857",lineHeight:1.55}}>Sent via <b>{rr.replacementCourier||"courier"}</b>{rr.replacementConsignment?<> · <span style={{fontFamily:"monospace"}}>{rr.replacementConsignment}</span></>:null}</div>
               {rr.replacementTrackUrl&&rr.replacementConsignment&&(
                 <button className="press" onClick={()=>trackParcel({courierTrackUrl:rr.replacementTrackUrl,trackingNumber:rr.replacementConsignment})}
-                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:10,padding:"9px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:12,padding:"9px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                   🚚 Track replacement{rr.replacementCourier?` · ${rr.replacementCourier}`:""}
                 </button>
               )}
@@ -7034,27 +7034,27 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
         </button>
       ):(
         <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"13px"}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>↩️ Return / Replacement (damaged item)</div>
+          <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:8}}>↩️ Return / Replacement (damaged item)</div>
           {disclaimer}
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Which item(s)?</div>
           <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
             {returnable.map(it=>(
-              <label key={it.id} style={{display:"flex",alignItems:"center",gap:9,fontSize:12.5,color:C.text,cursor:"pointer"}}>
+              <label key={it.id} style={{display:"flex",alignItems:"center",gap:9,fontSize:12,color:C.text,cursor:"pointer"}}>
                 <input type="checkbox" checked={sel.includes(it.id)} onChange={()=>toggle(it.id)} style={{width:17,height:17,accentColor:C.primary}}/>
                 {it.name} <span style={{color:C.textSub}}>· Qty {it.qty}</span>
               </label>
             ))}
           </div>
           <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder="Describe the damage…"
-            style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",resize:"none",background:"white",marginBottom:10}}/>
+            style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",resize:"none",background:"white",marginBottom:10}}/>
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Photo proof</div>
           {photo?(
             <div style={{position:"relative",display:"inline-block",marginBottom:10}}>
-              <img src={photo} alt="" style={{width:84,height:84,objectFit:"cover",borderRadius:10,border:`1px solid ${C.border}`}}/>
+              <img src={photo} alt="" style={{width:84,height:84,objectFit:"cover",borderRadius:12,border:`1px solid ${C.border}`}}/>
               <button onClick={()=>setPhoto("")} style={{position:"absolute",top:-6,right:-6,width:22,height:22,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:13,cursor:"pointer"}}>×</button>
             </div>
           ):(
-            <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:10,border:`1.5px dashed ${C.border}`,background:"white",padding:"12px",cursor:"pointer",color:C.textSub,fontSize:12.5,fontWeight:600,marginBottom:10}}>
+            <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:12,border:`1.5px dashed ${C.border}`,background:"white",padding:"12px",cursor:"pointer",color:C.textSub,fontSize:12,fontWeight:600,marginBottom:10}}>
               <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{pickPhoto(e.target.files[0]);e.target.value="";}}/>
               {busy?"Processing…":"📷 Add a photo of the damage"}
             </label>
@@ -7063,13 +7063,13 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
           <div style={{display:"flex",gap:8,marginBottom:12}}>
             {[["refund","💸 Refund"],["coins","🪙 Reward coins"]].map(([k,l])=>(
               <button key={k} type="button" className="press" onClick={()=>setResolution(k)}
-                style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${resolution===k?C.primary:C.border}`,background:resolution===k?C.primary:"white",color:resolution===k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
+                style={{flex:1,padding:"9px",borderRadius:12,border:`1.5px solid ${resolution===k?C.primary:C.border}`,background:resolution===k?C.primary:"white",color:resolution===k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
             ))}
           </div>
           <div style={{display:"flex",gap:8}}>
-            <button className="press" onClick={()=>setOpen(false)} style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+            <button className="press" onClick={()=>setOpen(false)} style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 14px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
             <button className="press" disabled={!sel.length||busy} onClick={submit}
-              style={{flex:1,background:sel.length?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Submit request</button>
+              style={{flex:1,background:sel.length?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Submit request</button>
           </div>
         </div>
       )}
@@ -7091,18 +7091,18 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
   const maxQty=Math.max(1,Number(item.qty)||1);
 
   if(claim) return(
-    <div style={{marginTop:6,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:9,padding:"8px 10px"}}>
+    <div style={{marginTop:6,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:8,padding:"8px 10px"}}>
       <div style={{fontSize:11,fontWeight:800,color:"#065f46"}}>🐟 DOA reported · {claim.qty||1} fish</div>
-      {claim.cause&&<div style={{fontSize:10.5,color:"#047857",marginTop:2,lineHeight:1.45}}>{claim.cause}</div>}
+      {claim.cause&&<div style={{fontSize:10,color:"#047857",marginTop:2,lineHeight:1.45}}>{claim.cause}</div>}
       <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${order.orderNo||orderId(order.id)} — item: ${item.name}. Here is my unboxing video.`))}
-        style={{marginTop:7,background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"7px 11px",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video</button>
+        style={{marginTop:7,background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"7px 11px",fontSize:10,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video</button>
     </div>
   );
   if(!windowOpen) return null;
 
   if(!open) return(
     <button className="press" onClick={()=>setOpen(true)}
-      style={{marginTop:6,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"7px 11px",fontSize:10.5,fontWeight:800,color:"#9a3412",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+      style={{marginTop:6,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"7px 11px",fontSize:10,fontWeight:800,color:"#9a3412",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
       {/* The countdown only appears once delivery has been recorded; before that there is no
           deadline running and quoting one would be a lie. */}
       🐟 Report this fish as Dead on Arrival{hoursLeft>0?` · ${hoursLeft}h left`:""}
@@ -7110,19 +7110,19 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
   );
   const ready=!!cause && (cause!=="Other (explain below)" || note.trim().length>0);
   return(
-    <div style={{marginTop:8,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:11,padding:"11px"}}>
-      <div style={{fontSize:11.5,fontWeight:800,color:"#9a3412",marginBottom:7}}>DOA — {item.name}</div>
+    <div style={{marginTop:8,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"11px"}}>
+      <div style={{fontSize:11,fontWeight:800,color:"#9a3412",marginBottom:7}}>DOA — {item.name}</div>
 
-      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>How many arrived dead?</div>
-      <div style={{display:"flex",alignItems:"center",gap:10,background:"#fff",borderRadius:9,padding:"5px 10px",border:"1px solid #fed7aa",width:"fit-content",marginBottom:10}}>
+      <div style={{fontSize:10,fontWeight:800,color:"#9a3412",marginBottom:5}}>How many arrived dead?</div>
+      <div style={{display:"flex",alignItems:"center",gap:10,background:"#fff",borderRadius:8,padding:"5px 10px",border:"1px solid #fed7aa",width:"fit-content",marginBottom:10}}>
         <button className="press" onClick={()=>setQty(q=>Math.max(1,q-1))} style={{background:"none",border:"none",fontSize:16,color:"#9a3412",fontWeight:800,lineHeight:1,cursor:"pointer"}}>−</button>
-        <span style={{fontSize:12.5,fontWeight:800,color:"#9a3412",minWidth:14,textAlign:"center"}}>{qty}</span>
+        <span style={{fontSize:12,fontWeight:800,color:"#9a3412",minWidth:14,textAlign:"center"}}>{qty}</span>
         <button className="press" onClick={()=>setQty(q=>Math.min(maxQty,q+1))} disabled={qty>=maxQty}
           style={{background:"none",border:"none",fontSize:16,color:qty>=maxQty?"#fdba74":"#9a3412",fontWeight:800,lineHeight:1,cursor:qty>=maxQty?"default":"pointer"}}>+</button>
         <span style={{fontSize:10,color:"#c2410c",fontWeight:700}}>of {maxQty}</span>
       </div>
 
-      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>Reason for dead arrival?</div>
+      <div style={{fontSize:10,fontWeight:800,color:"#9a3412",marginBottom:5}}>Reason for dead arrival?</div>
       <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:9}}>
         {DOA_CAUSES.map(c=>(
           <label key={c} style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:"#7c2d12",cursor:"pointer",lineHeight:1.4}}>
@@ -7134,13 +7134,13 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
       </div>
       <textarea value={note} onChange={e=>setNote(e.target.value.slice(0,300))} rows={2}
         placeholder={cause==="Other (explain below)"?"Please describe what happened (required)":"Anything else we should know? (optional)"}
-        style={{width:"100%",boxSizing:"border-box",borderRadius:9,border:"1.5px solid #fed7aa",padding:"8px 10px",fontSize:11.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",marginBottom:9,fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+        style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1.5px solid #fed7aa",padding:"8px 10px",fontSize:11,outline:"none",resize:"none",lineHeight:1.5,background:"white",marginBottom:9,fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
 
-      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>Choose your resolution</div>
+      <div style={{fontSize:10,fontWeight:800,color:"#9a3412",marginBottom:5}}>Choose your resolution</div>
       <div style={{display:"flex",gap:6,marginBottom:10}}>
         {[["refund","💸 Refund"],["coins","🪙 Reward coins"]].map(([k,l])=>(
           <button key={k} type="button" className="press" onClick={()=>setReso(k)}
-            style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${reso===k?"#9a3412":"#fed7aa"}`,background:reso===k?"#9a3412":"white",color:reso===k?"white":"#9a3412",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l}</button>
+            style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${reso===k?"#9a3412":"#fed7aa"}`,background:reso===k?"#9a3412":"white",color:reso===k?"white":"#9a3412",fontSize:10,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l}</button>
         ))}
       </div>
       <div style={{fontSize:10,color:"#9a3412",lineHeight:1.5,marginBottom:9}}>
@@ -7153,9 +7153,9 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
             onReportDoa&&onReportDoa(order,{resolution:reso,reason:full,cause,note:note.trim(),qty,itemId:item.id,itemName:item.name});
             setOpen(false);
           }}
-          style={{flex:1,background:ready?"#25D366":"#bbf7d0",color:"white",border:"none",borderRadius:9,padding:"10px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:ready?"pointer":"not-allowed"}}>💬 Share video on WhatsApp</button>
+          style={{flex:1,background:ready?"#25D366":"#bbf7d0",color:"white",border:"none",borderRadius:8,padding:"10px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:ready?"pointer":"not-allowed"}}>💬 Share video on WhatsApp</button>
         <button className="press" onClick={()=>setOpen(false)}
-          style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:9,padding:"10px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Cancel</button>
+          style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Cancel</button>
       </div>
     </div>
   );
@@ -7220,16 +7220,16 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           <span style={{fontSize:22,color:C.coral}}>♥</span>
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:800,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Saved Items</div>
-            <div style={{fontSize:11.5,color:C.textSub}}>{favorites.length>0?`${favorites.length} item${favorites.length!==1?"s":""} saved`:"Your wishlist is empty"}</div>
+            <div style={{fontSize:11,color:C.textSub}}>{favorites.length>0?`${favorites.length} item${favorites.length!==1?"s":""} saved`:"Your wishlist is empty"}</div>
           </div>
           <span style={{fontSize:18,color:C.textSub}}>›</span>
         </button>
         {myOrders.length===0?(
           <div style={{textAlign:"center",padding:"60px 20px",color:C.textSub}}>
-            <div style={{fontSize:64,marginBottom:14}}>📦</div>
+            <div style={{fontSize:60,marginBottom:14}}>📦</div>
             <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:6}}>No orders yet</div>
             <div style={{fontSize:13,marginBottom:20}}>Your orders will appear here.</div>
-            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Start Shopping</button>
+            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:16,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Start Shopping</button>
           </div>
         ):(
           <>
@@ -7241,14 +7241,14 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
             const isDelivered=o.status==="Delivered";
             const needsProductReview=(o.items||[]).some(it=>products.some(p=>p.id===it.id)&&!reviewedSet.includes(it.id));
             return(
-            <div key={o.id} style={{background:C.card,borderRadius:18,padding:"16px",marginBottom:12,border:`1px solid ${open?C.accent:C.border}`}}>
+            <div key={o.id} style={{background:C.card,borderRadius:20,padding:"16px",marginBottom:12,border:`1px solid ${open?C.accent:C.border}`}}>
               {/* Compact summary — always visible; tap to open full details, bills & invoices (#11/#12) */}
               <button className="press" onClick={()=>setOpenId(open?null:o.id)}
                 style={{width:"100%",background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontFamily:PRICE_FONT,fontSize:13.5,fontWeight:800,color:C.primary,marginBottom:3}}>{o.orderNo||orderId(o.id)}</div>
-                    <div style={{fontSize:12.5,fontWeight:700,color:C.text,lineHeight:1.35,marginBottom:3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{names}</div>
+                    <div style={{fontFamily:PRICE_FONT,fontSize:13,fontWeight:800,color:C.primary,marginBottom:3}}>{o.orderNo||orderId(o.id)}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:C.text,lineHeight:1.35,marginBottom:3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{names}</div>
                     <div style={{fontSize:11,color:C.textSub}}>{fmtDate(o.placedAt)} · {nItems} item{nItems!==1?"s":""} · ₹{o.amountDue??(o.total+o.fee)}</div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
@@ -7257,7 +7257,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                   </div>
                 </div>
                 {isDelivered&&needsProductReview&&!open&&(
-                  <div style={{marginTop:8,fontSize:11.5,fontWeight:800,color:C.primary}}>☆ Share review →</div>
+                  <div style={{marginTop:8,fontSize:11,fontWeight:800,color:C.primary}}>☆ Share review →</div>
                 )}
               </button>
               {open&&(<div style={{marginTop:12}}>
@@ -7276,7 +7276,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                       onKeyDown={open?(e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } }):undefined}
                       aria-label={open?`View ${item.name}`:undefined}
                       style={{display:"flex",gap:10,alignItems:"center",flex:1,minWidth:0,cursor:open?"pointer":"default"}}>
-                      <div style={{width:44,height:44,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0,overflow:"hidden"}}>
+                      <div style={{width:44,height:44,borderRadius:12,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0,overflow:"hidden"}}>
                         {/* Order lines are snapshots and carry no image, so resolve it
                             from the live catalogue — the same helper the cart uses.
                             Reading mediaCache directly only ever worked for legacy
@@ -7317,11 +7317,11 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 const sub = d<0 ? `Expected by ${eta.dateLabel} \u2014 should reach you any moment now` : `Expected by ${eta.dateLabel}`;
                 const urgent = d<=1;
                 return(
-                  <div style={{marginTop:10,display:"flex",alignItems:"center",gap:11,background:urgent?"#fff7ed":C.accentLight,border:`1.5px solid ${urgent?"#fdba74":C.accent}`,borderRadius:14,padding:"11px 13px"}}>
+                  <div style={{marginTop:10,display:"flex",alignItems:"center",gap:11,background:urgent?"#fff7ed":C.accentLight,border:`1.5px solid ${urgent?"#fdba74":C.accent}`,borderRadius:16,padding:"11px 13px"}}>
                     <span style={{fontSize:22,lineHeight:1}}>🚚</span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:14,fontWeight:800,color:urgent?"#9a3412":C.primaryDark,fontFamily:"'Plus Jakarta Sans',sans-serif",lineHeight:1.15}}>{headline}</div>
-                      <div style={{fontSize:11.5,color:urgent?"#9a3412":C.textSub,fontWeight:600,marginTop:2}}>{sub}{o.status==="Shipped"?" \u00b7 on the way":""}</div>
+                      <div style={{fontSize:11,color:urgent?"#9a3412":C.textSub,fontWeight:600,marginTop:2}}>{sub}{o.status==="Shipped"?" \u00b7 on the way":""}</div>
                     </div>
                   </div>
                 );
@@ -7329,30 +7329,30 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               {o.trackingNumber&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>Consignment: <b style={{color:C.text}}>{o.trackingNumber}</b>{o.courierName?<> · {o.courierName}</>:null}</div>}
               {(o.status==="Shipped"||o.status==="Delivered")&&o.courierTrackUrl&&(
                 <button className="press" onClick={()=>trackParcel(o)}
-                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:12,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
                   🚚 Track Parcel{o.courierName?` · ${o.courierName}`:""}
                 </button>
               )}
               {o.shippingReward&&(
                 <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"11px 13px"}}>
-                  <div style={{fontSize:12.5,fontWeight:800,color:"#15803d",marginBottom:3}}>🎁 Shipping refund — ₹{o.shippingReward.amount} added to your wallet!</div>
-                  <div style={{fontSize:11.5,color:"#166534",lineHeight:1.55}}>Extra shipping paid was returned to your wallet.</div>
+                  <div style={{fontSize:12,fontWeight:800,color:"#15803d",marginBottom:3}}>🎁 Shipping refund — ₹{o.shippingReward.amount} added to your wallet!</div>
+                  <div style={{fontSize:11,color:"#166534",lineHeight:1.55}}>Extra shipping paid was returned to your wallet.</div>
                 </div>
               )}
               {/* Bill button */}
               <div style={{display:"flex",gap:8,marginTop:10}}>
               <button className="press" onClick={()=>openBill(o,settings)}
-                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:12,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                 🧾 Quick Bill
               </button>
               <button className="press" onClick={()=>openInvoice(o,settings)}
-                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:12,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                 📄 Invoice (PDF)
               </button>
               </div>
               {o.status==="Delivered"&&(
                 <button className="press" onClick={()=>reorder(o)}
-                  style={{width:"100%",marginTop:8,background:C.accentLight,color:C.primary,border:`1.5px solid ${C.accent}`,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  style={{width:"100%",marginTop:8,background:C.accentLight,color:C.primary,border:`1.5px solid ${C.accent}`,borderRadius:12,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                   🔁 Reorder these items
                 </button>
               )}
@@ -7364,7 +7364,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     <PaymentPanel order={o} compact onCancelled={onCancelled} onCheckoutCancelled={onCancelPayment}/>
                   ):(
                     <>
-                      <div style={{background:"#fef3c7",border:`1px solid #fde68a`,borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:12,color:"#92400e",fontWeight:600,lineHeight:1.5}}>⏳ Payment pending — complete it to confirm this order (auto-cancels if unpaid).</div>
+                      <div style={{background:"#fef3c7",border:`1px solid #fde68a`,borderRadius:12,padding:"10px 12px",marginBottom:10,fontSize:12,color:"#92400e",fontWeight:600,lineHeight:1.5}}>⏳ Payment pending — complete it to confirm this order (auto-cancels if unpaid).</div>
                       <button className="press" onClick={()=>setPayOpen(o.id)}
                         style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💳 Complete Payment · ₹{o.amountDue??(o.total+o.fee)}</button>
                     </>
@@ -7372,15 +7372,15 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 </div>
               )}
               {o.status==="Payment Review"&&(
-                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>{o.gateway?(o.testPayment?`${gatewayLabel(o.gateway)} test payment recorded — not a fulfilment order.`:`${gatewayLabel(o.gateway)} payment recorded — this order still needs admin review.`):`🔎 Payment submitted${o.txnId?` (Ref: ${o.txnId})`:""} — under verification.`}</div>
+                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:12,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>{o.gateway?(o.testPayment?`${gatewayLabel(o.gateway)} test payment recorded — not a fulfilment order.`:`${gatewayLabel(o.gateway)} payment recorded — this order still needs admin review.`):`🔎 Payment submitted${o.txnId?` (Ref: ${o.txnId})`:""} — under verification.`}</div>
               )}
               {o.status==="Cancelled"&&(
                 <div style={{marginTop:10}}>
-                  <div style={{background:"#fee2e2",border:`1px solid #fecaca`,borderRadius:10,padding:"10px 12px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.55}}>
+                  <div style={{background:"#fee2e2",border:`1px solid #fecaca`,borderRadius:12,padding:"10px 12px",fontSize:12,color:"#b91c1c",fontWeight:600,lineHeight:1.55}}>
                     ✕ Your order has been cancelled.{o.cancelReason?` Reason: ${o.cancelReason}.`:o.paymentStatus&&/unpaid/i.test(o.paymentStatus)?" Payment wasn't completed in time.":""}
                   </div>
                   {o.refund&&o.refund.due&&(
-                    <div style={{marginTop:8,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"11px 12px",fontSize:12.5,color:"#1e3a8a",lineHeight:1.6}}>
+                    <div style={{marginTop:8,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"11px 12px",fontSize:12,color:"#1e3a8a",lineHeight:1.6}}>
                       <div style={{fontWeight:800,marginBottom:3}}>💸 Refund {o.refund.status==="refunded"?"completed":o.refund.status==="processing"?"in progress":"being arranged"}</div>
                       {o.refund.method==="gateway"?(
                         <div>A refund of <b>₹{o.refund.amount}</b> {o.refund.status==="refunded"?"has been":"is being"} returned automatically to your original payment method. Please allow 3–7 working days for it to reflect.</div>
@@ -7390,12 +7390,12 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     </div>
                   )}
                   {o.refund&&o.refund.due===false&&(
-                    <div style={{marginTop:8,fontSize:11.5,color:C.textSub,lineHeight:1.5}}>No payment was collected for this order, so there's nothing to refund.</div>
+                    <div style={{marginTop:8,fontSize:11,color:C.textSub,lineHeight:1.5}}>No payment was collected for this order, so there's nothing to refund.</div>
                   )}
                 </div>
               )}
               {o.status==="Confirmed"&&(
-                <div style={{marginTop:10,background:"#dcfce7",border:`1px solid #bbf7d0`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#15803d",fontWeight:600,lineHeight:1.5}}>✅ Payment verified — your order is confirmed &amp; being prepared!</div>
+                <div style={{marginTop:10,background:"#dcfce7",border:`1px solid #bbf7d0`,borderRadius:12,padding:"10px 12px",fontSize:12,color:"#15803d",fontWeight:600,lineHeight:1.5}}>✅ Payment verified — your order is confirmed &amp; being prepared!</div>
               )}
               {/* Dead-on-Arrival — the claim itself is now raised per fish, up with the item it
                   concerns (see ItemDoaBlock above). What stays here is the order-level status of
@@ -7405,7 +7405,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 const win=doaEntryOpen(o), left=doaHoursLeft(o);
                 if(o.liveGuarantee===false) return(
                   <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-                    <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>ℹ️ The <b>Live Arrival Guarantee (DOA cover)</b> doesn't apply to this order — a packing option below our recommendation was chosen at checkout. Per our Terms, DOA claims need the recommended (or safer) packing.</div>
+                    <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"9px 11px",lineHeight:1.5}}>ℹ️ The <b>Live Arrival Guarantee (DOA cover)</b> doesn't apply to this order — a packing option below our recommendation was chosen at checkout. Per our Terms, DOA claims need the recommended (or safer) packing.</div>
                   </div>
                 );
                 if(!claims.length){
@@ -7424,9 +7424,9 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 const st=(o.doa&&o.doa.status)||"Requested";
                 return(
                   <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-                    <div style={{background:st==="Declined"?"#fef2f2":st.startsWith("Approved")?"#ecfdf5":"#fff7ed",border:`1px solid ${st==="Declined"?"#fecaca":st.startsWith("Approved")?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 12px"}}>
+                    <div style={{background:st==="Declined"?"#fef2f2":st.startsWith("Approved")?"#ecfdf5":"#fff7ed",border:`1px solid ${st==="Declined"?"#fecaca":st.startsWith("Approved")?"#a7f3d0":"#fed7aa"}`,borderRadius:12,padding:"11px 12px"}}>
                       <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:3}}>🐟 Dead-on-Arrival request · {claims.length} item{claims.length>1?"s":""}</div>
-                      <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>{doaStatusText[st]||"Submitted."}</div>
+                      <div style={{fontSize:11,color:C.textSub,lineHeight:1.55}}>{doaStatusText[st]||"Submitted."}</div>
                       <div style={{marginTop:7,display:"flex",flexDirection:"column",gap:4}}>
                         {claims.map(([iid,c])=>(
                           <div key={iid} style={{fontSize:11,color:C.text,lineHeight:1.45}}>
@@ -7434,12 +7434,12 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                           </div>
                         ))}
                       </div>
-                      {o.doa&&o.doa.note&&<div style={{fontSize:11.5,color:C.text,marginTop:7,lineHeight:1.5}}><b>Note from store:</b> {o.doa.note}</div>}
+                      {o.doa&&o.doa.note&&<div style={{fontSize:11,color:C.text,marginTop:7,lineHeight:1.5}}><b>Note from store:</b> {o.doa.note}</div>}
                       {(st==="Requested"||st==="Under Review")&&(
                         <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${o.orderNo||orderId(o.id)} — here is my unboxing video.`))}
-                          style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video on WhatsApp</button>
+                          style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"8px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video on WhatsApp</button>
                       )}
-                      {win&&(st==="Requested")&&<div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>Found another one? You can still report other fish above{left>0?` for ${left}h`:""}.</div>}
+                      {win&&(st==="Requested")&&<div style={{fontSize:10,color:C.textSub,marginTop:6,lineHeight:1.45}}>Found another one? You can still report other fish above{left>0?` for ${left}h`:""}.</div>}
                     </div>
                   </div>
                 );
@@ -7466,7 +7466,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               Delete my account
             </button>
           ):(
-            <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:14,padding:"14px 16px"}}>
+            <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:16,padding:"14px 16px"}}>
               <div style={{fontSize:14,fontWeight:800,color:"#b91c1c",marginBottom:6}}>Delete my account &amp; data</div>
               <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.6,marginBottom:10}}>
                 This deletes your account and personal data — your profile, saved items, wallet &amp; loyalty coins, referral code and any tank photos you posted. Your past order &amp; payment records are kept only as long as tax law requires, then deleted. <b>This can't be undone.</b>
@@ -7478,11 +7478,11 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               <div style={{display:"flex",gap:8}}>
                 <button className="press" disabled={!delAck||delBusy}
                   onClick={async()=>{ if(!delAck||delBusy)return; setDelBusy(true); try{ await onDeleteAccount(); }catch(e){ setDelBusy(false); } }}
-                  style={{flex:1,background:(!delAck||delBusy)?"#f3a5a5":"#dc2626",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(!delAck||delBusy)?"default":"pointer"}}>
+                  style={{flex:1,background:(!delAck||delBusy)?"#f3a5a5":"#dc2626",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(!delAck||delBusy)?"default":"pointer"}}>
                   {delBusy?"Deleting…":"Delete my account"}
                 </button>
                 <button className="press" disabled={delBusy} onClick={()=>{setDelOpen(false);setDelAck(false);}}
-                  style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 16px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+                  style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 16px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
               </div>
               <div style={{fontSize:11,color:"#991b1b",marginTop:10,lineHeight:1.5}}>
                 Prefer to ask us directly? <a href="/delete-account.html" style={{color:"#b91c1c",fontWeight:700}}>Other ways to request deletion →</a>
@@ -7514,18 +7514,18 @@ function SkeletonGrid({n=6}){
   return(
     <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
       {Array.from({length:n}).map((_,i)=>(
-        <div key={i} style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`}}>
+        <div key={i} style={{background:C.card,borderRadius:20,overflow:"hidden",border:`1px solid ${C.border}`}}>
           <div className="shimmer-bar" style={{aspectRatio:"1 / 1"}}/>
           <div style={{padding:"11px 12px 12px"}}>
             {/* category */}
-            <div className="shimmer-bar" style={{height:9,borderRadius:6,marginBottom:5,width:"45%"}}/>
+            <div className="shimmer-bar" style={{height:9,borderRadius:8,marginBottom:5,width:"45%"}}/>
             {/* name — two lines inside the card's own minHeight:33 */}
             <div style={{minHeight:33,marginBottom:6}}>
-              <div className="shimmer-bar" style={{height:12,borderRadius:6,marginBottom:5}}/>
-              <div className="shimmer-bar" style={{height:12,borderRadius:6,width:"70%"}}/>
+              <div className="shimmer-bar" style={{height:12,borderRadius:8,marginBottom:5}}/>
+              <div className="shimmer-bar" style={{height:12,borderRadius:8,width:"70%"}}/>
             </div>
             {/* price */}
-            <div className="shimmer-bar" style={{height:16,borderRadius:6,width:"40%",marginBottom:6}}/>
+            <div className="shimmer-bar" style={{height:16,borderRadius:8,width:"40%",marginBottom:6}}/>
             {/* the add-to-cart row: a 11.5px label with 7px padding, so 30px tall */}
             <div className="shimmer-bar" style={{height:30,borderRadius:99}}/>
           </div>
@@ -7626,7 +7626,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   );
   return(
     <div className="lift" ref={cardRef} onClick={()=>onPress(p)} onMouseMove={onTilt} onMouseLeave={onTiltEnd}
-      style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.06)",cursor:"pointer",position:"relative"}}>
+      style={{background:C.card,borderRadius:20,overflow:"hidden",border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.06)",cursor:"pointer",position:"relative"}}>
       {fine&&<div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:5,opacity:"var(--spot,0)",transition:"opacity .3s ease",background:"radial-gradient(200px circle at var(--mx,50%) var(--my,50%),rgba(14,165,233,.14),transparent 62%)"}}/>}
       {/* The photo is the product — it gets a square tile (roughly 60% of the card) and is fitted
           WHOLE inside it. It used to be a 120px letterbox with object-fit:cover, which cropped a
@@ -7637,7 +7637,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           ? <SmoothImg src={imgSrc} alt={p.name} style={{width:"100%",height:"100%",objectFit:"contain",padding:6}}/>
           : productExpectsImage(p)
             ? <div className="shimmer-bar" style={{position:"absolute",inset:0}}/>
-            : <span style={{fontSize:54}}>{m.emoji}</span>}
+            : <span style={{fontSize:52}}>{m.emoji}</span>}
         {!imgSrc&&<div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(0,0,0,.16),transparent 40%)"}}/>}
         {p.tag&&<span style={{position:"absolute",top:8,left:8,background:"rgba(0,0,0,.32)",color:"white",fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,backdropFilter:"blur(4px)"}}>{p.tag}</span>}
         {onSale&&!soon&&<span style={{position:"absolute",bottom:8,left:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:20}}>-{activeDiscount(p)}%</span>}
@@ -7651,9 +7651,9 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
         <div style={{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3,marginBottom:6,minHeight:33}}>{p.name}</div>
         {soon ? (
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-            <div style={{fontSize:10.5,color:C.accent,fontWeight:700}}>Launching soon</div>
+            <div style={{fontSize:10,color:C.accent,fontWeight:700}}>Launching soon</div>
             <button className="press" onClick={e=>{e.stopPropagation();if(!isInterested&&onInterest)onInterest(p);}} disabled={isInterested}
-              style={{background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:10,padding:"6px 12px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:isInterested?"default":"pointer"}}>
+              style={{background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:12,padding:"6px 12px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:isInterested?"default":"pointer"}}>
               {isInterested?"✓ Interested":"🔔 Interested"}
             </button>
           </div>
@@ -7668,7 +7668,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
             {oos?"Out of stock":stk<=3?`🔥 Only ${stk} left`:stk<10?`Only ${stk} left`:"In stock"}
           </div>
           {inCart>0 ? (
-            <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:10,padding:"3px 4px",gap:4}}>
+            <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:12,padding:"3px 4px",gap:4}}>
               <button onClick={e=>{e.stopPropagation();onAdd(p,-1);}}
                 style={{background:"transparent",border:"none",color:"white",fontSize:16,fontWeight:700,width:22,height:22,lineHeight:1,cursor:"pointer"}}>−</button>
               <span style={{fontSize:12,fontWeight:800,color:"white",minWidth:14,textAlign:"center"}}>{inCart}</span>
@@ -7679,7 +7679,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
             <button className="cta" onClick={e=>{e.stopPropagation();if(oos)return;
                 if(multi){ onPress(p); return; }            // let the customer pick the option first
                 onAdd(p,1);flyToCart(e.clientX,e.clientY,imgSrc);}} disabled={oos}
-              style={{background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"7px 16px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:oos?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
+              style={{background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"7px 16px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:oos?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
               {multi?"Select":"+ Add"}
             </button>
           )}
@@ -7805,22 +7805,22 @@ function ReferralDrawerCard({open,user,settings={},orders=[],nav,onClose}){
      and still refreshes underneath. */
   if(settings.referralEnabled===false) return null;
   if(!uk) return(
-    <div style={{margin:"2px 0 12px",background:"linear-gradient(135deg,#ede9fe,#eef2ff)",border:"1px solid #c4b5fd",borderRadius:14,padding:"12px"}}>
-      <div style={{fontSize:12.5,fontWeight:800,color:"#5b21b6",marginBottom:3}}>🎟️ Your referral code</div>
-      <div style={{fontSize:10.8,color:"#6d28d9",lineHeight:1.45,marginBottom:8}}>Sign in to see your spend progress and unlock your unique code.</div>
+    <div style={{margin:"2px 0 12px",background:"linear-gradient(135deg,#ede9fe,#eef2ff)",border:"1px solid #c4b5fd",borderRadius:16,padding:"12px"}}>
+      <div style={{fontSize:12,fontWeight:800,color:"#5b21b6",marginBottom:3}}>🎟️ Your referral code</div>
+      <div style={{fontSize:11,color:"#6d28d9",lineHeight:1.45,marginBottom:8}}>Sign in to see your spend progress and unlock your unique code.</div>
       <button className="press" onClick={()=>{onClose&&onClose();nav&&nav("auth");}}
-        style={{width:"100%",background:"#6d28d9",color:"white",border:"none",borderRadius:9,padding:"8px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>
+        style={{width:"100%",background:"#6d28d9",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>
     </div>
   );
   /* One height for all three states — loading, locked and unlocked. They are within a few
      pixels of each other, and the categories sit directly underneath: a card that grows as it
      resolves moves the thing the customer is reaching for. */
-  const CARD={margin:"2px 0 12px",borderRadius:14,padding:"12px",minHeight:REFERRAL_CARD_MIN,boxSizing:"border-box"};
+  const CARD={margin:"2px 0 12px",borderRadius:16,padding:"12px",minHeight:REFERRAL_CARD_MIN,boxSizing:"border-box"};
   if(loading&&!status) return(
     <div style={{...CARD,background:C.bg,border:`1px solid ${C.border}`}} aria-busy="true">
-      <div style={{fontSize:12.5,fontWeight:800,color:C.textSub,marginBottom:8}}>🎟️ Your referral code</div>
-      <div className="shimmer-bar" style={{height:10,borderRadius:6,marginBottom:7}}/>
-      <div className="shimmer-bar" style={{height:10,borderRadius:6,width:"75%",marginBottom:12}}/>
+      <div style={{fontSize:12,fontWeight:800,color:C.textSub,marginBottom:8}}>🎟️ Your referral code</div>
+      <div className="shimmer-bar" style={{height:10,borderRadius:8,marginBottom:7}}/>
+      <div className="shimmer-bar" style={{height:10,borderRadius:8,width:"75%",marginBottom:12}}/>
       <div className="shimmer-bar" style={{height:31,borderRadius:8}}/>
     </div>
   );
@@ -7828,21 +7828,21 @@ function ReferralDrawerCard({open,user,settings={},orders=[],nav,onClose}){
   const pct=status.threshold<=0?100:Math.min(100,Math.round((status.spent/status.threshold)*100));
   return(
     <div style={{...CARD,background:status.unlocked?"linear-gradient(135deg,#7c3aed,#4f46e5)":"linear-gradient(135deg,#f5f3ff,#eef2ff)",border:`1px solid ${status.unlocked?"#7c3aed":"#c4b5fd"}`,color:status.unlocked?"white":"#4c1d95"}}>
-      <div style={{fontSize:12.5,fontWeight:800,marginBottom:3}}>🎟️ {status.unlocked?"Your referral code":"Referral code locked"}</div>
+      <div style={{fontSize:12,fontWeight:800,marginBottom:3}}>🎟️ {status.unlocked?"Your referral code":"Referral code locked"}</div>
       {status.unlocked?(
         <>
-          <div style={{fontSize:10.8,opacity:.9,lineHeight:1.45,marginBottom:8}}>Friends get {referralOfferLine(settings)} when they use this at checkout.{referralOwnerCoins(settings)>0?` You earn ${referralOwnerCoins(settings)} reward coins once their order is delivered.`:""}</div>
+          <div style={{fontSize:11,opacity:.9,lineHeight:1.45,marginBottom:8}}>Friends get {referralOfferLine(settings)} when they use this at checkout.{referralOwnerCoins(settings)>0?` You earn ${referralOwnerCoins(settings)} reward coins once their order is delivered.`:""}</div>
           <div style={{display:"flex",alignItems:"center",gap:7}}>
             <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.55)",borderRadius:8,padding:"8px 7px",fontFamily:"monospace",fontSize:13,fontWeight:800,letterSpacing:1.2,textAlign:"center"}}>{status.code}</div>
             <button className="press" onClick={()=>{ try{navigator.clipboard.writeText(status.code);}catch(e){} try{navigator.share&&navigator.share({text:`Use ${status.code} at ${STORE_NAME} and get ${referralOfferLine(settings)}.`});}catch(e){} setCopied(true);setTimeout(()=>setCopied(false),1800); }}
-              style={{background:copied?"white":"rgba(255,255,255,.24)",color:copied?"#6d28d9":"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"9px 10px",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied?"✓ Copied":"Share"}</button>
+              style={{background:copied?"white":"rgba(255,255,255,.24)",color:copied?"#6d28d9":"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"9px 10px",fontSize:10,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied?"✓ Copied":"Share"}</button>
           </div>
         </>
       ):(
         <>
-          <div style={{fontSize:10.8,lineHeight:1.45,marginBottom:8}}>Spend ₹{status.remaining.toLocaleString("en-IN")} more successfully to unlock your permanent code.</div>
+          <div style={{fontSize:11,lineHeight:1.45,marginBottom:8}}>Spend ₹{status.remaining.toLocaleString("en-IN")} more successfully to unlock your permanent code.</div>
           <div style={{height:7,background:"#ddd6fe",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:"#7c3aed",borderRadius:99}}/></div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:9.8,fontWeight:700,marginTop:5}}><span>₹{status.spent.toLocaleString("en-IN")} spent</span><span>₹{status.threshold.toLocaleString("en-IN")} goal</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:700,marginTop:5}}><span>₹{status.spent.toLocaleString("en-IN")} spent</span><span>₹{status.threshold.toLocaleString("en-IN")} goal</span></div>
         </>
       )}
     </div>
@@ -7873,22 +7873,22 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
           <button className="press" onClick={onClose} aria-label="Close menu"
             style={{position:"absolute",top:42,right:14,width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:18,cursor:"pointer",lineHeight:1}}>×</button>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800}}>Browse</div>
-          <div style={{fontSize:11.5,color:"rgba(255,255,255,.8)",marginTop:2}}>Shop by category</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,.8)",marginTop:2}}>Shop by category</div>
         </div>
         {/* Only this part scrolls; `overscroll-behavior:contain` stops the flick from
             carrying through to the page behind the drawer once the list hits its end. */}
         <div className="nemo-browse-scroll" style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",padding:"12px 12px 18px"}}>
           <ReferralDrawerCard open={open} user={user} settings={settings} orders={orders} nav={nav} onClose={onClose}/>
           <button className="press" onClick={()=>onSelect("All")}
-            style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderRadius:13,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+            style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderRadius:12,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
             <span style={{fontSize:22,width:28,textAlign:"center"}}>🌊</span>
-            <span style={{fontSize:14.5,fontWeight:800,color:C.text}}>All Products</span>
+            <span style={{fontSize:14,fontWeight:800,color:C.text}}>All Products</span>
           </button>
           {shopCategories().map(cat=>(
             <button key={cat} className="press" onClick={()=>onSelect(cat)}
               style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderTop:`1px solid ${C.border}`,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
               <span style={{fontSize:22,width:28,textAlign:"center"}}>{CAT_META[cat].emoji}</span>
-              <span style={{fontSize:14.5,fontWeight:700,color:C.text}}>{cat}</span>
+              <span style={{fontSize:14,fontWeight:700,color:C.text}}>{cat}</span>
               <span style={{marginLeft:"auto",color:C.textSub,fontSize:16}}>›</span>
             </button>
           ))}
@@ -7896,7 +7896,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
             <div style={{marginTop:18,paddingTop:6}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 12px",marginBottom:8}}>
                 <span style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6}}>Recent searches</span>
-                <button className="press" onClick={()=>onRecent&&onRecent(null)} style={{background:"none",border:"none",color:C.textSub,fontSize:10.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Clear</button>
+                <button className="press" onClick={()=>onRecent&&onRecent(null)} style={{background:"none",border:"none",color:C.textSub,fontSize:10,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Clear</button>
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:7,padding:"0 12px"}}>
                 {recent.map(r=>(
@@ -7911,10 +7911,10 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
           {/* Dedicated refresh — for a device stuck on an old build or a stale catalogue */}
           <div style={{marginTop:16,borderTop:`1px solid ${C.border}`,paddingTop:14}}>
             <button className="press" onClick={()=>{ if(refreshing)return; setRefreshing(true); forceRefresh(); }} disabled={refreshing}
-              style={{display:"flex",alignItems:"center",gap:11,width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:13,padding:"12px",cursor:refreshing?"default":"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+              style={{display:"flex",alignItems:"center",gap:11,width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px",cursor:refreshing?"default":"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
               <span style={{fontSize:20,width:26,textAlign:"center",flexShrink:0}}>{refreshing?"⏳":"🔄"}</span>
               <span style={{minWidth:0}}>
-                <span style={{display:"block",fontSize:13.5,fontWeight:800,color:C.text}}>{refreshing?"Refreshing…":"Refresh app"}</span>
+                <span style={{display:"block",fontSize:13,fontWeight:800,color:C.text}}>{refreshing?"Refreshing…":"Refresh app"}</span>
                 <span style={{display:"block",fontSize:11,color:C.textSub,marginTop:1,lineHeight:1.35}}>Clear the cache and reload the latest products &amp; prices</span>
               </span>
             </button>
@@ -7925,12 +7925,12 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
               <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",marginBottom:4}}>Company</div>
               {COMPANY.map(l=>(
                 <button key={l.label} className="press" onClick={()=>go(l.to)}
-                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l.label}</button>
+                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l.label}</button>
               ))}
               <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",margin:"20px 0 4px",borderTop:`1px solid ${C.border}`,paddingTop:16}}>Policies</div>
               {POLICIES.map(l=>(
                 <a key={l.label} className="press" href={l.href||"#"} onClick={e=>{e.preventDefault();go(l.to);}}
-                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",textDecoration:"none",boxSizing:"border-box"}}>{l.label}</a>
+                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",textDecoration:"none",boxSizing:"border-box"}}>{l.label}</a>
               ))}
             </div>
           )}
@@ -7938,7 +7938,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
           <PlayAppBlock medium="side_menu" note="Shop and track your orders from your phone."
             style={{marginTop:20,borderTop:`1px solid ${C.border}`,paddingTop:16}}
             headingStyle={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",marginBottom:4}}
-            noteStyle={{fontSize:12.5,color:C.textSub,lineHeight:1.5,padding:"0 12px"}}
+            noteStyle={{fontSize:12,color:C.textSub,lineHeight:1.5,padding:"0 12px"}}
             badgeStyle={{marginLeft:3}}/>
         </div>
       </div>
@@ -7963,27 +7963,27 @@ function PincodeChecker({settings={}}){
     <div style={{margin:"28px 0 0",background:`linear-gradient(135deg,${C.primaryDark},${C.primary})`,borderRadius:20,padding:"22px 20px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
         <span style={{fontSize:22}}>📍</span>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,color:"#fff"}}>Check delivery to your area</span>
+        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:"#fff"}}>Check delivery to your area</span>
       </div>
-      <div style={{fontSize:12.5,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>{LIVE_FISH_ENABLED?"Enter your 6-digit pincode to see if we deliver — and whether live fish reach your area.":"Enter your 6-digit pincode to see if we deliver to your area."}</div>
+      <div style={{fontSize:12,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>{LIVE_FISH_ENABLED?"Enter your 6-digit pincode to see if we deliver — and whether live fish reach your area.":"Enter your 6-digit pincode to see if we deliver to your area."}</div>
       <div style={{display:"flex",gap:8}}>
         <input value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,6));setRes(null);}}
           onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric"
-          style={{flex:1,borderRadius:12,border:"none",padding:"13px 14px",fontSize:15,outline:"none",letterSpacing:2,fontFamily:PRICE_FONT,minWidth:0}}/>
+          style={{flex:1,borderRadius:12,border:"none",padding:"13px 14px",fontSize:14,outline:"none",letterSpacing:2,fontFamily:PRICE_FONT,minWidth:0}}/>
         <button className="press" onClick={check} style={{background:"#fff",color:C.primary,border:"none",borderRadius:12,padding:"0 20px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,cursor:"pointer"}}>Check</button>
       </div>
       {res&&(
-        <div style={{marginTop:14,background:"rgba(255,255,255,.96)",borderRadius:14,padding:"13px 15px"}}>
+        <div style={{marginTop:14,background:"rgba(255,255,255,.96)",borderRadius:16,padding:"13px 15px"}}>
           {res.err?(
             <div style={{fontSize:13,fontWeight:700,color:C.danger}}>Please enter a valid 6-digit pincode.</div>
           ):(<>
             <div style={{fontSize:14,fontWeight:800,color:C.success,marginBottom:6}}>✓ Yes! We deliver to {ZONE_LABELS[res.zone]}.</div>
             {!LIVE_FISH_ENABLED?(
-              <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.5}}>🌿 Plants, tanks, accessories &amp; feed — all available, delivered across India.</div>
+              <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>🌿 Plants, tanks, accessories &amp; feed — all available, delivered across India.</div>
             ):res.live?(
-              <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.5}}>🐠 Live fish, plants &amp; accessories — all available, with our Live Arrival Guarantee.</div>
+              <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>🐠 Live fish, plants &amp; accessories — all available, with our Live Arrival Guarantee.</div>
             ):(
-              <div style={{fontSize:12.5,color:"#b45309",lineHeight:1.5,fontWeight:600}}>📦 Accessories, food &amp; plants ship here. Live fish aren't delivered to this region yet — for their safety we ship live stock only within Tamil Nadu &amp; South India.</div>
+              <div style={{fontSize:12,color:"#b45309",lineHeight:1.5,fontWeight:600}}>📦 Accessories, food &amp; plants ship here. Live fish aren't delivered to this region yet — for their safety we ship live stock only within Tamil Nadu &amp; South India.</div>
             )}
           </>)}
         </div>
@@ -8000,14 +8000,14 @@ function FoodReorderBanner({orders,products,addToCart,nav}){
   const reorder=()=>{ if(inStock){ addToCart(due.product,1); nav("cart"); } else if(due.product){ nav("detail",due.product); } };
   const dismiss=()=>{ try{ localStorage.setItem("nemo-reorder-dismiss",due.key); }catch{} setDismissed(true); };
   return(
-    <div style={{marginBottom:22,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:18,padding:"14px 30px 14px 16px",display:"flex",alignItems:"center",gap:13,position:"relative"}}>
+    <div style={{marginBottom:22,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:20,padding:"14px 30px 14px 16px",display:"flex",alignItems:"center",gap:13,position:"relative"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"#ffedd5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>🥣</div>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14.5,fontWeight:800,color:"#9a3412",lineHeight:1.2}}>Running low on fish food?</div>
-        <div style={{fontSize:11.5,color:"#9a3412",opacity:.85,marginTop:2,lineHeight:1.4}}>You bought {due.item.name} about {due.ageDays} days ago — keep your fish well-fed.</div>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#9a3412",lineHeight:1.2}}>Running low on fish food?</div>
+        <div style={{fontSize:11,color:"#9a3412",opacity:.85,marginTop:2,lineHeight:1.4}}>You bought {due.item.name} about {due.ageDays} days ago — keep your fish well-fed.</div>
       </div>
       <button className="press" onClick={reorder}
-        style={{flexShrink:0,background:C.coral,color:"white",border:"none",borderRadius:11,padding:"10px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        style={{flexShrink:0,background:C.coral,color:"white",border:"none",borderRadius:12,padding:"10px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
         {inStock?"Reorder":"View"}
       </button>
       <button className="press" onClick={dismiss} aria-label="Dismiss"
@@ -8055,7 +8055,7 @@ function DoaInsights({orders=[]}){
         <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:6}}>{title}</div>
         {arr.map(x=>(
           <div key={x.k} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderTop:`1px solid ${C.border}`}}>
-            <span style={{flex:1,fontSize:12.5,fontWeight:600,color:C.text,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.k}</span>
+            <span style={{flex:1,fontSize:12,fontWeight:600,color:C.text,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.k}</span>
             <span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{x.doa}/{x.d}</span>
             <span style={{fontSize:12,fontWeight:800,color:rateColor(x.rate),minWidth:46,textAlign:"right"}}>{x.rate.toFixed(0)}%</span>
           </div>
@@ -8064,7 +8064,7 @@ function DoaInsights({orders=[]}){
     );
   };
   return(
-    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:14}}>
       <button className="press" onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left"}}>
         <span style={{fontSize:18}}>🩺</span>
         <div style={{flex:1}}>
@@ -8075,7 +8075,7 @@ function DoaInsights({orders=[]}){
         <span style={{fontSize:13,color:C.textSub,marginLeft:6}}>{open?"▲":"▼"}</span>
       </button>
       {open&&(data.doa===0?(
-        <div style={{marginTop:12,fontSize:12,color:"#15803d",fontWeight:600,background:"#ecfdf5",borderRadius:10,padding:"10px 12px"}}>✓ No DOA reported yet — your fish are arriving safe!</div>
+        <div style={{marginTop:12,fontSize:12,color:"#15803d",fontWeight:600,background:"#ecfdf5",borderRadius:12,padding:"10px 12px"}}>✓ No DOA reported yet — your fish are arriving safe!</div>
       ):(
         <div>
           {/* The rates say WHERE losses cluster; this says WHICH orders they were, so a number
@@ -8093,10 +8093,10 @@ function DoaInsights({orders=[]}){
                   <div key={o.id} style={{padding:"8px 0",borderTop:`1px solid ${C.border}`}}>
                     <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
                       <code style={{fontSize:12,fontWeight:800,color:C.text,fontFamily:"monospace"}}>{o.orderNo||orderId(o.id)}</code>
-                      <span style={{fontSize:10.5,color:C.textSub}}>{o.shippingZoneLabel||"Unknown"}</span>
-                      <span style={{fontSize:10.5,fontWeight:800,color:col,marginLeft:"auto"}}>{st}</span>
+                      <span style={{fontSize:10,color:C.textSub}}>{o.shippingZoneLabel||"Unknown"}</span>
+                      <span style={{fontSize:10,fontWeight:800,color:col,marginLeft:"auto"}}>{st}</span>
                     </div>
-                    <div style={{fontSize:10.5,color:C.textSub,marginTop:2,lineHeight:1.45}}>
+                    <div style={{fontSize:10,color:C.textSub,marginTop:2,lineHeight:1.45}}>
                       {claims.length
                         ? claims.map(c=>`${c.name||"Item"} x${c.qty||1}${c.cause?` (${c.cause})`:""}`).join(" · ")
                         : (o.doa&&o.doa.claimReason)||"No item detail recorded"}
@@ -8554,7 +8554,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   const lbl={fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5};
   const fld={width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"#f8fafc"};
   const numIn=(val,set,ph)=>(<input type="number" inputMode="decimal" min="0" value={val} placeholder={ph} onChange={e=>set(e.target.value)} style={{...fld,textAlign:"center"}}/>);
-  const chip=(on)=>({flexShrink:0,padding:"8px 13px",borderRadius:20,border:`1.5px solid ${on?C.primary:C.border}`,background:on?C.primary:"transparent",color:on?"#fff":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"});
+  const chip=(on)=>({flexShrink:0,padding:"8px 13px",borderRadius:20,border:`1.5px solid ${on?C.primary:C.border}`,background:on?C.primary:"transparent",color:on?"#fff":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"});
 
   const applyVolume=()=>{
     persist({...tank,litres:usableL||waterL,lengthCm:Math.round(dimsCm.l)});
@@ -8635,10 +8635,10 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 </div>
               </div>
               {waterL>0&&(
-                <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginTop:12,fontSize:12.5,lineHeight:1.6,color:C.text}}>
+                <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginTop:12,fontSize:12,lineHeight:1.6,color:C.text}}>
                   💧 <b>{waterL} L</b> of water ({usGal(waterL)} US gal · {ukGal(waterL)} UK gal){fullL!==waterL?` — the tank itself holds ${fullL} L`:""}.<br/>
                   Usable after substrate &amp; décor: <b style={{color:C.primary}}>~{usableL} L</b> — plan stocking on that figure.
-                  <button className="press" onClick={applyVolume} style={{display:"block",marginTop:9,background:C.primary,color:"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Save to My Tank</button>
+                  <button className="press" onClick={applyVolume} style={{display:"block",marginTop:9,background:C.primary,color:"#fff",border:"none",borderRadius:12,padding:"9px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Save to My Tank</button>
                   {savedNote&&<div style={{fontSize:11,color:C.success,fontWeight:700,marginTop:6}}>{savedNote}</div>}
                 </div>
               )}
@@ -8647,7 +8647,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
 
           {saved&&!editing&&(
             <div style={{display:"flex",gap:12,alignItems:"center"}}>
-              <div style={{fontSize:12.5,color:C.text,lineHeight:1.7}}>
+              <div style={{fontSize:12,color:C.text,lineHeight:1.7}}>
                 <b>{tank.litres} L</b> usable{tank.lengthCm?` · ${tank.lengthCm} cm long`:""}<br/>
                 <span style={{color:C.textSub}}>
                   {({tropical:"Tropical",coldwater:"Coldwater",pond:"Pond",marine:"Marine"})[tank.type]}
@@ -8667,11 +8667,11 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
           return(
             <div style={{...card,background:L.bg,border:`1.5px solid ${L.bd}`}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                <span style={{fontSize:17}}>{L.icon}</span>
+                <span style={{fontSize:16}}>{L.icon}</span>
                 <span style={{fontSize:10,fontWeight:800,letterSpacing:.6,textTransform:"uppercase",color:L.c}}>{L.label}</span>
-                <span style={{marginLeft:"auto",fontSize:10.5,color:C.textSub}}>{fmtDate(latestTest(tank).at)}</span>
+                <span style={{marginLeft:"auto",fontSize:10,color:C.textSub}}>{fmtDate(latestTest(tank).at)}</span>
               </div>
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:L.c,marginBottom:4}}>{verdict.title}</div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:L.c,marginBottom:4}}>{verdict.title}</div>
               <div style={{fontSize:12,color:C.text,lineHeight:1.55,marginBottom:verdict.dos.length?10:0}}>{verdict.why}</div>
               {verdict.dos.map((d,i)=>(
                 <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:5}}>
@@ -8681,7 +8681,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
               ))}
               {verdict.level!=="good"&&(
                 <button className="press" onClick={markCareDone}
-                  style={{width:"100%",marginTop:8,background:L.c,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  style={{width:"100%",marginTop:8,background:L.c,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                   ✓ Done — I've made this change
                 </button>
               )}
@@ -8699,15 +8699,15 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:7,marginBottom:9}}>
               {WATER_PARAMS.map(pm=>(
                 <div key={pm.k}>
-                  <div style={{fontSize:9.5,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.4,marginBottom:4,textAlign:"center"}}>{pm.n}</div>
+                  <div style={{fontSize:9,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.4,marginBottom:4,textAlign:"center"}}>{pm.n}</div>
                   <input type="number" inputMode="decimal" min="0" step={pm.step} value={test[pm.k]}
                     onChange={e=>setTest(t=>({...t,[pm.k]:e.target.value}))} placeholder="—"
-                    style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 4px",fontSize:13.5,outline:"none",background:"#f8fafc",textAlign:"center"}}/>
+                    style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 4px",fontSize:13,outline:"none",background:"#f8fafc",textAlign:"center"}}/>
                 </div>
               ))}
             </div>
             <button className="press" onClick={saveTest}
-              style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
               Save today's readings
             </button>
 
@@ -8719,9 +8719,9 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                   return(
                     <div key={pm.k} style={{marginBottom:12}}>
                       <div style={{display:"flex",alignItems:"baseline",gap:7,marginBottom:2}}>
-                        <span style={{width:9,height:9,borderRadius:3,background:pm.color,flexShrink:0}}/>
+                        <span style={{width:9,height:9,borderRadius:4,background:pm.color,flexShrink:0}}/>
                         <span style={{fontSize:12,fontWeight:800,color:C.text}}>{pm.n}</span>
-                        <span style={{fontSize:10.5,color:C.textSub}}>
+                        <span style={{fontSize:10,color:C.textSub}}>
                           {pm.k==="ph"?`safe ${pm.lo}–${pm.hi}`:pm.hi>0?`safe under ${pm.hi} ${pm.unit}`:`must read 0 ${pm.unit}`}
                         </span>
                       </div>
@@ -8737,7 +8737,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 </button>
                 {logOpen&&(
                   <div style={{marginTop:9,overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                       <thead>
                         <tr style={{color:C.textSub}}>
                           <th style={{textAlign:"left",padding:"5px 6px",fontWeight:700}}>Date</th>
@@ -8772,7 +8772,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
               {perm!=="denied"&&(
                 <button className="press" onClick={toggleRemind} role="switch" aria-checked={!!tank.remind}
                   aria-label={tank.remind?"Turn off weekly tank reminders":"Turn on weekly tank reminders"}
-                  style={{display:"flex",alignItems:"center",gap:7,background:tank.remind?"#dcfce7":C.accentLight,border:`1px solid ${tank.remind?"#86efac":C.border}`,borderRadius:10,padding:"6px 11px",fontSize:11,fontWeight:700,color:tank.remind?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  style={{display:"flex",alignItems:"center",gap:7,background:tank.remind?"#dcfce7":C.accentLight,border:`1px solid ${tank.remind?"#86efac":C.border}`,borderRadius:12,padding:"6px 11px",fontSize:11,fontWeight:700,color:tank.remind?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                   <span>{tank.remind?"🔔":"🔕"}</span><span>Remind me</span>
                   <span style={{width:24,height:14,borderRadius:99,background:tank.remind?"#22c55e":"#cbd5e1",position:"relative",flexShrink:0,transition:"background .2s ease"}}>
                     <span style={{position:"absolute",top:2,left:tank.remind?12:2,width:10,height:10,borderRadius:"50%",background:"#fff",transition:"left .2s ease"}}/>
@@ -8787,16 +8787,16 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                  :`Done ${due.days===0?"today":due.days===1?"yesterday":`${due.days} days ago`} · next in ${CARE_INTERVAL_DAYS-due.days} day${CARE_INTERVAL_DAYS-due.days===1?"":"s"}.`}
               </div>
               <button className="press" onClick={markCareDone}
-                style={{background:due.due?C.primary:"#fff",color:due.due?"#fff":C.primary,border:due.due?"none":`1.5px solid ${C.primary}`,borderRadius:10,padding:"8px 13px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",flexShrink:0}}>
+                style={{background:due.due?C.primary:"#fff",color:due.due?"#fff":C.primary,border:due.due?"none":`1.5px solid ${C.primary}`,borderRadius:12,padding:"8px 13px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",flexShrink:0}}>
                 ✓ Done today
               </button>
             </div>
-            {tank.remind&&<div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.45}}>You'll be reminded when you open the app and the week is up — we can't wake a closed phone yet.</div>}
+            {tank.remind&&<div style={{fontSize:10,color:C.textSub,marginBottom:10,lineHeight:1.45}}>You'll be reminded when you open the app and the week is up — we can't wake a closed phone yet.</div>}
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {weekly.map((w,i)=>(
                 <label key={i} style={{display:"flex",gap:10,alignItems:"flex-start",background:checkedJobs.includes(i)?"#ecfdf5":"#f8fafc",border:`1px solid ${checkedJobs.includes(i)?"#a7f3d0":C.border}`,borderRadius:12,padding:"10px 12px",cursor:"pointer"}}>
                   <input type="checkbox" checked={checkedJobs.includes(i)} onChange={()=>toggleJob(i)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
-                  <div><div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{w.i} {w.t}</div><div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:2}}>{w.s}</div></div>
+                  <div><div style={{fontSize:12,fontWeight:700,color:C.text}}>{w.i} {w.t}</div><div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:2}}>{w.s}</div></div>
                 </label>
               ))}
             </div>
@@ -8816,15 +8816,15 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 const S=SPECIES[key];
                 return(
                   <div key={key} style={{display:"flex",alignItems:"center",gap:10,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px"}}>
-                    <span style={{fontSize:17,flexShrink:0}}>{S.e}</span>
+                    <span style={{fontSize:16,flexShrink:0}}>{S.e}</span>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{S.n} {S.big&&<span style={{fontSize:9,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"2px 7px",marginLeft:4}}>LARGE — {S.size} CM</span>}</div>
-                      <div style={{fontSize:10.5,color:C.textSub,fontStyle:"italic"}}>{S.sci} · adult {S.size} cm</div>
+                      <div style={{fontSize:12,fontWeight:700,color:C.text}}>{S.n} {S.big&&<span style={{fontSize:9,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"2px 7px",marginLeft:4}}>LARGE — {S.size} CM</span>}</div>
+                      <div style={{fontSize:10,color:C.textSub,fontStyle:"italic"}}>{S.sci} · adult {S.size} cm</div>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",gap:9,background:"#fff",borderRadius:10,padding:"3px 9px",border:`1.5px solid ${C.border}`,flexShrink:0}}>
-                      <button className="press" onClick={()=>setQty(key,qty-1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>−</button>
+                    <div style={{display:"flex",alignItems:"center",gap:9,background:"#fff",borderRadius:12,padding:"3px 9px",border:`1.5px solid ${C.border}`,flexShrink:0}}>
+                      <button className="press" onClick={()=>setQty(key,qty-1)} style={{background:"none",border:"none",fontSize:16,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>−</button>
                       <span style={{fontSize:13,fontWeight:700,minWidth:16,textAlign:"center"}}>{qty}</span>
-                      <button className="press" onClick={()=>setQty(key,qty+1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>+</button>
+                      <button className="press" onClick={()=>setQty(key,qty+1)} style={{background:"none",border:"none",fontSize:16,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>+</button>
                     </div>
                   </div>
                 );
@@ -8832,7 +8832,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             </div>
           )}
 
-          <button className="press" onClick={()=>setPickOpen(v=>!v)} style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",marginBottom:pickOpen?12:0}}>
+          <button className="press" onClick={()=>setPickOpen(v=>!v)} style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",marginBottom:pickOpen?12:0}}>
             {pickOpen?"▲ Close the fish list":"＋ Add fish"}
           </button>
 
@@ -8842,7 +8842,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             return(
               <div key={g.k} style={{marginBottom:12}}>
                 <div style={{...lbl,marginTop:4}}>{g.label}</div>
-                {g.k==="pond"&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:8,lineHeight:1.5}}>Pond fish, not aquarium fish. Koi need a large, deep pond — OATA advises substantially more depth than a tank can offer.</div>}
+                {g.k==="pond"&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"8px 10px",marginBottom:8,lineHeight:1.5}}>Pond fish, not aquarium fish. Koi need a large, deep pond — OATA advises substantially more depth than a tank can offer.</div>}
                 {g.k==="invert"&&<div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Judged separately from fish: "can live together" is not the same as "will not be eaten".</div>}
                 <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
                   {keys.map(k=>{
@@ -8860,9 +8860,9 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
 
           {report&&(
             <div style={{marginTop:14}}>
-              <div style={{background:VERDICT[report.worst].bg,border:`1.5px solid ${VERDICT[report.worst].bd}`,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+              <div style={{background:VERDICT[report.worst].bg,border:`1.5px solid ${VERDICT[report.worst].bd}`,borderRadius:16,padding:"12px 14px",marginBottom:10}}>
                 <div style={{fontSize:14,fontWeight:800,color:VERDICT[report.worst].c}}>{VERDICT[report.worst].icon} {VERDICT[report.worst].t}</div>
-                <div style={{fontSize:11.5,color:C.textSub,marginTop:4,lineHeight:1.55}}>
+                <div style={{fontSize:11,color:C.textSub,marginTop:4,lineHeight:1.55}}>
                   Confidence: <b style={{color:C.text}}>{report.confidence}</b>
                   {report.missing.length>0&&<> — still missing {report.missing.join(", ")}.</>}
                 </div>
@@ -8872,9 +8872,9 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 <div style={{marginBottom:9}}>
                   <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>🏠 {tank.name||"This tank"}</div>
                   {report.tankLvl.map((it,i)=>(
-                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:12,padding:"8px 11px",marginBottom:5}}>
                       <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
-                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                      <div style={{fontSize:11,lineHeight:1.55,color:C.text}}>{it.r}</div>
                     </div>
                   ))}
                 </div>
@@ -8883,9 +8883,9 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 <div key={key} style={{marginBottom:9}}>
                   <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>{SPECIES[key].e} {qty} × {SPECIES[key].n}</div>
                   {issues.map((it,i)=>(
-                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:12,padding:"8px 11px",marginBottom:5}}>
                       <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
-                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                      <div style={{fontSize:11,lineHeight:1.55,color:C.text}}>{it.r}</div>
                     </div>
                   ))}
                 </div>
@@ -8895,17 +8895,17 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 <div key={i} style={{marginBottom:9}}>
                   <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>{SPECIES[p.a].n} × {SPECIES[p.b].n}</div>
                   {p.issues.map((it,j)=>(
-                    <div key={j} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                    <div key={j} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:12,padding:"8px 11px",marginBottom:5}}>
                       <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
-                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                      <div style={{fontSize:11,lineHeight:1.55,color:C.text}}>{it.r}</div>
                     </div>
                   ))}
                 </div>
               ))}
 
-              {report.worst===V_OK&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>Nothing in this mix conflicts. Add fish a few at a time so the filter can keep up.</div>}
+              {report.worst===V_OK&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.55}}>Nothing in this mix conflicts. Add fish a few at a time so the filter can keep up.</div>}
 
-              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:11.5,lineHeight:1.6,color:C.text,marginTop:6}}>
+              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:11,lineHeight:1.6,color:C.text,marginTop:6}}>
                 🪣 <b>Waste load:</b> {({light:"light — room to add more later",comfortable:"comfortable for this volume",full:"at the comfortable limit",over:"beyond what this volume supports",unknown:"needs the tank volume to judge"})[report.load.level]}
                 {report.load.heavy.length>0&&<> · heavy-waste species here: {report.load.heavy.join(", ")}.</>}
               </div>
@@ -8928,14 +8928,14 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             <div><div style={lbl}>Room temp °C</div>{numIn(roomT,setRoomT,"28")}</div>
             <div><div style={lbl}>Target water °C</div>{numIn(tank.tempC,v=>setF("tempC",v),"26")}</div>
           </div>
-          {!tank.litres&&<div style={{fontSize:11.5,color:C.textSub}}>Set your tank volume above to size a heater.</div>}
+          {!tank.litres&&<div style={{fontSize:11,color:C.textSub}}>Set your tank volume above to size a heater.</div>}
           {heater&&heater.none&&(
-            <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:"#92400e"}}>
+            <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"11px 13px",fontSize:12,lineHeight:1.6,color:"#92400e"}}>
               🔥 Your room already sits at or above the target. A heater would rarely switch on — and in a hot spell the risk is <b>overheating</b>, not cold. Watch for water above {Number(tank.tempC)+2}°C, keep the surface moving, and consider a fan across the surface rather than a heater.
             </div>
           )}
           {heater&&!heater.none&&(
-            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:C.text}}>
+            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12,lineHeight:1.6,color:C.text}}>
               🌡️ About <b style={{color:C.primary}}>{heater.w} W</b> to hold {tank.tempC}°C in a {roomT}°C room ({heater.lift}°C lift).
               {heater.split&&<> Over 200 L, two smaller heaters at opposite ends beat one large one — and a single failure cannot cook or chill the tank.</>}
               {heater.hot&&<> Your room is close to the target, so it will rarely run.</>}
@@ -8949,9 +8949,9 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
           <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:10}}>
             A recommended range, not a guaranteed safe figure — what the filter holds matters more than the number on the box.
           </div>
-          {!filterRec&&<div style={{fontSize:11.5,color:C.textSub}}>Set your tank volume above to size a filter.</div>}
+          {!filterRec&&<div style={{fontSize:11,color:C.textSub}}>Set your tank volume above to size a filter.</div>}
           {filterRec&&(
-            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:C.text}}>
+            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12,lineHeight:1.6,color:C.text}}>
               🌀 Aim for <b style={{color:C.primary}}>{filterRec.lo}–{filterRec.hi} L/h</b> on a {tank.litres} L tank
               {filterRec.lvl!=="unknown"&&<> at your planned stocking ({filterRec.lvl}).</>}
               {filterRec.heavy.length>0&&<> Heavy-waste species in the plan ({filterRec.heavy.join(", ")}) push you to the top of that range.</>}
@@ -9008,10 +9008,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
         {/* Hamburger — opens category drawer */}
         <button className="press home-hero-chrome" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
-          style={{position:"absolute",top:46,left:16,width:40,height:40,borderRadius:14,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,cursor:"pointer",zIndex:3}}>
-          <span style={{width:17,height:2,background:C.text,borderRadius:2}}/>
-          <span style={{width:17,height:2,background:C.text,borderRadius:2}}/>
-          <span style={{width:17,height:2,background:C.text,borderRadius:2}}/>
+          style={{position:"absolute",top:46,left:16,width:40,height:40,borderRadius:16,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,cursor:"pointer",zIndex:3}}>
+          <span style={{width:17,height:2,background:C.text,borderRadius:4}}/>
+          <span style={{width:17,height:2,background:C.text,borderRadius:4}}/>
+          <span style={{width:17,height:2,background:C.text,borderRadius:4}}/>
         </button>
         {/* Account chip */}
         <div className="home-hero-chrome" style={{position:"absolute",top:46,right:16,display:"flex",alignItems:"center",gap:8}}>
@@ -9019,8 +9019,8 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <button className="press" onClick={()=>setWalletOpen(true)} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your coins & history"}
               style={{position:"relative",display:"flex",alignItems:"center",gap:5,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",borderRadius:99,padding:"7px 12px",color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
               <span style={{fontSize:14,lineHeight:1}}>👛</span>
-              <span style={{fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{walletPts}</span>
-              {walletWarn&&<span style={{position:"absolute",top:-5,right:-4,minWidth:16,height:16,padding:"0 3px",borderRadius:9,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid rgba(13,90,94,.9)"}}>⏳</span>}
+              <span style={{fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{walletPts}</span>
+              {walletWarn&&<span style={{position:"absolute",top:-5,right:-4,minWidth:16,height:16,padding:"0 3px",borderRadius:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid rgba(13,90,94,.9)"}}>⏳</span>}
             </button>
           )}
           <button className="press" onClick={()=>nav("orders")}
@@ -9048,15 +9048,15 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Browse categories — opens the left-slide category sidebar (icon only; shown on desktop, just above the quote). On mobile the top-left hamburger already does this. */}
         <button className="press hero-browse" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
           style={{display:"none",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:4,width:46,height:46,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",borderRadius:16,color:C.text,cursor:"pointer",marginBottom:18}}>
-          <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
-          <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
-          <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
+          <span style={{width:18,height:2,background:C.text,borderRadius:4}}/>
+          <span style={{width:18,height:2,background:C.text,borderRadius:4}}/>
+          <span style={{width:18,height:2,background:C.text,borderRadius:4}}/>
         </button>
         {/* Tagline */}
         <div className="hero-tagline" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(23px,6vw,38px)",fontWeight:800,letterSpacing:"-0.03em",color:C.text,lineHeight:1.1,marginBottom:5,textWrap:"balance",textAlign:"center"}}>
           {storeCopy(settings.heroHeadline,"Bring Colour to Your Life","Bring Colour to Your Life")}
         </div>
-        <div className="hero-sub" style={{fontSize:13.5,fontWeight:500,color:C.textSub,marginBottom:0,textAlign:"center"}}>
+        <div className="hero-sub" style={{fontSize:13,fontWeight:500,color:C.textSub,marginBottom:0,textAlign:"center"}}>
           {storeCopy(settings.heroSub,"Quality Fishes · Plants · Accessories","Plants · Tanks · Accessories · Feed")}
         </div>
       </div>
@@ -9076,11 +9076,11 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           )}
           {query&&(
             <button onClick={()=>{setSuggOpen(false);nav("shop");}} className="press"
-              style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 13px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Go</button>
+              style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"7px 13px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Go</button>
           )}
           {/* Live search suggestions — tap a match to jump straight to the product */}
           {suggOpen&&query.trim()&&suggestions.length>0&&(
-            <div className="sugg-drop" style={{position:"absolute",top:"calc(100% + 8px)",left:0,right:0,background:C.card,borderRadius:14,border:`1px solid ${C.border}`,boxShadow:"0 14px 34px rgba(11,110,114,.18)",overflow:"hidden",zIndex:40}}>
+            <div className="sugg-drop" style={{position:"absolute",top:"calc(100% + 8px)",left:0,right:0,background:C.card,borderRadius:16,border:`1px solid ${C.border}`,boxShadow:"0 14px 34px rgba(11,110,114,.18)",overflow:"hidden",zIndex:40}}>
               {suggestions.map(p=>{
                 const img=getCardImg(p,mediaCache);
                 const cm=CAT_META[p.category]||CAT_META["Live Fish"];
@@ -9088,7 +9088,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                   <button key={p.id} className="press" onMouseDown={e=>e.preventDefault()}
                     onClick={()=>{setRecent(addRecentSearch(p.name));setSuggOpen(false);nav("detail",p);}}
                     style={{display:"flex",alignItems:"center",gap:11,width:"100%",padding:"9px 12px",background:"none",border:"none",borderBottom:`1px solid ${C.border}`,cursor:"pointer",textAlign:"left"}}>
-                    <div style={{width:42,height:42,borderRadius:9,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${cm.c1},${cm.c2})`}}>
+                    <div style={{width:42,height:42,borderRadius:8,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${cm.c1},${cm.c2})`}}>
                       {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:22}}>{cm.emoji}</span>}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
@@ -9097,14 +9097,14 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                     </div>
                     {/* Option products are quoted from their cheapest option, same as the cards below */}
                     <div style={{flexShrink:0,textAlign:"right"}}>
-                      {hasMultiOptions(p)&&<div style={{fontSize:9.5,color:C.textSub,fontWeight:700,lineHeight:1.1}}>Starts from</div>}
+                      {hasMultiOptions(p)&&<div style={{fontSize:9,color:C.textSub,fontWeight:700,lineHeight:1.1}}>Starts from</div>}
                       <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{hasMultiOptions(p)?variantFromPrice(p):effectivePrice(p)}</div>
                     </div>
                   </button>
                 );
               })}
               <button className="press" onMouseDown={e=>e.preventDefault()} onClick={()=>{setSuggOpen(false);nav("shop");}}
-                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",padding:"11px 12px",background:C.bg,border:"none",cursor:"pointer",color:C.primary,fontWeight:800,fontSize:12.5,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",padding:"11px 12px",background:C.bg,border:"none",cursor:"pointer",color:C.primary,fontWeight:800,fontSize:12,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 See all results for "{query.trim()}" →
               </button>
             </div>
@@ -9144,7 +9144,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         <div className="js-reveal" style={{marginBottom:24}}>
           <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
             <span style={{fontSize:18}}>🕒</span>
-            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Recently Viewed</span>
+            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Recently Viewed</span>
           </div>
           <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
             {recentlyViewed.map(p=>(
@@ -9164,8 +9164,8 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
               <span style={{display:"flex",alignItems:"center",gap:7}}>
                 <span style={{fontSize:20}}>🔥</span>
-                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Offer Zone</span>
-                <span style={{background:C.coral,color:"#fff",fontSize:10.5,fontWeight:800,padding:"2px 8px",borderRadius:20}}>{offerProducts.length}</span>
+                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Offer Zone</span>
+                <span style={{background:C.coral,color:"#fff",fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20}}>{offerProducts.length}</span>
               </span>
               <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.coral,fontWeight:700,background:"none",border:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View All →</button>
             </div>
@@ -9184,7 +9184,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <div style={{marginBottom:26}}>
             <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
               <span style={{fontSize:18}}>✨</span>
-              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Based on Your Searches</span>
+              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Based on Your Searches</span>
             </div>
             <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
               {related.map(p=>(
@@ -9201,7 +9201,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Featured */}
         <div className="js-reveal" style={{marginBottom:26}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Featured</span>
+            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Featured</span>
             <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.accent,fontWeight:700,background:"none",border:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View All →</button>
           </div>
           {!hydrated ? <SkeletonGrid n={6}/> : (
@@ -9221,9 +9221,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {Number(settings.freeDeliveryThreshold) > 0 && (
         <div style={{background:`linear-gradient(135deg,${C.accent},${C.primary})`,borderRadius:20,padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",color:"white",marginBottom:14}}>
           <div>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Free Delivery</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,marginBottom:4}}>Free Delivery</div>
             <div style={{fontSize:12,opacity:.88,marginBottom:12}}>On orders above ₹{settings.freeDeliveryThreshold}</div>
-            <button className="press" onClick={()=>nav("shop")} style={{background:"white",color:C.primary,border:"none",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Shop Now</button>
+            <button className="press" onClick={()=>nav("shop")} style={{background:"white",color:C.primary,border:"none",borderRadius:12,padding:"8px 16px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Shop Now</button>
           </div>
           <div style={{fontSize:60,userSelect:"none"}}>🚚</div>
         </div>
@@ -9232,13 +9232,13 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Care Guides + Request */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:14}}>
           <button className="press" onClick={()=>nav("guides")}
-            style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,border:"none",borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white"}}>
+            style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,border:"none",borderRadius:20,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white"}}>
             <span style={{fontSize:28}}>📖</span>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,lineHeight:1.2}}>Care Guides</div>
             <div style={{fontSize:11,opacity:.85,lineHeight:1.4}}>Tips &amp; guides for a healthy tank</div>
           </button>
           <button className="press" onClick={()=>nav("request")}
-            style={{background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+            style={{background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:20,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
             <span style={{fontSize:28}}>🦄</span>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.2}}>Exotic Fish or Any Product on Request</div>
             <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Rare fish or any product? We'll source it for you</div>
@@ -9247,11 +9247,11 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
         {/* Aqua Tools — compatibility checker & tank calculators */}
         <button className="press" onClick={()=>nav("tools")}
-          style={{width:"100%",marginTop:12,background:"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:18,padding:"16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white",boxShadow:"0 8px 24px rgba(14,165,233,.22)"}}>
+          style={{width:"100%",marginTop:12,background:"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:20,padding:"16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white",boxShadow:"0 8px 24px rgba(14,165,233,.22)"}}>
           <span style={{fontSize:32,flexShrink:0}}>🧪</span>
           <div style={{flex:1}}>
-            <div style={{fontSize:15,fontWeight:800,lineHeight:1.2}}>Aqua Tools — free tank planner</div>
-            <div style={{fontSize:11.5,opacity:.9,marginTop:2,lineHeight:1.4}}>Fish compatibility checker · tank volume · heater &amp; filter size · stocking guide</div>
+            <div style={{fontSize:14,fontWeight:800,lineHeight:1.2}}>Aqua Tools — free tank planner</div>
+            <div style={{fontSize:11,opacity:.9,marginTop:2,lineHeight:1.4}}>Fish compatibility checker · tank volume · heater &amp; filter size · stocking guide</div>
           </div>
           <span style={{fontSize:18,opacity:.85}}>→</span>
         </button>
@@ -9320,19 +9320,19 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <div>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Contact Us</div>
               {settings.storeAddress&&(
-                <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>📍</span><span>{settings.storeAddress}</span></div>
+                <div style={{fontSize:12,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>📍</span><span>{settings.storeAddress}</span></div>
               )}
               {settings.storeHours&&(
-                <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>🕒</span><span>{settings.storeHours}</span></div>
+                <div style={{fontSize:12,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>🕒</span><span>{settings.storeHours}</span></div>
               )}
               {settings.ownerWhatsapp&&(
                 <a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
-                  style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",marginBottom:8}}>
+                  style={{display:"flex",alignItems:"center",gap:7,fontSize:12,fontWeight:700,color:"#25965a",textDecoration:"none",marginBottom:8}}>
                   <span style={{fontSize:14}}>💬</span> +{settings.ownerWhatsapp.replace(/\D/g,"")}
                 </a>
               )}
               <a href={`mailto:${settings.orderEmail||BUSINESS_EMAIL}`}
-                style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:C.accent,textDecoration:"none",wordBreak:"break-all"}}>
+                style={{display:"flex",alignItems:"center",gap:7,fontSize:12,fontWeight:700,color:C.accent,textDecoration:"none",wordBreak:"break-all"}}>
                 <span style={{fontSize:14}}>✉️</span> {settings.orderEmail||BUSINESS_EMAIL}
               </a>
             </div>
@@ -9341,16 +9341,16 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
               <div>
                 <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Follow Us</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {settings.instagramUrl&&(<a href={settings.instagramUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#c13584",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>📷 Instagram</a>)}
-                  {settings.facebookUrl&&(<a href={settings.facebookUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#1877f2",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>👍 Facebook</a>)}
-                  {settings.ownerWhatsapp&&(<a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>💬 WhatsApp</a>)}
+                  {settings.instagramUrl&&(<a href={settings.instagramUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#c13584",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:12,padding:"7px 12px"}}>📷 Instagram</a>)}
+                  {settings.facebookUrl&&(<a href={settings.facebookUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#1877f2",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:12,padding:"7px 12px"}}>👍 Facebook</a>)}
+                  {settings.ownerWhatsapp&&(<a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#25965a",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:12,padding:"7px 12px"}}>💬 WhatsApp</a>)}
                 </div>
               </div>
             )}
             {/* Get the App — the whole column drops out for visitors who already have it */}
             <PlayAppBlock medium="footer" note="Shop and track your orders from your phone."
               headingStyle={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}
-              noteStyle={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:4}}
+              noteStyle={{fontSize:12,color:C.textSub,lineHeight:1.6,marginBottom:4}}
               badgeStyle={{marginLeft:-9}}/>
             {/* Secure Payment */}
             <div>
@@ -9363,7 +9363,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             </div>
           </div>
 
-          <div style={{fontSize:10.5,color:C.textSub,opacity:.75,lineHeight:1.5}}>© {new Date().getFullYear()} {STORE_NAME} Aqua Store. All rights reserved.</div>
+          <div style={{fontSize:10,color:C.textSub,opacity:.75,lineHeight:1.5}}>© {new Date().getFullYear()} {STORE_NAME} Aqua Store. All rights reserved.</div>
         </div>
       </div>
     </div>
@@ -9431,15 +9431,15 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,flexShrink:0}}>Shop</div>
           <div style={{display:"flex",alignItems:"center",background:C.bg,borderRadius:12,padding:"8px 12px",gap:8,flex:1,minWidth:0,border:`1.5px solid ${C.border}`}}>
-            <span style={{fontSize:15}}>🔍</span>
+            <span style={{fontSize:14}}>🔍</span>
             <input type="text" placeholder="Search…" value={query} onChange={e=>setQuery(e.target.value)}
               style={{border:"none",background:"transparent",outline:"none",flex:1,fontSize:13,minWidth:0}}/>
-            {query&&<button className="press" onClick={()=>setQuery("")} style={{background:"none",border:"none",fontSize:15,color:C.textSub}}>✕</button>}
+            {query&&<button className="press" onClick={()=>setQuery("")} style={{background:"none",border:"none",fontSize:14,color:C.textSub}}>✕</button>}
           </div>
           <button className="press" onClick={()=>setSheet(true)}
-            style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,background:activeFilters>0?C.primary:C.card,border:`1.5px solid ${activeFilters>0?C.primary:C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:activeFilters>0?"white":C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+            style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,background:activeFilters>0?C.primary:C.card,border:`1.5px solid ${activeFilters>0?C.primary:C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12,fontWeight:700,color:activeFilters>0?"white":C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
-            Filter &amp; Sort{activeFilters>0&&<span style={{background:"rgba(255,255,255,.25)",borderRadius:10,padding:"1px 6px",fontSize:10}}>{activeFilters}</span>}
+            Filter &amp; Sort{activeFilters>0&&<span style={{background:"rgba(255,255,255,.25)",borderRadius:12,padding:"1px 6px",fontSize:10}}>{activeFilters}</span>}
           </button>
         </div>
         <CategoryPills selected={category} onSelect={setCategory} all counts={catCounts}/>
@@ -9454,7 +9454,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
               {recent.map(r=>(
                 <button key={r} className="press" onClick={()=>setQuery(r)}
-                  style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"7px 13px",fontSize:12.5,fontWeight:600,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"7px 13px",fontSize:12,fontWeight:600,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                   🔍 {r}
                 </button>
               ))}
@@ -9467,7 +9467,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
         {!hydrated?(<SkeletonGrid n={8}/>):list.length===0?(
           <div style={{textAlign:"center",padding:"50px 20px",color:C.textSub}}>
             <div style={{fontSize:52,marginBottom:14}}>🌊</div>
-            <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No products found</div>
+            <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>No products found</div>
             <div style={{fontSize:12}}>Try adjusting your filters</div>
           </div>
         ):(
@@ -9503,7 +9503,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             <div style={{marginTop:28}}>
               <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
                 <span style={{fontSize:18}}>✨</span>
-                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,color:C.text}}>You might also like</span>
+                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>You might also like</span>
               </div>
               <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
                 {rel.map(p=>(
@@ -9535,18 +9535,18 @@ function DeliveryEstimate({settings={}}){
   const ETA={TN:"1–2 days",SouthIndia:"2–4 days",CentralIndia:"3–5 days",NorthIndia:"4–6 days"};
   const zone=/^\d{6}$/.test(pin)?pincodeToZone(pin):null;
   return(
-    <div style={{margin:"18px 0 0",padding:"13px 14px",background:C.card,borderRadius:14,border:`1px solid ${C.border}`}}>
-      <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>🚚 Check delivery to your area</div>
+    <div style={{margin:"18px 0 0",padding:"13px 14px",background:C.card,borderRadius:16,border:`1px solid ${C.border}`}}>
+      <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:8}}>🚚 Check delivery to your area</div>
       <div style={{display:"flex",gap:8}}>
         <input value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" placeholder="Enter 6-digit pincode"
-          style={{flex:1,boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13.5,outline:"none",background:"white",fontFamily:"monospace"}}/>
+          style={{flex:1,boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"monospace"}}/>
       </div>
       {pin.length===6&&(zone?(
-        <div style={{marginTop:9,fontSize:12,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
+        <div style={{marginTop:9,fontSize:12,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"9px 11px",lineHeight:1.5}}>
           ✓ Delivers to <b>{ZONE_LABELS[zone]}</b> · Estimated <b>{ETA[zone]||"3–6 days"}</b>. Live fish ship on selected days for safe transit.
         </div>
       ):(
-        <div style={{marginTop:9,fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
+        <div style={{marginTop:9,fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"9px 11px",lineHeight:1.5}}>
           Pincode not recognised — please message us on WhatsApp to confirm delivery & timing.
         </div>
       ))}
@@ -9569,17 +9569,17 @@ function FrequentlyBought({base, products=[], addToCart, mediaCache={}, nav}){
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>🧰 Frequently bought together</div>
       <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch"}}>
         {fbt.map(x=>{ const img=getCardImg(x,mediaCache); const m=CAT_META[x.category]||CAT_META["Live Fish"]; return(
-          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:120,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"8px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            <div style={{height:74,borderRadius:9,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:6}}>
-              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:30}}>{m.emoji}</span>}
+          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:120,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"8px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            <div style={{height:74,borderRadius:8,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:6}}>
+              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:28}}>{m.emoji}</span>}
             </div>
-            <div style={{fontSize:11.5,fontWeight:700,color:C.text,lineHeight:1.3,height:30,overflow:"hidden"}}>{x.name}</div>
+            <div style={{fontSize:11,fontWeight:700,color:C.text,lineHeight:1.3,height:30,overflow:"hidden"}}>{x.name}</div>
             <div style={{fontFamily:PRICE_FONT,fontSize:13,fontWeight:800,color:C.primary,marginTop:2}}>₹{effectivePrice(x)}</div>
           </button>
         );})}
       </div>
       <button className="press" onClick={()=>{ fbt.forEach(x=>addToCart(x,1)); }}
-        style={{marginTop:8,width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        style={{marginTop:8,width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
         ＋ Add these {fbt.length} to cart
       </button>
     </div>
@@ -9595,12 +9595,12 @@ function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>👀 Recently viewed</div>
       <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch"}}>
         {items.map(x=>{ const img=getCardImg(x,mediaCache); const m=CAT_META[x.category]||CAT_META["Live Fish"]; return(
-          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:108,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"7px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            <div style={{height:66,borderRadius:9,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:5}}>
-              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:26}}>{m.emoji}</span>}
+          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:108,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"7px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            <div style={{height:66,borderRadius:8,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:5}}>
+              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:24}}>{m.emoji}</span>}
             </div>
             <div style={{fontSize:11,fontWeight:700,color:C.text,lineHeight:1.3,height:28,overflow:"hidden"}}>{x.name}</div>
-            <div style={{fontFamily:PRICE_FONT,fontSize:12.5,fontWeight:800,color:C.primary,marginTop:2}}>₹{effectivePrice(x)}</div>
+            <div style={{fontFamily:PRICE_FONT,fontSize:12,fontWeight:800,color:C.primary,marginTop:2}}>₹{effectivePrice(x)}</div>
           </button>
         );})}
       </div>
@@ -9730,7 +9730,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
     <Portal>
       <div className="fade-in" style={{position:"fixed",inset:0,zIndex:9500,background:"rgba(3,10,14,.97)",touchAction:"none",userSelect:"none",overscrollBehavior:"contain"}}>
         <div style={{position:"absolute",top:0,left:0,right:0,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"calc(env(safe-area-inset-top,0px) + 12px) 14px 12px",zIndex:4,pointerEvents:"none"}}>
-          <span style={{color:"#fff",fontSize:12.5,fontWeight:700,background:"rgba(255,255,255,.14)",padding:"6px 13px",borderRadius:20,backdropFilter:"blur(8px)"}}>
+          <span style={{color:"#fff",fontSize:12,fontWeight:700,background:"rgba(255,255,255,.14)",padding:"6px 13px",borderRadius:20,backdropFilter:"blur(8px)"}}>
             {isVideo?"▶ Video":(index+1)+" / "+slides.length}
           </span>
           <button className="press" onClick={onClose} aria-label="Close" style={{...iconBtn,pointerEvents:"auto",width:42,height:42,borderRadius:"50%",fontSize:20}}>✕</button>
@@ -9744,8 +9744,8 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
                 style={{width:"100%",height:"100%",objectFit:"contain",transform:"translate("+tx+"px,"+ty+"px) scale("+scale+")",transition:g.current.mode?"none":"transform .28s cubic-bezier(.22,1,.36,1)",willChange:"transform"}}/>}
         </div>
         {slides.length>1&&(<>
-          <button className="press" onClick={()=>go(-1)} aria-label="Previous" style={{...iconBtn,position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>‹</button>
-          <button className="press" onClick={()=>go(1)} aria-label="Next" style={{...iconBtn,position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>›</button>
+          <button className="press" onClick={()=>go(-1)} aria-label="Previous" style={{...iconBtn,position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:24,zIndex:3}}>‹</button>
+          <button className="press" onClick={()=>go(1)} aria-label="Next" style={{...iconBtn,position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:24,zIndex:3}}>›</button>
         </>)}
         {slides.length>1&&(
           <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 26px)",left:0,right:0,display:"flex",justifyContent:"center",gap:6,zIndex:3}}>
@@ -9761,7 +9761,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
             <button className="press" onClick={()=>zoomBy(1/1.5)} disabled={scale<=1.02} aria-label="Zoom out" style={{...iconBtn,width:42,height:42,borderRadius:12,fontSize:24,opacity:scale<=1.02?0.4:1}}>−</button>
           </div>
         )}
-        <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 6px)",left:0,right:0,textAlign:"center",color:"rgba(255,255,255,.5)",fontSize:10.5,fontWeight:600,letterSpacing:.3,pointerEvents:"none",zIndex:3}}>
+        <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 6px)",left:0,right:0,textAlign:"center",color:"rgba(255,255,255,.5)",fontSize:10,fontWeight:600,letterSpacing:.3,pointerEvents:"none",zIndex:3}}>
           {isVideo?"":"Use + / −, double-tap or pinch to zoom · swipe to browse"}
         </div>
       </div>
@@ -9898,7 +9898,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         )}
         {slides[slide]&&slides[slide].type==="image"&&(
           <button className="press" onClick={()=>openPhoto(slide)} aria-label="Open photo full screen"
-            style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
+            style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
         )}
         {slides[slide]&&<span style={{position:"absolute",top:50,right:16,background:"rgba(0,0,0,.4)",color:"white",fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,backdropFilter:"blur(6px)"}}>
           {slides[slide].type==="video"?"▶ Video":`📷 ${slide+1}/${slides.length}`}
@@ -9913,14 +9913,14 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
           <div style={{flex:1,paddingRight:12}}>
             <div style={{fontSize:10,color:C.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:5}}>{p.category}</div>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,lineHeight:1.2}}>{p.name}</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,lineHeight:1.2}}>{p.name}</div>
             <button className="press" onClick={()=>shareProduct(p)}
-              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:C.accentLight,border:`1px solid ${C.border}`,color:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:C.accentLight,border:`1px solid ${C.border}`,color:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zM18 22a3 3 0 100-6 3 3 0 000 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               Share
             </button>
             <button className="press" onClick={()=>onFav&&onFav(p)}
-              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,marginLeft:8,background:isFav?"#fff1ee":C.accentLight,border:`1px solid ${isFav?C.coral:C.border}`,color:isFav?C.coral:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,marginLeft:8,background:isFav?"#fff1ee":C.accentLight,border:`1px solid ${isFav?C.coral:C.border}`,color:isFav?C.coral:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               <span style={{fontSize:13,lineHeight:1}}>{isFav?"♥":"♡"}</span>{isFav?"Saved":"Save"}
             </button>
           </div>
@@ -9972,12 +9972,12 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         {/* Restock alert for out-of-stock products */}
         <RestockBtn product={p} user={user} restockSet={restockSet} onSubscribe={onRestock}/>
 
-        <div style={{display:"flex",gap:4,marginBottom:18,background:C.card,borderRadius:14,padding:4,border:`1px solid ${C.border}`}}>
+        <div style={{display:"flex",gap:4,marginBottom:18,background:C.card,borderRadius:16,padding:4,border:`1px solid ${C.border}`}}>
           {["desc","reviews"].map(t=>(
             <button key={t} className="press" onClick={()=>setTab(t)}
-              style={{flex:1,padding:"9px 8px",borderRadius:11,border:"none",background:tab===t?C.primary:"transparent",color:tab===t?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",position:"relative"}}>
+              style={{flex:1,padding:"9px 8px",borderRadius:12,border:"none",background:tab===t?C.primary:"transparent",color:tab===t?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",position:"relative"}}>
               {t==="desc"?"Description":`Reviews`}
-              {t==="reviews"&&reviews.length>0&&<span style={{marginLeft:5,background:tab==="reviews"?"rgba(255,255,255,.25)":C.primary,color:"white",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:800}}>
+              {t==="reviews"&&reviews.length>0&&<span style={{marginLeft:5,background:tab==="reviews"?"rgba(255,255,255,.25)":C.primary,color:"white",borderRadius:12,padding:"1px 7px",fontSize:10,fontWeight:800}}>
                 {reviews.length}
               </span>}
             </button>
@@ -9989,7 +9989,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <div className="fade-in">
             {/* pre-wrap keeps the admin's own line breaks and blank lines — typing the description
                 as paragraphs or a bulleted list used to collapse into one run-on block. */}
-            <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.75,whiteSpace:"pre-wrap"}}>{p.desc}</div>
+            <div style={{fontSize:13,color:C.textSub,lineHeight:1.75,whiteSpace:"pre-wrap"}}>{p.desc}</div>
             {(()=>{
               const care=p.care||{};
               const rows=[
@@ -10005,17 +10005,17 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               if(!rows.length) return null;
               return(
                 <div style={{marginTop:18,background:"#f0fbfc",borderRadius:16,padding:"14px 16px",border:`1px solid ${C.border}`}}>
-                  <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:10}}>🐠 Care Guide</div>
+                  <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text,marginBottom:10}}>🐠 Care Guide</div>
                   <div style={{display:"flex",flexDirection:"column",gap:0}}>
                     {rows.map(([icon,label,val],i)=>(
                       <div key={label} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 0",borderTop:i?`1px solid ${C.border}`:"none"}}>
-                        <span style={{fontSize:15,flexShrink:0,lineHeight:1.3}}>{icon}</span>
-                        <span style={{fontSize:12.5,fontWeight:700,color:C.textSub,minWidth:118,flexShrink:0}}>{label}</span>
-                        <span style={{fontSize:12.5,fontWeight:600,color:C.text,lineHeight:1.4}}>{val}</span>
+                        <span style={{fontSize:14,flexShrink:0,lineHeight:1.3}}>{icon}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:C.textSub,minWidth:118,flexShrink:0}}>{label}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:C.text,lineHeight:1.4}}>{val}</span>
                       </div>
                     ))}
                   </div>
-                  <div style={{fontSize:10.5,color:C.textSub,marginTop:10,lineHeight:1.5,fontStyle:"italic"}}>Care details are a guide — conditions can vary by individual fish & tank.</div>
+                  <div style={{fontSize:10,color:C.textSub,marginTop:10,lineHeight:1.5,fontStyle:"italic"}}>Care details are a guide — conditions can vary by individual fish & tank.</div>
                 </div>
               );
             })()}
@@ -10027,7 +10027,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <div className="fade-in">
             {/* Success banner */}
             {submitted&&(
-              <div style={{background:"#dcfce7",borderRadius:14,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,border:"1px solid #86efac"}}>
+              <div style={{background:"#dcfce7",borderRadius:16,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,border:"1px solid #86efac"}}>
                 <span style={{fontSize:20}}>🎉</span>
                 <div>
                   <div style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Review submitted!</div>
@@ -10051,11 +10051,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                 <div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
                   <span style={{fontSize:22}}>🔒</span>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:C.text,marginBottom:2}}>Only verified buyers can review</div>
-                    <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5}}>
+                    <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:2}}>Only verified buyers can review</div>
+                    <div style={{fontSize:11,color:C.textSub,lineHeight:1.5}}>
                       {user ? "Review unlocks once you've ordered & received this product." : "Sign in and purchase this product to leave a review."}
                     </div>
-                    {!user&&<button className="press" onClick={goAuth} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 14px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>}
+                    {!user&&<button className="press" onClick={goAuth} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"7px 14px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>}
                   </div>
                 </div>
               )
@@ -10069,8 +10069,8 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               <div style={{display:"flex",justifyContent:"center",padding:"24px"}}><Spinner/></div>
             ):reviews.length===0?(
               <div style={{textAlign:"center",padding:"32px 16px",color:C.textSub}}>
-                <div style={{fontSize:44,marginBottom:12}}>⭐</div>
-                <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No reviews yet</div>
+                <div style={{fontSize:40,marginBottom:12}}>⭐</div>
+                <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>No reviews yet</div>
                 <div style={{fontSize:13}}>Be the first to share your experience!</div>
               </div>
             ):(
@@ -10096,7 +10096,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                   {r.aspects&&(
                     <div style={{display:"flex",flexWrap:"wrap",gap:6,paddingLeft:44,marginTop:7}}>
                       {[["health","🐟 Condition"],["packing","📦 Packing"],["speed","🚚 Delivery"],["value","💰 Value"]].map(([k,label])=>r.aspects[k]?(
-                        <span key={k} style={{fontSize:10.5,fontWeight:700,color:C.textSub,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:20,padding:"3px 9px"}}>{label} <span style={{color:"#f59e0b"}}>{"★".repeat(r.aspects[k])}</span></span>
+                        <span key={k} style={{fontSize:10,fontWeight:700,color:C.textSub,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:20,padding:"3px 9px"}}>{label} <span style={{color:"#f59e0b"}}>{"★".repeat(r.aspects[k])}</span></span>
                       ):null)}
                     </div>
                   )}
@@ -10105,7 +10105,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingLeft:44,marginTop:10}}>
                       {r.photos.map((src,j)=>(
                         <button key={j} className="press" onClick={()=>setPhotoZoom(src)}
-                          style={{padding:0,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",width:72,height:72,cursor:"zoom-in",background:"none"}}>
+                          style={{padding:0,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",width:72,height:72,cursor:"zoom-in",background:"none"}}>
                           <img src={src} alt="" loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         </button>
                       ))}
@@ -10127,7 +10127,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                 <span style={{fontSize:18}}>🧩</span>
                 <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Goes well with</span>
               </div>
-              <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.45}}>{p.category==="Live Fish"?"Keep your new fish healthy — food, care & tank essentials.":"Pairs nicely with these."}</div>
+              <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.45}}>{p.category==="Live Fish"?"Keep your new fish healthy — food, care & tank essentials.":"Pairs nicely with these."}</div>
               <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
                 {cross.map(cp=>{
                   const cm=CAT_META[cp.category]||CAT_META["Live Fish"];
@@ -10135,14 +10135,14 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                   const cPrice=effectivePrice(cp);
                   const cOnSale=activeDiscount(cp)>0;
                   return(
-                    <div key={cp.id} style={{flexShrink:0,width:140,background:C.card,borderRadius:14,overflow:"hidden",border:`1px solid ${C.border}`}}>
+                    <div key={cp.id} style={{flexShrink:0,width:140,background:C.card,borderRadius:16,overflow:"hidden",border:`1px solid ${C.border}`}}>
                       <button className="press" onClick={()=>nav("detail",cp)} style={{display:"block",width:"100%",padding:0,border:"none",background:"none",cursor:"pointer",textAlign:"left"}}>
                         <div style={{height:96,background:`linear-gradient(135deg,${cm.c1},${cm.c2})`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-                          {cImg?<img src={cImg} alt={cp.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:34}}>{cm.emoji}</span>}
+                          {cImg?<img src={cImg} alt={cp.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:32}}>{cm.emoji}</span>}
                         </div>
                         <div style={{padding:"8px 10px 2px"}}>
-                          <div style={{fontSize:9.5,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>{cp.category}</div>
-                          <div style={{fontSize:12.5,fontWeight:700,color:C.text,lineHeight:1.25,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",minHeight:31}}>{cp.name}</div>
+                          <div style={{fontSize:9,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>{cp.category}</div>
+                          <div style={{fontSize:12,fontWeight:700,color:C.text,lineHeight:1.25,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",minHeight:31}}>{cp.name}</div>
                         </div>
                       </button>
                       <div style={{padding:"0 10px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
@@ -10155,11 +10155,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                           const q=inC?inC.qty:0;
                           if(q<=0) return (
                             <button className="press" onClick={()=>addToCart(cp,1)}
-                              style={{background:C.primary,color:"white",border:"none",borderRadius:9,width:32,height:32,fontSize:18,fontWeight:700,lineHeight:1,cursor:"pointer",flexShrink:0}}>+</button>
+                              style={{background:C.primary,color:"white",border:"none",borderRadius:8,width:32,height:32,fontSize:18,fontWeight:700,lineHeight:1,cursor:"pointer",flexShrink:0}}>+</button>
                           );
                           return (
-                            <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:9,flexShrink:0,overflow:"hidden"}}>
-                              <button className="press" onClick={()=>addToCart(cp,-1)} style={{background:"none",color:"white",border:"none",width:28,height:32,fontSize:19,fontWeight:800,lineHeight:1,cursor:"pointer"}}>−</button>
+                            <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:8,flexShrink:0,overflow:"hidden"}}>
+                              <button className="press" onClick={()=>addToCart(cp,-1)} style={{background:"none",color:"white",border:"none",width:28,height:32,fontSize:18,fontWeight:800,lineHeight:1,cursor:"pointer"}}>−</button>
                               <span style={{color:"white",fontSize:13,fontWeight:800,minWidth:18,textAlign:"center",fontFamily:PRICE_FONT}}>{q}</span>
                               <button className="press" onClick={()=>addToCart(cp,1)} style={{background:"none",color:"white",border:"none",width:28,height:32,fontSize:18,fontWeight:800,lineHeight:1,cursor:"pointer"}}>+</button>
                             </div>
@@ -10185,7 +10185,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               {[LIVE_FISH_ENABLED?["🛡️","Live Arrival","Guarantee"]:["🚚","Delivery across","India"],["📦","Safe, breathable","Packing"],["🔒","Secure UPI /","Online Pay"]].map(([ic,a,b])=>(
                 <div key={a} style={{display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",gap:5}}>
                   <span style={{fontSize:22,lineHeight:1}}>{ic}</span>
-                  <span style={{fontSize:10.5,fontWeight:700,color:C.text,lineHeight:1.3}}>{a}<br/>{b}</span>
+                  <span style={{fontSize:10,fontWeight:700,color:C.text,lineHeight:1.3}}>{a}<br/>{b}</span>
                 </div>
               ))}
             </div>
@@ -10199,7 +10199,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         <div className="nemo-product-bottom-bar" style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,
           background:"rgba(255,255,255,.97)",backdropFilter:"blur(16px)",padding:"14px 20px",borderTop:`1px solid ${C.border}`,display:"flex",gap:12,alignItems:"center",zIndex:50}}>
           <button className="press" onClick={()=>{if(!isInterested&&onInterest)onInterest(p);}} disabled={isInterested}
-            style={{flex:1,background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:14,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            style={{flex:1,background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:16,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             {isInterested?"✓ We'll notify you when it's in!":"🔔 Coming Soon — I'm Interested"}
           </button>
         </div>
@@ -10211,7 +10211,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
       {photoZoom&&(
         <Portal>
         <div onClick={()=>setPhotoZoom(null)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-          <img src={photoZoom} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:10}}/>
+          <img src={photoZoom} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:12}}/>
           <button className="press" onClick={()=>setPhotoZoom(null)} style={{position:"absolute",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22,cursor:"pointer"}}>×</button>
         </div>
         </Portal>
@@ -10271,14 +10271,14 @@ function MiniCart({open,onClose,cart,total,updateQty,nav,settings={},products=[]
         </div>
         {cart.length>0&&(
           <div style={{padding:"14px 18px calc(16px + env(safe-area-inset-bottom))",borderTop:`1px solid ${C.border}`,background:"#fff"}}>
-            {thr>0&&left>0&&<div style={{fontSize:11.5,color:C.textSub,marginBottom:10,textAlign:"center"}}>Add <b style={{color:C.coral}}>₹{left}</b> more for free delivery 🚚</div>}
+            {thr>0&&left>0&&<div style={{fontSize:11,color:C.textSub,marginBottom:10,textAlign:"center"}}>Add <b style={{color:C.coral}}>₹{left}</b> more for free delivery 🚚</div>}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <span style={{fontSize:14,fontWeight:700,color:C.text}}>Subtotal</span>
-              <span style={{fontFamily:PRICE_FONT,fontSize:19,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
+              <span style={{fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
             </div>
             <div style={{display:"flex",gap:10}}>
-              <button className="press" onClick={()=>{onClose();nav("cart");}} style={{flex:1,background:"#f8fafc",color:C.text,border:`1px solid ${C.border}`,borderRadius:99,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>View Cart</button>
-              <button className="cta" onClick={()=>{onClose();nav("checkout");}} style={{flex:1.4,background:C.coral,color:"white",border:"none",borderRadius:99,padding:"13px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textTransform:"uppercase",letterSpacing:".05em",cursor:"pointer"}}>Checkout →</button>
+              <button className="press" onClick={()=>{onClose();nav("cart");}} style={{flex:1,background:"#f8fafc",color:C.text,border:`1px solid ${C.border}`,borderRadius:99,padding:"13px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>View Cart</button>
+              <button className="cta" onClick={()=>{onClose();nav("checkout");}} style={{flex:1.4,background:C.coral,color:"white",border:"none",borderRadius:99,padding:"13px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textTransform:"uppercase",letterSpacing:".05em",cursor:"pointer"}}>Checkout →</button>
             </div>
           </div>
         )}
@@ -10291,9 +10291,9 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
   if(!cart.length)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"20px",textAlign:"center"}}>
       <div style={{fontSize:80,marginBottom:20}}>🛒</div>
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Cart is empty</div>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:8}}>Cart is empty</div>
       <div style={{fontSize:13,color:C.textSub,marginBottom:24}}>Find something for your aquarium.</div>
-      <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px 32px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Start Shopping</button>
+      <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:16,padding:"14px 32px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Start Shopping</button>
     </div>
   );
   return(
@@ -10326,20 +10326,20 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
           const prod=lineProduct(item,products);
           const open=prod?()=>nav("detail",prod):null;
           return(
-            <div key={item.key} style={{background:C.card,borderRadius:18,padding:"14px",marginBottom:10,display:"flex",gap:14,alignItems:"center",border:`1px solid ${C.border}`}}>
+            <div key={item.key} style={{background:C.card,borderRadius:20,padding:"14px",marginBottom:10,display:"flex",gap:14,alignItems:"center",border:`1px solid ${C.border}`}}>
               {/* Thumbnail + name open the product page. A line whose product has since been
                   removed from the catalogue stays as plain text — there's nothing to open. */}
               <div role={open?"button":undefined} tabIndex={open?0:undefined} onClick={open||undefined}
                 onKeyDown={open?(e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } }):undefined}
                 aria-label={open?`View ${item.name}`:undefined}
                 style={{display:"flex",gap:14,alignItems:"center",flex:1,minWidth:0,cursor:open?"pointer":"default"}}>
-                <div style={{width:58,height:58,borderRadius:14,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,overflow:"hidden"}}>
+                <div style={{width:58,height:58,borderRadius:16,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,overflow:"hidden"}}>
                   {cartImg?<img src={cartImg} alt={item.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13.5,fontWeight:700,color:open?C.primaryDark:C.text,marginBottom:2}}>{item.name}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:open?C.primaryDark:C.text,marginBottom:2}}>{item.name}</div>
                   <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>{item.variantLabel||item.category}</div>
-                  <div style={{fontFamily:PRICE_FONT,fontSize:15,fontWeight:800,color:C.primary,marginTop:5}}>₹{item.price*item.qty}</div>
+                  <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary,marginTop:5}}>₹{item.price*item.qty}</div>
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:12,background:C.bg,borderRadius:12,padding:"7px 12px",border:`1.5px solid ${C.border}`}}>
@@ -10350,7 +10350,7 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
             </div>
           );
         })}
-        <div style={{background:C.card,borderRadius:18,padding:"18px",marginTop:18,border:`1px solid ${C.border}`}}>
+        <div style={{background:C.card,borderRadius:20,padding:"18px",marginTop:18,border:`1px solid ${C.border}`}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
             <span style={{fontSize:13,color:C.textSub}}>Subtotal</span>
             <span style={{fontSize:13,fontWeight:700,color:C.text}}><AnimatedNumber value={total} prefix="₹"/></span>
@@ -10361,7 +10361,7 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
           </div>
           <div style={{height:1,background:C.border,margin:"12px 0"}}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:15,fontWeight:700,color:C.text}}>Subtotal (excl. shipping)</span>
+            <span style={{fontSize:14,fontWeight:700,color:C.text}}>Subtotal (excl. shipping)</span>
             <span style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
           </div>
         </div>
@@ -10372,7 +10372,7 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
           const worth=Math.floor(pts*val);
           if(worth<=0) return null;
           return (
-            <div style={{background:"#ecfdf5",borderRadius:12,padding:"11px 14px",marginTop:10,fontSize:12.5,color:"#15803d",fontWeight:700,border:"1px solid #a7f3d0",display:"flex",alignItems:"center",gap:8}}>
+            <div style={{background:"#ecfdf5",borderRadius:12,padding:"11px 14px",marginTop:10,fontSize:12,color:"#15803d",fontWeight:700,border:"1px solid #a7f3d0",display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:16}}>👛</span>
               <span>Earn ₹{worth} in wallet coins after delivery.</span>
             </div>
@@ -10390,8 +10390,8 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
           const pct=Math.max(4,Math.min(100,Math.round(((Number(total)||0)/(n.minOrder||1))*100)));
           const won=n.unlocked;
           return (
-            <div style={{marginTop:14,textAlign:"center",background:won?"#ecfdf5":"#fff7ed",border:`1px solid ${won?"#a7f3d0":"#fed7aa"}`,borderRadius:14,padding:"13px 16px"}}>
-              <div style={{fontSize:13.5,fontWeight:800,color:won?"#15803d":"#9a3412",lineHeight:1.45,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            <div style={{marginTop:14,textAlign:"center",background:won?"#ecfdf5":"#fff7ed",border:`1px solid ${won?"#a7f3d0":"#fed7aa"}`,borderRadius:16,padding:"13px 16px"}}>
+              <div style={{fontSize:13,fontWeight:800,color:won?"#15803d":"#9a3412",lineHeight:1.45,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 {won
                   ? <>🎉 You've unlocked <span style={{color:C.coral}}>{n.off}</span></>
                   : <>Add <span style={{fontFamily:PRICE_FONT,fontSize:16,color:C.coral}}>₹{n.need}</span> more to get <span style={{color:C.coral}}>{n.off}</span></>}
@@ -10399,14 +10399,14 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
               <div style={{height:7,borderRadius:99,background:won?"#a7f3d0":"#fde3c8",margin:"9px auto 0",overflow:"hidden",maxWidth:260}}>
                 <div style={{height:"100%",width:pct+"%",borderRadius:99,background:won?"#16a34a":C.coral,transition:"width .45s cubic-bezier(.22,1,.36,1)"}}/>
               </div>
-              <div style={{fontSize:10.5,color:won?"#15803d":"#9a3412",opacity:.85,fontWeight:600,marginTop:6}}>
+              <div style={{fontSize:10,color:won?"#15803d":"#9a3412",opacity:.85,fontWeight:600,marginTop:6}}>
                 {won?<>Apply code <b>{n.code}</b> at checkout</>:<>on orders above ₹{n.minOrder} · code {n.code}</>}
               </div>
             </div>
           );
         })()}
         <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={()=>nav("checkout")}
-          style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
           Proceed to Checkout →
         </button>
       </div>
@@ -10428,11 +10428,11 @@ function Collapsible({title, icon="", subtitle="", open=false, tone="plain", chi
           : tone==="amber" ? {bg:"#fff7ed",bd:"#fed7aa",fg:"#9a3412",sub:"#9a3412"}
           :                  {bg:C.card,   bd:C.border,  fg:C.text,   sub:C.textSub};
   return(
-    <div style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+    <div style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:16,marginBottom:12,overflow:"hidden"}}>
       <button className="press" type="button" onClick={()=>setOn(v=>!v)} aria-expanded={on}
         style={{display:"flex",alignItems:"center",gap:9,width:"100%",background:"none",border:"none",
                 padding:"12px 14px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-        {icon&&<span style={{fontSize:17,flexShrink:0}}>{icon}</span>}
+        {icon&&<span style={{fontSize:16,flexShrink:0}}>{icon}</span>}
         <span style={{flex:1,minWidth:0}}>
           <span style={{display:"block",fontSize:13,fontWeight:800,color:t.fg,lineHeight:1.35}}>{title}</span>
           {subtitle&&!on&&<span style={{display:"block",fontSize:11,color:t.sub,opacity:.85,marginTop:2,lineHeight:1.4}}>{subtitle}</span>}
@@ -10527,24 +10527,24 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
     <div style={{width:"100%",maxWidth:compact?"100%":360,margin:"0 auto"}}>
       {/* Countdown */}
       {deadline>0&&(
-        <div style={{background:expired?"#fee2e2":"#fff7ed",border:`1px solid ${expired?"#fca5a5":"#fed7aa"}`,borderRadius:14,padding:"12px 14px",marginBottom:14,textAlign:"center"}}>
+        <div style={{background:expired?"#fee2e2":"#fff7ed",border:`1px solid ${expired?"#fca5a5":"#fed7aa"}`,borderRadius:16,padding:"12px 14px",marginBottom:14,textAlign:"center"}}>
           {expired?(
-            <div style={{fontSize:12.5,color:"#b91c1c",fontWeight:700,lineHeight:1.5}}>⌛ Payment window closed. This order will be cancelled. Please place a new order.</div>
+            <div style={{fontSize:12,color:"#b91c1c",fontWeight:700,lineHeight:1.5}}>⌛ Payment window closed. This order will be cancelled. Please place a new order.</div>
           ):(
             <>
               <div style={{fontSize:11,color:"#9a3412",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>Pay within {PAY_WINDOW_MIN} minutes</div>
-              <div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"#c2410c",letterSpacing:1}}>{mm}:{ss}</div>
-              <div style={{fontSize:10.5,color:"#9a3412",marginTop:2}}>Auto-cancels when time ends</div>
+              <div style={{fontFamily:PRICE_FONT,fontSize:24,fontWeight:800,color:"#c2410c",letterSpacing:1}}>{mm}:{ss}</div>
+              <div style={{fontSize:10,color:"#9a3412",marginTop:2}}>Auto-cancels when time ends</div>
             </>
           )}
         </div>
       )}
 
-      <div style={{background:C.card,border:`1.5px solid ${C.primary}`,borderRadius:18,padding:"18px"}}>
+      <div style={{background:C.card,border:`1.5px solid ${C.primary}`,borderRadius:20,padding:"18px"}}>
         <div style={{textAlign:"center",marginBottom:14}}>
           <div style={{fontSize:11,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}>Amount due</div>
-          <div style={{fontFamily:PRICE_FONT,fontSize:30,fontWeight:800,color:C.primary,lineHeight:1.1}}>₹{grand}</div>
-          <div style={{fontSize:11.5,color:C.textSub,marginTop:2}}>Order {order.orderNo}</div>
+          <div style={{fontFamily:PRICE_FONT,fontSize:28,fontWeight:800,color:C.primary,lineHeight:1.1}}>₹{grand}</div>
+          <div style={{fontSize:11,color:C.textSub,marginTop:2}}>Order {order.orderNo}</div>
         </div>
 
         {/* ── Gateway path ──────────────────────────────────────────────────────
@@ -10557,12 +10557,12 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
           <>
             {gatewayMode==="sandbox"&&(
               <div style={{background:"#fff7ed",border:"1.5px solid #fb923c",borderRadius:12,padding:"10px 12px",marginBottom:11,textAlign:"center"}}>
-                <div style={{fontSize:11.5,fontWeight:900,color:"#9a3412",letterSpacing:.35}}>CASHFREE SANDBOX · TEST MODE</div>
-                <div style={{fontSize:10.5,color:"#c2410c",marginTop:3,lineHeight:1.45}}>Owner testing only. No real money is charged and the order will not enter fulfilment.</div>
+                <div style={{fontSize:11,fontWeight:900,color:"#9a3412",letterSpacing:.35}}>CASHFREE SANDBOX · TEST MODE</div>
+                <div style={{fontSize:10,color:"#c2410c",marginTop:3,lineHeight:1.45}}>Owner testing only. No real money is charged and the order will not enter fulfilment.</div>
               </div>
             )}
             <button className="press" onClick={payNow} disabled={payBusy||expired}
-              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:(payBusy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:(payBusy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               <span style={{fontSize:18}}>💳</span>
               {payBusy?"Opening secure payment…":expired?"Payment window closed":gatewayMode==="sandbox"?`Try Test Payment ₹${grand}`:`Pay ₹${grand} securely`}
             </button>
@@ -10575,16 +10575,16 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
           </>
         ):(
           <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px",textAlign:"center"}}>
-            <div style={{fontSize:12.5,color:"#9a3412",fontWeight:700,lineHeight:1.5}}>
+            <div style={{fontSize:12,color:"#9a3412",fontWeight:700,lineHeight:1.5}}>
               {gatewayChecking?"Checking secure payment…":"⚠ Secure online payment is temporarily unavailable."}
             </div>
             {!gatewayChecking&&(
               <button className="press" onClick={retryGateway}
-                style={{marginTop:10,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"10px 16px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                style={{marginTop:10,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"10px 16px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 Retry secure payment
               </button>
             )}
-            {payNote&&<div style={{fontSize:11.5,color:C.danger,fontWeight:700,marginTop:9,lineHeight:1.45}}>{payNote}</div>}
+            {payNote&&<div style={{fontSize:11,color:C.danger,fontWeight:700,marginTop:9,lineHeight:1.45}}>{payNote}</div>}
           </div>
         )}
       </div>
@@ -10652,15 +10652,15 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
         {stage===1?(<>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:12}}>Are you sure you want to exit?</div>
           {savingsBar("🐠")}
-          <button className="press" onClick={()=>setStage(2)} style={{width:"100%",background:"#fff",color:C.text,border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:10,cursor:"pointer"}}>Yes, exit checkout</button>
-          <button className="press" onClick={onStay} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>No, continue checkout</button>
+          <button className="press" onClick={()=>setStage(2)} style={{width:"100%",background:"#fff",color:C.text,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:10,cursor:"pointer"}}>Yes, exit checkout</button>
+          <button className="press" onClick={onStay} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:16,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>No, continue checkout</button>
         </>):(<>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:8}}>Sorry to see you go…</div>
           {savingsBar("🚚")}
-          <div style={{fontSize:13.5,fontWeight:700,color:C.text,marginBottom:12}}>What stopped you from completing your purchase?</div>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:12}}>What stopped you from completing your purchase?</div>
           <div style={{display:"flex",flexDirection:"column",gap:11,marginBottom:14}}>
             {REASONS.map(r=>(
-              <label key={r} style={{display:"flex",alignItems:"center",gap:10,fontSize:13.5,color:C.text,cursor:"pointer",userSelect:"none"}}>
+              <label key={r} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:C.text,cursor:"pointer",userSelect:"none"}}>
                 <input type="checkbox" checked={reasons.includes(r)} onChange={()=>toggle(r)} style={{width:18,height:18,accentColor:C.primary}}/>
                 {r}
               </label>
@@ -10670,7 +10670,7 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
             <textarea value={other} onChange={e=>setOther(e.target.value)} rows={3} placeholder="Others (please specify)"
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",marginBottom:14,background:"#fff"}}/>
           )}
-          <button className="press" onClick={()=>onLeave&&onLeave({reasons,other})} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Skip and exit</button>
+          <button className="press" onClick={()=>onLeave&&onLeave({reasons,other})} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:16,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Skip and exit</button>
           <button className="press" onClick={onStay} style={{width:"100%",background:"none",color:C.textSub,border:"none",padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:4,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}><BackArrow size={16}/> Continue checkout instead</button>
         </>)}
       </div>
@@ -10873,16 +10873,16 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                                   :c.type==="percent"?`${c.value}% off${c.maxDiscount>0?` up to ₹${c.maxDiscount}`:""}`
                                   :`₹${c.value} off`;
                     return(
-                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:minOk?"#f0fdf4":"#fefce8",border:`1px solid ${minOk?"#86efac":"#fde68a"}`,borderRadius:10,padding:"7px 12px"}}>
+                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:minOk?"#f0fdf4":"#fefce8",border:`1px solid ${minOk?"#86efac":"#fde68a"}`,borderRadius:12,padding:"7px 12px"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:12,color:minOk?C.success:"#92400e",background:minOk?"#dcfce7":"#fef3c7",padding:"2px 8px",borderRadius:6}}>{c.code}</span>
-                          <span style={{fontSize:11.5,color:minOk?"#15803d":"#92400e",fontWeight:600}}>{discount}</span>
+                          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:12,color:minOk?C.success:"#92400e",background:minOk?"#dcfce7":"#fef3c7",padding:"2px 8px",borderRadius:8}}>{c.code}</span>
+                          <span style={{fontSize:11,color:minOk?"#15803d":"#92400e",fontWeight:600}}>{discount}</span>
                         </div>
                         {minOk?(
                           <button className="press" onClick={()=>{setCouponCode(c.code);}}
                             style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Apply</button>
                         ):(
-                          <span style={{fontSize:10.5,color:"#92400e",fontWeight:600}}>Add ₹{needed} more</span>
+                          <span style={{fontSize:10,color:"#92400e",fontWeight:600}}>Add ₹{needed} more</span>
                         )}
                       </div>
                     );
@@ -10895,11 +10895,11 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                 placeholder="Enter coupon code"
                 style={{flex:1,borderRadius:12,border:`1.5px solid ${couponMsg.ok?"#22c55e":couponMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
               <button className="press" onClick={applyCoupon}
-                style={{background:C.primary,color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+                style={{background:C.primary,color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
                 Apply
               </button>
             </div>
-            {couponMsg.text&&<div style={{fontSize:11.5,color:couponMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{couponMsg.text}</div>}
+            {couponMsg.text&&<div style={{fontSize:11,color:couponMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{couponMsg.text}</div>}
           </div>
           )}
           {/* Permanent customer codes and qualifying-order codes use the same alphanumeric format. */}
@@ -10911,11 +10911,11 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                 autoCapitalize="characters" maxLength={12} placeholder="Enter referral code"
                 style={{flex:1,borderRadius:12,border:`1.5px solid ${refMsg.ok?"#22c55e":refMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",letterSpacing:2,fontFamily:"monospace"}}/>
               <button className="press" onClick={applyReferral} disabled={!REF_CODE_RE.test(cleanRefCode(refInput))}
-                style={{background:REF_CODE_RE.test(cleanRefCode(refInput))?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+                style={{background:REF_CODE_RE.test(cleanRefCode(refInput))?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
                 Apply
               </button>
             </div>
-            {refMsg.text&&<div style={{fontSize:11.5,color:refMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{refMsg.text}</div>}
+            {refMsg.text&&<div style={{fontSize:11,color:refMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{refMsg.text}</div>}
           </div>
           )}
   </>);
@@ -11111,8 +11111,8 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
       {submitted?(
         <>
           <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Verified! 🎉</div>
-          {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:8}}>Payment Verified! 🎉</div>
+          {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:16,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
           <div style={{fontSize:13,color:C.textSub,lineHeight:1.55,marginBottom:18,maxWidth:320}}>Payment verified. Your order is <b style={{color:C.text}}>Confirmed</b>. We'll update it when shipped and delivered.</div>
           {/* Care-guide reminder — tailored to what was purchased */}
           {placed&&(()=>{
@@ -11128,12 +11128,12 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                      the customer is still reading their order confirmation. */}
                   <Collapsible icon="🐠" tone="green" title="How to acclimatize your fish"
                     subtitle={`${steps.length} steps — tap to read when your parcel arrives`}>
-                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5,marginBottom:10}}>Save these steps for when your parcel arrives — they keep your new fish safe and stress-free.</div>
+                  <div style={{fontSize:11,color:"#047857",lineHeight:1.5,marginBottom:10}}>Save these steps for when your parcel arrives — they keep your new fish safe and stress-free.</div>
                   <ol style={{margin:0,paddingLeft:18,display:"flex",flexDirection:"column",gap:6}}>
-                    {steps.map((st,i)=>(<li key={i} style={{fontSize:12.5,color:"#065f46",lineHeight:1.5}}>{st}</li>))}
+                    {steps.map((st,i)=>(<li key={i} style={{fontSize:12,color:"#065f46",lineHeight:1.5}}>{st}</li>))}
                   </ol>
                   <button className="press" onClick={()=>nav("guides")}
-                    style={{marginTop:12,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
+                    style={{marginTop:12,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
                     📖 See full care guides →
                   </button>
                   </Collapsible>
@@ -11143,10 +11143,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             return(
               <button className="press" onClick={()=>nav("guides")}
                 style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,textAlign:"left",cursor:"pointer"}}>
-                <span style={{fontSize:30,flexShrink:0}}>📖</span>
+                <span style={{fontSize:28,flexShrink:0}}>📖</span>
                 <div>
-                  <div style={{fontSize:13.5,fontWeight:800,color:"#065f46",marginBottom:2}}>Please read the Care Guide</div>
-                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5}}>Settle your new plants in correctly for healthy growth. Tap to read →</div>
+                  <div style={{fontSize:13,fontWeight:800,color:"#065f46",marginBottom:2}}>Please read the Care Guide</div>
+                  <div style={{fontSize:11,color:"#047857",lineHeight:1.5}}>Settle your new plants in correctly for healthy growth. Tap to read →</div>
                 </div>
               </button>
             );
@@ -11156,7 +11156,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             const pts=coinsEarnedFor(placed, settings); // exactly what will be credited on delivery
             return pts>0?(
               <div className="points-pop" style={{background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:16,padding:"12px 20px",marginBottom:14,display:"flex",alignItems:"center",gap:10,width:"100%",maxWidth:340}}>
-                <span style={{fontSize:26}}>👛</span>
+                <span style={{fontSize:24}}>👛</span>
                 <div style={{textAlign:"left"}}>
                   <div style={{fontSize:14,fontWeight:800,color:"white"}}>{pts} wallet points pending</div>
                   <div style={{fontSize:11,color:"rgba(255,255,255,.85)"}}>≈ ₹{Math.floor(pts*Number(settings.loyaltyRedeemValue||1))} — credited after successful payment when your order is delivered</div>
@@ -11166,9 +11166,9 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           })()}
           <div style={{display:"flex",gap:10,width:"100%",maxWidth:340}}>
             <button className="press" onClick={()=>nav("home")}
-              style={{flex:1,background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Home</button>
+              style={{flex:1,background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:16,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Home</button>
             <button className="press" onClick={()=>nav("orders")}
-              style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View Orders</button>
+              style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:16,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View Orders</button>
           </div>
         </>
       ):(
@@ -11177,11 +11177,11 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           {placed&&<PaymentPanel order={placed} onVerified={()=>setSubmitted(true)} onCancelled={(o)=>{onCancelled&&onCancelled(o);}} onCheckoutCancelled={onCancelPayment}/>} 
           <div style={{display:"flex",gap:8,marginTop:14,width:"100%",maxWidth:360}}>
             <button className="press" onClick={()=>nav("orders")}
-              style={{flex:1,background:"#fff",border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 10px",color:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{flex:1,background:"#fff",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 10px",color:C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               Pay later
             </button>
             <button className="press" onClick={()=>{ if(placed) onCancelPayment&&onCancelPayment(placed); else goBack(); }}
-              style={{flex:1,background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"9px 10px",color:C.danger,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{flex:1,background:"#fff",border:"1px solid #fecaca",borderRadius:12,padding:"9px 10px",color:C.danger,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               Cancel payment
             </button>
           </div>
@@ -11211,7 +11211,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                 {i<step-1?"✓":i+1}
               </div>
               <span style={{fontSize:11,fontWeight:600,color:i===step-1?C.primary:C.textSub}}>{s}</span>
-              {i<2&&<div style={{width:16,height:2,background:i<step-1?C.primary:C.border,borderRadius:2}}/>}
+              {i<2&&<div style={{width:16,height:2,background:i<step-1?C.primary:C.border,borderRadius:4}}/>}
             </div>
           ))}
         </div>
@@ -11220,10 +11220,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
       {step===1&&(
         <div className="dt-read" style={{padding:"20px 16px 100px"}}>
           {/* Shipping rates info */}
-          <div style={{background:C.accentLight,borderRadius:14,padding:"12px 14px",marginBottom:16,border:`1px solid ${C.border}`}}>
+          <div style={{background:C.accentLight,borderRadius:16,padding:"12px 14px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{fontSize:13,fontWeight:700,color:C.primaryDark}}>🚚 Shipping rates vary by location &amp; weight</div>
-            {zone&&<div style={{fontSize:11.5,color:C.primary,fontWeight:700,marginTop:4}}>📍 Detected zone: <b>{ZONE_LABELS[zone]}</b></div>}
-            {!zone&&addr.pincode.length===6&&<div style={{fontSize:11.5,color:"#b45309",marginTop:4}}>⚠ Pincode not recognized — enter your city below and we'll confirm shipping</div>}
+            {zone&&<div style={{fontSize:11,color:C.primary,fontWeight:700,marginTop:4}}>📍 Detected zone: <b>{ZONE_LABELS[zone]}</b></div>}
+            {!zone&&addr.pincode.length===6&&<div style={{fontSize:11,color:"#b45309",marginTop:4}}>⚠ Pincode not recognized — enter your city below and we'll confirm shipping</div>}
             {hasLiveFish&&(()=>{
               const r2=settings.shippingRates||DEFAULT_SHIPPING_RATES;
               const fishWt=cart.filter(i=>i.category==="Live Fish").reduce((s,i)=>{const wt=Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2;return s+wt*i.qty;},0);
@@ -11233,7 +11233,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             })()}
           </div>
           {liveBlocked&&(
-            <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:14,padding:"13px 15px",marginBottom:14}}>
+            <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:16,padding:"13px 15px",marginBottom:14}}>
               <div style={{fontSize:13,fontWeight:800,color:"#b91c1c",marginBottom:3}}>🚫 Live fish not deliverable to {zone?ZONE_LABELS[zone]:"this region"}</div>
               <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.5}}>For the safety of the fish we currently ship live stock only within <b>Tamil Nadu</b> and <b>South India</b>. Please use a delivery address in those regions, or remove the live-fish items to continue with the rest of your order.</div>
             </div>
@@ -11245,14 +11245,14 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                choosing packing is repeated inside that chooser below. */}
             <Collapsible icon="🛡️" tone="green" title="Live Arrival Guarantee"
               subtitle="Free with our recommended packing — tap for the terms">
-              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish is <b>Dead on Arrival (DOA)</b>, share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery. If approved, <b>you choose either a refund or reward coins</b> for the fish's value. Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
+              <div style={{fontSize:12,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish is <b>Dead on Arrival (DOA)</b>, share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery. If approved, <b>you choose either a refund or reward coins</b> for the fish's value. Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
             </Collapsible>
             </>
           )}
           {/* Only customer-saved addresses appear here. Past orders never recreate a card. */}
           {savedAddresses.length>0&&(
-            <div style={{background:"#fff",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:16}}>
-              <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:10}}>📍 Saved Address</div>
+            <div style={{background:"#fff",border:`1px solid ${C.border}`,borderRadius:16,padding:"12px 14px",marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:10}}>📍 Saved Address</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {savedAddresses.map(a=>{
                   const active=addrFingerprint(a)===addrFingerprint(addr);
@@ -11264,23 +11264,23 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                   };
                   return(
                     <div key={a.id} style={{border:`1.5px solid ${active?C.primary:C.border}`,background:active?C.accentLight:"#fff",borderRadius:12,padding:"10px 12px"}}>
-                      <div style={{fontSize:12.5,fontWeight:800,color:C.text}}>
+                      <div style={{fontSize:12,fontWeight:800,color:C.text}}>
                         {a.name||"Address"}{a.label?<span style={{color:C.textSub,fontWeight:600}}> · {a.label}</span>:null}
                       </div>
-                      <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5,marginTop:3}}>
+                      <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:3}}>
                         {a.address}{a.city?`, ${a.city}`:""} — {a.pincode}{a.phone?<><br/>📞 {a.phone}</>:null}
                       </div>
                       <div style={{display:"flex",gap:8,marginTop:9,flexWrap:"wrap"}}>
                         <button className="press" onClick={()=>{ use(); setAddrFormOpen(false); }}
-                          style={{background:C.primary,color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          style={{background:C.primary,color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                           {active?"✓ In use":"Use this"}
                         </button>
                         <button className="press" onClick={()=>{ use(); setAddrFormOpen(true); }}
-                          style={{background:"#fff",color:C.primary,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          style={{background:"#fff",color:C.primary,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                           ✏ Edit
                         </button>
                         <button className="press" onClick={()=>onDeleteAddress&&onDeleteAddress(a.id)}
-                          style={{background:"#fff",color:C.danger,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          style={{background:"#fff",color:C.danger,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                           Delete
                         </button>
                       </div>
@@ -11292,7 +11292,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                       setAddr(cur=>({...BLANK_ADDR,waUpdates:cur.waUpdates,summary:cur.summary}));
                       setAddrEditId(null); setSaveForLater(false); setErrs({}); setErrFocus(""); setAddrFormOpen(true);
                     }}
-                    style={{background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                    style={{background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                     ＋ New address
                   </button>
                 )}
@@ -11316,7 +11316,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
               if(!checked&&errs.whatsapp) setErrs(p=>{const n={...p};delete n.whatsapp;return n;});
             }} style={{width:18,height:18,accentColor:"#25D366",flexShrink:0}}/>
             <span aria-hidden="true" style={{width:20,height:20,borderRadius:"50%",background:"#25D366",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900}}>☎</span>
-            <span style={{fontSize:12.5,color:"#166534",fontWeight:700}}>Update me on WhatsApp</span>
+            <span style={{fontSize:12,color:"#166534",fontWeight:700}}>Update me on WhatsApp</span>
           </label>
           {addr.waUpdates&&inp("WhatsApp Number","whatsapp","tel")}
           {showAddrForm&&(<>
@@ -11361,37 +11361,37 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                sees what they are getting and what it costs. */
             <Collapsible icon="🐠" title="Live-fish packing"
               subtitle={`${packingLabel(packing)}${guaranteeActive?" · 🛡️ guaranteed":" · not covered by the guarantee"}`}>
-              <div style={{fontSize:11.5,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> applies when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer option above it. Whatever you choose, we always pack with the utmost care to keep your fish safe in transit.</div>
+              <div style={{fontSize:11,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:12,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> applies when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer option above it. Whatever you choose, we always pack with the utmost care to keep your fish safe in transit.</div>
               {PACKING_OPTIONS.map(opt=>{
                 const sel=packing===opt.key;
                 const isSug=opt.key===suggestedPacking;
                 const covered=opt.rank>=packingOpt(suggestedPacking).rank;
                 const optFee=calcShipping(cart,zone,{packing:opt.key},settings);
                 return(
-                  <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:11,background:sel?"#eff6ff":"#fff",borderRadius:13,padding:"12px 13px",marginBottom:8,cursor:"pointer",userSelect:"none",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
+                  <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:11,background:sel?"#eff6ff":"#fff",borderRadius:12,padding:"12px 13px",marginBottom:8,cursor:"pointer",userSelect:"none",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
                     <input type="radio" name="packing" checked={sel} onChange={()=>setPacking(opt.key)} style={{width:18,height:18,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
                     <div style={{flex:1}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                        <span style={{fontSize:12.5,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
+                        <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
                         {isSug&&<span style={{fontSize:9,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"2px 7px",letterSpacing:.3}}>RECOMMENDED</span>}
-                        {covered&&<span style={{fontSize:9.5,fontWeight:700,color:"#15803d"}}>🛡️ Guaranteed</span>}
+                        {covered&&<span style={{fontSize:9,fontWeight:700,color:"#15803d"}}>🛡️ Guaranteed</span>}
                       </div>
                       <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>{opt.blurb}</div>
                     </div>
-                    <span style={{fontSize:12.5,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>{zone?`₹${optFee}`:"—"}</span>
+                    <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>{zone?`₹${optFee}`:"—"}</span>
                   </label>
                 );
               })}
               {selPack.rank < packingOpt(suggestedPacking).rank &&(
-                <div style={{fontSize:11,color:"#9a3412",lineHeight:1.45,marginTop:2,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px"}}>⚠ You've chosen a lighter packing than we recommend for these fish — that's okay, but <b>live arrival won't be guaranteed</b>.</div>
+                <div style={{fontSize:11,color:"#9a3412",lineHeight:1.45,marginTop:2,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"8px 11px"}}>⚠ You've chosen a lighter packing than we recommend for these fish — that's okay, but <b>live arrival won't be guaranteed</b>.</div>
               )}
             </Collapsible>
           ) : anySuggestSpecial ? (
-            <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"#eff6ff":"#fff",borderRadius:14,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
+            <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"#eff6ff":"#fff",borderRadius:16,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
               <input type="checkbox" checked={specialDelivery} onChange={e=>setSpecialDelivery(e.target.checked)} style={{width:20,height:20,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
               <div>
                 <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ Premium Delivery</div>
-                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{zone?speedCourierForZone(zone,settings,cart):(settings.specialDeliveryPrice||200)}</b> to shipping.</div>
+                <div style={{fontSize:11,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{zone?speedCourierForZone(zone,settings,cart):(settings.specialDeliveryPrice||200)}</b> to shipping.</div>
               </div>
             </label>
           ) : null}
@@ -11405,16 +11405,16 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           {/* Billing address */}
           <label style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"11px 14px",marginBottom:12,cursor:"pointer",userSelect:"none",border:`1px solid ${C.border}`}}>
             <input type="checkbox" checked={useSameBilling} onChange={e=>setUseSameBilling(e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
-            <span style={{fontSize:12.5,color:C.primaryDark,fontWeight:600}}>🏠 Billing address same as shipping</span>
+            <span style={{fontSize:12,color:C.primaryDark,fontWeight:600}}>🏠 Billing address same as shipping</span>
           </label>
           {!useSameBilling&&(
-            <div style={{background:C.bg,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
+            <div style={{background:C.bg,borderRadius:16,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
               <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:10}}>Billing Address</div>
               {["name","address","city","pincode"].map(k=>(
                 <div key={k} style={{marginBottom:10}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:4}}>{k.charAt(0).toUpperCase()+k.slice(1)}</div>
                   <input value={billing[k]} onChange={e=>fb(k,e.target.value)}
-                    style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                    style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
                 </div>
               ))}
             </div>
@@ -11422,17 +11422,17 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           {onSaveAddress&&showAddrForm&&!addrEditId&&(
             <label style={{display:"flex",alignItems:"center",gap:10,background:"#fff",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginBottom:12,cursor:"pointer",userSelect:"none"}}>
               <input type="checkbox" checked={saveForLater} onChange={e=>setSaveForLater(e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
-              <span style={{fontSize:12.5,color:C.text,fontWeight:700}}>Save this address for future orders</span>
+              <span style={{fontSize:12,color:C.text,fontWeight:700}}>Save this address for future orders</span>
             </label>
           )}
           {onSaveAddress&&showAddrForm&&addrEditId&&(
             <button className="press" onClick={()=>{ if(validate()) onSaveAddress({...addr,id:addrEditId}); }}
-              style={{width:"100%",marginBottom:10,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              style={{width:"100%",marginBottom:10,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
               Update saved address
             </button>
           )}
           <button className="press" onClick={()=>{ if(validate()) setStep(2); else setAddrFormOpen(true); }}
-            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             Continue to Payment →
           </button>
         </div>
@@ -11443,20 +11443,20 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:12}}>Order Items</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
             <button className="press" onClick={()=>nav("shop")}
-              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>＋ Add more items</button>
+              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>＋ Add more items</button>
             <button className="press" onClick={()=>setStep(1)}
-              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✏ Edit Address</button>
+              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✏ Edit Address</button>
           </div>
           {cart.map(item=>{
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
             const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
             return(
-              <div key={item.key||item.id} style={{background:C.card,borderRadius:14,padding:"12px",marginBottom:8,display:"flex",gap:12,alignItems:"center",border:`1px solid ${C.border}`}}>
+              <div key={item.key||item.id} style={{background:C.card,borderRadius:16,padding:"12px",marginBottom:8,display:"flex",gap:12,alignItems:"center",border:`1px solid ${C.border}`}}>
                 {/* Cart lines are snapshots and carry no picture, so the photo is looked up from
                     the catalogue — the same helper the cart and order history use. This tile
                     showed the bare category emoji until now, which made the last screen before
                     payment the one place you could not see what you were buying. */}
-                <div style={{width:44,height:44,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,overflow:"hidden"}}>
+                <div style={{width:44,height:44,borderRadius:12,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,overflow:"hidden"}}>
                   {(()=>{ const src=getCartLineImg(item,products,mediaCache);
                     return src?<img src={src} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji; })()}
                 </div>
@@ -11465,10 +11465,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                   {item.variantLabel&&<div style={{fontSize:12,color:C.textSub}}>{item.variantLabel}</div>}
                   {updateQty?(
                     <div style={{display:"flex",alignItems:"center",gap:10,marginTop:6}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:10,padding:"4px 10px",border:`1.5px solid ${C.border}`}}>
-                        <button className="press" onClick={()=>updateQty(item.key,-1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,lineHeight:1,cursor:"pointer"}}>−</button>
+                      <div style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"4px 10px",border:`1.5px solid ${C.border}`}}>
+                        <button className="press" onClick={()=>updateQty(item.key,-1)} style={{background:"none",border:"none",fontSize:16,color:C.primary,fontWeight:700,lineHeight:1,cursor:"pointer"}}>−</button>
                         <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:16,textAlign:"center"}}>{item.qty}</span>
-                        <button className="press" onClick={()=>updateQty(item.key,1)} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:17,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,lineHeight:1,cursor:item.qty>=maxAllowed?"default":"pointer"}}>+</button>
+                        <button className="press" onClick={()=>updateQty(item.key,1)} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:16,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,lineHeight:1,cursor:item.qty>=maxAllowed?"default":"pointer"}}>+</button>
                       </div>
                       <button className="press" onClick={()=>updateQty(item.key,-item.qty)} style={{background:"none",border:"none",fontSize:12,color:C.danger,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Remove</button>
                     </div>
@@ -11499,7 +11499,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
               <div style={{fontSize:11,color:"#0c4a6e",lineHeight:1.5,marginBottom:10}}>
                 The <b>Live Arrival Guarantee</b> applies on <b>{packingLabel(suggestedPacking)}</b> (our recommendation) or any safer option. Changing this changes your shipping charge below.
               </div>
-              {!zone&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>Enter a recognised pincode on the shipping step to see the charge for each option.</div>}
+              {!zone&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>Enter a recognised pincode on the shipping step to see the charge for each option.</div>}
               {PACKING_OPTIONS.map(opt=>{
                 const sel=packing===opt.key;
                 const isSug=opt.key===suggestedPacking;
@@ -11511,12 +11511,12 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
                         <span style={{fontSize:12,fontWeight:800,color:sel?"#0369a1":C.text}}>{opt.label}</span>
-                        {isSug&&<span style={{fontSize:8.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
+                        {isSug&&<span style={{fontSize:9,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
                         {covered
                           ? <span style={{fontSize:9,fontWeight:800,color:"#15803d"}} title="Live Arrival Guarantee applies">🛡️</span>
-                          : <span style={{fontSize:8.5,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"1px 6px"}}>NO DEAD-ON-ARRIVAL COVER</span>}
+                          : <span style={{fontSize:9,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"1px 6px"}}>NO DEAD-ON-ARRIVAL COVER</span>}
                       </div>
-                      <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
+                      <div style={{fontSize:10,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
                     </div>
                     <span style={{fontSize:12,fontWeight:800,color:sel?"#0369a1":C.text,whiteSpace:"nowrap"}}>{optFee==null?"—":`₹${optFee}`}</span>
                   </label>
@@ -11524,13 +11524,13 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
               })}
             </Collapsible>
             {!guaranteeActive&&(
-              <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",lineHeight:1.5,marginTop:-4,marginBottom:12}}>
+              <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"9px 11px",lineHeight:1.5,marginTop:-4,marginBottom:12}}>
                 ⚠ You've picked packing below our recommendation. Your fish still travel with our usual care, but a <b>Dead-on-Arrival claim can't be honoured</b> on this order.
               </div>
             )}
             </div>
           )}
-          <div style={{background:C.card,borderRadius:14,padding:"14px",marginTop:12,border:`1px solid ${C.border}`}}>
+          <div style={{background:C.card,borderRadius:16,padding:"14px",marginTop:12,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:13,color:C.textSub}}>Subtotal</span>
               <span style={{fontSize:13,fontWeight:600,color:C.text}}>₹{total}</span>
@@ -11586,10 +11586,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                           <div style={{flex:1}}>
                             <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
                               <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
-                              {isSug&&<span style={{fontSize:8.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
+                              {isSug&&<span style={{fontSize:9,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
                               {covered&&<span style={{fontSize:9,fontWeight:700,color:"#15803d"}}>🛡️</span>}
                             </div>
-                            <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
+                            <div style={{fontSize:10,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
                           </div>
                           <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>₹{optFee}</span>
                         </label>
@@ -11601,7 +11601,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                           <input type="radio" name="packrev" checked={sel} onChange={()=>setSpecialDelivery(o.sp)} style={{width:17,height:17,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
                           <div style={{flex:1}}>
                             <div style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{o.label}</div>
-                            <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{o.blurb}</div>
+                            <div style={{fontSize:10,color:C.textSub,marginTop:1,lineHeight:1.4}}>{o.blurb}</div>
                           </div>
                           <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>₹{optFee}</span>
                         </label>
@@ -11612,7 +11612,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                 )}
               </div>
             )}
-            {zone&&fee>0&&<div style={{fontSize:10.5,color:C.textSub,lineHeight:1.45,marginTop:-2,marginBottom:8,background:C.accentLight,borderRadius:8,padding:"7px 10px"}}>ℹ️ Estimated shipping. Any excess returns to your wallet after dispatch.</div>}
+            {zone&&fee>0&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.45,marginTop:-2,marginBottom:8,background:C.accentLight,borderRadius:8,padding:"7px 10px"}}>ℹ️ Estimated shipping. Any excess returns to your wallet after dispatch.</div>}
             {guaranteeActive&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
               <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Arrival Guarantee</span>
               <span style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Included</span>
@@ -11637,11 +11637,11 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             </div>}
             <div style={{height:1,background:C.border,margin:"10px 0"}}/>
             <div style={{display:"flex",justifyContent:"space-between"}}>
-              <span style={{fontSize:15,fontWeight:700,color:C.text}}>Grand Total</span>
+              <span style={{fontSize:14,fontWeight:700,color:C.text}}>Grand Total</span>
               <span style={{fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>₹{grand}</span>
             </div>
           </div>
-          <div style={{marginTop:16,background:C.card,borderRadius:14,padding:"14px",border:`1px solid ${C.border}`}}>
+          <div style={{marginTop:16,background:C.card,borderRadius:16,padding:"14px",border:`1px solid ${C.border}`}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>📍 Shipping To</div>
             {[{l:"Name",v:addr.name},{l:"Phone",v:addr.phone},{l:"Address",v:addr.address},{l:"City",v:`${addr.city} — ${addr.pincode}`}].map((r,i)=>(
               <div key={i} style={{display:"flex",gap:10,marginBottom:6}}>
@@ -11664,9 +11664,9 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             </div>
           </Collapsible>
 
-          {placeErr&&<div style={{marginTop:14,background:"#fef2f2",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
+          {placeErr&&<div style={{marginTop:14,background:"#fef2f2",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
           <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={handlePlaceOrder} disabled={placing}
-            style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,opacity:placing?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+            style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,opacity:placing?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
             {placing?"Checking stock…":"Place Order"}
           </button>
         </div>
@@ -11687,10 +11687,10 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
         <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"18px 22px",color:"#fff"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:13,fontWeight:700,opacity:.92}}>👛 Your Wallet</span>
-            <button onClick={onClose} aria-label="Close" style={{background:"rgba(255,255,255,.18)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:15,cursor:"pointer"}}>✕</button>
+            <button onClick={onClose} aria-label="Close" style={{background:"rgba(255,255,255,.18)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:14,cursor:"pointer"}}>✕</button>
           </div>
           <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:8}}>
-            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:34,fontWeight:800,lineHeight:1}}>{points}</span>
+            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:32,fontWeight:800,lineHeight:1}}>{points}</span>
             <span style={{fontSize:13,opacity:.9}}>coins · ₹1 each</span>
           </div>
         </div>
@@ -11709,7 +11709,7 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
         })()}
         <div className="wallet-log-scroll" style={{maxHeight:"min(48vh,420px)",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}}>
           {hist.length===0?(
-            <div style={{padding:"30px 22px",textAlign:"center",color:C.textSub,fontSize:12.5,lineHeight:1.6}}>No coin activity yet.<br/>Coins from successful delivered orders and approved rewards will show here.</div>
+            <div style={{padding:"30px 22px",textAlign:"center",color:C.textSub,fontSize:12,lineHeight:1.6}}>No coin activity yet.<br/>Coins from successful delivered orders and approved rewards will show here.</div>
           ):hist.map((h,i)=>{
             const pos=(h.pts||0)>=0;
             const label=h.note||({credit:"Coins earned",earn:"Coins earned",reverse:"Coins reversed",redeem:"Coins used on order"}[h.type])||(pos?"Coins earned":"Coins used");
@@ -11720,7 +11720,7 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
                   <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
                   {d&&<div style={{fontSize:11,color:C.textSub,marginTop:2}}>{d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</div>}
                 </div>
-                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:pos?C.primary:C.coral,flexShrink:0}}>{pos?"+":"−"}{Math.abs(h.pts||0)}</div>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:pos?C.primary:C.coral,flexShrink:0}}>{pos?"+":"−"}{Math.abs(h.pts||0)}</div>
               </div>
             );
           })}
@@ -11836,21 +11836,21 @@ function WhyNemoPopup({open,onClose,nav}){
     <div onClick={onClose} role="dialog" aria-modal="true" aria-label="Why shop at Nemo Aqua Store"
       style={{position:"fixed",inset:0,background:"rgba(6,40,43,.58)",backdropFilter:"blur(3px)",zIndex:9200,display:"flex",alignItems:"center",justifyContent:"center",padding:"14px 12px",animation:"fadeIn .2s ease"}}>
       <div onClick={e=>e.stopPropagation()} className="slide-up why-panel"
-        style={{width:"100%",maxWidth:430,maxHeight:"92vh",background:C.card,borderRadius:22,overflow:"hidden",boxShadow:"0 26px 64px rgba(0,0,0,.34)",display:"flex",flexDirection:"column"}}>
+        style={{width:"100%",maxWidth:430,maxHeight:"92vh",background:C.card,borderRadius:20,overflow:"hidden",boxShadow:"0 26px 64px rgba(0,0,0,.34)",display:"flex",flexDirection:"column"}}>
         <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"14px 18px 12px",color:"#fff",flexShrink:0,position:"relative",overflow:"hidden"}}>
           <div style={{position:"absolute",top:-34,right:-24,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.09)"}}/>
           <button onClick={onClose} aria-label="Close"
-            style={{position:"absolute",top:14,right:14,background:"rgba(255,255,255,.2)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:15,cursor:"pointer",lineHeight:1,zIndex:2}}>✕</button>
+            style={{position:"absolute",top:14,right:14,background:"rgba(255,255,255,.2)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:14,cursor:"pointer",lineHeight:1,zIndex:2}}>✕</button>
           <div style={{fontSize:11,fontWeight:800,letterSpacing:1,opacity:.85,textTransform:"uppercase"}}>Welcome to {STORE_NAME} 🐠</div>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,marginTop:4,lineHeight:1.25,paddingRight:34}}>Why we're not like the others</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,marginTop:4,lineHeight:1.25,paddingRight:34}}>Why we're not like the others</div>
         </div>
         <div style={{overflowY:"auto",padding:"9px 10px 2px",background:C.bg}}>
           {/* The two column headings carry the "Others vs At Nemo" framing once, at the top — the
               rows below stay label-free so all 8 points fit on one screen without scrolling. */}
           <div style={{display:"flex",gap:6,padding:"0 3px 6px",position:"sticky",top:0,background:C.bg,zIndex:1}}>
             <div style={{width:22,flexShrink:0}}/>
-            <div style={{flex:1,fontSize:9.5,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.6}}>❌ Elsewhere</div>
-            <div style={{flex:1,fontSize:9.5,fontWeight:800,color:"#0d9488",textTransform:"uppercase",letterSpacing:.6}}>✅ At {STORE_NAME}</div>
+            <div style={{flex:1,fontSize:9,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.6}}>❌ Elsewhere</div>
+            <div style={{flex:1,fontSize:9,fontWeight:800,color:"#0d9488",textTransform:"uppercase",letterSpacing:.6}}>✅ At {STORE_NAME}</div>
           </div>
           {/* The "Us" side is the point of the whole popup, so it's the one that's meant to pop:
               green, slightly raised, with the "Others" side deliberately washed out. */}
@@ -11858,14 +11858,14 @@ function WhyNemoPopup({open,onClose,nav}){
           {WHY_US_ROWS.map(r=>(
             <div key={r.title} style={{display:"flex",gap:6,alignItems:"stretch",marginBottom:5}}>
               <div title={r.title} style={{width:22,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,lineHeight:1}}>{r.icon}</div>
-              <div style={{flex:1,background:"#f8fafc",borderRadius:10,padding:"6px 8px",border:`1px solid ${C.border}`,opacity:.85}}>
-                <div style={{fontSize:9.5,fontWeight:800,color:"#94a3b8",marginBottom:2,lineHeight:1.3}}>{r.title}</div>
-                <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.35}}>{r.them}</div>
+              <div style={{flex:1,background:"#f8fafc",borderRadius:12,padding:"6px 8px",border:`1px solid ${C.border}`,opacity:.85}}>
+                <div style={{fontSize:9,fontWeight:800,color:"#94a3b8",marginBottom:2,lineHeight:1.3}}>{r.title}</div>
+                <div style={{fontSize:10,color:C.textSub,lineHeight:1.35}}>{r.them}</div>
               </div>
-              <div style={{flex:1,background:"linear-gradient(160deg,#ecfdf5,#f0fdfa)",borderRadius:10,padding:"6px 8px",border:"1.5px solid #5eead4",boxShadow:"0 3px 10px rgba(13,148,136,.12)"}}>
+              <div style={{flex:1,background:"linear-gradient(160deg,#ecfdf5,#f0fdfa)",borderRadius:12,padding:"6px 8px",border:"1.5px solid #5eead4",boxShadow:"0 3px 10px rgba(13,148,136,.12)"}}>
                 <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
                   <span style={{fontSize:10,lineHeight:1.35,color:"#0d9488",flexShrink:0}}>✔</span>
-                  <span style={{fontSize:10.5,color:"#134e4a",lineHeight:1.35,fontWeight:600}} dangerouslySetInnerHTML={html(r.us)}/>
+                  <span style={{fontSize:10,color:"#134e4a",lineHeight:1.35,fontWeight:600}} dangerouslySetInnerHTML={html(r.us)}/>
                 </div>
               </div>
             </div>
@@ -11879,7 +11879,7 @@ function WhyNemoPopup({open,onClose,nav}){
           </button>
           <div style={{textAlign:"center",marginTop:6}}>
             <button className="press" onClick={()=>{onClose&&onClose();nav&&nav("policy-terms");}}
-              style={{background:"none",border:"none",fontSize:9.5,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer",padding:2}}>
+              style={{background:"none",border:"none",fontSize:9,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer",padding:2}}>
               Subject to our terms &amp; conditions
             </button>
           </div>
@@ -11897,12 +11897,12 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
   const [walletOpen,setWalletOpen]=useState(false);
   const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
   const walletWarn=!!(wexp&&(wexp.expiringSoon||wexp.expired));
-  const linkStyle=on=>({background:on?"#eef9fa":"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:on?800:600,color:on?C.primary:C.text,padding:"8px 12px",borderRadius:10,fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"});
+  const linkStyle=on=>({background:on?"#eef9fa":"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:on?800:600,color:on?C.primary:C.text,padding:"8px 12px",borderRadius:12,fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"});
   return(
     <div className="desk-nav" style={{flexShrink:0,alignSelf:"center",alignItems:"center",gap:6,background:"rgba(255,255,255,0.8)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",border:"1px solid rgba(15,23,42,0.06)",borderRadius:99,padding:"8px 14px",margin:"14px auto 6px",position:"sticky",top:14,zIndex:60,boxShadow:"0 10px 34px rgba(15,23,42,.09)",maxWidth:"calc(100% - 28px)",overflowX:"auto"}}>
       {page!=="home"&&(
         <button className="press" onClick={()=>nav("home")} title="Back to home"
-          style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 14px",marginRight:12,fontSize:14,fontWeight:800,color:C.primary,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"}}><BackArrow size={16}/> Home</button>
+          style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 14px",marginRight:12,fontSize:14,fontWeight:800,color:C.primary,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"}}><BackArrow size={16}/> Home</button>
       )}
       <div className="press" onClick={onSecretTap} title="Nemo Aqua Store" style={{display:"flex",flexDirection:"column",alignItems:"flex-start",cursor:"pointer",marginRight:16,lineHeight:1}}>
         <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{height:34,width:"auto",objectFit:"contain",display:"block",pointerEvents:"none"}}/>
@@ -11912,20 +11912,20 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
       ))}
       <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
         <button className="desk-link" onClick={()=>nav("orders")} style={{...linkStyle(active==="orders"),position:"relative",fontWeight:800}}>📦 Orders
-          {ordersCount>0&&<span className="cart-pop" style={{position:"absolute",top:-6,right:-5,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>{ordersCount>99?"99+":ordersCount}</span>}
+          {ordersCount>0&&<span className="cart-pop" style={{position:"absolute",top:-6,right:-5,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:12,padding:"1px 5px",minWidth:16,textAlign:"center"}}>{ordersCount>99?"99+":ordersCount}</span>}
         </button>
         {user&&settings.loyaltyEnabled!==false&&(
           <button className="press" onClick={()=>setWalletOpen(true)} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your coins & history"}
-            style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,color:C.primary,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-            <span style={{fontSize:15,lineHeight:1}}>👛</span>{walletPts}
-            {walletWarn&&<span style={{position:"absolute",top:-6,right:-6,minWidth:16,height:16,padding:"0 3px",borderRadius:9,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${C.card}`}}>⏳</span>}
+            style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,color:C.primary,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 13px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+            <span style={{fontSize:14,lineHeight:1}}>👛</span>{walletPts}
+            {walletWarn&&<span style={{position:"absolute",top:-6,right:-6,minWidth:16,height:16,padding:"0 3px",borderRadius:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${C.card}`}}>⏳</span>}
           </button>
         )}
-        <button data-cart-target="" className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+        <button data-cart-target="" className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:12,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
           🛒 Cart
-          {cartCount>0&&<span key={cartCount} className="cart-pop" style={{position:"absolute",top:-6,right:-6,background:C.coral,color:"white",fontSize:10,fontWeight:800,borderRadius:10,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{cartCount>99?"99+":cartCount}</span>}
+          {cartCount>0&&<span key={cartCount} className="cart-pop" style={{position:"absolute",top:-6,right:-6,background:C.coral,color:"white",fontSize:10,fontWeight:800,borderRadius:12,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{cartCount>99?"99+":cartCount}</span>}
         </button>
-        <button className="press" onClick={()=>nav("orders")} style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:`1px solid ${C.border}`,borderRadius:30,padding:"5px 12px 5px 5px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        <button className="press" onClick={()=>nav("orders")} style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:`1px solid ${C.border}`,borderRadius:99,padding:"5px 12px 5px 5px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
           <span style={{width:28,height:28,borderRadius:"50%",background:C.primary,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>{user?(user.name||"U").charAt(0).toUpperCase():"👤"}</span>
           <span style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap"}}>{user?(user.name||"").split(" ")[0]||"Account":"Sign in"}</span>
         </button>
@@ -11951,12 +11951,12 @@ function BottomNav({page,nav,cartCount,ordersCount=0}){
               <div style={{position:"relative"}} {...(t.id==="cart"?{"data-cart-target":""}:{})}>
                 <span style={{fontSize:24,filter:on?"none":"grayscale(1) opacity(.45)",transition:"filter .2s",display:"block"}}>{t.icon}</span>
                 {t.id==="cart"&&cartCount>0&&(
-                  <span key={cartCount} className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
+                  <span key={cartCount} className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:12,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
                     {cartCount>99?"99+":cartCount}
                   </span>
                 )}
                 {t.id==="orders"&&ordersCount>0&&(
-                  <span className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
+                  <span className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:12,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
                     {ordersCount>99?"99+":ordersCount}
                   </span>
                 )}
@@ -12060,9 +12060,9 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
   return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100%",background:C.bg,padding:"24px",position:"relative"}}>
       <button className="press" onClick={onBack} style={{display:"flex",alignItems:"center",justifyContent:"center",position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44}}><BackArrow/></button>
-      <div style={{fontSize:56,marginBottom:14}}>🔐</div>
+      <div style={{fontSize:52,marginBottom:14}}>🔐</div>
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:7}}>Admin</div>
-      <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.6,maxWidth:380,marginBottom:18}}>Enter the Admin password every time you open Admin. Google sign-in is needed only for shared Firebase data and changes; only the main admin or the added co-admin UID can sync changes.</div>
+      <div style={{fontSize:12,color:C.textSub,textAlign:"center",lineHeight:1.6,maxWidth:380,marginBottom:18}}>Enter the Admin password every time you open Admin. Google sign-in is needed only for shared Firebase data and changes; only the main admin or the added co-admin UID can sync changes.</div>
       <div style={{width:"min(100%,360px)"}}>
         {/* PasswordField lives in the main bundle (see app.jsx) and carries the show/hide eye,
             so a mistyped password on a phone keyboard can be checked rather than retyped. */}
@@ -12071,9 +12071,9 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
         <button className="press" onClick={unlock} disabled={busy||checking} style={{width:"100%",background:(busy||checking)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"12px 16px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{checking?"Checking…":busy?"Checking…":"Unlock Admin"}</button>
       </div>
       {!configured&&!checking&&(
-        <button className="press" onClick={bootstrap} disabled={busy} style={{marginTop:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"10px 14px",fontSize:11.5,fontWeight:800,color:C.text}}>{busy?"Signing in…":"Main admin: set up password"}</button>
+        <button className="press" onClick={bootstrap} disabled={busy} style={{marginTop:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"10px 14px",fontSize:11,fontWeight:800,color:C.text}}>{busy?"Signing in…":"Main admin: set up password"}</button>
       )}
-      {msg&&<div style={{marginTop:12,maxWidth:380,textAlign:"center",fontSize:11.5,color:msg.toLowerCase().includes("incorrect")||msg.toLowerCase().includes("only")?C.danger:C.textSub,lineHeight:1.5}}>{msg}</div>}
+      {msg&&<div style={{marginTop:12,maxWidth:380,textAlign:"center",fontSize:11,color:msg.toLowerCase().includes("incorrect")||msg.toLowerCase().includes("only")?C.danger:C.textSub,lineHeight:1.5}}>{msg}</div>}
     </div>
   );
 }
@@ -12085,7 +12085,7 @@ function MediaUploader({label,accept,preview,previewType,onChange,onClear,note,f
     <div style={{marginBottom:20}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>{label}</div>
       {preview?(
-        <div style={{position:"relative",borderRadius:14,overflow:"hidden",border:`1.5px solid ${C.border}`,background:fit==="contain"?"#0c2b30":"transparent"}}>
+        <div style={{position:"relative",borderRadius:16,overflow:"hidden",border:`1.5px solid ${C.border}`,background:fit==="contain"?"#0c2b30":"transparent"}}>
           {previewType==="video"
             ?<video src={preview} autoPlay loop muted playsInline style={{width:"100%",maxHeight:fit==="contain"?340:180,objectFit:fit,display:"block"}}/>
             :<img src={preview} alt="" style={{width:"100%",maxHeight:fit==="contain"?340:180,objectFit:fit,display:"block"}}/>}
@@ -12099,11 +12099,11 @@ function MediaUploader({label,accept,preview,previewType,onChange,onClear,note,f
         <div onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
           onDrop={e=>{e.preventDefault();setDrag(false);onChange(e.dataTransfer.files[0]);}}
           onClick={()=>ref.current?.click()}
-          style={{border:`2px dashed ${drag?C.primary:C.border}`,borderRadius:14,padding:"28px 16px",textAlign:"center",cursor:"pointer",background:drag?C.accentLight:"transparent",transition:"all .2s"}}>
+          style={{border:`2px dashed ${drag?C.primary:C.border}`,borderRadius:16,padding:"28px 16px",textAlign:"center",cursor:"pointer",background:drag?C.accentLight:"transparent",transition:"all .2s"}}>
           <div style={{fontSize:32,marginBottom:8}}>{previewType==="video"?"🎬":"📷"}</div>
           <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Drop {previewType==="video"?"video / GIF":"photo"} here</div>
           <div style={{fontSize:12,color:C.textSub,marginBottom:12}}>or tap to browse</div>
-          <span style={{background:C.primary,color:"white",borderRadius:10,padding:"7px 18px",fontSize:12,fontWeight:700}}>Choose File</span>
+          <span style={{background:C.primary,color:"white",borderRadius:12,padding:"7px 18px",fontSize:12,fontWeight:700}}>Choose File</span>
           <input ref={ref} type="file" accept={accept} style={{display:"none"}} onChange={e=>onChange(e.target.files[0])}/>
         </div>
       )}
@@ -12195,7 +12195,7 @@ function VideoTrimmer({file,onCancel,onDone}){
   };
 
   const pctOf=t=>dur?Math.max(0,Math.min(100,(t/dur)*100)):0;
-  const handle={position:"absolute",top:-4,width:16,height:"calc(100% + 8px)",background:C.primary,borderRadius:6,cursor:"ew-resize",touchAction:"none",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(0,0,0,.25)"};
+  const handle={position:"absolute",top:-4,width:16,height:"calc(100% + 8px)",background:C.primary,borderRadius:8,cursor:"ew-resize",touchAction:"none",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(0,0,0,.25)"};
   return(
     <Portal>
       <div style={{position:"fixed",inset:0,background:"rgba(6,40,43,.72)",zIndex:9400,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:"0"}}>
@@ -12209,15 +12209,15 @@ function VideoTrimmer({file,onCancel,onDone}){
             Drag the blue handles to pick up to <b>{CLIP_MAX_SEC} seconds</b>. Whatever the file size, it is compressed to fit — and the sound is removed.
           </div>
           <video ref={vidRef} src={url} onLoadedMetadata={onMeta} onTimeUpdate={onTime} muted playsInline controls
-            style={{width:"100%",maxHeight:"38vh",background:"#000",borderRadius:14,display:"block"}}/>
+            style={{width:"100%",maxHeight:"38vh",background:"#000",borderRadius:16,display:"block"}}/>
           <div ref={barRef} onPointerDown={startDrag("move")}
-            style={{position:"relative",height:44,margin:"16px 8px 8px",borderRadius:10,background:"#e2e8f0",touchAction:"none",cursor:"grab"}}>
-            <div style={{position:"absolute",left:pctOf(range.a)+"%",width:(pctOf(range.b)-pctOf(range.a))+"%",top:0,bottom:0,background:"rgba(14,165,233,.22)",border:`2px solid ${C.primary}`,borderRadius:10}}/>
-            <div style={{position:"absolute",left:pctOf(now)+"%",top:-3,bottom:-3,width:2,background:C.coral,borderRadius:2}}/>
+            style={{position:"relative",height:44,margin:"16px 8px 8px",borderRadius:12,background:"#e2e8f0",touchAction:"none",cursor:"grab"}}>
+            <div style={{position:"absolute",left:pctOf(range.a)+"%",width:(pctOf(range.b)-pctOf(range.a))+"%",top:0,bottom:0,background:"rgba(14,165,233,.22)",border:`2px solid ${C.primary}`,borderRadius:12}}/>
+            <div style={{position:"absolute",left:pctOf(now)+"%",top:-3,bottom:-3,width:2,background:C.coral,borderRadius:4}}/>
             <div onPointerDown={startDrag("a")} style={{...handle,left:`calc(${pctOf(range.a)}% - 8px)`}}><span style={{color:"#fff",fontSize:11}}>⋮</span></div>
             <div onPointerDown={startDrag("b")} style={{...handle,left:`calc(${pctOf(range.b)}% - 8px)`}}><span style={{color:"#fff",fontSize:11}}>⋮</span></div>
           </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,color:C.textSub,fontWeight:700,margin:"0 8px 14px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.textSub,fontWeight:700,margin:"0 8px 14px"}}>
             <span>{fmtClock(range.a)}</span>
             <span style={{color:len>CLIP_MAX_SEC+0.05?C.danger:C.primary}}>{len.toFixed(1)}s selected</span>
             <span>{fmtClock(dur)}</span>
@@ -12228,14 +12228,14 @@ function VideoTrimmer({file,onCancel,onDone}){
               <div style={{height:8,background:C.bg,borderRadius:99,overflow:"hidden"}}>
                 <div style={{height:"100%",width:pct+"%",background:C.primary,transition:"width .2s"}}/>
               </div>
-              <div style={{fontSize:11.5,color:C.textSub,marginTop:6,fontWeight:600}}>Processing the clip in real time — {pct}%{pass>1?` · compressing further (pass ${pass})`:""}</div>
+              <div style={{fontSize:11,color:C.textSub,marginTop:6,fontWeight:600}}>Processing the clip in real time — {pct}%{pass>1?` · compressing further (pass ${pass})`:""}</div>
             </div>
           )}
           <div style={{display:"flex",gap:10}}>
             <button className="press" onClick={onCancel} disabled={busy}
-              style={{flex:1,padding:"13px",borderRadius:14,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textSub,fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+              style={{flex:1,padding:"13px",borderRadius:16,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textSub,fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
             <button className="press" onClick={use} disabled={busy}
-              style={{flex:2,padding:"13px",borderRadius:14,border:"none",background:C.primary,color:"#fff",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:busy?.7:1}}>
+              style={{flex:2,padding:"13px",borderRadius:16,border:"none",background:C.primary,color:"#fff",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:busy?.7:1}}>
               {busy?"Processing…":"Use this clip"}
             </button>
           </div>
@@ -12555,7 +12555,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
   return(
     <div className="slide-up">
       <div className="admin-head" style={{background:C.adminBg,padding:"52px 16px 16px",display:"flex",alignItems:"center",gap:12}}>
-        <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:44,height:44,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><BackArrow/></button>
+        <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:12,width:44,height:44,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><BackArrow/></button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:"white"}}>{isEdit?"Edit Product":"Add Product"}</div>
       </div>
       <div className="dt-read" style={{padding:"20px 16px 100px"}}>
@@ -12626,7 +12626,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
         </div>
 
         {/* Offer / discount */}
-        <div style={{background:"#fff7ed",borderRadius:14,padding:"14px",marginBottom:16,border:`1px solid #fed7aa`}}>
+        <div style={{background:"#fff7ed",borderRadius:16,padding:"14px",marginBottom:16,border:`1px solid #fed7aa`}}>
           <div style={{fontSize:12,fontWeight:800,color:"#c2410c",textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>⚡ Offer &amp; Discount</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:12}}>
             <div>
@@ -12658,25 +12658,25 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
               <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                 <code style={{fontSize:14,fontWeight:800,letterSpacing:.5,color:"#065f46",background:"white",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px"}}>{shownSku}</code>
                 <button type="button" className="press" onClick={()=>{ try{ navigator.clipboard.writeText(shownSku); showToast("Product ID copied"); }catch(e){} }}
-                  style={{background:"white",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",fontSize:11.5,fontWeight:700,color:"#065f46",cursor:"pointer"}}>Copy</button>
+                  style={{background:"white",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,color:"#065f46",cursor:"pointer"}}>Copy</button>
               </div>
               {variants.filter(v=>String(v.label||"").trim()).length>0&&(
                 <div style={{marginTop:10}}>
                   <div style={ADMIN_LABEL}>One ID per option — use these in inventory</div>
                   <div style={{display:"flex",flexDirection:"column",gap:4}}>
                     {variants.filter(v=>String(v.label||"").trim()).map((v,i)=>(
-                      <div key={v.id} style={{display:"flex",gap:8,alignItems:"baseline",fontSize:11.5}}>
+                      <div key={v.id} style={{display:"flex",gap:8,alignItems:"baseline",fontSize:11}}>
                         <code style={{fontWeight:800,color:"#065f46"}}>{shownSku}-{v.sku||variantSkuCode(v.id,i)}</code>
                         <span style={{color:C.textSub}}>{v.label}</span>
                       </div>
                     ))}
                   </div>
-                  <div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>New options get their ID when you save.</div>
+                  <div style={{fontSize:10,color:C.textSub,marginTop:6,lineHeight:1.45}}>New options get their ID when you save.</div>
                 </div>
               )}
             </>
           ):(
-            <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5}}>Generated when you save — one for the product and one for each option. Use it in the analytics app's inventory so stock follows the right item.</div>
+            <div style={{fontSize:11,color:C.textSub,lineHeight:1.5}}>Generated when you save — one for the product and one for each option. Use it in the analytics app's inventory so stock follows the right item.</div>
           )}
         </div>
 
@@ -12713,7 +12713,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
                       if(!pick) return;
                       f("hsn",pick.hsn); f("gstRate",String(pick.rate));
                     }}
-                    style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none",background:"white"}}>
+                    style={{width:"100%",padding:"10px 12px",borderRadius:12,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none",background:"white"}}>
                     <option value="">Choose a saved HSN…</option>
                     {hsnSuggestions.slice(0,12).map((s,i)=>(
                       <option key={s.hsn+"|"+s.rate} value={i}>
@@ -12721,23 +12721,23 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
                       </option>
                     ))}
                   </select>
-                  <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.45}}>★ marks codes you've used on {form.category}. Manage the full list in Settings → GST &amp; HSN.</div>
+                  <div style={{fontSize:10,color:C.textSub,marginTop:4,lineHeight:1.45}}>★ marks codes you've used on {form.category}. Manage the full list in Settings → GST &amp; HSN.</div>
                 </div>
               )}
               <div>
                 <div style={ADMIN_LABEL}>HSN code</div>
                 <input value={form.hsn} onChange={e=>f("hsn",e.target.value)} placeholder="e.g. 2309"
-                  style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${form.hsn?C.border:"#fca5a5"}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none"}}/>
+                  style={{width:"100%",padding:"10px 12px",borderRadius:12,border:`1.5px solid ${form.hsn?C.border:"#fca5a5"}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none"}}/>
               </div>
               <div>
                 <div style={ADMIN_LABEL}>GST rate %</div>
                 <input type="number" min="0" max="28" step="0.5" value={form.gstRate} onChange={e=>f("gstRate",e.target.value)} placeholder="e.g. 18"
-                  style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${String(form.gstRate).trim()?C.border:"#fca5a5"}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none"}}/>
+                  style={{width:"100%",padding:"10px 12px",borderRadius:12,border:`1.5px solid ${String(form.gstRate).trim()?C.border:"#fca5a5"}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none"}}/>
               </div>
               {(!form.hsn||!String(form.gstRate).trim())&&(
                 <div style={{gridColumn:"1 / -1",fontSize:11,color:"#b91c1c",fontWeight:600,lineHeight:1.45}}>⚠ Enter both the HSN and the rate — without them this product bills with no GST.</div>
               )}
-              <div style={{gridColumn:"1 / -1",fontSize:10.5,color:C.textSub,lineHeight:1.45}}>Prices are treated as GST-inclusive. Shipping follows the biggest item in the order, so an order of no-GST goods carries no GST on delivery either.</div>
+              <div style={{gridColumn:"1 / -1",fontSize:10,color:C.textSub,lineHeight:1.45}}>Prices are treated as GST-inclusive. Shipping follows the biggest item in the order, so an order of no-GST goods carries no GST on delivery either.</div>
             </div>
           )}
         </div>
@@ -12765,7 +12765,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
             "Tanks":'e.g. "1ft", "2ft", "3ft"',
           }[form.category]||'e.g. "Small", "Medium", "Large"';
           return(
-          <div style={{background:"#eef9fa",borderRadius:14,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
+          <div style={{background:"#eef9fa",borderRadius:16,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
               <div style={{fontSize:12,fontWeight:800,color:C.primary,textTransform:"uppercase",letterSpacing:.8}}>{isFish?"🐠 Live Fish Types":"🧩 Options / Sizes"}</div>
               <span style={{fontSize:11,color:C.textSub}}>{variants.length} option{variants.length!==1?"s":""}</span>
@@ -12779,7 +12779,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
                 <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>HEADING SHOWN TO CUSTOMERS</div>
                 <input value={form.variantLabelText} onChange={e=>f("variantLabelText",e.target.value)}
                   placeholder={isFish?"Choose Type":"e.g. Size / Capacity / Wattage / Pack Size"}
-                  style={{width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white"}}/>
+                  style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white"}}/>
               </div>
             )}
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -12787,14 +12787,14 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
                 <div key={v.id} style={{background:"white",borderRadius:12,padding:"10px",border:`1px solid ${C.border}`}}>
                   <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
                     <input value={v.label} onChange={e=>setVar(v.id,"label",e.target.value)} placeholder="e.g. 1 Pair — Male & Female"
-                      style={{flex:1,borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white"}}/>
+                      style={{flex:1,borderRadius:8,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white"}}/>
                     <button className="press" onClick={()=>removeVariant(v.id)} title="Remove"
-                      style={{flexShrink:0,width:30,height:30,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
+                      style={{flexShrink:0,width:30,height:30,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:14,cursor:"pointer"}}>×</button>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
                     <div>
                       <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>PRICE</div>
-                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}}>
+                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:8,padding:"0 10px",border:`1.5px solid ${C.border}`}}>
                         <span style={{fontSize:13,color:C.textSub,fontWeight:700}}>₹</span>
                         <input type="number" min="0" value={v.price} onChange={e=>setVar(v.id,"price",e.target.value)} placeholder="0"
                           style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
@@ -12802,14 +12802,14 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
                     </div>
                     <div>
                       <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>STOCK</div>
-                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="How many of this option you have. Sells down on its own; the product's total is the sum of these.">
+                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:8,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="How many of this option you have. Sells down on its own; the product's total is the sum of these.">
                         <input type="number" min="0" step="1" value={v.stock??""} onChange={e=>setVar(v.id,"stock",e.target.value===''?null:Math.max(0,parseInt(e.target.value)||0))} placeholder="0"
                           style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
                       </div>
                     </div>
                     <div>
                       <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:3,letterSpacing:.4}}>PACKING WT</div>
-                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:9,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="Packing weight for this option (kg) — used for shipping. Customers never see it.">
+                      <div style={{display:"flex",alignItems:"center",gap:4,background:C.bg,borderRadius:8,padding:"0 10px",border:`1.5px solid ${C.border}`}} title="Packing weight for this option (kg) — used for shipping. Customers never see it.">
                         <input type="number" step="0.05" min="0" value={v.packagingWeight??""} onChange={e=>setVar(v.id,"packagingWeight",e.target.value===''?null:Number(e.target.value))} placeholder="0.20"
                           style={{width:"100%",border:"none",background:"transparent",outline:"none",padding:"9px 2px",fontSize:13,fontFamily:PRICE_FONT,fontWeight:700}}/>
                         <span style={{fontSize:12,color:C.textSub,fontWeight:700,whiteSpace:"nowrap"}}>kg</span>
@@ -12817,19 +12817,19 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
                     </div>
                   </div>
                   <button className="press" onClick={()=>setVar(v.id,"soldOut",!v.soldOut)}
-                    style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${v.soldOut?C.danger:C.border}`,background:v.soldOut?"#fee2e2":"transparent",color:v.soldOut?C.danger:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                    style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1.5px solid ${v.soldOut?C.danger:C.border}`,background:v.soldOut?"#fee2e2":"transparent",color:v.soldOut?C.danger:C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                     {v.soldOut?"Sold out":"In stock"}
                   </button>
                 </div>
               ))}
             </div>
             <button className="press" onClick={addVariant}
-              style={{width:"100%",marginTop:10,background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{width:"100%",marginTop:10,background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               ＋ Add {isFish?"a type":"an option"}
             </button>
             {isFish&&!anyNamedVariant()&&(
               <button className="press" onClick={addFishDefaults}
-                style={{width:"100%",marginTop:8,background:"transparent",border:"none",color:C.textSub,padding:"6px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
+                style={{width:"100%",marginTop:8,background:"transparent",border:"none",color:C.textSub,padding:"6px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline"}}>
                 Use the standard pair / trio types
               </button>
             )}
@@ -12852,15 +12852,15 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
             ["careTankMates","Good tank mates","e.g. Tetras, rasboras, corydoras"],
           ];
           return(
-            <div style={{background:"#f0fbfc",borderRadius:14,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
+            <div style={{background:"#f0fbfc",borderRadius:16,padding:"14px",marginBottom:16,border:`1px solid ${C.border}`}}>
               <div style={{fontSize:12,fontWeight:800,color:C.primary,textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>🐠 Care Info</div>
               <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.45}}>Optional — shown as a care guide on the product page. Helps customers buy the right fish &amp; cuts DOA complaints. Leave blank to hide.</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 {careRows.map(([k,label,ph])=>(
                   <div key={k} style={{gridColumn:k==="careTankMates"?"1 / -1":"auto"}}>
-                    <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>{label}</div>
+                    <div style={{fontSize:10,fontWeight:700,color:C.text,marginBottom:4}}>{label}</div>
                     <input value={form[k]} onChange={e=>f(k,e.target.value)} placeholder={ph}
-                      style={{width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white",boxSizing:"border-box"}}/>
+                      style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:13,outline:"none",background:"white",boxSizing:"border-box"}}/>
                   </div>
                 ))}
               </div>
@@ -12875,16 +12875,16 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5,textTransform:"uppercase"}}>recommended packing by location</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <div>
-                <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>📍 Inside Tamil Nadu</div>
+                <div style={{fontSize:10,fontWeight:700,color:C.text,marginBottom:4}}>📍 Inside Tamil Nadu</div>
                 <select value={form.suggestedPackingTN||"carton_special"} onChange={e=>f("suggestedPackingTN",e.target.value)}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                   {PACKING_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
                 </select>
               </div>
               <div>
-                <div style={{fontSize:10.5,fontWeight:700,color:C.text,marginBottom:4}}>🚚 Outside TN (Others)</div>
+                <div style={{fontSize:10,fontWeight:700,color:C.text,marginBottom:4}}>🚚 Outside TN (Others)</div>
                 <select value={form.suggestedPackingOther||"thermacol_special"} onChange={e=>f("suggestedPackingOther",e.target.value)}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                   {PACKING_OPTIONS.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
                 </select>
               </div>
@@ -12903,7 +12903,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
             if(cov==="all"&&r) return(
               <div>
                 <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5}}>packaging weight (kg)</div>
-                <div style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,background:C.bg,color:C.textSub,fontFamily:PRICE_FONT,fontWeight:700}}>
+                <div style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,background:C.bg,color:C.textSub,fontFamily:PRICE_FONT,fontWeight:700}}>
                   {r.min===r.max?kg(r.min):`${kg(r.min)} – ${kg(r.max)}`}
                 </div>
                 <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Set per option below — shipping uses each option's own weight.</div>
@@ -12913,7 +12913,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
               <div>
                 <div style={{fontSize:11,fontWeight:700,color:C.textSub,letterSpacing:.6,marginBottom:5}}>packaging weight (kg)</div>
                 <input type="number" step="0.1" min="0" value={form.packagingWeight} onChange={e=>f("packagingWeight",e.target.value)} placeholder="e.g. 0.2"
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                  style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
                 <div style={{fontSize:10,color:C.textSub,marginTop:3}}>
                   {cov==="some"?"Used only by options with no weight of their own.":"Weight of product + packaging in kg, used for shipping."}
                 </div>
@@ -12942,10 +12942,10 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
             {images.map((im,idx)=>(
               <div key={im.key} style={{position:"relative",aspectRatio:"1",borderRadius:12,overflow:"hidden",border:`1.5px solid ${idx===0?C.primary:C.border}`,background:C.bg}}>
                 <img src={im.src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                {idx===0&&<span style={{position:"absolute",top:3,left:3,background:C.primary,color:"white",fontSize:8,fontWeight:800,padding:"2px 5px",borderRadius:6}}>MAIN</span>}
+                {idx===0&&<span style={{position:"absolute",top:3,left:3,background:C.primary,color:"white",fontSize:9,fontWeight:800,padding:"2px 5px",borderRadius:8}}>MAIN</span>}
                 <button onClick={()=>removeImage(im.key)} style={{position:"absolute",top:3,right:3,width:20,height:20,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:12,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-                {idx>0&&<button onClick={()=>moveImage(im.key,-1)} style={{position:"absolute",bottom:3,left:3,width:20,height:20,borderRadius:6,background:"rgba(255,255,255,.92)",color:C.primary,border:"none",fontSize:12,fontWeight:800,cursor:"pointer",lineHeight:1}}>←</button>}
-                {idx<images.length-1&&<button onClick={()=>moveImage(im.key,1)} style={{position:"absolute",bottom:3,right:3,width:20,height:20,borderRadius:6,background:"rgba(255,255,255,.92)",color:C.primary,border:"none",fontSize:12,fontWeight:800,cursor:"pointer",lineHeight:1}}>→</button>}
+                {idx>0&&<button onClick={()=>moveImage(im.key,-1)} style={{position:"absolute",bottom:3,left:3,width:20,height:20,borderRadius:8,background:"rgba(255,255,255,.92)",color:C.primary,border:"none",fontSize:12,fontWeight:800,cursor:"pointer",lineHeight:1}}>←</button>}
+                {idx<images.length-1&&<button onClick={()=>moveImage(im.key,1)} style={{position:"absolute",bottom:3,right:3,width:20,height:20,borderRadius:8,background:"rgba(255,255,255,.92)",color:C.primary,border:"none",fontSize:12,fontWeight:800,cursor:"pointer",lineHeight:1}}>→</button>}
               </div>
             ))}
             {images.length<MAX_IMAGES&&(
@@ -12969,7 +12969,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
           {video?(
             <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:`1.5px solid ${C.border}`,background:"#000"}}>
               <video src={video.src} controls playsInline style={{width:"100%",maxHeight:200,display:"block"}}/>
-              <button onClick={()=>{setVideo(null);setBusyNote("");}} style={{position:"absolute",top:6,right:6,width:26,height:26,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:15,cursor:"pointer"}}>×</button>
+              <button onClick={()=>{setVideo(null);setBusyNote("");}} style={{position:"absolute",top:6,right:6,width:26,height:26,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:14,cursor:"pointer"}}>×</button>
               {video.tooLarge&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(220,38,38,.9)",color:"white",fontSize:10,fontWeight:700,padding:"4px 8px",textAlign:"center"}}>Too large to save — won't persist</div>}
             </div>
           ):(
@@ -12984,7 +12984,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
         {busyNote&&!saving&&<div style={{fontSize:12,color:busyNote.startsWith("⚠")?C.danger:C.textSub,fontWeight:600,marginBottom:12,marginTop:-4}}>{busyNote}</div>}
 
         <button className="press" onClick={handleSave} disabled={saving}
-          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?.7:1}}>
+          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?.7:1}}>
           {/* Naming the current step makes a slow photo upload read as progress, not a hang. */}
           {saving?<><Spinner/> {busyNote||"Saving…"}</>:isEdit?"💾 Save Changes":"✓ Add Product"}
         </button>
@@ -13060,7 +13060,7 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
     <div className="kpi-rise" style={{flex:"1 1 calc(50% - 5px)",minWidth:140,borderRadius:16,padding:"13px 14px",color:"white",background:grad,position:"relative",overflow:"hidden"}}>
       <div style={{position:"absolute",top:-18,right:-12,width:64,height:64,borderRadius:"50%",background:"rgba(255,255,255,.12)"}}/>
       <div style={{fontSize:18,marginBottom:4}}>{icon}</div>
-      <div style={{fontFamily:PRICE_FONT,fontSize:21,fontWeight:800,lineHeight:1.1}}>{value}</div>
+      <div style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,lineHeight:1.1}}>{value}</div>
       <div style={{fontSize:11,fontWeight:700,opacity:.92,marginTop:2}}>{label}</div>
       {sub&&<div style={{fontSize:10,opacity:.8,marginTop:2}}>{sub}</div>}
     </div>
@@ -13069,7 +13069,7 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
     <div style={{marginBottom:16}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
         <span style={{fontSize:18}}>📊</span>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text}}>Sales Dashboard</span>
+        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Sales Dashboard</span>
       </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:12}}>
         {kpi("💰",`${d.paidCount} paid order${d.paidCount!==1?"s":""}`,inr(d.net),d.refunded>0?`Net · ${inr(d.gross)} in, ${inr(d.refunded)} refunded`:"Total revenue",`linear-gradient(135deg,${C.primaryDark},${C.primary})`)}
@@ -13079,12 +13079,12 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
       </div>
       {/* 7-day revenue bars */}
       <div className="glass" style={{borderRadius:16,padding:"14px",marginBottom:12}}>
-        <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:10,letterSpacing:.3}}>LAST 7 DAYS</div>
+        <div style={{fontSize:11,fontWeight:800,color:C.textSub,marginBottom:10,letterSpacing:.3}}>LAST 7 DAYS</div>
         <div style={{display:"flex",alignItems:"flex-end",gap:8,height:84}}>
           {d.series.map((s,i)=>(
             <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:5,height:"100%",justifyContent:"flex-end"}}>
               <div title={inr(s.amt)} style={{width:"78%",height:`${Math.max(4,(s.amt/maxBar)*100)}%`,background:`linear-gradient(180deg,${C.accent},${C.primary})`,borderRadius:"6px 6px 3px 3px",transition:"height .4s ease"}}/>
-              <span style={{fontSize:9.5,color:C.textSub,fontWeight:700}}>{s.label}</span>
+              <span style={{fontSize:9,color:C.textSub,fontWeight:700}}>{s.label}</span>
             </div>
           ))}
         </div>
@@ -13092,11 +13092,11 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
       {/* Collected by gateway — matches the export's Gateway column, totalled. */}
       {d.gateways.length>0&&(
         <div className="glass" style={{borderRadius:16,padding:"13px 14px",marginBottom:12}}>
-          <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>COLLECTED BY GATEWAY</div>
+          <div style={{fontSize:11,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>COLLECTED BY GATEWAY</div>
           {d.gateways.map(g=>(
             <div key={g.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6}}>
               <span style={{fontSize:12,color:C.text,fontWeight:600}}>{g.label}<span style={{color:C.textSub,fontWeight:600}}> · {g.count}</span></span>
-              <span style={{fontSize:11.5,fontWeight:800,color:C.primary,flexShrink:0,fontFamily:PRICE_FONT}}>{inr(g.amt)}</span>
+              <span style={{fontSize:11,fontWeight:800,color:C.primary,flexShrink:0,fontFamily:PRICE_FONT}}>{inr(g.amt)}</span>
             </div>
           ))}
         </div>
@@ -13104,11 +13104,11 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
       {/* Alerts */}
       {(d.openReturns>0||d.openDoa>0||d.low.length>0||d.owedRefundCount>0||d.testCount>0)&&(
         <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
-          {d.openDoa>0&&<span style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#9a3412",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>🐟 {d.openDoa} DOA open</span>}
-          {d.openReturns>0&&<span style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1e40af",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>↩️ {d.openReturns} return{d.openReturns!==1?"s":""} open</span>}
-          {d.low.length>0&&<span style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>📦 {d.low.length} low stock</span>}
-          {d.owedRefundCount>0&&<span style={{background:"#fdf2f8",border:"1px solid #fbcfe8",color:"#9d174d",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>💸 {d.owedRefundCount} refund{d.owedRefundCount!==1?"s":""} owed · {inr(d.refundOwed)}</span>}
-          {d.testCount>0&&<span style={{background:"#f1f5f9",border:"1px solid #cbd5e1",color:"#475569",borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:800}}>🧪 {d.testCount} test payment{d.testCount!==1?"s":""} excluded</span>}
+          {d.openDoa>0&&<span style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#9a3412",borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:800}}>🐟 {d.openDoa} DOA open</span>}
+          {d.openReturns>0&&<span style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1e40af",borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:800}}>↩️ {d.openReturns} return{d.openReturns!==1?"s":""} open</span>}
+          {d.low.length>0&&<span style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:800}}>📦 {d.low.length} low stock</span>}
+          {d.owedRefundCount>0&&<span style={{background:"#fdf2f8",border:"1px solid #fbcfe8",color:"#9d174d",borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:800}}>💸 {d.owedRefundCount} refund{d.owedRefundCount!==1?"s":""} owed · {inr(d.refundOwed)}</span>}
+          {d.testCount>0&&<span style={{background:"#f1f5f9",border:"1px solid #cbd5e1",color:"#475569",borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:800}}>🧪 {d.testCount} test payment{d.testCount!==1?"s":""} excluded</span>}
         </div>
       )}
       <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
@@ -13120,18 +13120,18 @@ function AdminSalesDashboard({orders=[], products=[], settings={}}){
                 <span style={{fontSize:12,color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{i+1}. {t.name}</span>
                 <span style={{fontSize:11,fontWeight:800,color:C.primary,flexShrink:0}}>{t.qty}× · {inr(t.rev)}</span>
               </div>
-            )):<div style={{fontSize:11.5,color:C.textSub}}>No paid orders yet.</div>}
+            )):<div style={{fontSize:11,color:C.textSub}}>No paid orders yet.</div>}
           </Collapsible>
         </div>
         {/* Low stock */}
         <div style={{flex:"1 1 calc(50% - 5px)",minWidth:160,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"13px"}}>
-          <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>⚠️ LOW / OUT OF STOCK</div>
+          <div style={{fontSize:11,fontWeight:800,color:C.textSub,marginBottom:9,letterSpacing:.3}}>⚠️ LOW / OUT OF STOCK</div>
           {d.low.length?d.low.map((p,i)=>(
             <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:7}}>
               <span style={{fontSize:12,color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</span>
               <span style={{fontSize:11,fontWeight:800,color:(p.stockCount??0)<=0?C.danger:"#b45309",flexShrink:0}}>{(p.stockCount??0)<=0?"OUT":`${p.stockCount} left`}</span>
             </div>
-          )):<div style={{fontSize:11.5,color:C.textSub}}>All products well stocked ✓</div>}
+          )):<div style={{fontSize:11,color:C.textSub}}>All products well stocked ✓</div>}
         </div>
       </div>
     </div>
@@ -13161,18 +13161,18 @@ function AdminInsights({stats, products=[]}){
       <span style={{fontSize:12,color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{i+1}. {renderName(it.k)}</span>
       <span style={{fontSize:11,fontWeight:800,color:C.primary,flexShrink:0}}>{it.v}</span>
     </div>
-  )):<div style={{fontSize:11.5,color:C.textSub}}>No {mode==="today"?"activity today":"data yet"}.</div>;
+  )):<div style={{fontSize:11,color:C.textSub}}>No {mode==="today"?"activity today":"data yet"}.</div>;
   return(
     <Collapsible title="Customer Insights" icon="🔬" subtitle="Funnel, products and searches">
       <div style={{display:"flex",justifyContent:"flex-end",gap:6,marginBottom:10}}>
         {[['overall','Overall'],['today','Today']].map(([k,l])=><button key={k} className="press" onClick={()=>setMode(k)}
-          style={{border:`1px solid ${mode===k?C.primary:C.border}`,background:mode===k?C.primary:"white",color:mode===k?"white":C.textSub,borderRadius:18,padding:"6px 11px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>)}
+          style={{border:`1px solid ${mode===k?C.primary:C.border}`,background:mode===k?C.primary:"white",color:mode===k?"white":C.textSub,borderRadius:20,padding:"6px 11px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>)}
       </div>
       {!hasData?<div style={{fontSize:12,color:C.textSub,lineHeight:1.6,padding:"8px 0"}}>No {mode==="today"?"activity recorded today":"customer activity recorded yet"}.</div>:(<>
         <Collapsible title={`Conversion Funnel · ${mode==="today"?"Today":"Overall"}`} icon="📊">
           {steps.map(([lbl,v,col],i)=><div key={i} style={{marginBottom:9}}>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,marginBottom:3}}><span style={{color:C.text,fontWeight:700}}>{lbl}</span><span style={{color:C.textSub,fontWeight:700}}>{v}</span></div>
-            <div style={{height:8,background:"#e2e8f0",borderRadius:6,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,(v/maxV)*100)}%`,background:col,borderRadius:6}}/></div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}><span style={{color:C.text,fontWeight:700}}>{lbl}</span><span style={{color:C.textSub,fontWeight:700}}>{v}</span></div>
+            <div style={{height:8,background:"#e2e8f0",borderRadius:8,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,(v/maxV)*100)}%`,background:col,borderRadius:8}}/></div>
           </div>)}
           <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}><span style={{fontSize:11,fontWeight:800,color:"#1d4ed8"}}>Cart {pct(add,views)}%</span><span style={{fontSize:11,fontWeight:800,color:"#7c3aed"}}>Checkout {pct(chk,add)}%</span><span style={{fontSize:11,fontWeight:800,color:"#15803d"}}>Paid {pct(paid,views)}%</span></div>
         </Collapsible>
@@ -13280,19 +13280,19 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const gatewayRefundButton=()=>(!gatewayPaid?null:(
     <div style={{marginBottom:12}}>
       <button className="press" onClick={sendGatewayRefund} disabled={refundBusy||alreadyRefunded}
-        style={{width:"100%",background:alreadyRefunded?C.bg:"#0f766e",color:alreadyRefunded?C.textSub:"white",border:alreadyRefunded?`1px solid ${C.border}`:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:refundBusy?.7:1}}>
+        style={{width:"100%",background:alreadyRefunded?C.bg:"#0f766e",color:alreadyRefunded?C.textSub:"white",border:alreadyRefunded?`1px solid ${C.border}`:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:refundBusy?.7:1}}>
         {alreadyRefunded?"✓ Refunded via gateway":refundBusy?"Sending refund…":`↩ Refund ₹${amtDue} via payment gateway`}
       </button>
-      {!alreadyRefunded&&<div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.5,textAlign:"center"}}>Sends the money back to however they paid. Or record a manual refund below instead.</div>}
+      {!alreadyRefunded&&<div style={{fontSize:10,color:C.textSub,marginTop:6,lineHeight:1.5,textAlign:"center"}}>Sends the money back to however they paid. Or record a manual refund below instead.</div>}
     </div>
   ));
-  const refundFld={width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",boxSizing:"border-box"};
+  const refundFld={width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",boxSizing:"border-box"};
   const refundEditor=()=>(
     <div>
       <div style={{display:"flex",gap:8,marginBottom:10}}>
         {[{k:"upi",l:"Manual UPI"},{k:"gateway",l:"Auto / Gateway"}].map(m=>(
           <button key={m.k} className="press" type="button" onClick={()=>setRefundMethod(m.k)}
-            style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${refundMethod===m.k?C.primary:C.border}`,background:refundMethod===m.k?C.primary:"transparent",color:refundMethod===m.k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{m.l}</button>
+            style={{flex:1,padding:"9px",borderRadius:12,border:`1.5px solid ${refundMethod===m.k?C.primary:C.border}`,background:refundMethod===m.k?C.primary:"transparent",color:refundMethod===m.k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{m.l}</button>
         ))}
       </div>
       <div style={{display:"flex",gap:8,marginBottom:10}}>
@@ -13313,7 +13313,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         <div>
           <div style={ADMIN_LABEL}>Refund Transaction / UPI Ref ID</div>
           <input value={refundTxn} onChange={e=>setRefundTxn(e.target.value)} placeholder="e.g. 4231XXXXXX98" style={refundFld}/>
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.5}}>Shown to the customer on their order page so they can match the UPI refund you sent.</div>
+          <div style={{fontSize:10,color:C.textSub,marginTop:4,lineHeight:1.5}}>Shown to the customer on their order page so they can match the UPI refund you sent.</div>
         </div>
       ):(
         <div style={{fontSize:11,color:C.textSub,lineHeight:1.5}}>Gateway refunds are returned automatically to the customer's original payment method in 3–7 working days.</div>
@@ -13513,7 +13513,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   return(
     <div className="slide-up">
       <div className="admin-head" style={{background:C.adminBg,padding:"52px 16px 16px",display:"flex",alignItems:"center",gap:12}}>
-        <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:10,width:44,height:44,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><BackArrow/></button>
+        <button className="press" onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:12,width:44,height:44,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><BackArrow/></button>
         <div>
           <div style={{fontSize:11,color:"rgba(255,255,255,.65)",fontWeight:600,letterSpacing:1}}>ORDER {o.orderNo||orderId(o.id)}</div>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:"white"}}>{o.address.name}</div>
@@ -13544,7 +13544,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           {/* Status selector */}
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>Update Status</div>
           {o.closed&&(
-            <div style={{fontSize:11.5,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5,fontWeight:600}}>🔒 This order is closed, so its status is locked. Reopen it below if you really need to change anything.</div>
+            <div style={{fontSize:11,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"9px 12px",marginBottom:10,lineHeight:1.5,fontWeight:600}}>🔒 This order is closed, so its status is locked. Reopen it below if you really need to change anything.</div>
           )}
           {/* Fulfilment is for orders that have been paid for. Removing the "Verify & Confirm"
               button below would have meant little while this row could put an unpaid order
@@ -13552,7 +13552,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               the customer's self-cancel button away, because that is offered only while an
               order is still awaiting payment. The gateway confirms; this row ships. */}
           {!o.closed&&!verified&&(
-            <div style={{fontSize:11.5,color:"#92400e",background:"#fef3c7",border:"1px solid #fde68a",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5,fontWeight:600}}>⏳ Not paid yet — fulfilment opens once {o.gateway?gatewayLabel(o.gateway):"the gateway"} confirms the payment.</div>
+            <div style={{fontSize:11,color:"#92400e",background:"#fef3c7",border:"1px solid #fde68a",borderRadius:12,padding:"9px 12px",marginBottom:10,lineHeight:1.5,fontWeight:600}}>⏳ Not paid yet — fulfilment opens once {o.gateway?gatewayLabel(o.gateway):"the gateway"} confirms the payment.</div>
           )}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12,opacity:(o.closed||!verified)?.55:1,pointerEvents:(o.closed||!verified)?"none":"auto"}}>
             {ORDER_STATUSES.map(s=>(
@@ -13575,7 +13575,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   </select>
                 </div>
               ) : (
-                <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px",marginBottom:10,lineHeight:1.45}}>Add your courier partners in <b>Settings → Live-Fish Packing &amp; Couriers</b> to give customers a Track button.</div>
+                <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"8px 11px",marginBottom:10,lineHeight:1.45}}>Add your courier partners in <b>Settings → Live-Fish Packing &amp; Couriers</b> to give customers a Track button.</div>
               )}
               <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Consignment / Tracking Number</div>
               <input value={tracking} onChange={e=>setTracking(e.target.value)} placeholder="e.g. DTDC123456789IN"
@@ -13589,7 +13589,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}}>Estimated Delivery (days)</div>
               <input type="number" min="0" value={etaDays} onChange={e=>setEtaDays(e.target.value)} placeholder="e.g. 3"
                 style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:C.bg,boxSizing:"border-box"}}/>
-              <div style={{fontSize:10.5,color:C.textSub,marginTop:5}}>Sets a delivery date {etaDays!==""?`(≈ ${new Date(Date.now()+Math.max(0,Number(etaDays)||0)*864e5).toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"})})`:""} from today. The customer sees a highlighted “Arriving in X days” tracker that counts down on its own each day. Leave blank to hide.</div>
+              <div style={{fontSize:10,color:C.textSub,marginTop:5}}>Sets a delivery date {etaDays!==""?`(≈ ${new Date(Date.now()+Math.max(0,Number(etaDays)||0)*864e5).toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"})})`:""} from today. The customer sees a highlighted “Arriving in X days” tracker that counts down on its own each day. Leave blank to hide.</div>
             </div>
           )}
           {o.closed ? (
@@ -13609,12 +13609,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             {o.closed ? (
               <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"12px"}}>
                 <div style={{fontSize:13,fontWeight:800,color:"#15803d",marginBottom:3}}>✓ Order closed — all done</div>
-                <div style={{fontSize:11.5,color:"#166534",lineHeight:1.5,marginBottom:10}}>Delivered safely and finalised{o.closedAt?` on ${fmtDate(o.closedAt)}`:""}. Nothing more to do here.</div>
+                <div style={{fontSize:11,color:"#166534",lineHeight:1.5,marginBottom:10}}>Delivered safely and finalised{o.closedAt?` on ${fmtDate(o.closedAt)}`:""}. Nothing more to do here.</div>
                 <button className="press" onClick={doReopen} disabled={saving}
-                  style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 14px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>↺ Reopen order</button>
+                  style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 14px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>↺ Reopen order</button>
               </div>
             ) : !doaResolved ? (
-              <div style={{fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"11px 13px",lineHeight:1.5}}>⏳ A Dead-on-Arrival request is still open. Resolve the DOA below before closing this order.</div>
+              <div style={{fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"11px 13px",lineHeight:1.5}}>⏳ A Dead-on-Arrival request is still open. Resolve the DOA below before closing this order.</div>
             ) : (
               <>
                 <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>Everything delivered safely and no DOA is pending. It will <b>auto-close</b> on the date below (once the return window ends), or you can close it now.</div>
@@ -13627,7 +13627,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                     <div style={{marginBottom:10}}>
                       <div style={ADMIN_LABEL}>Auto-close on</div>
                       <input type="date" defaultValue={val} onChange={e=>{ const d=e.target.value; onUpdateOrder({...o,autoCloseAt:d?new Date(d+"T23:59:59").toISOString():"",updatedAt:new Date().toISOString()}); }}
-                        style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:C.bg}}/>
+                        style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:C.bg}}/>
                     </div>
                   );
                 })()}
@@ -13650,11 +13650,11 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             ) : (
               <>
                 <div style={{fontSize:12,color:C.textSub,marginBottom:6,lineHeight:1.55}}>Customer paid <b style={{color:C.text}}>₹{chargedShip}</b> in <b>courier charges</b> for this order{Number(o.thermacolFee||0)>0?<> (₹{o.fee} shipping − ₹{o.thermacolFee} thermacol packaging, which is not rewardable)</>:null}. If the courier actually cost you less (by ≥ ₹{rewardMin}), give the difference back as a reward code.</div>
-                <div style={{fontSize:11,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:9,padding:"7px 10px",marginBottom:10,lineHeight:1.45}}>ℹ️ Reward is based on the <b>courier partner charge only</b> — packaging costs are excluded.</div>
+                <div style={{fontSize:11,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:8,padding:"7px 10px",marginBottom:10,lineHeight:1.45}}>ℹ️ Reward is based on the <b>courier partner charge only</b> — packaging costs are excluded.</div>
                 <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
                   <span style={{fontSize:12,color:C.text,fontWeight:700,whiteSpace:"nowrap"}}>Actual courier cost ₹</span>
                   <input type="number" min="0" value={actualShip} onChange={e=>{setActualShip(e.target.value);setRewardConfirm(false);}} placeholder="0"
-                    style={{width:"100px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:14,outline:"none",background:C.bg}}/>
+                    style={{width:"100px",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 11px",fontSize:14,outline:"none",background:C.bg}}/>
                   {actualShip!==""&&Number(actualShip)>=0&&(
                     <span style={{fontSize:12,fontWeight:700,color:(chargedShip-Number(actualShip))>=rewardMin?C.success:C.textSub}}>
                       → reward ₹{Math.max(0,Math.round(chargedShip-Number(actualShip)))}
@@ -13663,12 +13663,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                 </div>
                 {rewardConfirm ? (
                   <div style={{background:"#ecfdf5",border:`1.5px solid #34d399`,borderRadius:12,padding:"12px"}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:"#15803d",marginBottom:10,textAlign:"center",lineHeight:1.5}}>Credit <b>{o.address.name}</b>'s 👛 wallet with ₹{Math.max(0,Math.round(chargedShip-Number(actualShip)))}? They can redeem it at checkout on a future order.</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#15803d",marginBottom:10,textAlign:"center",lineHeight:1.5}}>Credit <b>{o.address.name}</b>'s 👛 wallet with ₹{Math.max(0,Math.round(chargedShip-Number(actualShip)))}? They can redeem it at checkout on a future order.</div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                       <button className="press" onClick={()=>setRewardConfirm(false)} disabled={saving}
-                        style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+                        style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
                       <button className="press" onClick={issueShippingReward} disabled={saving}
-                        style={{background:C.success,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✓ Yes, issue</button>
+                        style={{background:C.success,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✓ Yes, issue</button>
                     </div>
                   </div>
                 ) : (
@@ -13692,7 +13692,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             </div>
             <StatusBadge status={o.status}/>
           </div>
-          {o.txnId&&<div style={{background:C.bg,borderRadius:10,padding:"9px 12px",marginBottom:10,fontSize:12.5}}><span style={{color:C.textSub}}>Txn / Ref ID: </span><b style={{color:C.text}}>{o.txnId}</b></div>}
+          {o.txnId&&<div style={{background:C.bg,borderRadius:12,padding:"9px 12px",marginBottom:10,fontSize:12}}><span style={{color:C.textSub}}>Txn / Ref ID: </span><b style={{color:C.text}}>{o.txnId}</b></div>}
           {o.paymentProof&&(
             <button className="press" onClick={()=>setProofZoom(true)} style={{display:"block",width:"100%",padding:0,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",background:"#0c2b30",marginBottom:10,cursor:"zoom-in"}}>
               <img src={o.paymentProof} alt="payment proof" style={{width:"100%",maxHeight:260,objectFit:"contain",display:"block"}}/>
@@ -13701,17 +13701,17 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           {o.gateway!=="cashfree"&&(o.status==="Payment Review"||o.status==="Awaiting Payment")&&(
             rejectConfirm?(
               <div style={{background:"#fee2e2",borderRadius:12,padding:"12px",border:`1.5px solid ${C.danger}`}}>
-                <div style={{fontSize:12.5,fontWeight:700,color:C.danger,marginBottom:10,textAlign:"center"}}>Reject this payment &amp; cancel the order? This can't be undone.</div>
+                <div style={{fontSize:12,fontWeight:700,color:C.danger,marginBottom:10,textAlign:"center"}}>Reject this payment &amp; cancel the order? This can't be undone.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   <button className="press" onClick={()=>setRejectConfirm(false)} disabled={saving}
-                    style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Keep order</button>
+                    style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Keep order</button>
                   <button className="press" onClick={()=>{setRejectConfirm(false);rejectPayment();}} disabled={saving}
-                    style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, reject</button>
+                    style={{background:C.danger,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, reject</button>
                 </div>
               </div>
             ):(
             <>
-              <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55,background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 12px",marginBottom:8}}>
+              <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 12px",marginBottom:8}}>
                 🔒 Only the payment gateway can confirm this order. It moves to Confirmed on its own the moment {o.gateway?gatewayLabel(o.gateway):"the gateway"} reports the money as received.
               </div>
               <button className="press" onClick={()=>setRejectConfirm(true)} disabled={saving}
@@ -13719,8 +13719,8 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             </>
             )
           )}
-          {o.testPayment&&<div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,marginTop:8}}>Sandbox test payment — excluded from fulfilment.</div>}
-          {o.gateway&&!o.testPayment&&verified&&<div style={{fontSize:11.5,color:C.success,fontWeight:600,marginTop:8}}>{gatewayLabel(o.gateway)} verified this payment and confirmed the order automatically.</div>}
+          {o.testPayment&&<div style={{fontSize:11,color:"#9a3412",fontWeight:600,marginTop:8}}>Sandbox test payment — excluded from fulfilment.</div>}
+          {o.gateway&&!o.testPayment&&verified&&<div style={{fontSize:11,color:C.success,fontWeight:600,marginTop:8}}>{gatewayLabel(o.gateway)} verified this payment and confirmed the order automatically.</div>}
         </div>
 
         {proofZoom&&o.paymentProof&&(
@@ -13737,8 +13737,8 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:4}}>💬 Send WhatsApp Update</div>
           <div style={{fontSize:12,color:C.textSub,marginBottom:4}}>Customer: {o.address.whatsapp||o.address.phone}</div>
           {o.waUpdates===false
-            ? <div style={{fontSize:11.5,color:"#c2410c",fontWeight:600,marginBottom:10,background:"#fff7ed",borderRadius:8,padding:"7px 10px"}}>⚠ Customer opted out of WhatsApp updates — only message if needed.</div>
-            : <div style={{fontSize:11.5,color:C.success,fontWeight:600,marginBottom:10}}>✓ Customer opted in to WhatsApp updates</div>}
+            ? <div style={{fontSize:11,color:"#c2410c",fontWeight:600,marginBottom:10,background:"#fff7ed",borderRadius:8,padding:"7px 10px"}}>⚠ Customer opted out of WhatsApp updates — only message if needed.</div>
+            : <div style={{fontSize:11,color:C.success,fontWeight:600,marginBottom:10}}>✓ Customer opted in to WhatsApp updates</div>}
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {["Confirmed","Shipped","Delivered"].map(s=>(
               <button key={s} className="press" onClick={()=>sendWA(s)}
@@ -13787,7 +13787,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             ))}
             <div style={{display:"flex",justifyContent:"space-between",marginTop:6,paddingTop:6,borderTop:`1px dashed ${C.border}`}}>
               <span style={{fontSize:13,fontWeight:700,color:C.text}}>Grand Total</span>
-              <span style={{fontFamily:PRICE_FONT,fontSize:15,fontWeight:800,color:C.primary}}>₹{o.amountDue??(o.total+o.fee)}</span>
+              <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{o.amountDue??(o.total+o.fee)}</span>
             </div>
           </div>
         </div>
@@ -13815,11 +13815,11 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         {/* Bill / Invoice */}
         <div style={{marginTop:14,display:"flex",gap:10}}>
           <button className="press" onClick={()=>openBill(o,settings)}
-            style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:13.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            style={{flex:1,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:16,padding:"14px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
             🧾 Quick Bill
           </button>
           <button className="press" onClick={()=>openInvoice(o,settings)}
-            style={{flex:1,background:C.primary,color:"#fff",border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:13.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            style={{flex:1,background:C.primary,color:"#fff",border:`1.5px solid ${C.primary}`,borderRadius:16,padding:"14px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
             📄 Invoice (PDF)
           </button>
         </div>
@@ -13830,19 +13830,19 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>🐟 Dead-on-Arrival (DOA) Request</div>
             {o.doa?(
               <div style={{fontSize:12,color:C.text,marginBottom:10,lineHeight:1.55}}>Customer reported a DOA{o.doa.requestedAt?` on ${fmtDate(o.doa.requestedAt)}`:""}. Review their unboxing video on WhatsApp, then set the outcome below.
-                {o.doa.claimReason&&<div style={{marginTop:6,fontSize:11.5,color:C.text,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px"}}><b>Customer's claim:</b> {o.doa.claimReason}</div>}
-                <div style={{marginTop:6,fontSize:11.5,color:C.textSub}}>Customer chose: <b style={{color:C.text}}>{o.doa.resolution==="coins"?"Reward coins":"Refund"}</b> · Honour this choice if approved · Covered up to fish value <b style={{color:C.text}}>₹{liveValue}</b>.</div>
+                {o.doa.claimReason&&<div style={{marginTop:6,fontSize:11,color:C.text,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px"}}><b>Customer's claim:</b> {o.doa.claimReason}</div>}
+                <div style={{marginTop:6,fontSize:11,color:C.textSub}}>Customer chose: <b style={{color:C.text}}>{o.doa.resolution==="coins"?"Reward coins":"Refund"}</b> · Honour this choice if approved · Covered up to fish value <b style={{color:C.text}}>₹{liveValue}</b>.</div>
               </div>
             ):(
               <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.55}}>No DOA reported yet. You can still record an outcome here if the customer contacted you directly.</div>
             )}
             <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding the Dead-on-Arrival report for order ${o.orderNo||orderId(o.id)} — please share your unboxing video so we can help.`))}
-              style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>💬 Message customer on WhatsApp</button>
+              style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:12,padding:"10px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>💬 Message customer on WhatsApp</button>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Outcome</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               {["Under Review",doaChoice==="coins"?"Approved - Store Credit":"Approved - Refund","Declined"].map(s=>(
                 <button key={s} className="press" onClick={()=>setDoaStatus(s)}
-                  style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${doaStatus===s?C.primary:C.border}`,background:doaStatus===s?C.primary:"transparent",color:doaStatus===s?"white":C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{s==="Approved - Store Credit"?"✓ Reward Coins":s.replace("Approved - ","✓ ")}</button>
+                  style={{padding:"9px 6px",borderRadius:12,border:`1.5px solid ${doaStatus===s?C.primary:C.border}`,background:doaStatus===s?C.primary:"transparent",color:doaStatus===s?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{s==="Approved - Store Credit"?"✓ Reward Coins":s.replace("Approved - ","✓ ")}</button>
               ))}
             </div>
             {doaApproved&&(
@@ -13852,12 +13852,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   <input type="number" min="1" max={liveQtyTotal||99} value={doaQty}
                     onChange={e=>{const q=Math.max(1,Number(e.target.value)||1); setDoaQty(q); setDoaAmount(q*liveUnit);}}
                     style={refundFld}/>
-                  <div style={{fontSize:9.5,color:C.textSub,marginTop:3}}>of {liveQtyTotal} fish</div>
+                  <div style={{fontSize:9,color:C.textSub,marginTop:3}}>of {liveQtyTotal} fish</div>
                 </div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>{doaStatus.indexOf("Store Credit")>=0?"Coins value (₹)":"Refund amount (₹)"}</div>
                   <input type="number" min="0" value={doaAmount} onChange={e=>setDoaAmount(Number(e.target.value))} style={refundFld}/>
-                  <div style={{fontSize:9.5,color:C.textSub,marginTop:3}}>fish value only — excludes shipping</div>
+                  <div style={{fontSize:9,color:C.textSub,marginTop:3}}>fish value only — excludes shipping</div>
                 </div>
               </div>
             )}
@@ -13868,7 +13868,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             <textarea value={doaNote} onChange={e=>setDoaNote(e.target.value)} rows={2} placeholder={doaChoice==="coins"?"e.g. Reward coins have been added to your wallet":"e.g. Refund is being returned to your payment account"}
               style={{...refundFld,resize:"none",lineHeight:1.5,marginBottom:10}}/>
             <button className="press" onClick={saveDoa} disabled={saving}
-              style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:saving?.7:1}}>💾 Save DOA Outcome</button>
+              style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:saving?.7:1}}>💾 Save DOA Outcome</button>
           </div>
         )}
 
@@ -13879,21 +13879,21 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             <div style={{fontSize:12,color:C.text,marginBottom:8,lineHeight:1.55}}>
               Raised {rr.requestedAt?`on ${fmtDate(rr.requestedAt)}`:""}. Customer prefers <b>{rr.resolution==="coins"?"reward coins":"refund"}</b>. Refund/coin value (excl. packing &amp; shipping): <b>₹{retValue}</b>.
             </div>
-            {rr.reason&&<div style={{fontSize:11.5,color:C.text,marginBottom:8,lineHeight:1.5}}><b>Reason:</b> {rr.reason}</div>}
-            {(()=>{const names=(o.items||[]).filter(it=>(rr.itemIds||[]).includes(it.id)).map(it=>it.name); return names.length?<div style={{fontSize:11.5,color:C.text,marginBottom:8}}><b>Items:</b> {names.join(", ")}</div>:null;})()}
-            {rr.photo&&<img src={rr.photo} alt="damage" style={{width:90,height:90,objectFit:"cover",borderRadius:10,border:`1px solid ${C.border}`,marginBottom:10}}/>}
+            {rr.reason&&<div style={{fontSize:11,color:C.text,marginBottom:8,lineHeight:1.5}}><b>Reason:</b> {rr.reason}</div>}
+            {(()=>{const names=(o.items||[]).filter(it=>(rr.itemIds||[]).includes(it.id)).map(it=>it.name); return names.length?<div style={{fontSize:11,color:C.text,marginBottom:8}}><b>Items:</b> {names.join(", ")}</div>:null;})()}
+            {rr.photo&&<img src={rr.photo} alt="damage" style={{width:90,height:90,objectFit:"cover",borderRadius:12,border:`1px solid ${C.border}`,marginBottom:10}}/>}
             {(rr.courier||rr.consignment)&&(
-              <div style={{fontSize:11.5,color:C.text,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>📦 Return courier: <b>{rr.courier||"—"}</b>{rr.consignment?<> · Consignment <span style={{fontFamily:"monospace"}}>{rr.consignment}</span></>:null}</div>
+              <div style={{fontSize:11,color:C.text,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>📦 Return courier: <b>{rr.courier||"—"}</b>{rr.consignment?<> · Consignment <span style={{fontFamily:"monospace"}}>{rr.consignment}</span></>:null}</div>
             )}
             <button className="press" onClick={()=>openWA(custWA,encodeURIComponent(`Hi ${o.address.name}, regarding your return request for order ${o.orderNo||orderId(o.id)} —`))}
-              style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12}}>💬 Message customer on WhatsApp</button>
+              style={{width:"100%",background:"#25D366",color:"white",border:"none",borderRadius:12,padding:"10px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12}}>💬 Message customer on WhatsApp</button>
             {retAddrOpts.length>0&&(
               <>
                 <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Return address to send the customer {retAddrOpts.length<2&&<span style={{fontWeight:400,textTransform:"none"}}>(add a 2nd in Settings → About &amp; Policies)</span>}</div>
                 <div style={{display:"grid",gridTemplateColumns:retAddrOpts.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:8}}>
                   {retAddrOpts.map(a=>(
                     <button key={a.key} className="press" onClick={()=>setRetAddrKey(a.key)}
-                      style={{padding:"9px 10px",borderRadius:10,border:`1.5px solid ${retAddrKey===a.key?C.primary:C.border}`,background:retAddrKey===a.key?C.accentLight:"transparent",color:retAddrKey===a.key?C.primaryDark:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>📍 {a.label}</button>
+                      style={{padding:"9px 10px",borderRadius:12,border:`1.5px solid ${retAddrKey===a.key?C.primary:C.border}`,background:retAddrKey===a.key?C.accentLight:"transparent",color:retAddrKey===a.key?C.primaryDark:C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>📍 {a.label}</button>
                   ))}
                 </div>
                 <div style={{fontSize:11,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:12}}>{(retAddrOpts.find(a=>a.key===retAddrKey)||retAddrOpts[0]).text}</div>
@@ -13903,14 +13903,14 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               {["Requested","Approved","Shipped","Received & Verified","Declined"].map(s=>(
                 <button key={s} className="press" onClick={()=>setRetStatus(s)}
-                  style={{padding:"9px 6px",borderRadius:10,border:`1.5px solid ${retStatus===s?C.primary:C.border}`,background:retStatus===s?C.primary:"transparent",color:retStatus===s?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{s}</button>
+                  style={{padding:"9px 6px",borderRadius:12,border:`1.5px solid ${retStatus===s?C.primary:C.border}`,background:retStatus===s?C.primary:"transparent",color:retStatus===s?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{s}</button>
               ))}
             </div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Resolve as</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
               {[["refund","💸 Part refund"],["replacement","🔁 Replace"],["coins","🪙 Coins"]].map(([k,l])=>(
                 <button key={k} className="press" onClick={()=>setRetResolution(k)}
-                  style={{padding:"9px 4px",borderRadius:10,border:`1.5px solid ${retResolution===k?C.primary:C.border}`,background:retResolution===k?C.primary:"transparent",color:retResolution===k?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
+                  style={{padding:"9px 4px",borderRadius:12,border:`1.5px solid ${retResolution===k?C.primary:C.border}`,background:retResolution===k?C.primary:"transparent",color:retResolution===k?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
               ))}
             </div>
             {retResolution==="replacement"&&(
@@ -13927,7 +13927,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                 )}
                 <input value={retRepConsign} onChange={e=>setRetRepConsign(e.target.value)} placeholder="Replacement consignment / tracking number"
                   style={{...refundFld,fontFamily:"monospace"}}/>
-                <div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.5}}>
+                <div style={{fontSize:10,color:C.textSub,marginTop:6,lineHeight:1.5}}>
                   Shown to the customer on their order as soon as you Save. The original delivery&#39;s courier and consignment above are left untouched.
                   {retRepCourier&&retRepCourier.trackUrl&&retRepConsign.trim()?<> They&#39;ll get a <b>Track replacement</b> button for {retRepCourier.name}.</>:null}
                 </div>
@@ -13947,7 +13947,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             </div>
             {String(settings.gstin||"").trim()&&(rr.itemIds||[]).length>0&&(
               <button className="press" onClick={()=>openCreditNote(o,settings)}
-                style={{width:"100%",marginTop:8,background:"transparent",color:C.primaryDark,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🧾 GST Credit Note (reverses tax on returned items)</button>
+                style={{width:"100%",marginTop:8,background:"transparent",color:C.primaryDark,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🧾 GST Credit Note (reverses tax on returned items)</button>
             )}
           </div>
         )}
@@ -13957,7 +13957,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>✕ Cancellation &amp; Refund</div>
           {o.status==="Cancelled"?(
             <>
-              <div style={{background:"#fee2e2",border:"1px solid #fecaca",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>
+              <div style={{background:"#fee2e2",border:"1px solid #fecaca",borderRadius:12,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>
                 This order is cancelled.{o.cancelReason?` Reason: ${o.cancelReason}`:""}
               </div>
               {paidish?(
@@ -13966,7 +13966,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   {gatewayRefundButton()}
                   {refundEditor()}
                   <button className="press" onClick={saveRefund} disabled={saving}
-                    style={{width:"100%",marginTop:12,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:saving?.7:1}}>
+                    style={{width:"100%",marginTop:12,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:saving?.7:1}}>
                     💾 Save Refund Details
                   </button>
                 </>
@@ -13990,16 +13990,16 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
               )}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14}}>
                 <button className="press" onClick={()=>setCancelOpen(false)} disabled={saving}
-                  style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Keep order</button>
+                  style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Keep order</button>
                 <button className="press" onClick={doCancel} disabled={saving}
-                  style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{saving?"Cancelling…":"Confirm cancellation"}</button>
+                  style={{background:C.danger,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{saving?"Cancelling…":"Confirm cancellation"}</button>
               </div>
             </div>
           ):(
             <>
               <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Cancel this order and record any refund owed. Stock is automatically returned, and the customer sees the cancellation &amp; refund status on their order page.</div>
               <button className="press" onClick={()=>setCancelOpen(true)}
-                style={{width:"100%",background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px",fontSize:13.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                style={{width:"100%",background:"transparent",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 ✕ Cancel Order
               </button>
             </>
@@ -14010,19 +14010,19 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
         {onDeleteOrder&&(
           <div style={{marginTop:14}}>
             {delOrderConfirm?(
-              <div style={{background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"14px"}}>
+              <div style={{background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:16,padding:"14px"}}>
                 <div style={{fontSize:13,fontWeight:700,color:C.danger,marginBottom:4,textAlign:"center"}}>Delete order {o.orderNo||orderId(o.id)} permanently?</div>
                 <div style={{fontSize:11,color:"#7f1d1d",marginBottom:10,textAlign:"center",lineHeight:1.5}}>This also removes its payment screenshot and can't be undone.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   <button className="press" onClick={()=>setDelOrderConfirm(false)}
-                    style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+                    style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
                   <button className="press" onClick={()=>{setDelOrderConfirm(false);onDeleteOrder(o);}}
-                    style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, delete</button>
+                    style={{background:C.danger,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, delete</button>
                 </div>
               </div>
             ):(
             <button className="press" onClick={()=>setDelOrderConfirm(true)}
-              style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:16,padding:"13px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               🗑 Delete This Order
             </button>
             )}
@@ -14041,17 +14041,17 @@ function AdminExitConfirm({onStay,onLeave}){
     <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,.55)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:4000}} onClick={onStay}>
       <div className="slide-up" onClick={e=>e.stopPropagation()}
         style={{width:"100%",maxWidth:440,background:"#fff",borderRadius:"20px 20px 0 0",padding:"22px 20px calc(22px + env(safe-area-inset-bottom))",boxShadow:"0 -12px 40px rgba(0,0,0,.25)"}}>
-        <div style={{fontSize:34,textAlign:"center",marginBottom:10}}>⚠️</div>
+        <div style={{fontSize:32,textAlign:"center",marginBottom:10}}>⚠️</div>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:8,textAlign:"center"}}>Leave the Admin panel?</div>
-        <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.6,marginBottom:18,textAlign:"center"}}>
+        <div style={{fontSize:13,color:C.textSub,lineHeight:1.6,marginBottom:18,textAlign:"center"}}>
           You'll go back to the store. Anything you were typing but haven't saved will be lost.
         </div>
         <button className="press" onClick={onStay}
-          style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:10,cursor:"pointer"}}>
+          style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:16,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:10,cursor:"pointer"}}>
           Stay in Admin
         </button>
         <button className="press" onClick={onLeave}
-          style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+          style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:16,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
           Leave Admin
         </button>
       </div>
@@ -14367,15 +14367,15 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 between the click and the app, which is the thing being removed.
                 rel=noopener because this page holds an admin session. */}
             <a className="press" href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer" title="Open the analytics app"
-              style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"none"}}>
+              style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:12,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"none"}}>
               📊 Analytics
             </a>
             <button className="press" onClick={()=>{ if(window.confirm("Leave the Admin panel and go back to the store?")) onBack(); }}
-              style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",borderRadius:12,padding:"8px 14px",color:"white",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               🛍 Store
             </button>
             {tab==="products"&&<button className="press" onClick={openNewProduct}
-              style={{background:"white",border:"none",borderRadius:10,padding:"8px 14px",color:C.primary,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{background:"white",border:"none",borderRadius:12,padding:"8px 14px",color:C.primary,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               + Add
             </button>}
           </div>
@@ -14394,12 +14394,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
         <div style={{display:"flex",background:"rgba(0,0,0,.2)",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
           {allowedTabs.map(t=>(
             <button key={t} className="press" onClick={()=>setTab(t)}
-              style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
+              style={{flex:"1 0 auto",minWidth:76,padding:"12px 6px",border:"none",background:tab===t?"white":"transparent",color:tab===t?C.primary:"rgba(255,255,255,.75)",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",whiteSpace:"nowrap"}}>
               {t==="orders"?"📋 Orders":t==="dashboard"?"📊 Dashboard":t==="products"?"📦 Products":t==="wallets"?"👛 Wallets":t==="reviews"?"⭐ Reviews":t==="requests"?"📨 Requests":t==="guides"?"📖 Guides":"⚙️ Settings"}
-              {t==="orders"&&newOrderCount>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}}>{newOrderCount}</span>}
-              {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":attnProds.some(p=>(p.stockCount??DEFAULT_STOCK)<=0)?"#dc2626":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Products needing restock — tap Products to see which">{stockAlertCount}</span>}
-              {t==="requests"&&unseenRequests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Product requests you haven't opened yet">{unseenRequests.length}</span>}
-              {t==="settings"&&settingsAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":"#f59e0b",color:"white",borderRadius:10,padding:"1px 5px",fontSize:9,fontWeight:800}} title={rewardReminder?"Month-end rewards need review": "Tank photos waiting for approval"}>{settingsAlertCount}</span>}
+              {t==="orders"&&newOrderCount>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:12,padding:"1px 5px",fontSize:9,fontWeight:800}}>{newOrderCount}</span>}
+              {t==="products"&&stockAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":attnProds.some(p=>(p.stockCount??DEFAULT_STOCK)<=0)?"#dc2626":"#f59e0b",color:"white",borderRadius:12,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Products needing restock — tap Products to see which">{stockAlertCount}</span>}
+              {t==="requests"&&unseenRequests.length>0&&<span style={{marginLeft:3,background:tab===t?C.primary:C.coral,color:"white",borderRadius:12,padding:"1px 5px",fontSize:9,fontWeight:800}} title="Product requests you haven't opened yet">{unseenRequests.length}</span>}
+              {t==="settings"&&settingsAlertCount>0&&<span style={{marginLeft:3,background:tab===t?"#b45309":"#f59e0b",color:"white",borderRadius:12,padding:"1px 5px",fontSize:9,fontWeight:800}} title={rewardReminder?"Month-end rewards need review": "Tank photos waiting for approval"}>{settingsAlertCount}</span>}
             </button>
           ))}
         </div>
@@ -14407,41 +14407,41 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
 
       {/* In-admin month-end reminder. It is visible even when browser notifications are blocked. */}
       {rewardReminder&&rewardPeriod&&(
-        <div style={{margin:"14px 16px 0",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:14,padding:"14px 15px",color:"white",boxShadow:"0 8px 24px rgba(79,70,229,.2)"}}>
+        <div style={{margin:"14px 16px 0",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",borderRadius:16,padding:"14px 15px",color:"white",boxShadow:"0 8px 24px rgba(79,70,229,.2)"}}>
           <div style={{display:"flex",alignItems:"flex-start",gap:9,marginBottom:9}}>
             <span style={{fontSize:20}}>🔔</span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800}}>{rewardPeriod.phase==="month-end"?"Month-end reward check":`${totmMonthLabel(rewardPeriod.month)} rewards`}</div>
-              <div style={{fontSize:11.5,opacity:.9,lineHeight:1.5,marginTop:2}}>{rewardPeriod.phase==="month-end"?"Check the reward switches now. Review winners after the month closes.":"Review the completed month and issue any enabled rewards."}</div>
+              <div style={{fontSize:11,opacity:.9,lineHeight:1.5,marginTop:2}}>{rewardPeriod.phase==="month-end"?"Check the reward switches now. Review winners after the month closes.":"Review the completed month and issue any enabled rewards."}</div>
             </div>
           </div>
           <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:10}}>
-            {[{label:"Tank vote",on:tankVoteRewardOn(settings)},{label:"Streak",on:tankStreakRewardOn(settings)}].map(x=><span key={x.label} style={{fontSize:10.5,fontWeight:800,background:x.on?"rgba(34,197,94,.28)":"rgba(244,63,94,.3)",border:`1px solid ${x.on?"rgba(134,239,172,.7)":"rgba(254,202,202,.65)"}`,borderRadius:20,padding:"4px 9px"}}>{x.label}: {x.on?"ON":"OFF"}</span>)}
+            {[{label:"Tank vote",on:tankVoteRewardOn(settings)},{label:"Streak",on:tankStreakRewardOn(settings)}].map(x=><span key={x.label} style={{fontSize:10,fontWeight:800,background:x.on?"rgba(34,197,94,.28)":"rgba(244,63,94,.3)",border:`1px solid ${x.on?"rgba(134,239,172,.7)":"rgba(254,202,202,.65)"}`,borderRadius:20,padding:"4px 9px"}}>{x.label}: {x.on?"ON":"OFF"}</span>)}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:8}}>
-            <button className="press" onClick={()=>setTab("settings")} style={{background:"white",color:"#4f46e5",border:"none",borderRadius:10,padding:"9px 12px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Review rewards</button>
-            <button className="press" onClick={dismissRewardReminder} style={{background:"rgba(255,255,255,.16)",color:"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"9px 13px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Dismiss</button>
+            <button className="press" onClick={()=>setTab("settings")} style={{background:"white",color:"#4f46e5",border:"none",borderRadius:12,padding:"9px 12px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Review rewards</button>
+            <button className="press" onClick={dismissRewardReminder} style={{background:"rgba(255,255,255,.16)",color:"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:12,padding:"9px 13px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Dismiss</button>
           </div>
         </div>
       )}
 
       {FB_OK&&FB_AUTH?.currentUser&&!isAdminUid(FB_AUTH.currentUser.uid)&&(
-        <div style={{margin:"14px 16px 0",background:"#f0fdf4",border:"1px solid #86efac",borderRadius:14,padding:"14px",fontSize:12,color:"#14532d",lineHeight:1.55}}>
+        <div style={{margin:"14px 16px 0",background:"#f0fdf4",border:"1px solid #86efac",borderRadius:16,padding:"14px",fontSize:12,color:"#14532d",lineHeight:1.55}}>
           <b>New co-admin Google UID</b><br/>
-          <code style={{display:"inline-block",marginTop:6,fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:5,padding:"3px 7px"}}>{FB_AUTH.currentUser.uid}</code>
+          <code style={{display:"inline-block",marginTop:6,fontSize:11,wordBreak:"break-all",background:"rgba(0,0,0,.06)",borderRadius:4,padding:"3px 7px"}}>{FB_AUTH.currentUser.uid}</code>
           <button className="press" onClick={()=>navigator.clipboard?.writeText(FB_AUTH.currentUser.uid)} style={{display:"block",marginTop:9,background:"#16a34a",color:"white",border:"none",borderRadius:8,padding:"7px 13px",fontSize:11,fontWeight:800}}>📋 Copy UID</button>
           <div style={{marginTop:7}}>Copy this UID, then sign back in with the main admin account and assign its permissions in Admin Security.</div>
         </div>
       )}
       {!isAdminSignedIn()&&(
-        <div style={{margin:"14px 16px 0",background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:14,padding:"14px"}}>
+        <div style={{margin:"14px 16px 0",background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:16,padding:"14px"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
             <span style={{fontSize:18}}>⚠️</span>
             <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#9a3412"}}>Sign in to load orders &amp; save changes</span>
           </div>
-          <div style={{fontSize:12.5,color:"#9a3412",lineHeight:1.55,marginBottom:10}}>For customer privacy, <b>order details load only after you sign in with your configured Google admin account</b>. Products, posters and settings also will not sync until you sign in.</div>
+          <div style={{fontSize:12,color:"#9a3412",lineHeight:1.55,marginBottom:10}}>For customer privacy, <b>order details load only after you sign in with your configured Google admin account</b>. Products, posters and settings also will not sync until you sign in.</div>
           <button className="press" onClick={onAdminSignIn}
-            style={{display:"inline-flex",alignItems:"center",gap:8,background:"white",border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            style={{display:"inline-flex",alignItems:"center",gap:8,background:"white",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 16px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.2 35.9 26.7 37 24 37c-5.3 0-9.7-2.6-11.3-7l-6.5 5C9.2 41.4 16 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.3 5.3C41.9 35.5 45 30.2 45 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
             Sign in with Google
           </button>
@@ -14456,7 +14456,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               one — and so it stops competing with the sales figures below. */}
           <AdminSalesDashboard orders={orders} products={products} settings={settings}/>
           {/* Visitor analytics */}
-          <div style={{background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
+          <div style={{background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,borderRadius:16,padding:"14px 16px",marginBottom:14,color:"white"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
               <span style={{fontSize:16}}>📈</span>
               <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800}}>Store Visitors</span>
@@ -14464,7 +14464,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             {(()=>{
               const d=(visitStats&&visitStats.daily)||{}; const today=new Date().toISOString().slice(0,10);
               let last7=0; for(let i=0;i<7;i++){ last7+=d[new Date(Date.now()-i*86400000).toISOString().slice(0,10)]||0; }
-              const cell=(n,l)=>(<div style={{flex:1,textAlign:"center"}}><div style={{fontFamily:PRICE_FONT,fontSize:22,fontWeight:800}}>{n}</div><div style={{fontSize:10.5,opacity:.85,fontWeight:600}}>{l}</div></div>);
+              const cell=(n,l)=>(<div style={{flex:1,textAlign:"center"}}><div style={{fontFamily:PRICE_FONT,fontSize:22,fontWeight:800}}>{n}</div><div style={{fontSize:10,opacity:.85,fontWeight:600}}>{l}</div></div>);
               return <div style={{display:"flex",gap:8}}>{cell(d[today]||0,"Today")}{cell(last7,"Last 7 days")}{cell((visitStats&&visitStats.total)||0,"All time")}</div>;
             })()}
             <div style={{fontSize:10,opacity:.75,marginTop:8}}>One visit per browser session. {(settings.gaId||(typeof window!=="undefined"&&window.__GA_ACTIVE))?"Google Analytics is also active.":"Add a Google Analytics ID in Settings for detailed reports."}</div>
@@ -14497,10 +14497,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   {/* Don't make the owner guess which half is broken — ask Firebase. */}
                   <button className="press" onClick={async()=>{ setVisitorDiag("checking…"); const d=await diagnoseVisitorLog();
                       setVisitorDiag(`read: ${d.read} · write: ${d.write} · signed in as ${d.uid?d.uid.slice(0,10)+"…":"nobody"}${d.adminClient&&!d.adminInRules?" · this is a CO-ADMIN uid, which the database rules do not list":""}`); }}
-                    style={{marginTop:9,background:"white",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:9,padding:"7px 12px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                    style={{marginTop:9,background:"white",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:8,padding:"7px 12px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                     Run a check
                   </button>
-                  {visitorDiag&&<div style={{fontSize:10.5,marginTop:7,opacity:.9,wordBreak:"break-word",fontFamily:"monospace"}}>{visitorDiag}</div>}
+                  {visitorDiag&&<div style={{fontSize:10,marginTop:7,opacity:.9,wordBreak:"break-word",fontFamily:"monospace"}}>{visitorDiag}</div>}
                 </div>
               ) : (
                 <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>No signed-in visitors logged yet today. Customers browsing without signing in are counted above but have no name to show — and your own admin visits are deliberately left out.</div>
@@ -14515,20 +14515,20 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                       <button className="press" onClick={()=>setOpenVisitDay(open?"":day)}
                         style={{display:"flex",alignItems:"center",gap:8,width:"100%",background:open?C.accentLight:C.bg,border:"none",padding:"10px 12px",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                         {/* A day label, not a moment — fmtDate would append a meaningless 12:00 pm. */}
-                        <span style={{fontSize:12.5,fontWeight:800,color:C.text}}>{isToday?"Today":new Date(day+"T12:00:00Z").toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"})}</span>
+                        <span style={{fontSize:12,fontWeight:800,color:C.text}}>{isToday?"Today":new Date(day+"T12:00:00Z").toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"})}</span>
                         <span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{people.length} {people.length===1?"person":"people"}</span>
                         <span style={{marginLeft:"auto",fontSize:12,color:C.textSub}}>{open?"▾":"▸"}</span>
                       </button>
                       {open&&(
                         <div style={{padding:"4px 12px 10px"}}>
                           {people.length===0
-                            ? <div style={{fontSize:11.5,color:C.textSub,fontStyle:"italic",paddingTop:6}}>Nobody signed in on this day.</div>
+                            ? <div style={{fontSize:11,color:C.textSub,fontStyle:"italic",paddingTop:6}}>Nobody signed in on this day.</div>
                             : people.map(p=>(
                               <div key={p.uid} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:`1px solid ${C.border}`}}>
                                 <span style={{width:26,height:26,borderRadius:"50%",background:C.primary,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0}}>{(p.name||"C").charAt(0).toUpperCase()}</span>
                                 <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:12.5,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name||"Customer"}</div>
-                                  {p.email&&<div style={{fontSize:10.5,color:C.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.email}</div>}
+                                  <div style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name||"Customer"}</div>
+                                  {p.email&&<div style={{fontSize:10,color:C.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.email}</div>}
                                 </div>
                                 {Number(p.visits)>1&&<span style={{fontSize:10,color:C.textSub,fontWeight:700,flexShrink:0}}>{p.visits}×</span>}
                               </div>
@@ -14558,18 +14558,18 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           {/* DOA insights — loss patterns by species × zone × season */}
           <DoaInsights orders={orders}/>
           {/* Payment destination — gateway credentials live only on the Worker. */}
-          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:16,padding:"12px 14px",marginBottom:14}}>
             <div style={{fontSize:11,fontWeight:800,color:"#15803d",letterSpacing:.4,marginBottom:5}}>💰 ONLINE PAYMENTS</div>
             <div style={{fontSize:13,fontWeight:700,color:"#166534"}}>Integrated gateway checkout</div>
-            <div style={{fontSize:10.5,color:"#15803d",marginTop:3,lineHeight:1.5}}>Production credentials and automatic verification are managed securely by the Cloudflare Worker.</div>
-            {settings.upiId&&<div style={{fontSize:10.5,color:"#15803d",marginTop:5}}>Invoice UPI reference: <span style={{fontFamily:"monospace"}}>{settings.upiId}</span></div>}
+            <div style={{fontSize:10,color:"#15803d",marginTop:3,lineHeight:1.5}}>Production credentials and automatic verification are managed securely by the Cloudflare Worker.</div>
+            {settings.upiId&&<div style={{fontSize:10,color:"#15803d",marginTop:5}}>Invoice UPI reference: <span style={{fontFamily:"monospace"}}>{settings.upiId}</span></div>}
           </div>
 
           {/* Monthly report reminder */}
           {!exportDone&&orders.length>0&&(()=>{
             const pm=prevMonthRange();
             return(
-              <div style={{background:"linear-gradient(135deg,#107c41,#0b5e31)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"white"}}>
+              <div style={{background:"linear-gradient(135deg,#107c41,#0b5e31)",borderRadius:16,padding:"14px 16px",marginBottom:14,color:"white"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                   <span style={{fontSize:18}}>🗓️</span>
                   <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800}}>Monthly report reminder</span>
@@ -14577,30 +14577,30 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 <div style={{fontSize:12,opacity:.93,lineHeight:1.55,marginBottom:10}}>It's a new month — download &amp; save your <b>{pm.label}</b> orders report (Excel) for your records and accounts.</div>
                 <div style={{display:"flex",gap:8}}>
                   <button className="press" onClick={()=>{const n=exportOrdersCSV(orders,pm.from,pm.to,settings,walletBalances);stampExport();showToast(n?`Downloaded ${n} order${n!==1?"s":""} for ${pm.label}`:`No orders in ${pm.label} — marked done`);}}
-                    style={{flex:1,background:"white",color:"#0b5e31",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>⬇ Download {pm.label}</button>
+                    style={{flex:1,background:"white",color:"#0b5e31",border:"none",borderRadius:12,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>⬇ Download {pm.label}</button>
                   <button className="press" onClick={stampExport}
-                    style={{background:"rgba(255,255,255,.18)",color:"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"10px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Dismiss</button>
+                    style={{background:"rgba(255,255,255,.18)",color:"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:12,padding:"10px 14px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Dismiss</button>
                 </div>
               </div>
             );
           })()}
 
           {/* Excel export with date range */}
-          <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
+          <div style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
               <span style={{fontSize:16}}>📊</span>
               <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Export Orders to Excel</span>
             </div>
             <div style={{display:"flex",gap:8,marginBottom:10}}>
               <div style={{flex:1}}>
-                <div style={{fontSize:10.5,color:C.textSub,fontWeight:700,marginBottom:4}}>FROM</div>
+                <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:4}}>FROM</div>
                 <input type="date" value={csvFrom} onChange={e=>setCsvFrom(e.target.value)}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",color:C.text}}/>
+                  style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",color:C.text}}/>
               </div>
               <div style={{flex:1}}>
-                <div style={{fontSize:10.5,color:C.textSub,fontWeight:700,marginBottom:4}}>TO</div>
+                <div style={{fontSize:10,color:C.textSub,fontWeight:700,marginBottom:4}}>TO</div>
                 <input type="date" value={csvTo} onChange={e=>setCsvTo(e.target.value)}
-                  style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",color:C.text}}/>
+                  style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",color:C.text}}/>
               </div>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
@@ -14634,21 +14634,21 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               style={{width:"100%",marginTop:8,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               🗃 Inventory snapshot — stock &amp; prices now
             </button>
-            <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.5,marginTop:8}}>
+            <div style={{fontSize:10,color:C.textSub,lineHeight:1.5,marginTop:8}}>
               The orders sheet marks each row <b>Counts for GST</b>. Cancelled and unpaid orders are excluded from the tax columns, so the totals you file don't include them. Every sheet also carries full <b>ISO date</b> columns for reporting tools — the short dates on screen have no year.
             </div>
           </div>
 
           {/* Clean up old orders — frees Firebase space (also removes their payment screenshots) */}
-          <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
+          <div style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
               <span style={{fontSize:16}}>🧹</span>
               <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Clean Up Old Orders</span>
             </div>
-            <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Permanently deletes <b>Delivered</b> &amp; <b>Cancelled</b> orders (and their payment screenshots) older than the chosen age — frees Firebase space. Active &amp; recent orders are kept. 💡 Download a backup first (Settings → Data &amp; Backup).</div>
+            <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Permanently deletes <b>Delivered</b> &amp; <b>Cancelled</b> orders (and their payment screenshots) older than the chosen age — frees Firebase space. Active &amp; recent orders are kept. 💡 Download a backup first (Settings → Data &amp; Backup).</div>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
               <select value={cleanMonths} onChange={e=>{setCleanMonths(Number(e.target.value));setCleanConfirm(false);}}
-                style={{flexShrink:0,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px",fontSize:12.5,background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",color:C.text}}>
+                style={{flexShrink:0,borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px",fontSize:12,background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif",color:C.text}}>
                 <option value={3}>Older than 3 months</option>
                 <option value={6}>Older than 6 months</option>
                 <option value={12}>Older than 1 year</option>
@@ -14659,7 +14659,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 if(!due){ showToast("No old orders to delete","error"); return; }
                 setCleanConfirm(true);
               }}
-                style={{flex:1,background:"#b91c1c",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                style={{flex:1,background:"#b91c1c",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 🗑 Delete Old Orders
               </button>
             </div>
@@ -14668,19 +14668,19 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               const due=orders.filter(o=>(o.status==="Delivered"||o.status==="Cancelled")&&new Date(o.placedAt||0).getTime()<cutoff).length;
               return(
                 <div style={{marginTop:10,background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
-                  <div style={{fontSize:12.5,fontWeight:700,color:C.danger,marginBottom:4,lineHeight:1.5}}>⚠ Take a backup first — permanently delete {due} delivered/cancelled order{due!==1?"s":""} older than {cleanMonths} months?</div>
+                  <div style={{fontSize:12,fontWeight:700,color:C.danger,marginBottom:4,lineHeight:1.5}}>⚠ Take a backup first — permanently delete {due} delivered/cancelled order{due!==1?"s":""} older than {cleanMonths} months?</div>
                   <div style={{fontSize:11,color:"#7f1d1d",marginBottom:10,lineHeight:1.5}}>This also removes their payment screenshots and <b>cannot be undone</b>. Your automatic <b>Google Drive backup</b> already keeps these (it updates daily) — but download a copy now to be safe.</div>
                   <button className="press" onClick={()=>{ const n=exportOrdersCSV(orders,"","",settings,walletBalances); stampExport(); showToast(n?`Backed up ${n} order${n!==1?"s":""} ✓`:"No orders to back up"); }}
-                    style={{width:"100%",marginBottom:8,background:"#107c41",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>⬇ Download backup now (all orders)</button>
+                    style={{width:"100%",marginBottom:8,background:"#107c41",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>⬇ Download backup now (all orders)</button>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     <button className="press" onClick={()=>setCleanConfirm(false)}
-                      style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+                      style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
                     <button className="press" onClick={async()=>{
                       setCleanConfirm(false);
                       const n=await onCleanupOrders(cleanMonths);
                       showToast(n?`Deleted ${n} old order${n!==1?"s":""} ✓`:"Nothing deleted");
                     }}
-                      style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, delete</button>
+                      style={{background:C.danger,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, delete</button>
                   </div>
                 </div>
               );
@@ -14703,19 +14703,19 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             const check=(on,set,label,note)=>(
               <label style={{display:"flex",gap:9,alignItems:"flex-start",marginBottom:9,cursor:"pointer"}}>
                 <input type="checkbox" checked={on} onChange={e=>set(e.target.checked)} style={{marginTop:2,width:16,height:16,accentColor:C.danger,flexShrink:0}}/>
-                <span style={{fontSize:12,color:C.text,lineHeight:1.5}}>{label}{note&&<span style={{display:"block",fontSize:10.5,color:C.textSub}}>{note}</span>}</span>
+                <span style={{fontSize:12,color:C.text,lineHeight:1.5}}>{label}{note&&<span style={{display:"block",fontSize:10,color:C.textSub}}>{note}</span>}</span>
               </label>
             );
             return(
-              <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1.5px solid ${resetOpen?C.danger:C.border}`}}>
+              <div style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:14,border:`1.5px solid ${resetOpen?C.danger:C.border}`}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                   <span style={{fontSize:16}}>🚀</span>
                   <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Go Live — Clear Test Orders</span>
                 </div>
-                <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
+                <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
                   Run this <b>once</b>, just before the store opens for real customers. It permanently deletes <b>every order ever placed</b> — whatever its age or status — so your books, order numbers and the analytics dashboard all start from zero on day one.
                 </div>
-                <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 12px",marginBottom:10,fontSize:11.5,lineHeight:1.6,color:C.text}}>
+                <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 12px",marginBottom:10,fontSize:11,lineHeight:1.6,color:C.text}}>
                   <div style={{fontWeight:800,color:C.danger,marginBottom:4}}>Will be deleted</div>
                   <div style={{color:C.textSub}}>All {n} order{n!==1?"s":""} &amp; their payment screenshots · daily order-number counters · saved abandoned carts · daily deal-usage counters{resetWallets?" · customer wallet / loyalty points":""}{resetAnalytics?" · visitor & funnel counters":""}</div>
                   <div style={{fontWeight:800,color:C.success,margin:"8px 0 4px"}}>Never touched</div>
@@ -14725,25 +14725,25 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   ? <div style={{fontSize:12,fontWeight:700,color:C.success,padding:"4px 0"}}>✓ Order book is already empty — nothing to clear.</div>
                   : !resetOpen
                   ? <button className="press" onClick={()=>setResetOpen(true)}
-                      style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                      style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                       🚀 Clear all {n} test order{n!==1?"s":""}…
                     </button>
                   : (
                   <div style={{background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
-                    <div style={{fontSize:12.5,fontWeight:800,color:C.danger,marginBottom:6,lineHeight:1.5}}>
+                    <div style={{fontSize:12,fontWeight:800,color:C.danger,marginBottom:6,lineHeight:1.5}}>
                       ⚠ About to permanently delete {n} order{n!==1?"s":""} worth ₹{value.toLocaleString("en-IN")}{span?` (${span})`:""}. This cannot be undone.
                     </div>
                     {live>0&&(
-                      <div style={{fontSize:11.5,fontWeight:700,color:"#7f1d1d",background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:9,padding:"9px 10px",marginBottom:10,lineHeight:1.5}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#7f1d1d",background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:8,padding:"9px 10px",marginBottom:10,lineHeight:1.5}}>
                         🛑 {live} of these {live===1?"is":"are"} Confirmed / Shipped / Delivered. If any of them is a <b>real</b> customer order, stop — deleting it destroys a record you may need for GST and for that customer's warranty claim.
                       </div>
                     )}
                     <div style={{fontSize:11,fontWeight:800,color:C.text,marginBottom:6}}>Step 1 — take a backup</div>
                     <button className="press" onClick={()=>{ const k=exportOrdersCSV(orders,"","",settings,walletBalances); stampExport(); setResetBackedUp(true); showToast(k?`Backed up ${k} order${k!==1?"s":""} ✓`:"Nothing to back up — you can continue"); }}
-                      style={{width:"100%",marginBottom:4,background:resetBackedUp?"#fff":"#107c41",color:resetBackedUp?"#107c41":"white",border:`1.5px solid #107c41`,borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                      style={{width:"100%",marginBottom:4,background:resetBackedUp?"#fff":"#107c41",color:resetBackedUp?"#107c41":"white",border:`1.5px solid #107c41`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                       {resetBackedUp?"✓ Backup downloaded — download again":"⬇ Download backup (required)"}
                     </button>
-                    <div style={{fontSize:10.5,color:"#7f1d1d",marginBottom:12,lineHeight:1.5}}>Keep this file. It is the only copy of these orders once the reset runs.</div>
+                    <div style={{fontSize:10,color:"#7f1d1d",marginBottom:12,lineHeight:1.5}}>Keep this file. It is the only copy of these orders once the reset runs.</div>
 
                     <div style={{fontSize:11,fontWeight:800,color:C.text,marginBottom:6}}>Step 2 — confirm what you're doing</div>
                     {check(resetAck1,setResetAck1,`I understand all ${n} order${n!==1?"s":""} and their payment screenshots will be permanently deleted, with no way to restore them.`)}
@@ -14751,13 +14751,13 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                     {check(resetWallets,v=>{setResetWallets(v);setResetTyped("");},"Also reset customer wallet / loyalty points","Points earned by test orders. Leave on unless a real customer already holds a balance.")}
                     {check(resetAnalytics,v=>{setResetAnalytics(v);setResetTyped("");},"Also reset visitor & funnel counters","Website traffic numbers. Optional — unrelated to orders.")}
 
-                    <div style={{fontSize:11,fontWeight:800,color:C.text,margin:"12px 0 6px"}}>Step 3 — type <span style={{fontFamily:"monospace",background:"#fff",border:`1px solid ${C.border}`,borderRadius:5,padding:"1px 5px"}}>{RESET_PHRASE}</span> to unlock</div>
+                    <div style={{fontSize:11,fontWeight:800,color:C.text,margin:"12px 0 6px"}}>Step 3 — type <span style={{fontFamily:"monospace",background:"#fff",border:`1px solid ${C.border}`,borderRadius:4,padding:"1px 5px"}}>{RESET_PHRASE}</span> to unlock</div>
                     <input value={resetTyped} onChange={e=>setResetTyped(e.target.value)} placeholder={RESET_PHRASE} autoCapitalize="characters" autoCorrect="off" spellCheck={false}
-                      style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${resetTyped&&resetTyped.trim().toUpperCase()!==RESET_PHRASE?C.danger:C.border}`,padding:"11px",fontSize:13,fontWeight:700,letterSpacing:".05em",fontFamily:"monospace",background:"#fff",color:C.text,marginBottom:12}}/>
+                      style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${resetTyped&&resetTyped.trim().toUpperCase()!==RESET_PHRASE?C.danger:C.border}`,padding:"11px",fontSize:13,fontWeight:700,letterSpacing:".05em",fontFamily:"monospace",background:"#fff",color:C.text,marginBottom:12}}/>
 
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                       <button className="press" disabled={resetBusy} onClick={closeReset}
-                        style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:resetBusy?.5:1}}>Cancel</button>
+                        style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",opacity:resetBusy?.5:1}}>Cancel</button>
                       <button className="press" disabled={!ready} onClick={async()=>{
                         setResetBusy(true);
                         showToast("Clearing test orders…");
@@ -14768,7 +14768,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                         if(r.remaining>0) showToast(`⚠ ${r.remaining} order${r.remaining>1?"s":""} couldn't be removed — sign in with the admin Google account, then run it again`,"error");
                         else showToast(`✓ Store is live-ready — cleared ${r.orders} order${r.orders!==1?"s":""}`);
                       }}
-                        style={{background:ready?C.danger:"#fca5a5",color:"white",border:"none",borderRadius:10,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:ready?"pointer":"not-allowed"}}>
+                        style={{background:ready?C.danger:"#fca5a5",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:ready?"pointer":"not-allowed"}}>
                         {resetBusy?"Clearing…":"Delete all orders"}
                       </button>
                     </div>
@@ -14786,12 +14786,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               return first && !first.thumb && !first.thumbUrl;
             }).length;
             return(
-              <div style={{background:C.card,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
+              <div style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                   <span style={{fontSize:16}}>⚡</span>
                   <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text}}>Speed Up Catalog</span>
                 </div>
-                <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
+                <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
                   Sets each product's <b>first photo</b> as its catalog thumbnail and shrinks it so the shop grid loads fast (full-size photos still open on the product page). Run it after adding products &amp; photos. Safe anytime — your full-size photos are never deleted. {needOpt>0?<b>{needOpt} product{needOpt!==1?"s":""} can be optimised.</b>:<span style={{color:C.success,fontWeight:700}}>All products optimised ✓</span>}
                 </div>
                 <button className="press" disabled={thumbBusy||!needOpt} onClick={async()=>{
@@ -14802,10 +14802,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   }catch(e){ setThumbMsg("⚠ Something went wrong — please try again."); }
                   setThumbBusy(false);
                 }}
-                  style={{width:"100%",background:(thumbBusy||!needOpt)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  style={{width:"100%",background:(thumbBusy||!needOpt)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                   {thumbBusy?"Optimising…":"⚡ Optimise Catalog Images"}
                 </button>
-                {thumbMsg&&<div style={{fontSize:11.5,color:thumbMsg.startsWith("⚠")?C.danger:C.textSub,fontWeight:600,marginTop:8,lineHeight:1.5}}>{thumbMsg}</div>}
+                {thumbMsg&&<div style={{fontSize:11,color:thumbMsg.startsWith("⚠")?C.danger:C.textSub,fontWeight:600,marginTop:8,lineHeight:1.5}}>{thumbMsg}</div>}
               </div>
             );
           })()}
@@ -14820,7 +14820,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:14,opacity:.5}}>🔍</span>
             <input value={orderSearch} onChange={e=>setOrderSearch(e.target.value)}
               placeholder="Search order # / name / phone / WhatsApp…"
-              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 36px 11px 36px",fontSize:13.5,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 36px 11px 36px",fontSize:13,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
             {orderSearch&&<button className="press" onClick={()=>setOrderSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,color:C.textSub,cursor:"pointer"}}>×</button>}
           </div>
           {/* Status filter */}
@@ -14829,17 +14829,17 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               <button key={s} className="press" onClick={()=>setOrderFilter(s)}
                 style={{flexShrink:0,background:orderFilter===s?C.primary:C.card,color:orderFilter===s?"white":C.textSub,border:`1.5px solid ${orderFilter===s?C.primary:C.border}`,borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 {s}
-                {s!=="All"&&<span style={{marginLeft:4,background:orderFilter===s?"rgba(255,255,255,.25)":C.border,borderRadius:10,padding:"1px 6px",fontSize:10}}>
+                {s!=="All"&&<span style={{marginLeft:4,background:orderFilter===s?"rgba(255,255,255,.25)":C.border,borderRadius:12,padding:"1px 6px",fontSize:10}}>
                   {orders.filter(o=>adminOrderStage(o)===s).length}
                 </span>}
               </button>
             ))}
           </div>
-          {orderSearch.trim()&&<div style={{fontSize:11.5,color:C.textSub,fontWeight:600,marginBottom:10,marginTop:-4}}>{filteredOrders.length} match{filteredOrders.length!==1?"es":""} for “{orderSearch.trim()}”</div>}
+          {orderSearch.trim()&&<div style={{fontSize:11,color:C.textSub,fontWeight:600,marginBottom:10,marginTop:-4}}>{filteredOrders.length} match{filteredOrders.length!==1?"es":""} for “{orderSearch.trim()}”</div>}
           {filteredOrders.length===0?(
             <div style={{textAlign:"center",padding:"50px 0",color:C.textSub}}>
               <div style={{fontSize:48,marginBottom:14}}>📋</div>
-              <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No orders yet</div>
+              <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>No orders yet</div>
               <div style={{fontSize:12}}>Orders will appear here when customers place them</div>
             </div>
           ):(<>
@@ -14885,9 +14885,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               <div key={p.id} style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
                 {/* Product header */}
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,paddingBottom:12,borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{width:40,height:40,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>
+                  <div style={{width:40,height:40,borderRadius:12,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>
                     {(()=>{ const src=getCardImg(p,mediaCache);
-                      return src?<img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:10}}/>:m.emoji; })()}
+                      return src?<img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:12}}/>:m.emoji; })()}
                   </div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:700,color:C.text}}>{p.name}</div>
@@ -14929,7 +14929,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           {!loadingRev&&Object.values(allReviews).every(r=>r.length===0)&&(
             <div style={{textAlign:"center",padding:"50px 0",color:C.textSub}}>
               <div style={{fontSize:48,marginBottom:12}}>⭐</div>
-              <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No reviews yet</div>
+              <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>No reviews yet</div>
               <div style={{fontSize:12}}>Public product reviews will appear here</div>
             </div>
           )}
@@ -14942,7 +14942,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           {/* Full-width twin of the header's "+ Add". The header one sits right under the phone's
               status bar, which is a cramped place to aim at — this one is always easy to hit. */}
           <button className="press" onClick={openNewProduct}
-            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",minHeight:48,fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:"0 6px 18px rgba(14,165,233,.28)"}}>
+            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"14px",minHeight:48,fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:"0 6px 18px rgba(14,165,233,.28)"}}>
             ➕ Add New Product
           </button>
           <div style={{display:"flex",alignItems:"center",background:C.card,borderRadius:12,padding:"10px 14px",gap:8,marginBottom:12,border:`1.5px solid ${C.border}`}}>
@@ -14953,9 +14953,9 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           </div>
           <div style={{marginBottom:14}}><CategoryPills selected={catFilter} onSelect={setCatFilter} all/></div>
           {attnProds.length>0&&(
-            <div style={{background:"#fff7ed",border:`1.5px solid #fed7aa`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+            <div style={{background:"#fff7ed",border:`1.5px solid #fed7aa`,borderRadius:16,padding:"12px 14px",marginBottom:14}}>
               <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}>
-                <span style={{fontSize:15}}>⚠️</span>
+                <span style={{fontSize:14}}>⚠️</span>
                 <span style={{fontSize:13,fontWeight:800,color:"#9a3412"}}>{attnProds.length} product{attnProds.length!==1?"s":""} need restocking</span>
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
@@ -14963,14 +14963,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   const s=p.stockCount??DEFAULT_STOCK; const out=s<=0;
                   return(
                     <button key={p.id} className="press" onClick={()=>openProduct(p)} title="Open this product — clears the alert"
-                      style={{display:"inline-flex",alignItems:"center",gap:6,background:"white",border:`1px solid ${out?"#fecaca":"#fed7aa"}`,borderRadius:20,padding:"5px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                      style={{display:"inline-flex",alignItems:"center",gap:6,background:"white",border:`1px solid ${out?"#fecaca":"#fed7aa"}`,borderRadius:20,padding:"5px 11px",fontSize:11,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                       <span style={{width:7,height:7,borderRadius:"50%",background:out?"#dc2626":"#f59e0b",flexShrink:0}}/>
                       {p.name} <span style={{color:out?"#dc2626":"#c2410c",fontWeight:800}}>{out?"· Out":`· ${s} left`}</span>
                     </button>
                   );
                 })}
               </div>
-              <div style={{fontSize:10.5,color:"#9a3412",marginTop:8,opacity:.8}}>Tap a product to open it — that clears it from this alert.</div>
+              <div style={{fontSize:10,color:"#9a3412",marginTop:8,opacity:.8}}>Tap a product to open it — that clears it from this alert.</div>
             </div>
           )}
           <div style={{fontSize:12,color:C.textSub,fontWeight:500,marginBottom:12}}>{filteredProds.length} product{filteredProds.length!==1?"s":""}</div>
@@ -14987,7 +14987,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   <div style={{fontSize:14,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
                   <div style={{fontSize:11,color:C.textSub,marginBottom:4}}>{p.category}</div>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                    <span style={{fontFamily:PRICE_FONT,fontSize:15,fontWeight:800,color:C.primary}}>₹{effectivePrice(p)}</span>
+                    <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{effectivePrice(p)}</span>
                     {p.comingSoon
                       ? <span style={{fontSize:10,fontWeight:800,color:C.accent,background:C.accentLight,padding:"2px 7px",borderRadius:12}}>🔜 Coming Soon · {interestCounts[p.id]||0} interested</span>
                       : <StockBadge stockCount={productStockTotal(p)}/>}
@@ -14997,7 +14997,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   </div>
                 </div>
                 <button className="press" onClick={()=>openProduct(p)}
-                  style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+                  style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 14px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
                   Edit
                 </button>
               </div>
@@ -15018,7 +15018,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           {requests.length===0?(
             <div style={{textAlign:"center",padding:"50px 0",color:C.textSub}}>
               <div style={{fontSize:48,marginBottom:14}}>📨</div>
-              <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No requests yet</div>
+              <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>No requests yet</div>
               <div style={{fontSize:12}}>Customer product requests will appear here</div>
             </div>
           ):(
@@ -15034,22 +15034,22 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                       <div style={{fontSize:14,fontWeight:800,color:"#b91c1c"}}>Account deletion request</div>
                     </div>
                     <div style={{fontSize:13,fontWeight:800,color:C.text}}>{r.name||"Customer"}</div>
-                    <div style={{fontSize:11.5,color:C.textSub,marginTop:3,lineHeight:1.7}}>
+                    <div style={{fontSize:11,color:C.textSub,marginTop:3,lineHeight:1.7}}>
                       {r.phone?<>📱 +91 {r.phone}<br/></>:null}
                       {r.email?<>✉️ {r.email}<br/></>:null}
                       <span style={{wordBreak:"break-all"}}>🆔 {r.uid||r.ukey||"—"}</span>
                     </div>
                     <div style={{fontSize:11,color:C.textSub,marginTop:4}}>{fmtDate(r.createdAt)}</div>
-                    <div style={{fontSize:11.5,color:"#7f1d1d",background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"9px 12px",marginTop:10,lineHeight:1.6}}>
+                    <div style={{fontSize:11,color:"#7f1d1d",background:"#fff",border:"1px solid #fecaca",borderRadius:12,padding:"9px 12px",marginTop:10,lineHeight:1.6}}>
                       The customer deleted their account from the app. Tap <b>Delete remaining data</b> to erase any leftover personal data (wallet coins, saved items, referral code, tank photos) from the cloud. <b>Order &amp; payment records are kept</b> for tax/accounting law — delete those manually once the retention period ends.
                     </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:12,paddingTop:10,borderTop:"1px solid #fecaca"}}>
                       {delWa&&<button className="press" onClick={()=>openWA(delWa,encodeURIComponent(`Hi ${r.name||"there"}, your ${STORE_NAME} account and personal data have been deleted as requested. Order records are retained only as long as the law requires. Thank you.`))}
-                        style={{background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Confirm to customer</button>}
+                        style={{background:"#25D366",color:"white",border:"none",borderRadius:12,padding:"7px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Confirm to customer</button>}
                       <button className="press" onClick={()=>onPurgeUser&&onPurgeUser(r)}
-                        style={{background:"#dc2626",color:"white",border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🗑️ Delete remaining data</button>
+                        style={{background:"#dc2626",color:"white",border:"none",borderRadius:12,padding:"7px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🗑️ Delete remaining data</button>
                       <button className="press" onClick={()=>onDeleteRequest(r.id)}
-                        style={{background:"#e5e7eb",color:C.text,border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Dismiss</button>
+                        style={{background:"#e5e7eb",color:C.text,border:"none",borderRadius:12,padding:"7px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Dismiss</button>
                     </div>
                   </div>
                 );
@@ -15059,26 +15059,26 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               return(
                 <div key={r.id} style={{background:C.card,borderRadius:16,padding:"14px",marginBottom:12,border:`1px solid ${C.border}`}}>
                   <div style={{display:"flex",gap:12}}>
-                    <div style={{width:60,height:60,borderRadius:12,flexShrink:0,overflow:"hidden",background:C.bg,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26}}>
+                    <div style={{width:60,height:60,borderRadius:12,flexShrink:0,overflow:"hidden",background:C.bg,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>
                       {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:"🐟"}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:14,fontWeight:700,color:C.text}}>{r.product}</div>
-                      <div style={{fontSize:11.5,color:C.textSub,marginTop:2}}>
+                      <div style={{fontSize:11,color:C.textSub,marginTop:2}}>
                         {r.brand?<>Brand: <b style={{color:C.text}}>{r.brand}</b> · </>:null}Qty: {r.qty}
                       </div>
                       <div style={{fontSize:11,color:C.textSub,marginTop:2}}>{fmtDate(r.createdAt)}</div>
                     </div>
                   </div>
-                  {r.notes&&<div style={{fontSize:12,color:C.textSub,lineHeight:1.55,marginTop:10,background:C.bg,borderRadius:10,padding:"8px 12px"}}>{r.notes}</div>}
+                  {r.notes&&<div style={{fontSize:12,color:C.textSub,lineHeight:1.55,marginTop:10,background:C.bg,borderRadius:12,padding:"8px 12px"}}>{r.notes}</div>}
                   {r.link&&<a href={r.link} target="_blank" rel="noopener" style={{display:"inline-block",fontSize:12,color:C.accent,fontWeight:700,marginTop:8,wordBreak:"break-all"}}>🔗 Reference link</a>}
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
                     <div style={{fontSize:12,color:C.text,fontWeight:600}}>{r.name} · {r.phone}</div>
                     <div style={{display:"flex",gap:8}}>
                       <button className="press" onClick={()=>openWA(waNum,encodeURIComponent(`Hi ${r.name}! Regarding your request for "${r.product}" at ${STORE_NAME}…`))}
-                        style={{background:"#25D366",color:"white",border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Reply</button>
+                        style={{background:"#25D366",color:"white",border:"none",borderRadius:12,padding:"7px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Reply</button>
                       <button className="press" onClick={()=>onDeleteRequest(r.id)}
-                        style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:10,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Delete</button>
+                        style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:12,padding:"7px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Delete</button>
                     </div>
                   </div>
                 </div>
@@ -15099,7 +15099,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           ):(
             <>
             <button className="press" onClick={()=>{setEditGuide(null);setGuideFormOpen(true);}}
-              style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:16}}>
+              style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:16}}>
               + Add Care Guide / Poster
             </button>
             {guides.length===0?(
@@ -15117,14 +15117,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:10,fontWeight:800,color:C.accent,marginBottom:2}}>{g.category}</div>
-                    <div style={{fontSize:13.5,fontWeight:700,color:C.text,lineHeight:1.3,marginBottom:4}}>{g.title}</div>
-                    <div style={{fontSize:11.5,color:C.textSub,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{g.content}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3,marginBottom:4}}>{g.title}</div>
+                    <div style={{fontSize:11,color:C.textSub,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{g.content}</div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
                     <button className="press" onClick={()=>{setEditGuide(g);setGuideFormOpen(true);}}
-                      style={{background:C.accentLight,color:C.primary,border:"none",borderRadius:9,padding:"6px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Edit</button>
+                      style={{background:C.accentLight,color:C.primary,border:"none",borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Edit</button>
                     <button className="press" onClick={()=>onDeleteGuide(g.id)}
-                      style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:9,padding:"6px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Del</button>
+                      style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Del</button>
                   </div>
                 </div>
               );
@@ -15140,10 +15140,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>👛 Customer Wallets</div>
-              <div style={{fontSize:11.5,color:C.textSub}}>{customers.length} customer{customers.length!==1?"s":""} · ₹{Number(settings.loyaltyRedeemValue||1)}/coin</div>
+              <div style={{fontSize:11,color:C.textSub}}>{customers.length} customer{customers.length!==1?"s":""} · ₹{Number(settings.loyaltyRedeemValue||1)}/coin</div>
             </div>
             <button className="press" onClick={loadWallets} disabled={loadingWallets}
-              style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 12px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 12px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               {loadingWallets?"…":"↻ Refresh"}
             </button>
           </div>
@@ -15152,10 +15152,10 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             const val=Number(settings.loyaltyRedeemValue||1);
             return(
               <div style={{display:"flex",gap:10,marginBottom:14}}>
-                <div style={{flex:1,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:14,padding:"13px 15px",color:"white"}}>
+                <div style={{flex:1,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:16,padding:"13px 15px",color:"white"}}>
                   <div style={{fontSize:11,opacity:.85,fontWeight:600}}>Total coins outstanding</div>
                   <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800}}>{totalCoins}</div>
-                  <div style={{fontSize:10.5,opacity:.85}}>≈ ₹{Math.floor(totalCoins*val)} liability</div>
+                  <div style={{fontSize:10,opacity:.85}}>≈ ₹{Math.floor(totalCoins*val)} liability</div>
                 </div>
               </div>
             );
@@ -15170,19 +15170,19 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                 const bal=walletBalances[c.uid];
                 const val=Number(settings.loyaltyRedeemValue||1);
                 return(
-                  <div key={c.uid} style={{background:C.card,borderRadius:14,padding:"12px 14px",border:`1px solid ${adjUid===c.uid?C.primary:C.border}`}}>
+                  <div key={c.uid} style={{background:C.card,borderRadius:16,padding:"12px 14px",border:`1px solid ${adjUid===c.uid?C.primary:C.border}`}}>
                     <div style={{display:"flex",alignItems:"center",gap:12}}>
-                      <div style={{width:38,height:38,borderRadius:"50%",background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>👤</div>
+                      <div style={{width:38,height:38,borderRadius:"50%",background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>👤</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</div>
                         <div style={{fontSize:11,color:C.textSub}}>{c.phone||c.email||c.uid.slice(0,12)} · {c.orders} order{c.orders!==1?"s":""}</div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0}}>
                         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.primary}}>{bal==null?"—":bal} <span style={{fontSize:11,fontWeight:600,color:C.textSub}}>pts</span></div>
-                        {bal!=null&&<div style={{fontSize:10.5,color:C.textSub}}>≈ ₹{Math.floor(bal*val)}</div>}
+                        {bal!=null&&<div style={{fontSize:10,color:C.textSub}}>≈ ₹{Math.floor(bal*val)}</div>}
                       </div>
                       <button className="press" onClick={()=>{ setAdjUid(adjUid===c.uid?null:c.uid); setAdjAmt(""); setAdjNote(""); }}
-                        style={{flexShrink:0,background:adjUid===c.uid?C.primary:C.accentLight,color:adjUid===c.uid?"white":C.primary,border:`1px solid ${C.border}`,borderRadius:9,padding:"7px 10px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                        style={{flexShrink:0,background:adjUid===c.uid?C.primary:C.accentLight,color:adjUid===c.uid?"white":C.primary,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                         {adjUid===c.uid?"Close":"Adjust"}
                       </button>
                     </div>
@@ -15191,12 +15191,12 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                         <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.4}}>Enter points to <b>add</b> (e.g. <b>50</b>) or <b>deduct</b> (e.g. <b>-50</b>). A confirmation will show the new balance.</div>
                         <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
                           <input type="number" value={adjAmt} onChange={e=>setAdjAmt(e.target.value)} placeholder="± points"
-                            style={{width:110,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                            style={{width:110,borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
                           <input type="text" value={adjNote} onChange={e=>setAdjNote(e.target.value)} placeholder="Reason (optional)"
-                            style={{flex:1,minWidth:120,borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                            style={{flex:1,minWidth:120,borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
                         </div>
                         <button className="press" onClick={()=>doAdjust(c)} disabled={adjBusy}
-                          style={{width:"100%",background:adjBusy?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:11,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                          style={{width:"100%",background:adjBusy?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                           {adjBusy?"Updating…":"Review & Confirm"}
                         </button>
                       </div>
@@ -15227,18 +15227,18 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               const voteCoins=Math.max(0,Number(settings.tankVoteRewardCoins??settings.totmRewardCoins)||0);
               const streakCoins=Math.max(0,Number(settings.tankStreakRewardCoins)||0);
               return(
-                <details key={month} open={complete} style={{background:"#fff7ed",borderRadius:14,border:"1px solid #fed7aa",overflow:"hidden"}}>
-                  <summary style={{cursor:"pointer",padding:"12px 13px",fontSize:12.5,fontWeight:800,color:"#9a3412",listStylePosition:"inside"}}>
+                <details key={month} open={complete} style={{background:"#fff7ed",borderRadius:16,border:"1px solid #fed7aa",overflow:"hidden"}}>
+                  <summary style={{cursor:"pointer",padding:"12px 13px",fontSize:12,fontWeight:800,color:"#9a3412",listStylePosition:"inside"}}>
                     {totmMonthLabel(month)} · {rows.length} customer{rows.length===1?"":"s"}
                   </summary>
                   <div style={{padding:"0 12px 12px"}}>
-                    <div style={{fontSize:10.5,color:"#9a3412",lineHeight:1.5,marginBottom:9}}>{complete?"Completed month — verify the leaders before awarding.":"Live month — votes and approved share days update here and reset next month."}</div>
+                    <div style={{fontSize:10,color:"#9a3412",lineHeight:1.5,marginBottom:9}}>{complete?"Completed month — verify the leaders before awarding.":"Live month — votes and approved share days update here and reset next month."}</div>
                     {complete&&(
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                         {[{type:"vote",title:"Most votes",top:voteTop,coins:voteCoins,won:winners.vote,enabled:tankVoteRewardOn(settings)},{type:"streak",title:"Best streak",top:streakTop,coins:streakCoins,won:winners.streak,enabled:tankStreakRewardOn(settings)}].map(reward=>(
-                          <div key={reward.type} style={{background:"white",border:`1px solid ${reward.won?"#86efac":"#fde68a"}`,borderRadius:11,padding:"9px"}}>
+                          <div key={reward.type} style={{background:"white",border:`1px solid ${reward.won?"#86efac":"#fde68a"}`,borderRadius:12,padding:"9px"}}>
                             <div style={{fontSize:10,fontWeight:800,color:C.textSub,textTransform:"uppercase"}}>{reward.title}</div>
-                            <div style={{fontSize:11.5,fontWeight:800,color:C.text,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reward.won?reward.won.name:!reward.enabled?"Reward is off":reward.top?reward.top.ownerName:"No eligible customer"}</div>
+                            <div style={{fontSize:11,fontWeight:800,color:C.text,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reward.won?reward.won.name:!reward.enabled?"Reward is off":reward.top?reward.top.ownerName:"No eligible customer"}</div>
                             <div style={{fontSize:10,color:C.textSub,marginTop:2}}>{reward.won?`${reward.won.total} ${reward.type==="vote"?"votes":"days"} · ${reward.won.rewardCoins||0} coins paid`:!reward.enabled?"Turn it on in Settings to issue this reward":reward.top?`${reward.type==="vote"?reward.top.votes:reward.top.streak} ${reward.type==="vote"?"votes":"days"} · ${reward.coins} coins`:reward.type==="streak"?`Minimum ${minStreak} days`:"No votes received"}</div>
                             {!reward.won&&reward.enabled&&reward.top&&<button className="press" onClick={()=>{if(window.confirm(`Award ${reward.coins} coins to ${reward.top.ownerName} for ${reward.title.toLowerCase()} in ${totmMonthLabel(month)}?`)) awardMonthlyTank(reward.type,month,reward.top);}}
                               style={{width:"100%",marginTop:7,background:C.primary,color:"white",border:"none",borderRadius:8,padding:"6px",fontSize:10,fontWeight:800}}>Verify &amp; award</button>}
@@ -15250,11 +15250,11 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
                     {!tankMonthLoading&&rows.length===0&&<div style={{fontSize:11,color:C.textSub,fontStyle:"italic",padding:"6px 0"}}>No approved customer tank days in this month.</div>}
                     <div style={{display:"flex",flexDirection:"column",gap:7}}>
                       {rows.map(row=>(
-                        <details key={row.uid} style={{background:"white",border:`1px solid ${row.streak>=minStreak?"#86efac":"#fed7aa"}`,borderRadius:10,padding:"8px 10px"}}>
-                          <summary style={{cursor:"pointer",fontSize:11.5,fontWeight:800,color:C.text}}>
+                        <details key={row.uid} style={{background:"white",border:`1px solid ${row.streak>=minStreak?"#86efac":"#fed7aa"}`,borderRadius:12,padding:"8px 10px"}}>
+                          <summary style={{cursor:"pointer",fontSize:11,fontWeight:800,color:C.text}}>
                             {row.ownerName} · {row.votes} vote{row.votes===1?"":"s"} · {row.streak}-day streak
                           </summary>
-                          <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.55,padding:"7px 2px 1px"}}>
+                          <div style={{fontSize:10,color:C.textSub,lineHeight:1.55,padding:"7px 2px 1px"}}>
                             <div>Approved share days: {row.uploadDays.length}</div>
                             <div>Total monthly votes: {row.votes}</div>
                             <div>Longest approved streak: {row.streak} day{row.streak===1?"":"s"}</div>
@@ -15268,7 +15268,7 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
               );
             };
             return <div style={{padding:"16px 16px 0"}}><div style={{background:C.card,borderRadius:16,padding:"14px",border:`1px solid ${C.border}`}}>
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:4}}>📊 Monthly Tank Reward Log</div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text,marginBottom:4}}>📊 Monthly Tank Reward Log</div>
               <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginBottom:10}}>Collapsible audit of approved share days, longest streaks and all votes received across each customer's daily images.</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>{renderMonth(current,false)}{renderMonth(previous,true)}</div>
             </div></div>;
@@ -15301,18 +15301,18 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
             return(
             <div style={{padding:"16px 16px 0"}}>
               <div style={{background:C.card,borderRadius:16,padding:"16px",marginBottom:0,border:`1px solid ${C.border}`}}>
-                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase</div>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text,marginBottom:12}}>🪸 Customer Tank Showcase</div>
                 {pending.length>0&&(
                   <div style={{marginBottom:14}}>
-                    <div style={{fontSize:11.5,fontWeight:800,color:"#9a3412",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>⏳ Pending approval ({pending.length})</div>
+                    <div style={{fontSize:11,fontWeight:800,color:"#9a3412",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>⏳ Pending approval ({pending.length})</div>
                     <div style={{display:"flex",flexDirection:"column",gap:8}}>{pending.map(s=>row(s,true))}</div>
                   </div>
                 )}
-                <div style={{fontSize:11.5,fontWeight:800,color:C.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>✓ Live ({live.length})</div>
+                <div style={{fontSize:11,fontWeight:800,color:C.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>✓ Live ({live.length})</div>
                 {live.length>0?(
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>{live.map(s=>row(s,false))}</div>
                 ):(
-                  <div style={{fontSize:11.5,color:C.textSub,fontStyle:"italic"}}>No live tanks right now.</div>
+                  <div style={{fontSize:11,color:C.textSub,fontStyle:"italic"}}>No live tanks right now.</div>
                 )}
               </div>
             </div>
@@ -15322,14 +15322,14 @@ function AdminHub({products,orders,mediaCache,requests,guides,settings,interestC
           {testimonials.length>0&&(
             <div style={{padding:"16px 16px 0"}}>
               <div style={{background:C.card,borderRadius:16,padding:"16px",border:`1px solid ${C.border}`}}>
-                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:4}}>💬 Testimonials ({testimonials.length})</div>
-                <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Posted by signed-in customers and <b>published straight away</b> — newest first. Remove anything you don't want on the home page.</div>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text,marginBottom:4}}>💬 Testimonials ({testimonials.length})</div>
+                <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Posted by signed-in customers and <b>published straight away</b> — newest first. Remove anything you don't want on the home page.</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {testimonials.map(t=>(
                     <div key={t.id} style={{display:"flex",alignItems:"flex-start",gap:10,background:C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${C.border}`}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
-                          <span style={{fontSize:12.5,fontWeight:800,color:C.text}}>{t.name||"Customer"}</span>
+                          <span style={{fontSize:12,fontWeight:800,color:C.text}}>{t.name||"Customer"}</span>
                           <span style={{fontSize:11,color:"#f59e0b"}}>{"★".repeat(t.rating||5)}</span>
                           {t.createdAt&&<span style={{fontSize:10,color:C.textSub}}>{fmtDate(t.createdAt)}</span>}
                         </div>
@@ -15385,7 +15385,7 @@ function SettingsPanel({settings,onSave,products=[]}){
     const used=promoToday[type]||0; const lim=Number(limit||0);
     const full=lim>0&&used>=lim;
     return (
-      <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,fontWeight:800,color:full?C.danger:lim>0?"#9a6a00":C.textSub,background:full?"#fee2e2":lim>0?"#fffbeb":C.bg,border:`1px solid ${full?"#fecaca":lim>0?"#fde68a":C.border}`,borderRadius:20,padding:"3px 9px",marginLeft:8}}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10,fontWeight:800,color:full?C.danger:lim>0?"#9a6a00":C.textSub,background:full?"#fee2e2":lim>0?"#fffbeb":C.bg,border:`1px solid ${full?"#fecaca":lim>0?"#fde68a":C.border}`,borderRadius:20,padding:"3px 9px",marginLeft:8}}>
         {full?"●":"○"} {used}{lim>0?` of ${lim}`:""} used today{full?" — full":""}
       </span>
     );
@@ -15499,7 +15499,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         {[["store","🏪 Store"],["payship","🚚 Payments & Shipping"],["hsn","🧾 GST & HSN"],["promos","🎁 Promotions"],["content","📄 Content"],["emails","🔐 Email & Security"]].map(([k,label])=>(
           <button key={k} className="press" onClick={()=>{if(sec===k)setSecOpen(v=>!v);else{setSec(k);setSecOpen(true);}}}
             aria-expanded={sec===k&&secOpen}
-            style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${sec===k&&secOpen?C.primary:C.border}`,background:sec===k&&secOpen?C.primary:"white",color:sec===k&&secOpen?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap",cursor:"pointer"}}>
+            style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${sec===k&&secOpen?C.primary:C.border}`,background:sec===k&&secOpen?C.primary:"white",color:sec===k&&secOpen?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap",cursor:"pointer"}}>
             {label} {sec===k&&secOpen?"▴":"▾"}
           </button>
         ))}
@@ -15516,12 +15516,12 @@ function SettingsPanel({settings,onSave,products=[]}){
             style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
           <span>
             <span style={{fontSize:13,fontWeight:800,color:C.text}}>Sell live fish</span>
-            <span style={{display:"block",fontSize:11.5,color:C.textSub,lineHeight:1.55,marginTop:3}}>
+            <span style={{display:"block",fontSize:11,color:C.textSub,lineHeight:1.55,marginTop:3}}>
               Shows the Live Fish category, its products, the Live Arrival Guarantee and the Acclimatization Guide, the Dead-on-Arrival claim flow, live-fish packing and shipping, and the fish wording in your own home-page and policy text.
             </span>
           </span>
         </label>
-        <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55,marginTop:10,background:C.bg,borderRadius:10,padding:"10px 12px"}}>
+        <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginTop:10,background:C.bg,borderRadius:12,padding:"10px 12px"}}>
           <b>Nothing is ever deleted.</b> Turning this off hides live fish; every product, past order, DOA claim and refund stays exactly where it is, and comes straight back when you turn it on. Your saved fish wording is never rewritten — while the switch is off the storefront simply shows fish-free copy in its place.
           <span style={{display:"block",marginTop:6}}>Customers already on the site pick up the change when they next open it. Your product pages on Google follow within the hour.</span>
           {f.liveFishEnabled===true&&<span style={{display:"block",marginTop:6,color:"#9a3412",fontWeight:600}}>⚠ Check your payment gateway allows live animals before you switch this on.</span>}
@@ -15542,15 +15542,15 @@ function SettingsPanel({settings,onSave,products=[]}){
       <Collapsible icon="🖼️" title="Store Logo">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Upload your logo (PNG with transparent background works best). It updates everywhere for all customers.</div>
         <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:10}}>
-          <div style={{width:72,height:72,borderRadius:14,background:C.bg,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
+          <div style={{width:72,height:72,borderRadius:16,background:C.bg,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
             <img src={f.storeLogo||STORE_LOGO} alt="" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
           </div>
           <div style={{flex:1}}>
-            <label className="press" style={{display:"inline-block",background:C.accentLight,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+            <label className="press" style={{display:"inline-block",background:C.accentLight,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"9px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
               Choose Logo
               <input type="file" accept="image/*" onChange={e=>handleLogo(e.target.files&&e.target.files[0])} style={{display:"none"}}/>
             </label>
-            {f.storeLogo&&<button className="press" onClick={()=>{set("storeLogo","");setLogoNote("Reset to default — tap Save");}} style={{marginLeft:8,background:"#fee2e2",color:C.danger,border:"none",borderRadius:10,padding:"9px 12px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Reset</button>}
+            {f.storeLogo&&<button className="press" onClick={()=>{set("storeLogo","");setLogoNote("Reset to default — tap Save");}} style={{marginLeft:8,background:"#fee2e2",color:C.danger,border:"none",borderRadius:12,padding:"9px 12px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Reset</button>}
             {logoNote&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>{logoNote}</div>}
           </div>
         </div>
@@ -15641,15 +15641,15 @@ function SettingsPanel({settings,onSave,products=[]}){
       {/* Admin security */}
       {mainAdminOk&&(<Collapsible icon="🔐" title="Admin Security">
 
-        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Firebase admin identity</div>
-        <div style={{background:adminOk?"#ecfdf5":"#fff7ed",border:`1px solid ${adminOk?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 13px",marginBottom:14,fontSize:12,color:adminOk?"#166534":"#9a3412",lineHeight:1.55}}>
+        <div style={{fontSize:12,fontWeight:800,color:C.text,marginTop:6,marginBottom:8}}>Firebase admin identity</div>
+        <div style={{background:adminOk?"#ecfdf5":"#fff7ed",border:`1px solid ${adminOk?"#a7f3d0":"#fed7aa"}`,borderRadius:12,padding:"11px 13px",marginBottom:14,fontSize:12,color:adminOk?"#166534":"#9a3412",lineHeight:1.55}}>
           {adminOk?"✓ Signed in with the configured Google admin account.":"🔒 Sign in with the configured Google admin account to access protected Firebase data."}
         </div>
-        {pwMsg&&<div style={{fontSize:11.5,color:pwMsg[0]==="✓"?C.success:C.danger,fontWeight:600,marginBottom:12}}>{pwMsg}</div>}
+        {pwMsg&&<div style={{fontSize:11,color:pwMsg[0]==="✓"?C.success:C.danger,fontWeight:600,marginBottom:12}}>{pwMsg}</div>}
 
-        <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:6}}>Your Google Admin UID</div>
+        <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:6}}>Your Google Admin UID</div>
         <div style={{fontSize:12,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Paste this into your Firebase rules to lock admin to your account.</div>
-        <div style={{display:"flex",alignItems:"center",gap:8,background:C.bg,borderRadius:10,padding:"10px 12px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,background:C.bg,borderRadius:12,padding:"10px 12px"}}>
           <code style={{flex:1,fontSize:12,color:C.text,wordBreak:"break-all"}}>{adminOk?FB_AUTH.currentUser.uid:"— sign in with Google to view —"}</code>
           {adminOk&&(
             <button className="press" onClick={()=>{navigator.clipboard?.writeText(FB_AUTH.currentUser.uid);}} style={{background:C.accentLight,border:"none",color:C.primary,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Copy</button>
@@ -15657,26 +15657,26 @@ function SettingsPanel({settings,onSave,products=[]}){
         </div>
 
                 <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:14}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:9}}>🔑 Admin password</div>
+          <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:9}}>🔑 Admin password</div>
           <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginBottom:9}}>This password only unlocks the Admin workspace. Firebase still requires the authorised Google account for protected data.</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <PasswordField value={newAdminPassword} onChange={setNewAdminPassword} placeholder="New password" label="New admin password" autoComplete="new-password" style={{minWidth:0}}/>
             <PasswordField value={confirmAdminPassword} onChange={setConfirmAdminPassword} placeholder="Confirm password" label="Confirm admin password" autoComplete="new-password" style={{minWidth:0}}/>
           </div>
-          <button className="press" onClick={changeAdminPassword} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:9,padding:"8px 13px",fontSize:11.5,fontWeight:800}}>Save Admin password</button>
+          <button className="press" onClick={changeAdminPassword} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:8,padding:"8px 13px",fontSize:11,fontWeight:800}}>Save Admin password</button>
         </div>
         <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:14}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>🤝 Co-admin access</div>
+          <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:8}}>🤝 Co-admin access</div>
           <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginBottom:9}}>Paste the UID copied after the helper signs in with Google. Saving here activates database access; no source-code or Firebase-console edit is required.</div>
-          <input value={f.coAdminUid||""} onChange={e=>set("coAdminUid",e.target.value.trim())} placeholder="Co-admin Google UID" aria-label="Co-admin Google UID" style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:9,padding:"9px 10px",fontFamily:"monospace",fontSize:11.5}}/>
+          <input value={f.coAdminUid||""} onChange={e=>set("coAdminUid",e.target.value.trim())} placeholder="Co-admin Google UID" aria-label="Co-admin Google UID" style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:8,padding:"9px 10px",fontFamily:"monospace",fontSize:11}}/>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginTop:10}}>
             {[['orders','📋 Orders'],['dashboard','📊 Dashboard'],['products','📦 Products'],['wallets','👛 Wallets'],['reviews','⭐ Reviews'],['requests','📨 Requests'],['guides','📖 Guides'],['settings','⚙️ Settings']].map(([key,label])=>(
-              <label key={key} style={{display:"flex",alignItems:"center",gap:7,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 9px",fontSize:11.5,fontWeight:700,color:C.text}}>
+              <label key={key} style={{display:"flex",alignItems:"center",gap:7,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 9px",fontSize:11,fontWeight:700,color:C.text}}>
                 <input type="checkbox" checked={!!(f.coAdminPermissions&&f.coAdminPermissions[key])} onChange={e=>set("coAdminPermissions",{...DEFAULT_CO_ADMIN_PERMISSIONS,...(f.coAdminPermissions||{}),[key]:e.target.checked})}/>{label}
               </label>
             ))}
           </div>
-          <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.55,marginTop:8}}>A co-admin cannot edit this UID, these permissions, or the Admin password. Disabled sections are hidden and Firebase rejects direct access.</div>
+          <div style={{fontSize:10,color:C.textSub,lineHeight:1.55,marginTop:8}}>A co-admin cannot edit this UID, these permissions, or the Admin password. Disabled sections are hidden and Firebase rejects direct access.</div>
         </div>
 </Collapsible>)}
 
@@ -15689,9 +15689,9 @@ function SettingsPanel({settings,onSave,products=[]}){
             ⬇ Download Full Backup (JSON)
           </button>
         ) : (
-          <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:10,padding:"11px 13px",fontSize:12,color:"#9a3412",lineHeight:1.5}}>🔒 Sign in with your Google admin account to download the full backup (it includes orders, which only you can read).</div>
+          <div style={{background:"#fff7ed",border:`1px solid #fed7aa`,borderRadius:12,padding:"11px 13px",fontSize:12,color:"#9a3412",lineHeight:1.5}}>🔒 Sign in with your Google admin account to download the full backup (it includes orders, which only you can read).</div>
         )}
-        {backupMsg&&<div style={{fontSize:11.5,color:backupMsg[0]==="✓"?C.success:backupMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8}}>{backupMsg}</div>}
+        {backupMsg&&<div style={{fontSize:11,color:backupMsg[0]==="✓"?C.success:backupMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8}}>{backupMsg}</div>}
       </Collapsible>
 
       {/* Clear cached copies ─────────────────────────────────────────────────
@@ -15706,7 +15706,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           Use it when an old picture or an old version of the app is still showing.
           Nothing is lost — it all lives in Firebase and downloads again. Your cart, saved items and the settings on this page are untouched.
         </div>
-        <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5,background:C.bg,border:`1px dashed ${C.border}`,borderRadius:10,padding:"9px 11px"}}>
+        <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5,background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"9px 11px"}}>
           💡 A link preview on WhatsApp is cached by <b>WhatsApp</b>, not by this device — clearing here will not refresh one already sent.
           Share the link again after this and the new preview shows.
         </div>
@@ -15728,7 +15728,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           style={{width:"100%",background:cacheBusy?C.textSub:"#0f766e",color:"white",border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:cacheBusy?"default":"pointer"}}>
           {cacheBusy?"Clearing…":"🧹 Clear Cache & Reload"}
         </button>
-        {cacheMsg&&<div style={{fontSize:11.5,color:cacheMsg[0]==="✓"?C.success:cacheMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8,lineHeight:1.5}}>{cacheMsg}</div>}
+        {cacheMsg&&<div style={{fontSize:11,color:cacheMsg[0]==="✓"?C.success:cacheMsg[0]==="⚠"?C.danger:C.textSub,fontWeight:600,marginTop:8,lineHeight:1.5}}>{cacheMsg}</div>}
       </Collapsible>
 
       </>)}
@@ -15741,13 +15741,13 @@ function SettingsPanel({settings,onSave,products=[]}){
         {area("Live Arrival Guarantee","liveArrivalGuarantee")}
         {area("Cancellations, Returns & DOA Policy","returnPolicy")}
         <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px 12px 2px",marginBottom:14}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>↩️ Return Shipping Addresses</div>
+          <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:4}}>↩️ Return Shipping Addresses</div>
           <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Set up to <b>2</b> pickup/return points (e.g. main store + warehouse). When you approve a return you'll choose which one the customer should courier the item to.</div>
           {field("Address 1 — short name","returnAddress1Label","e.g. Salem Store")}
           {area("Address 1 — full address","returnAddress")}
           {field("Address 2 — short name (optional)","returnAddress2Label","e.g. Chennai Warehouse")}
           {area("Address 2 — full address (optional)","returnAddress2")}
-          <div style={{fontSize:11.5,color:C.textSub,background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",lineHeight:1.5}}>Orders close automatically after delivery: <b>3 days</b> when accessories are included; <b>1 day</b> for fish and all other orders. Open DOA or return requests keep the order active.</div>
+          <div style={{fontSize:11,color:C.textSub,background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",lineHeight:1.5}}>Orders close automatically after delivery: <b>3 days</b> when accessories are included; <b>1 day</b> for fish and all other orders. Open DOA or return requests keep the order active.</div>
         </div>
         {area("Acclimatization Guide","acclimatizationTips")}
         {area("Terms & Conditions","termsPolicy")}
@@ -15769,18 +15769,18 @@ function SettingsPanel({settings,onSave,products=[]}){
             ? `✓ Valid GSTIN · Seller state: ${p.stateName} (${p.stateCode}). Invoices to ${p.stateName} charge CGST + SGST; all other states charge IGST — set automatically from each customer's delivery pincode.`
             : (p.valid ? `⚠ Format looks OK but state code “${p.stateCode}” isn't recognised — double-check the GSTIN.`
                        : `⚠ This doesn't look like a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z5). Invoices still work, but check for a typo.`);
-          return <div style={{marginTop:-8,marginBottom:16,fontSize:11.5,fontWeight:700,lineHeight:1.5,color:good?C.success:C.danger}}>{msg}</div>;
+          return <div style={{marginTop:-8,marginBottom:16,fontSize:11,fontWeight:700,lineHeight:1.5,color:good?C.success:C.danger}}>{msg}</div>;
         })()}
         {/* No store-wide HSN or rate any more — mixed baskets (fish with no GST, feed, equipment,
             medicine) can't be billed off one number. Each product carries its own, set in the
             product editor under "Claim GST on this product". */}
         <div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:"#5b21b6",marginBottom:4}}>🧾 GST is set per product</div>
-          <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>HSN and rate live on each product — open a product and tick <b>Claim GST on this product</b>. Live fish stay off, so those orders bill as a Bill of Supply with no tax. Shipping follows the biggest item in the order.</div>
+          <div style={{fontSize:12,fontWeight:800,color:"#5b21b6",marginBottom:4}}>🧾 GST is set per product</div>
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.55}}>HSN and rate live on each product — open a product and tick <b>Claim GST on this product</b>. Live fish stay off, so those orders bill as a Bill of Supply with no tax. Shipping follows the biggest item in the order.</div>
           {(()=>{
             const gaps=(products||[]).filter(p=>p.gstApplicable&&(!String(p.hsn||"").trim()||!(Number(p.gstRate)>0)));
             if(!gaps.length) return null;
-            return <div style={{fontSize:11.5,color:"#b91c1c",fontWeight:700,marginTop:8,lineHeight:1.5}}>⚠ {gaps.length} product{gaps.length!==1?"s":""} claim GST but are missing an HSN or rate — they will bill with no GST: {gaps.slice(0,4).map(p=>p.name).join(", ")}{gaps.length>4?"…":""}</div>;
+            return <div style={{fontSize:11,color:"#b91c1c",fontWeight:700,marginTop:8,lineHeight:1.5}}>⚠ {gaps.length} product{gaps.length!==1?"s":""} claim GST but are missing an HSN or rate — they will bill with no GST: {gaps.slice(0,4).map(p=>p.name).join(", ")}{gaps.length>4?"…":""}</div>;
           })()}
         </div>
         {field("Website (invoice + About page)","website","www.nemoaquastore.in")}
@@ -15793,14 +15793,14 @@ function SettingsPanel({settings,onSave,products=[]}){
       <Collapsible icon="💳" title="Online Payment">
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}><b>Customer payments use the integrated gateway checkout (PhonePe and Razorpay).</b> Their production credentials are stored securely on Cloudflare and are never entered here. The optional UPI details below are printed on invoices only.</div>
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>Primary gateway</div>
+          <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:4}}>Primary gateway</div>
           <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Checkout tries this one first. The other is used automatically if it can't create a session for a customer — no code change or app update needed to switch.</div>
           <div style={{display:"flex",gap:8}}>
             {[["phonepe","PhonePe"],["razorpay","Razorpay"]].map(([k,l])=>{
               const active=(f.paymentPrimary||"phonepe")===k;
               return (
                 <button key={k} className="press" type="button" onClick={()=>set("paymentPrimary",k)}
-                  style={{flex:1,padding:"10px",borderRadius:10,border:`1.5px solid ${active?C.primary:C.border}`,background:active?C.primary:"transparent",color:active?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  style={{flex:1,padding:"10px",borderRadius:12,border:`1.5px solid ${active?C.primary:C.border}`,background:active?C.primary:"transparent",color:active?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                   {l}{active?" · Primary":""}
                 </button>
               );
@@ -15813,7 +15813,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             accountant needs an account to pay into and something to reconcile against. All
             optional: any field left blank simply doesn't print. */}
         <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px 12px 2px",marginTop:6}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>🏦 Bank Details (printed on invoices)</div>
+          <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:4}}>🏦 Bank Details (printed on invoices)</div>
           <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Optional, but wholesale/GST buyers expect it. Leave any field blank to hide it. This is <b>business account</b> information that already appears on your invoices — never enter a personal PIN, password or OTP anywhere.</div>
           {field("Account Name","bankAccountName","NEMO AQUA STORE")}
           {field("Bank","bankName","ICICI Bank")}
@@ -15828,22 +15828,22 @@ function SettingsPanel({settings,onSave,products=[]}){
             be readable there; the open internet does not need the proprietor's
             signature. */}
         <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px",marginTop:12}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:4}}>✍️ Authorised Signature (printed on invoices)</div>
+          <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:4}}>✍️ Authorised Signature (printed on invoices)</div>
           <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
             Signs on a white background, cropped close, PNG or JPG. Upload one and the invoice prints that signature and nothing else. Leave it empty and the invoice prints <b>This is auto generated &amp; not required signature</b> in its place — those are the only two things that ever appear there, so no bill goes out waiting for a pen.
           </div>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <div style={{width:120,height:56,borderRadius:10,background:"white",border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
+            <div style={{width:120,height:56,borderRadius:12,background:"white",border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
               {f.invoiceSignature
                 ? <img src={f.invoiceSignature} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}}/>
-                : <span style={{fontSize:10.5,color:C.textSub}}>none</span>}
+                : <span style={{fontSize:10,color:C.textSub}}>none</span>}
             </div>
             <div style={{flex:1}}>
-              <label className="press" style={{display:"inline-block",background:C.accentLight,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:10,padding:"9px 14px",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              <label className="press" style={{display:"inline-block",background:C.accentLight,color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"9px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 Choose Signature
                 <input type="file" accept="image/*" onChange={e=>handleSignature(e.target.files&&e.target.files[0])} style={{display:"none"}}/>
               </label>
-              {f.invoiceSignature&&<button className="press" onClick={()=>{set("invoiceSignature","");setSigNote("Removed — tap Save Settings");}} style={{marginLeft:8,background:"#fee2e2",color:C.danger,border:"none",borderRadius:10,padding:"9px 12px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Remove</button>}
+              {f.invoiceSignature&&<button className="press" onClick={()=>{set("invoiceSignature","");setSigNote("Removed — tap Save Settings");}} style={{marginLeft:8,background:"#fee2e2",color:C.danger,border:"none",borderRadius:12,padding:"9px 12px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Remove</button>}
               {sigNote&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>{sigNote}</div>}
             </div>
           </div>
@@ -15856,16 +15856,16 @@ function SettingsPanel({settings,onSave,products=[]}){
       <Collapsible icon="🚚" title="Shipping Rates">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Edit shipping prices per zone. Leave blank to use default rates. Changes apply immediately after Save.</div>
         <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>⚖️ Packaging weight added by item-weight bracket</div>
-        <div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.45}}>Set the box, oxygen bag and packing-material weight separately for each order-weight range. The app adds it before choosing the courier rate.</div>
+        <div style={{fontSize:10,color:C.textSub,marginBottom:10,lineHeight:1.45}}>Set the box, oxygen bag and packing-material weight separately for each order-weight range. The app adds it before choosing the courier rate.</div>
         {[['dry','Dry Goods','basePackagingByWeight','basePackagingKg'],['live','Live Fish · oxygen bag + box','liveBasePackagingByWeight','liveBasePackagingKg']].map(([kind,label,mapKey,legacyKey])=>{
           const cur=f.shippingRates||DEFAULT_SHIPPING_RATES;
           const map=cur[mapKey]||{};
           const fallback=Number(cur[legacyKey]??cur.basePackagingKg??0.5);
           return <div key={kind} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 11px",marginBottom:10}}>
-            <div style={{fontSize:11.5,fontWeight:800,color:C.text,marginBottom:7}}>{label}</div>
+            <div style={{fontSize:11,fontWeight:800,color:C.text,marginBottom:7}}>{label}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 82px",gap:"6px 10px",alignItems:"center"}}>
               {SHIP_TIERS.map(t=><React.Fragment key={t}>
-                <span style={{fontSize:10.5,color:C.textSub,fontWeight:700}}>{t}</span>
+                <span style={{fontSize:10,color:C.textSub,fontWeight:700}}>{t}</span>
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <input type="number" step="0.05" min="0" value={map[t]??fallback}
                     onChange={e=>{const rates=f.shippingRates||{...DEFAULT_SHIPPING_RATES};const next={...(rates[mapKey]||{}),[t]:Math.max(0,Number(e.target.value)||0)};set("shippingRates",{...rates,[mapKey]:next});}}
@@ -15883,7 +15883,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             <div key={type} style={{marginBottom:14}}>
               <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>{label}</div>
               <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                   <thead>
                     <tr>
                       <th style={{padding:"5px 4px",color:C.textSub,textAlign:"left",fontWeight:700,fontSize:10}}>Size/Weight</th>
@@ -15893,7 +15893,7 @@ function SettingsPanel({settings,onSave,products=[]}){
                   <tbody>
                     {Object.entries(rows).map(([bracket,prices])=>(
                       <tr key={bracket}>
-                        <td style={{padding:"4px 4px",fontSize:10.5,color:C.text,fontWeight:600,whiteSpace:"nowrap"}}>{bracket}</td>
+                        <td style={{padding:"4px 4px",fontSize:10,color:C.text,fontWeight:600,whiteSpace:"nowrap"}}>{bracket}</td>
                         {ZONE_KEYS.map(z=>(
                           <td key={z} style={{padding:"3px 4px"}}>
                             <input type="number" min="0"
@@ -15931,7 +15931,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};
             const therm=cur.thermacol||DEFAULT_SHIPPING_RATES.thermacol;
             return(
-              <div key={t} style={{display:"flex",alignItems:"center",gap:8,background:C.bg,borderRadius:10,padding:"8px 10px",border:`1px solid ${C.border}`}}>
+              <div key={t} style={{display:"flex",alignItems:"center",gap:8,background:C.bg,borderRadius:12,padding:"8px 10px",border:`1px solid ${C.border}`}}>
                 <span style={{fontSize:11,color:C.text,fontWeight:700,flex:1,whiteSpace:"nowrap"}}>{t}</span>
                 <span style={{fontSize:12,color:C.textSub,fontWeight:700}}>₹</span>
                 <input type="number" min="0" value={therm[t]||0}
@@ -15942,13 +15942,13 @@ function SettingsPanel({settings,onSave,products=[]}){
           })}
         </div>
         <div style={{fontSize:12,fontWeight:800,color:C.primary,marginTop:14,marginBottom:6}}>📦 Standard packing charge (₹ per parcel-weight bracket)</div>
-        <div style={{fontSize:11.5,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Base packing — carton box, or a courier bag for small/dry items. Added to <b>dry-goods parcels</b> and to live-fish orders packed with a <b>Standard</b> option. Charged by total parcel weight.</div>
+        <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Base packing — carton box, or a courier bag for small/dry items. Added to <b>dry-goods parcels</b> and to live-fish orders packed with a <b>Standard</b> option. Charged by total parcel weight.</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:8}}>
           {SHIP_TIERS.map(t=>{
             const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};
             const crt=cur.carton||DEFAULT_SHIPPING_RATES.carton;
             return(
-              <div key={t} style={{display:"flex",alignItems:"center",gap:8,background:C.bg,borderRadius:10,padding:"8px 10px",border:`1px solid ${C.border}`}}>
+              <div key={t} style={{display:"flex",alignItems:"center",gap:8,background:C.bg,borderRadius:12,padding:"8px 10px",border:`1px solid ${C.border}`}}>
                 <span style={{fontSize:11,color:C.text,fontWeight:700,flex:1,whiteSpace:"nowrap"}}>{t}</span>
                 <span style={{fontSize:12,color:C.textSub,fontWeight:700}}>₹</span>
                 <input type="number" min="0" value={crt[t]||0}
@@ -15961,16 +15961,16 @@ function SettingsPanel({settings,onSave,products=[]}){
         <div style={{height:1,background:C.border,margin:"14px 0"}}/>
         {/* Shipping-overcharge reward */}
         <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>🎁 Shipping-overcharge reward</div>
-        <div style={{fontSize:11.5,color:C.textSub,marginBottom:8,lineHeight:1.5}}>When you ship an order you can enter what the courier actually cost. If it's lower than what the customer paid by at least this amount, the app creates a reward code in their orders to use next time — so you're never overcharging for shipping.</div>
+        <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>When you ship an order you can enter what the courier actually cost. If it's lower than what the customer paid by at least this amount, the app creates a reward code in their orders to use next time — so you're never overcharging for shipping.</div>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-          <span style={{fontSize:11.5,color:C.text,fontWeight:700}}>Minimum difference to reward (₹)</span>
+          <span style={{fontSize:11,color:C.text,fontWeight:700}}>Minimum difference to reward (₹)</span>
           <input type="number" min="0" value={f.shippingRewardMin??10} onChange={e=>set("shippingRewardMin",Number(e.target.value)||0)}
-            style={{width:"80px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:13,outline:"none",background:"white"}}/>
+            style={{width:"80px",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:13,outline:"none",background:"white"}}/>
         </div>
         <div style={{height:1,background:C.border,margin:"14px 0"}}/>
         {/* Courier partners */}
         <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:4}}>🚚 Courier partners &amp; tracking links</div>
-        <div style={{fontSize:11.5,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Add the couriers you use and each one's public tracking-page link. When you mark an order Shipped you'll pick the courier and enter the consignment number — the customer gets a <b>Track</b> button. Tip: if a courier's URL accepts the number directly, put <b style={{fontFamily:"monospace"}}>{"{awb}"}</b> where the number goes (e.g. <span style={{fontFamily:"monospace"}}>https://dtdc.in/track?awb={"{awb}"}</span>) and it'll auto-fill; otherwise we copy the number for the customer to paste.</div>
+        <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Add the couriers you use and each one's public tracking-page link. When you mark an order Shipped you'll pick the courier and enter the consignment number — the customer gets a <b>Track</b> button. Tip: if a courier's URL accepts the number directly, put <b style={{fontFamily:"monospace"}}>{"{awb}"}</b> where the number goes (e.g. <span style={{fontFamily:"monospace"}}>https://dtdc.in/track?awb={"{awb}"}</span>) and it'll auto-fill; otherwise we copy the number for the customer to paste.</div>
         {(f.couriers||[]).map((c,i)=>(
           <div key={c.id||i} style={{background:C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${C.border}`,marginBottom:8}}>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -15978,7 +15978,7 @@ function SettingsPanel({settings,onSave,products=[]}){
                 placeholder="Courier name (e.g. DTDC, ST Courier)"
                 style={{flex:1,borderRadius:8,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",background:"white"}}/>
               <button className="press" onClick={()=>{const arr=(f.couriers||[]).filter((_,j)=>j!==i);set("couriers",arr);}}
-                style={{flexShrink:0,width:28,height:28,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:15,cursor:"pointer"}}>×</button>
+                style={{flexShrink:0,width:28,height:28,borderRadius:8,background:"#fee2e2",color:C.danger,border:"none",fontSize:14,cursor:"pointer"}}>×</button>
             </div>
             <input value={c.trackUrl||""} onChange={e=>{const arr=[...(f.couriers||[])];arr[i]={...arr[i],trackUrl:e.target.value.trim()};set("couriers",arr);}}
               placeholder="https://courier.com/track  (optionally with {awb})"
@@ -15986,7 +15986,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           </div>
         ))}
         <button className="press" onClick={()=>set("couriers",[...(f.couriers||[]),{id:"cr"+Date.now().toString(36),name:"",trackUrl:""}])}
-          style={{width:"100%",background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:2}}>
+          style={{width:"100%",background:"white",border:`1.5px dashed ${C.primary}`,color:C.primary,borderRadius:12,padding:"10px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:2}}>
           ＋ Add Courier Partner
         </button>
       </Collapsible>
@@ -15996,7 +15996,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,marginBottom:6}}>Free Delivery above (₹)</div>
           <input type="number" min="0" value={f.freeDeliveryThreshold||0} onChange={e=>set("freeDeliveryThreshold",Number(e.target.value))}
             style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 12px",fontSize:14,outline:"none",background:"white"}}/>
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
+          <div style={{fontSize:10,color:C.textSub,marginTop:4}}>Home-page banner. Set 0 to hide.</div>
         </div>
       </Collapsible>
 
@@ -16046,7 +16046,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           matching the invoices behind it. Products carrying the old code are
           listed under each row so they can be corrected by hand. */}
       <Collapsible icon="🧾" title="HSN Master List">
-        <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55,marginBottom:14}}>
+        <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginBottom:14}}>
           Every HSN code and GST rate you've used, kept so you never type one twice. When you list a
           product and tick "Claim GST", the code you enter is added here automatically — and suggested
           on the next product with a similar name or the same category.
@@ -16141,10 +16141,10 @@ function SettingsPanel({settings,onSave,products=[]}){
         {(f.coupons||[]).map((c,i)=>{
           const upd=(patch)=>{ const arr=[...(f.coupons||[])]; arr[i]={...arr[i],...patch}; set("coupons",arr); };
           const lbl=ADMIN_LABEL;
-          const box={width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:12.5,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"};
-          const chk={display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:11.5,fontWeight:600,color:C.text};
+          const box={width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:12,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"};
+          const chk={display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:11,fontWeight:600,color:C.text};
           return(
-            <div key={c.id||i} style={{background:C.bg,borderRadius:13,padding:"12px",border:`1px solid ${C.border}`,marginBottom:10}}>
+            <div key={c.id||i} style={{background:C.bg,borderRadius:12,padding:"12px",border:`1px solid ${C.border}`,marginBottom:10}}>
               <div style={{display:"flex",gap:8,marginBottom:9}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={lbl}>Coupon code</div>
@@ -16218,7 +16218,7 @@ function SettingsPanel({settings,onSave,products=[]}){
                 const name=c.name||c.code||"this offer";
                 if(window.confirm(`Delete ${name}?\n\nCustomers will no longer be able to use or see it.`)) set("coupons",(f.coupons||[]).filter((_,j)=>j!==i));
               }}
-                style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:9,padding:"7px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                style={{background:"#fee2e2",color:C.danger,border:"none",borderRadius:8,padding:"7px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                 Remove this offer
               </button>
             </div>
@@ -16226,7 +16226,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         })}
         <button className="press"
           onClick={()=>set("coupons",[...(f.coupons||[]),{id:"cp"+Math.random().toString(36).slice(2,9),code:"",name:"",type:"flat",value:0,maxDiscount:0,minOrder:0,firstOrderOnly:false,active:true,secret:false,endsAt:"",showAtCheckout:true,showOnWelcome:false,emoji:"🎉",bg:"#7c3aed"}])}
-          style={{width:"100%",background:"white",border:`1.5px dashed ${C.border}`,borderRadius:11,padding:"11px",fontSize:12.5,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+          style={{width:"100%",background:"white",border:`1.5px dashed ${C.border}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:700,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
           + Add an offer / banner
         </button>
       </Collapsible>
@@ -16247,12 +16247,12 @@ function SettingsPanel({settings,onSave,products=[]}){
           <div style={{flex:1}}>
             <div style={ADMIN_LABEL}>Max total discount ₹</div>
             <input type="number" min="0" value={f.maxDiscountRs||""} onChange={e=>set("maxDiscountRs",Number(e.target.value)||0)} placeholder="0 = no cap"
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12,outline:"none",background:"white"}}/>
           </div>
           <div style={{flex:1}}>
             <div style={ADMIN_LABEL}>Max total discount % of subtotal</div>
             <input type="number" min="0" max="100" value={f.maxDiscountPct||""} onChange={e=>set("maxDiscountPct",Number(e.target.value)||0)} placeholder="0 = no cap"
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12,outline:"none",background:"white"}}/>
           </div>
         </div>
       </Collapsible>
@@ -16268,20 +16268,20 @@ function SettingsPanel({settings,onSave,products=[]}){
           <div>
             <div style={ADMIN_LABEL}>Pts per ₹100</div>
             <input type="number" min="1" value={f.loyaltyPointsPerHundred||10} onChange={e=>set("loyaltyPointsPerHundred",Number(e.target.value))}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
           </div>
           <div>
             <div style={ADMIN_LABEL}>Min to redeem</div>
             <input type="number" min="1" value={f.loyaltyRedeemMin||100} onChange={e=>set("loyaltyRedeemMin",Number(e.target.value))}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
           </div>
           <div>
             <div style={ADMIN_LABEL}>₹ per point (coin value)</div>
             <input type="number" min="0.1" step="0.1" value={f.loyaltyRedeemValue||1} onChange={e=>set("loyaltyRedeemValue",Number(e.target.value))}
-              style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
           </div>
         </div>
-        <div style={{fontSize:10.5,color:C.textSub,marginTop:8}}>Example: spend ₹1000 → earn {(f.loyaltyPointsPerHundred||10)*10} pts → worth ₹{Math.floor((f.loyaltyPointsPerHundred||10)*10*(f.loyaltyRedeemValue||1))} in the wallet.</div>
+        <div style={{fontSize:10,color:C.textSub,marginTop:8}}>Example: spend ₹1000 → earn {(f.loyaltyPointsPerHundred||10)*10} pts → worth ₹{Math.floor((f.loyaltyPointsPerHundred||10)*10*(f.loyaltyRedeemValue||1))} in the wallet.</div>
         {/* walletMaxCoins has always governed how many coins a single order may absorb — the
             checkout reads it, the wallet widget reads it — but there was nowhere to set it, so
             it sat on its 100 default unless somebody edited the database by hand. The two
@@ -16291,15 +16291,15 @@ function SettingsPanel({settings,onSave,products=[]}){
             <div>
               <div style={ADMIN_LABEL}>Max coins per order</div>
               <input type="number" min="0" value={f.walletMaxCoins??100} onChange={e=>set("walletMaxCoins",Number(e.target.value))}
-                style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+                style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
             </div>
             <div>
               <div style={ADMIN_LABEL}>Min order to spend coins ₹</div>
               <input type="number" min="0" value={f.walletMinOrder??0} onChange={e=>set("walletMinOrder",Number(e.target.value))}
-                style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
+                style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
             </div>
           </div>
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:8,lineHeight:1.5}}>
+          <div style={{fontSize:10,color:C.textSub,marginTop:8,lineHeight:1.5}}>
             A customer can put at most <b>{walletCoinCap(f)===Infinity?"unlimited":walletCoinCap(f)+" coins"}</b>{walletCoinCap(f)===Infinity?null:<> (≈ ₹{Math.floor(walletCoinCap(f)*(f.loyaltyRedeemValue||1))})</>} toward one order{(f.walletMinOrder??0)>0?<>, and only on orders of ₹{f.walletMinOrder} or more</>:null}. Coins never pay for shipping, and never more than the order still owes after a coupon. <b>0 = no cap.</b>
           </div>
         </div>
@@ -16311,7 +16311,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           <div style={ADMIN_LABEL}>Coin validity (months)</div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <input type="number" min="0" value={f.walletValidityMonths??0} onChange={e=>set("walletValidityMonths",Number(e.target.value))}
-              style={{width:"90px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"90px",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <span style={{fontSize:11,color:C.textSub,lineHeight:1.4,flex:1}}>Each batch of coins expires this many months after it's earned, with a ⏳ reminder before expiry; expired coins are removed automatically. <b>Changing this only affects coins earned afterwards</b> — coins already in wallets keep their original expiry. <b>0 = never expire.</b></span>
           </div>
         </div>
@@ -16330,42 +16330,42 @@ function SettingsPanel({settings,onSave,products=[]}){
             <div style={{display:"flex",gap:8}}>
               {[["flat","₹ off"],["percent","% off"]].map(([k,l])=>(
                 <button key={k} type="button" className="press" onClick={()=>set("referralDiscountType",k)}
-                  style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${(f.referralDiscountType||"flat")===k?C.primary:C.border}`,background:(f.referralDiscountType||"flat")===k?C.primary:"white",color:(f.referralDiscountType||"flat")===k?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
+                  style={{flex:1,padding:"9px",borderRadius:12,border:`1.5px solid ${(f.referralDiscountType||"flat")===k?C.primary:C.border}`,background:(f.referralDiscountType||"flat")===k?C.primary:"white",color:(f.referralDiscountType||"flat")===k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
               ))}
               {(f.referralDiscountType||"flat")==="percent"
                 ? <input type="number" min="0" max="100" value={f.referralDiscountPct??5} onChange={e=>set("referralDiscountPct",Number(e.target.value))}
-                    style={{flex:1,boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                    style={{flex:1,boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
                 : <input type="number" min="0" value={f.referralDiscount??50} onChange={e=>set("referralDiscount",Number(e.target.value))}
-                    style={{flex:1,boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>}
+                    style={{flex:1,boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>}
             </div>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Friends currently get <b>{referralOfferLine(f)}</b>. A percentage is worked out on the cart before shipping and rounded down.</div>
           </div>
           <div>
             <div style={ADMIN_LABEL}>Lifetime spend to unlock (₹)</div>
             <input type="number" min="0" value={f.referralLifetimeSpendMin??1000} onChange={e=>set("referralLifetimeSpendMin",Number(e.target.value))}
-              style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Applies to everyone still locked. Customers who already unlocked keep their code.</div>
           </div>
           <div>
             <div style={ADMIN_LABEL}>Friend&#39;s minimum order (₹)</div>
             <input type="number" min="0" value={f.referralRedeemMinOrder??0} onChange={e=>set("referralRedeemMinOrder",Number(e.target.value))}
-              style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = any cart size</div>
           </div>
           <div>
             <div style={ADMIN_LABEL}>Owner&#39;s reward coins</div>
             <input type="number" min="0" value={f.referralCoins??0} onChange={e=>set("referralCoins",Number(e.target.value))}
-              style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Paid on delivery · 0 = no payout</div>
           </div>
           <div>
             <div style={ADMIN_LABEL}>Daily limit</div>
             <input type="number" min="0" value={f.referralDailyLimit||0} onChange={e=>set("referralDailyLimit",Number(e.target.value))}
-              style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
+              style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = unlimited / day</div>
           </div>
         </div>
-        <div style={{fontSize:11,color:C.textSub,marginTop:10,lineHeight:1.5,background:C.bg,borderRadius:10,padding:"9px 11px"}}>A code reserves at checkout but counts as used <b>only after that buyer&#39;s payment succeeds</b>; an unpaid or cancelled order releases it. Each customer may use any given code once. The owner&#39;s reward coins are credited when you mark the referred order <b>Delivered</b> — so a cancelled or unpaid referral never pays out.</div>
+        <div style={{fontSize:11,color:C.textSub,marginTop:10,lineHeight:1.5,background:C.bg,borderRadius:12,padding:"9px 11px"}}>A code reserves at checkout but counts as used <b>only after that buyer&#39;s payment succeeds</b>; an unpaid or cancelled order releases it. Each customer may use any given code once. The owner&#39;s reward coins are credited when you mark the referred order <b>Delivered</b> — so a cancelled or unpaid referral never pays out.</div>
       </Collapsible>
 
       {/* Tank showcase */}
@@ -16382,26 +16382,26 @@ function SettingsPanel({settings,onSave,products=[]}){
         <div style={{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9}}>
             <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:C.textSub,marginBottom:5}}>Min approved streak</div>
+              <div style={{fontSize:10,fontWeight:700,color:C.textSub,marginBottom:5}}>Min approved streak</div>
               <input type="number" min="1" value={f.tankMinStreak??f.tankUploadStreakTarget??7} onChange={e=>set("tankMinStreak",Math.max(1,Number(e.target.value)||1))}
-                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px",fontSize:13,outline:"none",background:"white"}}/>
+                style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px",fontSize:13,outline:"none",background:"white"}}/>
             </div>
             <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:C.textSub,marginBottom:5}}>Most-votes coins</div>
+              <div style={{fontSize:10,fontWeight:700,color:C.textSub,marginBottom:5}}>Most-votes coins</div>
               <input type="number" min="0" value={f.tankVoteRewardCoins??f.totmRewardCoins??200} onChange={e=>set("tankVoteRewardCoins",Math.max(0,Number(e.target.value)||0))}
-                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px",fontSize:13,outline:"none",background:"white"}}/>
+                style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px",fontSize:13,outline:"none",background:"white"}}/>
             </div>
             <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:C.textSub,marginBottom:5}}>Best-streak coins</div>
+              <div style={{fontSize:10,fontWeight:700,color:C.textSub,marginBottom:5}}>Best-streak coins</div>
               <input type="number" min="0" value={f.tankStreakRewardCoins??200} onChange={e=>set("tankStreakRewardCoins",Math.max(0,Number(e.target.value)||0))}
-                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px",fontSize:13,outline:"none",background:"white"}}/>
+                style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px",fontSize:13,outline:"none",background:"white"}}/>
             </div>
           </div>
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>Only admin-approved daily shares count. Both vote totals and streaks reset automatically on the first day of each month.</div>
+          <div style={{fontSize:10,color:C.textSub,marginTop:6,lineHeight:1.45}}>Only admin-approved daily shares count. Both vote totals and streaks reset automatically on the first day of each month.</div>
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginTop:12,marginBottom:5}}>Customer tank reward rules</div>
           <textarea value={f.tankRewardRules??DEFAULT_SETTINGS.tankRewardRules} onChange={e=>set("tankRewardRules",e.target.value.slice(0,3000))} rows={8} placeholder="Write the conditions a tank photo must satisfy before you approve it…"
             style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:12,lineHeight:1.55,outline:"none",background:"white",resize:"vertical"}}/>
-          <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.45}}>Customers see this text from the Rules button beside the tank upload control.</div>
+          <div style={{fontSize:10,color:C.textSub,marginTop:4,lineHeight:1.45}}>Customers see this text from the Rules button beside the tank upload control.</div>
         </div>
       </Collapsible>
 
@@ -16416,13 +16416,13 @@ function SettingsPanel({settings,onSave,products=[]}){
           <input type="checkbox" checked={f.tankStreakRewardEnabled!==false} onChange={e=>set("tankStreakRewardEnabled",e.target.checked)} style={{width:18,height:18,accentColor:C.primary}}/>
           <span style={{fontSize:13,fontWeight:700,color:C.text}}>Enable longest-streak monthly reward</span>
         </label>
-        {!f.showcaseEnabled&&f.totmEnabled&&<div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",marginBottom:12,lineHeight:1.5}}>⚠ The tank showcase is switched off above, so nothing will appear. Turn it on for this to run.</div>}
-        <div style={{fontSize:11,color:C.textSub,background:C.bg,borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>Reward values and the minimum approved streak are configured in Customer Tank Showcase above. Awards are never automatic.</div>
+        {!f.showcaseEnabled&&f.totmEnabled&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"9px 11px",marginBottom:12,lineHeight:1.5}}>⚠ The tank showcase is switched off above, so nothing will appear. Turn it on for this to run.</div>}
+        <div style={{fontSize:11,color:C.textSub,background:C.bg,borderRadius:12,padding:"9px 11px",lineHeight:1.5}}>Reward values and the minimum approved streak are configured in Customer Tank Showcase above. Awards are never automatic.</div>
       </Collapsible>
 
       </>)}
       <button className="press" onClick={()=>startSave(f)}
-        style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
         💾 Save Settings
       </button>
       <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:12,lineHeight:1.5}}>
@@ -16432,26 +16432,26 @@ function SettingsPanel({settings,onSave,products=[]}){
       {otpOpen&&(
         <div style={{position:"fixed",inset:0,background:"rgba(8,30,33,.55)",backdropFilter:"blur(3px)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
           onClick={e=>{if(e.target===e.currentTarget){setOtpOpen(false);setPendingSave(null);}}}>
-          <div className="fade-in" style={{width:"100%",maxWidth:360,background:"white",borderRadius:18,padding:"22px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+          <div className="fade-in" style={{width:"100%",maxWidth:360,background:"white",borderRadius:20,padding:"22px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
             <div style={{fontSize:40,textAlign:"center",marginBottom:8}}>🔐</div>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text,textAlign:"center",marginBottom:6}}>Confirm with email code</div>
-            <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.5,marginBottom:18}}>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text,textAlign:"center",marginBottom:6}}>Confirm with email code</div>
+            <div style={{fontSize:12,color:C.textSub,textAlign:"center",lineHeight:1.5,marginBottom:18}}>
               We emailed a 6-digit code to<br/><b style={{color:C.text}}>{maskEmail(otpEmail)}</b>.<br/>Enter it to confirm this change (WhatsApp, email or payment details).
             </div>
             <input value={otpInput} onChange={e=>{setOtpInput(e.target.value.replace(/\D/g,"").slice(0,6));if(otpMsg)setOtpMsg("");}}
               onKeyDown={e=>{if(e.key==="Enter")verifyOtp();}}
               inputMode="numeric" autoComplete="one-time-code" placeholder="••••••" autoFocus
-              style={{width:"100%",borderRadius:14,border:`1.5px solid ${C.border}`,padding:"14px",fontSize:24,letterSpacing:8,textAlign:"center",fontWeight:800,fontFamily:PRICE_FONT,outline:"none",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
+              style={{width:"100%",borderRadius:16,border:`1.5px solid ${C.border}`,padding:"14px",fontSize:24,letterSpacing:8,textAlign:"center",fontWeight:800,fontFamily:PRICE_FONT,outline:"none",background:C.bg,color:C.text,boxSizing:"border-box"}}/>
             {otpMsg&&<div style={{fontSize:12,fontWeight:700,textAlign:"center",marginTop:10,color:otpMsg[0]==="✓"?C.success:(otpMsg[0]==="⚠"||otpMsg[0]==="✕"||otpMsg[0]==="⌛")?C.danger:C.textSub}}>{otpMsg}</div>}
             <button className="press" onClick={verifyOtp} disabled={otpInput.length<6||otpBusy}
-              style={{width:"100%",marginTop:16,background:(otpInput.length<6||otpBusy)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{width:"100%",marginTop:16,background:(otpInput.length<6||otpBusy)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:16,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               {otpBusy?"Sending…":"Verify & Save"}
             </button>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}>
               <button className="press" onClick={()=>{setOtpOpen(false);setPendingSave(null);}}
-                style={{background:"none",border:"none",color:C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",padding:"6px 4px"}}>Cancel</button>
+                style={{background:"none",border:"none",color:C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",padding:"6px 4px"}}>Cancel</button>
               <button className="press" onClick={resendOtp} disabled={otpBusy}
-                style={{background:"none",border:"none",color:C.primary,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",padding:"6px 4px",opacity:otpBusy?.5:1}}>Resend code</button>
+                style={{background:"none",border:"none",color:C.primary,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",padding:"6px 4px",opacity:otpBusy?.5:1}}>Resend code</button>
             </div>
           </div>
         </div>
@@ -16502,20 +16502,20 @@ function PosterRecovery({products,requests,guides,showcase,onRestore,showToast})
     } finally { setBusy(""); }
   };
   return(
-    <div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:14,padding:"13px 14px",marginBottom:16}}>
+    <div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:16,padding:"13px 14px",marginBottom:16}}>
       <div style={{fontSize:13,fontWeight:800,color:"#0c4a6e",marginBottom:4}}>🖼️ Recover uploaded posters</div>
-      <div style={{fontSize:11.5,color:"#0c4a6e",lineHeight:1.55,marginBottom:10}}>
+      <div style={{fontSize:11,color:"#0c4a6e",lineHeight:1.55,marginBottom:10}}>
         Posters are stored separately from the guides that show them, so a guide that disappeared
         did not take its poster with it. This finds posters nothing points at any more.
       </div>
       {state!=="done"&&(
         <button className="press" onClick={scan} disabled={state==="scanning"}
-          style={{background:state==="scanning"?"#7dd3fc":"#0284c7",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:state==="scanning"?"default":"pointer"}}>
+          style={{background:state==="scanning"?"#7dd3fc":"#0284c7",color:"#fff",border:"none",borderRadius:12,padding:"10px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:state==="scanning"?"default":"pointer"}}>
           {state==="scanning"?"Scanning…":"Scan for lost posters"}
         </button>
       )}
       {state==="failed"&&(
-        <div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",marginTop:9,lineHeight:1.5}}>
+        <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"9px 11px",marginTop:9,lineHeight:1.5}}>
           <b>Couldn't look</b> — none of the three places could be read, which is not the same as
           finding nothing. Check the connection, and make sure you're signed in with the admin
           Google account (Admin → Sign in), then scan again.
@@ -16524,7 +16524,7 @@ function PosterRecovery({products,requests,guides,showcase,onRestore,showToast})
       {/* Which places actually answered. Without this a clean "no posters found" is impossible to
           trust: it looks identical whether all three were searched or all three were unreachable. */}
       {sources&&state==="done"&&(
-        <div style={{fontSize:10.5,color:C.textSub,margin:"8px 0 4px",lineHeight:1.5}}>
+        <div style={{fontSize:10,color:C.textSub,margin:"8px 0 4px",lineHeight:1.5}}>
           Searched: {[["storage","Firebase Storage"],["database","database"],["device","this device"]]
             .map(([k,label])=>`${sources[k]?"✓":"✕"} ${label}`).join(" · ")}
           {(!sources.storage||!sources.database||!sources.device)&&
@@ -16532,7 +16532,7 @@ function PosterRecovery({products,requests,guides,showcase,onRestore,showToast})
         </div>
       )}
       {state==="done"&&orphans.length===0&&(
-        <div style={{fontSize:11.5,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:9,padding:"9px 11px",lineHeight:1.5}}>
+        <div style={{fontSize:11,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"9px 11px",lineHeight:1.5}}>
           ✓ No lost posters — every poster in storage still belongs to a guide, product or request.
         </div>
       )}
@@ -16543,24 +16543,24 @@ function PosterRecovery({products,requests,guides,showcase,onRestore,showToast})
           </div>
           {orphans.map(id=>(
             <div key={id} style={{display:"flex",gap:11,background:"#fff",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px",marginBottom:9}}>
-              <div style={{width:62,height:62,borderRadius:10,flexShrink:0,overflow:"hidden",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
+              <div style={{width:62,height:62,borderRadius:12,flexShrink:0,overflow:"hidden",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
                 {imgs[id]?<img src={imgs[id]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:"⏳"}
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <input value={titles[id]||""} onChange={e=>setTitles(t=>({...t,[id]:e.target.value}))}
                   placeholder="Guide title"
-                  style={{width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:12.5,outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:6}}/>
+                  style={{width:"100%",borderRadius:8,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:12,outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:6}}/>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   <select value={cats[id]||GUIDE_CATEGORIES[0]} onChange={e=>setCats(c=>({...c,[id]:e.target.value}))}
-                    style={{borderRadius:9,border:`1.5px solid ${C.border}`,padding:"7px 9px",fontSize:11.5,fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#fff"}}>
+                    style={{borderRadius:8,border:`1.5px solid ${C.border}`,padding:"7px 9px",fontSize:11,fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#fff"}}>
                     {GUIDE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
                   <button className="press" onClick={()=>restore(id)} disabled={busy===id}
-                    style={{background:C.primary,color:"#fff",border:"none",borderRadius:9,padding:"8px 13px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:busy===id?"default":"pointer"}}>
+                    style={{background:C.primary,color:"#fff",border:"none",borderRadius:8,padding:"8px 13px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:busy===id?"default":"pointer"}}>
                     {busy===id?"Restoring…":"Restore"}
                   </button>
                 </div>
-                <div style={{fontSize:9.5,color:C.textSub,marginTop:5,wordBreak:"break-all"}}>id: {id}</div>
+                <div style={{fontSize:9,color:C.textSub,marginTop:5,wordBreak:"break-all"}}>id: {id}</div>
               </div>
             </div>
           ))}
@@ -16605,7 +16605,7 @@ function GuideForm({guide,imgSrc,onSave,onCancel}){
 
   return(
     <div className="fade-in">
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text,marginBottom:16}}>{isEdit?"Edit Guide":"New Care Guide"}</div>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text,marginBottom:16}}>{isEdit?"Edit Guide":"New Care Guide"}</div>
       <div style={{marginBottom:14}}>
         <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Title</div>
         <input value={form.title} onChange={e=>f("title",e.target.value)} placeholder="e.g. Betta Fish Care Basics"
@@ -16728,7 +16728,7 @@ function PosterReel({posters=[],start=0,onClose}){
     }catch(e){ /* user cancelled */ }
   };
 
-  const btn={width:38,height:38,borderRadius:11,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:19,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,backdropFilter:"blur(6px)"};
+  const btn={width:38,height:38,borderRadius:12,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:18,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,backdropFilter:"blur(6px)"};
   const pct=Math.round(scale*100);
   return(
     <Portal>
@@ -16736,11 +16736,11 @@ function PosterReel({posters=[],start=0,onClose}){
       {/* top bar */}
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",color:"white",flexShrink:0,zIndex:5}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.title||"Care Guide"}</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.title||"Care Guide"}</div>
           {posters.length>1&&<div style={{fontSize:11,fontWeight:700,opacity:.7,marginTop:2}}>{idx+1} / {posters.length}</div>}
         </div>
-        <button className="press" onClick={share} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800}} aria-label="Share poster">{shared||"⤴ Share"}</button>
-        {cur.notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
+        <button className="press" onClick={share} style={{...btn,width:"auto",padding:"0 13px",fontSize:12,fontWeight:800}} aria-label="Share poster">{shared||"⤴ Share"}</button>
+        {cur.notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 13px",fontSize:12,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
         <button className="press" onClick={onClose} style={btn} aria-label="Close">✕</button>
       </div>
 
@@ -16770,7 +16770,7 @@ function PosterReel({posters=[],start=0,onClose}){
         {posters.length>1&&posters.length<=12&&(
           <div style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",display:"flex",flexDirection:"column",gap:6,zIndex:4}}>
             {posters.map((p,i)=>(
-              <div key={i} onClick={()=>setIdx(i)} style={{width:6,height:i===idx?18:6,borderRadius:6,background:i===idx?"#fff":"rgba(255,255,255,.4)",transition:"height .2s,background .2s",cursor:"pointer"}}/>
+              <div key={i} onClick={()=>setIdx(i)} style={{width:6,height:i===idx?18:6,borderRadius:8,background:i===idx?"#fff":"rgba(255,255,255,.4)",transition:"height .2s,background .2s",cursor:"pointer"}}/>
             ))}
           </div>
         )}
@@ -16779,14 +16779,14 @@ function PosterReel({posters=[],start=0,onClose}){
         {hint&&scale<=1&&idx<posters.length-1&&(
           <div style={{position:"absolute",bottom:16,left:0,right:0,display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:"rgba(255,255,255,.85)",pointerEvents:"none",zIndex:4,animation:"bobUp 1.4s ease-in-out infinite"}}>
             <span style={{fontSize:22,lineHeight:1}}>⌃</span>
-            <span style={{fontSize:11.5,fontWeight:700,letterSpacing:.3}}>Swipe up for next</span>
+            <span style={{fontSize:11,fontWeight:700,letterSpacing:.3}}>Swipe up for next</span>
           </div>
         )}
       </div>
 
       {/* notes panel */}
       {cur.notes&&showNotes&&(
-        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13.5,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cur.notes}</div>
+        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cur.notes}</div>
       )}
 
       {/* zoom controls */}
@@ -16794,7 +16794,7 @@ function PosterReel({posters=[],start=0,onClose}){
         <button className="press" onClick={()=>applyScale(scale-0.5)} style={btn} aria-label="Zoom out">−</button>
         <input type="range" min="1" max="5" step="0.1" value={scale} onChange={e=>applyScale(Number(e.target.value))} style={{flex:1,accentColor:C.accent,height:4}}/>
         <button className="press" onClick={()=>applyScale(scale+0.5)} style={btn} aria-label="Zoom in">+</button>
-        <div style={{minWidth:52,textAlign:"center",color:"white",fontSize:12.5,fontWeight:800}}>{pct}%</div>
+        <div style={{minWidth:52,textAlign:"center",color:"white",fontSize:12,fontWeight:800}}>{pct}%</div>
         <button className="press" onClick={()=>applyScale(1)} style={{...btn,width:"auto",padding:"0 12px",fontSize:12,fontWeight:800}}>Fit</button>
       </div>
     </div>
@@ -16829,7 +16829,7 @@ function CareGuidesPage({nav,goBack,guides,mediaCache}){
         {list.length===0?(
           <div style={{textAlign:"center",padding:"50px 20px",color:C.textSub}}>
             <div style={{fontSize:52,marginBottom:14}}>📖</div>
-            <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No guides yet</div>
+            <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>No guides yet</div>
             <div style={{fontSize:12}}>Care guides will appear here soon.</div>
           </div>
         ):list.map(g=>{
@@ -16845,14 +16845,14 @@ function CareGuidesPage({nav,goBack,guides,mediaCache}){
                   {hasPoster? <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontSize:22}}>📋</span>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"inline-block",fontSize:9.5,fontWeight:800,color:C.accent,background:C.accentLight,padding:"2px 9px",borderRadius:20,marginBottom:5,letterSpacing:.5}}>{g.category}</div>
-                  <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15.5,fontWeight:800,color:C.text,lineHeight:1.25}}>{g.title}</div>
+                  <div style={{display:"inline-block",fontSize:9,fontWeight:800,color:C.accent,background:C.accentLight,padding:"2px 9px",borderRadius:20,marginBottom:5,letterSpacing:.5}}>{g.category}</div>
+                  <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.25}}>{g.title}</div>
                   <div style={{fontSize:11,color:C.textSub,marginTop:3,fontWeight:600}}>{hasPoster?"":content?(open?"Tap to collapse":"Tap to read"):""}</div>
                 </div>
                 <span style={{flexShrink:0,fontSize:18,color:C.textSub,transform:(!hasPoster&&open)?"rotate(90deg)":"none",transition:"transform .2s"}}>{hasPoster?"⛶":"›"}</span>
               </button>
               {!hasPoster&&open&&content&&(
-                <div style={{padding:"0 16px 16px",fontSize:13.5,color:C.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{content}</div>
+                <div style={{padding:"0 16px 16px",fontSize:13,color:C.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{content}</div>
               )}
             </div>
           );
@@ -16872,7 +16872,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
     <div className="slide-up">
       <div className="vh-head" style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>♥ Saved Items</div>
-        <div style={{fontSize:12.5,color:C.textSub,marginTop:2}}>{saved.length} item{saved.length!==1?"s":""} saved for later</div>
+        <div style={{fontSize:12,color:C.textSub,marginTop:2}}>{saved.length} item{saved.length!==1?"s":""} saved for later</div>
       </div>
       <div className="dt-read" style={{padding:"16px 16px 100px"}}>
         {saved.length===0?(
@@ -16880,7 +16880,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
             <div style={{fontSize:60,marginBottom:14}}>🤍</div>
             <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:6}}>No saved items yet</div>
             <div style={{fontSize:13,marginBottom:20,lineHeight:1.5}}>Tap the ♥ on any product to save it here and order later.</div>
-            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Browse Products</button>
+            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:16,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Browse Products</button>
           </div>
         ):(
           <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
@@ -16903,12 +16903,12 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
 function AboutPage({nav,goBack,settings={}}){
   const s={...DEFAULT_SETTINGS,...settings};
   const Section=({icon,title,body,accent})=>(
-    <div style={{background:C.card,borderRadius:18,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
+    <div style={{background:C.card,borderRadius:20,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-        <div style={{width:38,height:38,borderRadius:11,background:accent||C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{icon}</div>
+        <div style={{width:38,height:38,borderRadius:12,background:accent||C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{icon}</div>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>{title}</div>
       </div>
-      <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{body}</div>
+      <div style={{fontSize:13,color:C.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{body}</div>
     </div>
   );
   return(
@@ -16919,9 +16919,9 @@ function AboutPage({nav,goBack,settings={}}){
         <Section icon="🐠" title={`Our Story`} body={s.aboutStory} accent="#ffe9d6"/>
         <Section icon="🚚" title="Delivery Areas" body={s.deliveryAreas} accent="#d4f4f5"/>
         {/* Policies — each opens its own focused page */}
-        <div style={{background:C.card,borderRadius:18,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
+        <div style={{background:C.card,borderRadius:20,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-            <div style={{width:38,height:38,borderRadius:11,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📋</div>
+            <div style={{width:38,height:38,borderRadius:12,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📋</div>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>Our Policies</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -16935,8 +16935,8 @@ function AboutPage({nav,goBack,settings={}}){
               <button key={l.to} className="press" onClick={()=>nav(l.to)}
                 style={{display:"flex",alignItems:"center",gap:11,width:"100%",textAlign:"left",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 <span style={{fontSize:18}}>{l.icon}</span>
-                <span style={{flex:1,fontSize:13.5,fontWeight:700,color:C.text}}>{l.label}</span>
-                <span style={{color:C.textSub,fontSize:17}}>›</span>
+                <span style={{flex:1,fontSize:13,fontWeight:700,color:C.text}}>{l.label}</span>
+                <span style={{color:C.textSub,fontSize:16}}>›</span>
               </button>
             ))}
           </div>
@@ -16945,18 +16945,18 @@ function AboutPage({nav,goBack,settings={}}){
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px",marginTop:6}}>
           <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Business Information</div>
           <div style={{fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>{s.legalName||(STORE_NAME+" Aqua Store")}</div>
-          {s.legalEntity&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>{s.legalEntity}</div>}
-          {s.legalActivity&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>{s.legalActivity}</div>}
-          {(s.legalAddress||s.legalCity)&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6,marginTop:4}}>📍 {s.legalAddress||s.legalCity}</div>}
-          {s.gstin&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>GSTIN: {s.gstin}</div>}
-          {s.orderEmail&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>✉ {s.orderEmail}</div>}
-          {s.ownerWhatsapp&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>💬 +{s.ownerWhatsapp.replace(/\D/g,"")}</div>}
-          <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.6,marginTop:8,fontStyle:"italic"}}>Jurisdiction: {s.jurisdiction||"India"}. © {new Date().getFullYear()} {s.legalName||STORE_NAME}. All rights reserved.</div>
+          {s.legalEntity&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6}}>{s.legalEntity}</div>}
+          {s.legalActivity&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6}}>{s.legalActivity}</div>}
+          {(s.legalAddress||s.legalCity)&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6,marginTop:4}}>📍 {s.legalAddress||s.legalCity}</div>}
+          {s.gstin&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6}}>GSTIN: {s.gstin}</div>}
+          {s.orderEmail&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6}}>✉ {s.orderEmail}</div>}
+          {s.ownerWhatsapp&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6}}>💬 +{s.ownerWhatsapp.replace(/\D/g,"")}</div>}
+          <div style={{fontSize:10,color:C.textSub,lineHeight:1.6,marginTop:8,fontStyle:"italic"}}>Jurisdiction: {s.jurisdiction||"India"}. © {new Date().getFullYear()} {s.legalName||STORE_NAME}. All rights reserved.</div>
         </div>
         <div style={{textAlign:"center",marginTop:18}}>
           {s.ownerWhatsapp&&(
             <a href={`https://wa.me/${s.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
-              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:"white",borderRadius:14,padding:"13px 24px",fontSize:14,fontWeight:700,textDecoration:"none"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:"white",borderRadius:16,padding:"13px 24px",fontSize:14,fontWeight:700,textDecoration:"none"}}>
               💬 Questions? Chat with us
             </a>
           )}
@@ -16978,40 +16978,40 @@ function ContactPage({nav,goBack,settings={}}){
       <HeroHeader onBack={goBack} title={"Contact Us"}
         subtitle={"Customer support for orders, payments, cancellations, returns, refunds and delivery."}/>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
-        <div style={{background:C.accentLight,border:`1px solid ${C.primary}33`,borderRadius:18,padding:"17px",marginBottom:14}}>
-          <div style={{fontSize:15,fontWeight:900,color:C.text,marginBottom:5}}>{s.legalName||(STORE_NAME+" Aqua Store")}</div>
-          <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.65}}>Please include your order number when contacting us about an existing purchase so we can help quickly.</div>
+        <div style={{background:C.accentLight,border:`1px solid ${C.primary}33`,borderRadius:20,padding:"17px",marginBottom:14}}>
+          <div style={{fontSize:14,fontWeight:900,color:C.text,marginBottom:5}}>{s.legalName||(STORE_NAME+" Aqua Store")}</div>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.65}}>Please include your order number when contacting us about an existing purchase so we can help quickly.</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:11}}>
           <a className="press" href={`https://wa.me/${phone}`} target="_blank" rel="noopener" style={card}>
-            <span style={{width:42,height:42,borderRadius:12,background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>💬</span>
+            <span style={{width:42,height:42,borderRadius:12,background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>💬</span>
             <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>WhatsApp / Customer Support</span><span style={{display:"block",fontSize:14,fontWeight:800,color:"#15803d",marginTop:3}}>+{phone}</span></span>
           </a>
           <a className="press" href={`tel:+${phone}`} style={card}>
-            <span style={{width:42,height:42,borderRadius:12,background:"#e0f2fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>📞</span>
+            <span style={{width:42,height:42,borderRadius:12,background:"#e0f2fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📞</span>
             <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Phone</span><span style={{display:"block",fontSize:14,fontWeight:800,color:C.primaryDark,marginTop:3}}>+{phone}</span></span>
           </a>
           <a className="press" href={`mailto:${email}`} style={card}>
-            <span style={{width:42,height:42,borderRadius:12,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>✉️</span>
-            <span style={{minWidth:0}}><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Email</span><span style={{display:"block",fontSize:13.5,fontWeight:800,color:"#6d28d9",marginTop:3,wordBreak:"break-word"}}>{email}</span></span>
+            <span style={{width:42,height:42,borderRadius:12,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>✉️</span>
+            <span style={{minWidth:0}}><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Email</span><span style={{display:"block",fontSize:13,fontWeight:800,color:"#6d28d9",marginTop:3,wordBreak:"break-word"}}>{email}</span></span>
           </a>
           <div style={card}>
-            <span style={{width:42,height:42,borderRadius:12,background:"#ffedd5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>📍</span>
-            <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Business Address</span><span style={{display:"block",fontSize:13.5,fontWeight:700,color:C.text,marginTop:3,lineHeight:1.55}}>{address}</span></span>
+            <span style={{width:42,height:42,borderRadius:12,background:"#ffedd5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📍</span>
+            <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Business Address</span><span style={{display:"block",fontSize:13,fontWeight:700,color:C.text,marginTop:3,lineHeight:1.55}}>{address}</span></span>
           </div>
           {s.storeHours&&(
             <div style={card}>
-              <span style={{width:42,height:42,borderRadius:12,background:"#fef3c7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>🕒</span>
-              <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Support Hours</span><span style={{display:"block",fontSize:13.5,fontWeight:700,color:C.text,marginTop:3,lineHeight:1.55}}>{s.storeHours}</span></span>
+              <span style={{width:42,height:42,borderRadius:12,background:"#fef3c7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🕒</span>
+              <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Support Hours</span><span style={{display:"block",fontSize:13,fontWeight:700,color:C.text,marginTop:3,lineHeight:1.55}}>{s.storeHours}</span></span>
             </div>
           )}
         </div>
         <div style={{marginTop:20,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px"}}>
-          <div style={{fontSize:13.5,fontWeight:800,color:C.text,marginBottom:9}}>Before contacting us</div>
+          <div style={{fontSize:13,fontWeight:800,color:C.text,marginBottom:9}}>Before contacting us</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            <a href="/cancellations-returns-refunds" onClick={e=>{e.preventDefault();nav("policy-returns");}} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,textDecoration:"none"}}>Cancellations, Returns &amp; Refunds</a>
-            {LIVE_FISH_ENABLED&&<button className="press" onClick={()=>nav("policy-guarantee")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Live Arrival Guarantee</button>}
-            <button className="press" onClick={()=>nav("orders")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Track My Orders</button>
+            <a href="/cancellations-returns-refunds" onClick={e=>{e.preventDefault();nav("policy-returns");}} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 11px",fontSize:11,fontWeight:700,color:C.text,textDecoration:"none"}}>Cancellations, Returns &amp; Refunds</a>
+            {LIVE_FISH_ENABLED&&<button className="press" onClick={()=>nav("policy-guarantee")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 11px",fontSize:11,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Live Arrival Guarantee</button>}
+            <button className="press" onClick={()=>nav("orders")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 11px",fontSize:11,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Track My Orders</button>
           </div>
         </div>
       </div>
@@ -17043,15 +17043,15 @@ function PolicyPage({nav,goBack,settings={},which}){
       <HeroHeader onBack={goBack} title={<>{meta.icon} {meta.title}</>}
         subtitle={meta.sub}/>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
-        <div style={{background:C.card,borderRadius:18,padding:"20px",border:`1px solid ${C.border}`,fontSize:13.5,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{policyText(meta.key, s)}</div>
+        <div style={{background:C.card,borderRadius:20,padding:"20px",border:`1px solid ${C.border}`,fontSize:13,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{policyText(meta.key, s)}</div>
         {/* The tracking & collection clause is part of the terms whether or not the saved text
             carries it — a store that customised its terms before this clause existed would
             otherwise show terms that don't match what checkout tells the customer. Shown only
             when the saved text doesn't already cover it, so it never appears twice. */}
         {which==="terms" && !/collect it from the courier/i.test(String(s.termsPolicy||"")) && (
-          <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:18,padding:"18px 20px",marginTop:12}}>
+          <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:20,padding:"18px 20px",marginTop:12}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-              <span style={{fontSize:17}}>📦</span>
+              <span style={{fontSize:16}}>📦</span>
               <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#92400e"}}>Tracking &amp; collection</span>
             </div>
             <div style={{fontSize:13,color:"#78350f",lineHeight:1.75}}>{courierCollectTerm().replace(/^Tracking & collection: /,"")}</div>
@@ -17061,7 +17061,7 @@ function PolicyPage({nav,goBack,settings={},which}){
         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
           {others.map(k=>(
             <button key={k} className="press" onClick={()=>nav("policy-"+k)}
-              style={{display:"inline-flex",alignItems:"center",gap:7,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:7,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
               <span>{POLICY_META[k].icon}</span>{POLICY_META[k].title}
             </button>
           ))}
@@ -17069,7 +17069,7 @@ function PolicyPage({nav,goBack,settings={},which}){
         {s.ownerWhatsapp&&(
           <div style={{textAlign:"center",marginTop:22}}>
             <a href={`https://wa.me/${s.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
-              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:"white",borderRadius:14,padding:"13px 24px",fontSize:14,fontWeight:700,textDecoration:"none"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:"white",borderRadius:16,padding:"13px 24px",fontSize:14,fontWeight:700,textDecoration:"none"}}>
               💬 Questions? Chat with us
             </a>
           </div>
@@ -17120,13 +17120,13 @@ function RequestPage({nav,goBack,user,onSubmit,myRequests}){
   if(done)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"80vh",padding:"24px",textAlign:"center"}}>
       <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Request Sent! 🙌</div>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:8}}>Request Sent! 🙌</div>
       <div style={{fontSize:14,color:C.textSub,lineHeight:1.7,marginBottom:24,maxWidth:300}}>We've received your request. We'll source it and reach out on WhatsApp if it's available.</div>
       <div style={{display:"flex",gap:10}}>
         <button className="press" onClick={()=>{setDone(false);setForm(f=>({...f,product:"",brand:"",link:"",notes:""}));setImgB64(null);setImgPrev(null);}}
-          style={{background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"13px 22px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>+ Another</button>
+          style={{background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:16,padding:"13px 22px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>+ Another</button>
         <button className="press" onClick={()=>nav("home")}
-          style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Back Home</button>
+          style={{background:C.primary,color:"white",border:"none",borderRadius:16,padding:"13px 28px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Back Home</button>
       </div>
     </div>
   );
@@ -17177,7 +17177,7 @@ function RequestPage({nav,goBack,user,onSubmit,myRequests}){
         </div>
         {errs.submit&&<div style={{fontSize:12,color:C.danger,fontWeight:700,marginBottom:8,textAlign:"center"}}>{errs.submit}</div>}
         <button className="press" onClick={submit} disabled={saving}
-          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
+          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
           {saving?<><Spinner/>Sending…</>:"📨 Send Request"}
         </button>
       </div>
@@ -17199,7 +17199,7 @@ class ErrorBoundary extends React.Component {
         <div style={{fontSize:52}}>🐠</div>
         <h1 style={{fontSize:22,fontWeight:800,margin:0}}>Something went wrong</h1>
         <p style={{fontSize:14,color:"#64748b",maxWidth:340,lineHeight:1.5,margin:0}}>The app hit an unexpected error. Reloading usually fixes it. If it keeps happening, message us on WhatsApp and we'll sort it out.</p>
-        <button onClick={()=>{ try{ location.reload(); }catch(e){} }} style={{background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"14px 28px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",boxShadow:"0 6px 20px rgba(14,165,233,.35)"}}>Reload</button>
+        <button onClick={()=>{ try{ location.reload(); }catch(e){} }} style={{background:C.primary,color:"#fff",border:"none",borderRadius:16,padding:"14px 28px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",boxShadow:"0 6px 20px rgba(14,165,233,.35)"}}>Reload</button>
       </div>
     );
   }
@@ -19068,13 +19068,13 @@ function NemoStore(){
         return(
           <button className="press floating-cart-bar" onClick={()=>setMiniOpen(true)}
             style={{position:"absolute",left:"50%",transform:"translateX(-50%)",bottom:"calc(76px + env(safe-area-inset-bottom))",zIndex:90,width:"calc(100% - 28px)",maxWidth:440,background:"#0f172a",color:"white",border:"none",borderRadius:99,padding:"7px 8px 7px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,boxShadow:"0 14px 34px rgba(15,23,42,.35)",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-            <span style={{fontSize:12.5,fontWeight:700,textAlign:"left",lineHeight:1.3,minWidth:0,flex:1,overflow:"visible",textOverflow:"clip",whiteSpace:"normal"}}>
+            <span style={{fontSize:12,fontWeight:700,textAlign:"left",lineHeight:1.3,minWidth:0,flex:1,overflow:"visible",textOverflow:"clip",whiteSpace:"normal"}}>
               {showFree?<>🚚 Add <b style={{color:"#fda4af"}}>₹{left}</b> more for free delivery</>
                :dc?<>🏷️ Add <b style={{color:"#fda4af"}}>₹{dc.need}</b> more to get <b>{dc.off}</b></>
                :thr>0&&cartTotal>=thr?<>🎉 Free delivery unlocked!</>
                :<>🛒 {cartCount} item{cartCount!==1?"s":""} in your cart</>}
             </span>
-            <span style={{flexShrink:0,display:"inline-flex",alignItems:"center",gap:7,background:C.coral,borderRadius:99,padding:"9px 16px",fontSize:12.5,fontWeight:800,boxShadow:"0 6px 16px rgba(244,63,94,.4)"}}>
+            <span style={{flexShrink:0,display:"inline-flex",alignItems:"center",gap:7,background:C.coral,borderRadius:99,padding:"9px 16px",fontSize:12,fontWeight:800,boxShadow:"0 6px 16px rgba(244,63,94,.4)"}}>
               🛒 Cart · {cartCount}<span style={{opacity:.9}}>₹{cartTotal}</span>
             </span>
           </button>

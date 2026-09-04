@@ -5678,7 +5678,7 @@ function Toast({msg,type,onDone}){
   const ok=type==="success";
   return(
     <div style={{position:"fixed",top:16,left:"50%",background:ok?C.success:C.danger,color:"white",
-      borderRadius:14,padding:"11px 20px",fontSize:13,fontWeight:700,zIndex:9999,
+      borderRadius:16,padding:"11px 20px",fontSize:13,fontWeight:700,zIndex:9999,
       fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",gap:8,
       boxShadow:"0 4px 20px rgba(0,0,0,.25)",whiteSpace:"nowrap",
       animation:"toastIn .3s ease both"}}>
@@ -5747,7 +5747,7 @@ function MiniCountdown({endsAt,compact=false}){
   if(compact)return(
     <div style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"3px 7px",marginTop:4}}>
       <span style={{fontSize:9,color:"#c2410c"}}>⏱</span>
-      <span style={{fontFamily:PRICE_FONT,fontSize:10.5,fontWeight:800,color:"#c2410c",letterSpacing:.5}}>
+      <span style={{fontFamily:PRICE_FONT,fontSize:10,fontWeight:800,color:"#c2410c",letterSpacing:.5}}>
         {h>0?`${fmt(h)}h `:""}{fmt(m)}:{fmt(s)}
       </span>
       <span style={{fontSize:9,color:"#9a3412",fontWeight:600}}>left</span>
@@ -5794,26 +5794,26 @@ function OfferBanners({settings,orders=[]}){
   const copy=(code)=>{ try{ navigator.clipboard.writeText(code); }catch(e){} setCopied(code); setTimeout(()=>setCopied(""),1600); };
   return(
     <div onClick={close} role="presentation" style={{position:"fixed",top:0,left:0,right:0,height:"100dvh",minHeight:"100vh",zIndex:4200,background:"rgba(15,23,42,.56)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
-      <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Today's promotions" className="fade-rise" style={{position:"relative",width:"min(92vw,430px)",maxHeight:"82vh",overflowY:"auto",background:C.card,borderRadius:22,padding:"18px",boxShadow:"0 24px 70px rgba(15,23,42,.32)"}}>
-        <button className="press" onClick={close} aria-label="Close promotion" style={{position:"absolute",right:10,top:9,width:36,height:36,borderRadius:18,border:`1px solid ${C.border}`,background:"rgba(255,255,255,.94)",fontSize:20,fontWeight:800,color:C.text,zIndex:2}}>×</button>
+      <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Today's promotions" className="fade-rise" style={{position:"relative",width:"min(92vw,430px)",maxHeight:"82vh",overflowY:"auto",background:C.card,borderRadius:20,padding:"18px",boxShadow:"0 24px 70px rgba(15,23,42,.32)"}}>
+        <button className="press" onClick={close} aria-label="Close promotion" style={{position:"absolute",right:10,top:9,width:36,height:36,borderRadius:20,border:`1px solid ${C.border}`,background:"rgba(255,255,255,.94)",fontSize:20,fontWeight:800,color:C.text,zIndex:2}}>×</button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,fontSize:18,color:C.text,paddingRight:38,marginBottom:12}}>Today at Nemo</div>
         {list.map(c=>{
           const bg=c.bg||"#7c3aed";
           const worth=c.type==="coins"?`${c.value} reward coins`:c.type==="percent"?`${c.value}% off${c.maxDiscount>0?` (up to ₹${c.maxDiscount})`:""}`:`₹${c.value} off`;
           return(
-            <div key={c.id} style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:18,padding:"18px 16px",marginBottom:12,textAlign:"center",boxShadow:`0 8px 22px ${bg}33`}}>
-              <div style={{fontSize:30,lineHeight:1}}>{c.emoji||"🎉"}</div>
+            <div key={c.id} style={{background:`linear-gradient(135deg,${bg},${bg}cc)`,borderRadius:20,padding:"18px 16px",marginBottom:12,textAlign:"center",boxShadow:`0 8px 22px ${bg}33`}}>
+              <div style={{fontSize:28,lineHeight:1}}>{c.emoji||"🎉"}</div>
               <div style={{fontSize:13,fontWeight:800,color:"rgba(255,255,255,.92)",marginTop:6,letterSpacing:.3}}>{c.name||"Special offer"}</div>
-              {c.value>0&&<div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"white",lineHeight:1.15,marginTop:2}}>{worth}</div>}
-              {(c.minOrder>0||c.firstOrderOnly)&&<div style={{fontSize:11.5,color:"rgba(255,255,255,.85)",marginTop:4}}>{c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}</div>}
+              {c.value>0&&<div style={{fontFamily:PRICE_FONT,fontSize:24,fontWeight:800,color:"white",lineHeight:1.15,marginTop:2}}>{worth}</div>}
+              {(c.minOrder>0||c.firstOrderOnly)&&<div style={{fontSize:11,color:"rgba(255,255,255,.85)",marginTop:4}}>{c.firstOrderOnly?"First order":""}{c.firstOrderOnly&&c.minOrder>0?" · ":""}{c.minOrder>0?`On orders above ₹${c.minOrder}`:""}</div>}
               {c.code&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:11,flexWrap:"wrap"}}>
                 <div style={{background:"rgba(255,255,255,.2)",borderRadius:8,padding:"5px 14px",border:"1px dashed rgba(255,255,255,.6)"}}><span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:"white",letterSpacing:2}}>{c.code}</span></div>
-                <button className="press" onClick={()=>copy(c.code)} style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:10,padding:"7px 13px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied===c.code?"✓ Copied":"Copy"}</button>
+                <button className="press" onClick={()=>copy(c.code)} style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",borderRadius:12,padding:"7px 13px",color:"white",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied===c.code?"✓ Copied":"Copy"}</button>
               </div>}
             </div>
           );
         })}
-        <div style={{fontSize:10.5,color:C.textSub,textAlign:"center"}}>Shown once per day. Tap outside this card or × to close.</div>
+        <div style={{fontSize:10,color:C.textSub,textAlign:"center"}}>Shown once per day. Tap outside this card or × to close.</div>
       </div>
     </div>
   );
@@ -5837,22 +5837,22 @@ function LoyaltyWidget({points,settings,onRedeem,redeemApplied,subtotal=0}){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:redeemApplied?0:5}}>
         <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
           <span style={{fontSize:18}}>👛</span>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13.5,fontWeight:800,color:"white",lineHeight:1.2,whiteSpace:"nowrap"}}>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:"white",lineHeight:1.2,whiteSpace:"nowrap"}}>
             {points} coins <span style={{fontWeight:600,opacity:.82}}>· ₹{totalWorth}</span>
           </div>
         </div>
         {!redeemApplied&&(
           <button className="press" onClick={onRedeem} disabled={!canRedeem}
-            style={{background:canRedeem?"rgba(255,255,255,.2)":"rgba(255,255,255,.08)",border:`1px solid ${canRedeem?"rgba(255,255,255,.5)":"rgba(255,255,255,.2)"}`,borderRadius:8,padding:"6px 9px",color:canRedeem?"white":"rgba(255,255,255,.55)",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:canRedeem?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
+            style={{background:canRedeem?"rgba(255,255,255,.2)":"rgba(255,255,255,.08)",border:`1px solid ${canRedeem?"rgba(255,255,255,.5)":"rgba(255,255,255,.2)"}`,borderRadius:8,padding:"6px 9px",color:canRedeem?"white":"rgba(255,255,255,.55)",fontSize:10,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:canRedeem?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
             {points<min?`Need ${min-points} coins`:!orderOk?`Min. order ₹${minOrder}`:`Use ₹${worth}`}
           </button>
         )}
       </div>
       {redeemApplied&&(
-        <div style={{fontSize:10.5,color:"rgba(255,255,255,.9)",fontWeight:700}}>✓ ₹{worth} wallet applied{points>maxCoins?` · max ${maxCoins} coins/order`:""}</div>
+        <div style={{fontSize:10,color:"rgba(255,255,255,.9)",fontWeight:700}}>✓ ₹{worth} wallet applied{points>maxCoins?` · max ${maxCoins} coins/order`:""}</div>
       )}
       {!redeemApplied&&canRedeem&&points>maxCoins&&(
-        <div style={{fontSize:9.5,color:"rgba(255,255,255,.8)",marginTop:3}}>Up to {maxCoins} coins (₹{Math.floor(maxCoins*val)}) per order</div>
+        <div style={{fontSize:9,color:"rgba(255,255,255,.8)",marginTop:3}}>Up to {maxCoins} coins (₹{Math.floor(maxCoins*val)}) per order</div>
       )}
       {!redeemApplied&&!canRedeem&&(
         <div style={{background:"rgba(0,0,0,.15)",borderRadius:8,height:3,overflow:"hidden",marginTop:3}}>
@@ -5991,20 +5991,20 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
     <div style={{marginBottom:26}}>
       {showGallery&&<React.Fragment>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>{contest?"🏆 Tank of the Month":"🪸 Customer Tanks"}</span>
+        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>{contest?"🏆 Tank of the Month":"🪸 Customer Tanks"}</span>
         {ranked.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{ranked.length} live</span>}
       </div>
 
       {minePending&&(
         <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={showcaseImgs(mine)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your new tank is awaiting approval. {mineApproved?"Your current approved photo stays live unless this replacement is approved.":"It will go live only after it meets the store rules and is approved."}</div>
+          <div style={{fontSize:11,color:"#9a3412",fontWeight:600,lineHeight:1.45}}>⏳ Your new tank is awaiting approval. {mineApproved?"Your current approved photo stays live unless this replacement is approved.":"It will go live only after it meets the store rules and is approved."}</div>
         </div>
       )}
       {mineApproved&&(
         <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
           <img src={showcaseImgs(mineApproved)[0]} alt="" style={{width:38,height:38,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-          <div style={{fontSize:11.5,color:"#15803d",fontWeight:600,lineHeight:1.45}}>
+          <div style={{fontSize:11,color:"#15803d",fontWeight:600,lineHeight:1.45}}>
             ✓ Your current tank is live{contest?<> · <b>🗳️ {votesFor(mineApproved)}</b></>:null}{showcaseHoursLeft(mineApproved,now)>0?<> · <b>🕒 {showcaseHoursLeft(mineApproved,now)}h</b></>:null}{minePending?" · replacement pending":""}.
           </div>
         </div>
@@ -6016,7 +6016,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
             const n=votesFor(s);
             const voted=hasVotedForTank(s,user&&user.uid,votes);
             return(
-              <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:142,borderRadius:14,overflow:"hidden",background:C.card,border:`1px solid ${contest&&voted?C.primary:C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
+              <div key={s.id} className="showcase-slide" style={{flexShrink:0,width:142,borderRadius:16,overflow:"hidden",background:C.card,border:`1px solid ${contest&&voted?C.primary:C.border}`,cursor:"pointer"}} onClick={()=>setFullImg(s)}>
                 <div style={{position:"relative",height:104}}>
                   <TankSlides imgs={imgs} alt={s.ownerName} height={104}/>
                   {contest&&idx===0&&n>0&&<span style={{position:"absolute",top:6,left:6,background:"rgba(251,191,36,.95)",color:"#7c2d12",fontSize:9,fontWeight:800,borderRadius:20,padding:"2px 7px"}}>LEADING</span>}
@@ -6025,7 +6025,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
                 <div style={{padding:"7px 8px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.ownerName}</div>
                   {s.caption&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.3,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.caption}</div>}
-                  <div style={{fontSize:10.5,color:contest&&voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>🗳️ {n} · 🕒 {showcaseHoursLeft(s,now)}h</div>
+                  <div style={{fontSize:10,color:contest&&voted?C.primary:C.textSub,fontWeight:700,marginTop:3}}>🗳️ {n} · 🕒 {showcaseHoursLeft(s,now)}h</div>
                 </div>
               </div>
             );
@@ -6039,27 +6039,27 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text}}>📸 {minePending?"Update pending photos":mineApproved?"Submit replacement photos":"Customer Tank Showcase"}</div>
             <button type="button" className="press" disabled={!anyReward} onClick={()=>{if(anyReward)setRulesOpen(true);}}
               title={anyReward?"View customer tank reward rules":"Both monthly rewards are off"}
-              style={{background:anyReward?"#eff6ff":C.bg,color:anyReward?C.primary:C.textSub,border:`1px solid ${anyReward?C.accent:C.border}`,borderRadius:20,padding:"5px 10px",fontSize:10.5,fontWeight:800,flexShrink:0,cursor:anyReward?"pointer":"not-allowed",opacity:anyReward?1:.65}}>Rules</button>
+              style={{background:anyReward?"#eff6ff":C.bg,color:anyReward?C.primary:C.textSub,border:`1px solid ${anyReward?C.accent:C.border}`,borderRadius:20,padding:"5px 10px",fontSize:10,fontWeight:800,flexShrink:0,cursor:anyReward?"pointer":"not-allowed",opacity:anyReward?1:.65}}>Rules</button>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:9}}>
-            <div style={{fontSize:10.5,fontWeight:800,color:contest?"#15803d":C.textSub,background:contest?"#ecfdf5":C.bg,border:`1px solid ${contest?"#a7f3d0":C.border}`,borderRadius:9,padding:"7px 8px",lineHeight:1.35}}>
+            <div style={{fontSize:10,fontWeight:800,color:contest?"#15803d":C.textSub,background:contest?"#ecfdf5":C.bg,border:`1px solid ${contest?"#a7f3d0":C.border}`,borderRadius:8,padding:"7px 8px",lineHeight:1.35}}>
               🏆 Tank of the month: {contest?"ON":"OFF"}
             </div>
-            <div style={{fontSize:10.5,fontWeight:800,color:streakReward?"#15803d":C.textSub,background:streakReward?"#ecfdf5":C.bg,border:`1px solid ${streakReward?"#a7f3d0":C.border}`,borderRadius:9,padding:"7px 8px",lineHeight:1.35}}>
+            <div style={{fontSize:10,fontWeight:800,color:streakReward?"#15803d":C.textSub,background:streakReward?"#ecfdf5":C.bg,border:`1px solid ${streakReward?"#a7f3d0":C.border}`,borderRadius:8,padding:"7px 8px",lineHeight:1.35}}>
               🔥 Streak reward: {streakReward?"ON":"OFF"}
             </div>
           </div>
           {streakReward&&streak&&(
-            <div style={{fontSize:11.5,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>
+            <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>
               🔥 <b>{Number(monthlyStreak&&monthlyStreak.current)||0}-day streak</b> · Best {Number(monthlyStreak&&monthlyStreak.best)||0}
             </div>
           )}
           {preview.length>0&&(
             <div style={{display:"flex",gap:7,marginBottom:8,flexWrap:"wrap"}}>
               {preview.map((src,i)=>(
-                <div key={i} style={{position:"relative",width:82,height:62,borderRadius:10,overflow:"hidden"}}>
+                <div key={i} style={{position:"relative",width:82,height:62,borderRadius:12,overflow:"hidden"}}>
                   <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                  <button onClick={()=>setPreview(p=>p.filter((_,k)=>k!==i))} style={{position:"absolute",top:3,right:3,background:"rgba(0,0,0,.6)",color:"white",border:"none",borderRadius:7,padding:"1px 6px",fontSize:11,fontWeight:700,cursor:"pointer"}}>×</button>
+                  <button onClick={()=>setPreview(p=>p.filter((_,k)=>k!==i))} style={{position:"absolute",top:3,right:3,background:"rgba(0,0,0,.6)",color:"white",border:"none",borderRadius:8,padding:"1px 6px",fontSize:11,fontWeight:700,cursor:"pointer"}}>×</button>
                 </div>
               ))}
             </div>
@@ -6071,13 +6071,13 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
               <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{const chosen=Array.from(e.target.files||[]);e.target.value="";void handleFiles(chosen);}}/>
             </label>
           )}
-          <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,background:C.bg,marginBottom:6,color:C.text}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,background:C.bg,marginBottom:6,color:C.text}}>
             <span style={{fontSize:14}}>🐠</span>
             <span style={{fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user.name||"Aquarist"}</span>
           </div>
           <input value={caption} onChange={e=>setCaption(e.target.value.slice(0,100))} placeholder="Describe your tank… (optional)"
-            style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6}}/>
-          {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:note[0]==="🎉"?C.success:C.primary,fontWeight:600,marginBottom:6}}>{note}</div>}
+            style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6}}/>
+          {note&&<div style={{fontSize:11,color:note[0]==="⚠"?C.danger:note[0]==="🎉"?C.success:C.primary,fontWeight:600,marginBottom:6}}>{note}</div>}
           <button className="press" onClick={submit} disabled={uploading}
             style={{width:"100%",background:uploading?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             {uploading?"Uploading…":(minePending?"Update pending tank 🐠":mineApproved?"Send replacement for review 🐠":"Share my tank 🐠")}
@@ -6086,20 +6086,20 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
       )}
       {showUpload&&previousWinners&&(previousWinners.vote||previousWinners.streak)&&(
         <div style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"1px solid #fcd34d",borderRadius:16,padding:"13px",marginTop:10}}>
-          <div style={{fontSize:11.5,color:"#92400e",fontWeight:800,marginBottom:9}}>🏆 {totmMonthLabel(previousMonth)} rewards issued</div>
+          <div style={{fontSize:11,color:"#92400e",fontWeight:800,marginBottom:9}}>🏆 {totmMonthLabel(previousMonth)} rewards issued</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {previousWinners.vote&&(
-              <div style={{background:"rgba(255,255,255,.72)",borderRadius:11,padding:"10px 11px",color:"#78350f",lineHeight:1.5}}>
-                <div style={{fontSize:12.5,fontWeight:800}}>Tank of the month</div>
-                <div style={{fontSize:11.5}}>Receiver's name: <b>{previousWinners.vote.name}</b></div>
-                <div style={{fontSize:11.5}}>Reward coins: <b>{Number(previousWinners.vote.rewardCoins)||0}</b></div>
+              <div style={{background:"rgba(255,255,255,.72)",borderRadius:12,padding:"10px 11px",color:"#78350f",lineHeight:1.5}}>
+                <div style={{fontSize:12,fontWeight:800}}>Tank of the month</div>
+                <div style={{fontSize:11}}>Receiver's name: <b>{previousWinners.vote.name}</b></div>
+                <div style={{fontSize:11}}>Reward coins: <b>{Number(previousWinners.vote.rewardCoins)||0}</b></div>
               </div>
             )}
             {previousWinners.streak&&(
-              <div style={{background:"rgba(255,255,255,.72)",borderRadius:11,padding:"10px 11px",color:"#78350f",lineHeight:1.5}}>
-                <div style={{fontSize:12.5,fontWeight:800}}>Longest streak of the month</div>
-                <div style={{fontSize:11.5}}>Receiver name: <b>{previousWinners.streak.name}</b></div>
-                <div style={{fontSize:11.5}}>Reward coins: <b>{Number(previousWinners.streak.rewardCoins)||0}</b></div>
+              <div style={{background:"rgba(255,255,255,.72)",borderRadius:12,padding:"10px 11px",color:"#78350f",lineHeight:1.5}}>
+                <div style={{fontSize:12,fontWeight:800}}>Longest streak of the month</div>
+                <div style={{fontSize:11}}>Receiver name: <b>{previousWinners.streak.name}</b></div>
+                <div style={{fontSize:11}}>Reward coins: <b>{Number(previousWinners.streak.rewardCoins)||0}</b></div>
               </div>
             )}
           </div>
@@ -6107,12 +6107,12 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
       )}
       {rulesOpen&&anyReward&&(
         <Portal><div onClick={()=>setRulesOpen(false)} style={{position:"fixed",inset:0,background:"rgba(8,30,33,.65)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div onClick={e=>e.stopPropagation()} className="fade-in" style={{width:"100%",maxWidth:390,maxHeight:"78vh",overflowY:"auto",background:"white",borderRadius:18,padding:"20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+          <div onClick={e=>e.stopPropagation()} className="fade-in" style={{width:"100%",maxWidth:390,maxHeight:"78vh",overflowY:"auto",background:"white",borderRadius:20,padding:"20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10}}>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Customer Tank Reward Rules</div>
               <button type="button" onClick={()=>setRulesOpen(false)} aria-label="Close rules" style={{border:"none",background:C.bg,borderRadius:99,width:32,height:32,fontSize:18,cursor:"pointer"}}>×</button>
             </div>
-            <div style={{whiteSpace:"pre-wrap",fontSize:12.5,lineHeight:1.65,color:C.text}}>{String(settings.tankRewardRules||DEFAULT_SETTINGS.tankRewardRules)}</div>
+            <div style={{whiteSpace:"pre-wrap",fontSize:12,lineHeight:1.65,color:C.text}}>{String(settings.tankRewardRules||DEFAULT_SETTINGS.tankRewardRules)}</div>
             <div style={{marginTop:14,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 12px",fontSize:11,color:"#9a3412",lineHeight:1.5}}>Only photos approved by the store count toward your streak and monthly vote total. Rejected submissions do not count.</div>
           </div>
         </div></Portal>
@@ -6150,7 +6150,7 @@ function TankShowcaseSection({showcase,user,settings,onSubmit,onVote,votes={},pr
               <div style={{width:"100%",marginTop:14}}>
                 <button className="press" disabled={!!own||voted||voting===fullImg.id} onClick={()=>vote(fullImg)}
                   style={{width:"100%",background:own?"rgba(255,255,255,.14)":voted?"rgba(255,255,255,.92)":C.primary,color:own?"rgba(255,255,255,.7)":voted?C.success:"#fff",
-                          border:"none",borderRadius:14,padding:"13px",fontSize:13.5,fontWeight:800,
+                          border:"none",borderRadius:16,padding:"13px",fontSize:13,fontWeight:800,
                           fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(own||voted)?"default":"pointer"}}>
                   {own?`🗳️ ${n}`
                      : voting===fullImg.id?"…"
@@ -6196,7 +6196,7 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
   return(
     <div style={{marginBottom:26}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>💬 Testimonials</span>
+        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>💬 Testimonials</span>
         {list.length>0&&<span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{list.length} from our customers</span>}
       </div>
       {list.length>0&&(
@@ -6217,7 +6217,7 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
       )}
       {user?(
         mine?(
-          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:14,padding:"12px 14px",fontSize:12.5,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}! It's live on our home page.</div>
+          <div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:16,padding:"12px 14px",fontSize:12,color:"#15803d",fontWeight:700}}>✓ Thanks for your testimonial, {(user.name||"").split(" ")[0]||"friend"}! It's live on our home page.</div>
         ):(
           <div style={{background:C.card,borderRadius:16,padding:"14px",border:`1.5px dashed ${C.accent}`}}>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:800,color:C.text,marginBottom:8}}>Share review</div>
@@ -6227,8 +6227,8 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
               ))}
             </div>
             <textarea value={text} onChange={e=>setText(e.target.value.slice(0,280))} placeholder="How was your experience with Nemo Aqua Store?"
-              rows={3} style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6,resize:"vertical",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
-            {note&&<div style={{fontSize:11.5,color:note[0]==="⚠"?C.danger:C.success,fontWeight:600,marginBottom:6}}>{note}</div>}
+              rows={3} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:6,resize:"vertical",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+            {note&&<div style={{fontSize:11,color:note[0]==="⚠"?C.danger:C.success,fontWeight:600,marginBottom:6}}>{note}</div>}
             <button className="press" onClick={submit} disabled={busy}
               style={{width:"100%",background:busy?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               {busy?"Posting…":"Share Review"}
@@ -6285,7 +6285,7 @@ function HeroHeader({title,subtitle,onBack,right,gradient,children}){
       <div style={{display:"flex",alignItems:"center",gap:12,position:"relative"}}>
         {onBack&&(
           <button className="press" onClick={onBack} aria-label="Back"
-            style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:13,width:44,height:44,color:"white",flexShrink:0,cursor:"pointer"}}>
+            style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:12,width:44,height:44,color:"white",flexShrink:0,cursor:"pointer"}}>
             <BackArrow/>
           </button>
         )}
@@ -6304,7 +6304,7 @@ function RestockBtn({product,user,restockSet,onSubscribe}){
   if((product.stockCount??DEFAULT_STOCK)>0||product.comingSoon)return null;
   return(
     <button className="press" onClick={()=>{if(!already&&onSubscribe)onSubscribe(product);}} disabled={already}
-      style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:already?"#dcfce7":"#fff7ed",color:already?"#15803d":"#c2410c",border:`1.5px solid ${already?"#86efac":"#fed7aa"}`,borderRadius:12,padding:"10px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:8}}>
+      style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",background:already?"#dcfce7":"#fff7ed",color:already?"#15803d":"#c2410c",border:`1.5px solid ${already?"#86efac":"#fed7aa"}`,borderRadius:12,padding:"10px 14px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:8}}>
       {already?"🔔 You'll be alerted when it's back!":"🔔 Notify me when back in stock"}
     </button>
   );
@@ -6375,7 +6375,7 @@ function GuideNotifBtn(){
     <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
       <button className="press" onClick={toggle} role="switch" aria-checked={active}
         aria-label={active?"Turn off new-guide notifications":"Turn on new-guide notifications"}
-        style={{display:"flex",alignItems:"center",gap:8,background:active?"#dcfce7":C.accentLight,border:`1px solid ${active?"#86efac":C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:active?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+        style={{display:"flex",alignItems:"center",gap:8,background:active?"#dcfce7":C.accentLight,border:`1px solid ${active?"#86efac":C.border}`,borderRadius:12,padding:"7px 12px",fontSize:11,fontWeight:700,color:active?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
         <span>{active?"🔔":"🔕"}</span>
         {/* One word. The switch beside it is what says on or off — spelling that out again in
             the label made a control the size of a sentence, and the aria-label still carries
@@ -6422,7 +6422,7 @@ function CustomerStageBadge({order}){
     Delivered:{c:"#15803d",bg:"#dcfce7",icon:"✓"},
     "Past Orders":{c:"#475569",bg:"#f1f5f9",icon:"🗂️"},
   }[stage];
-  return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:m.bg,color:m.c,borderRadius:20,padding:"4px 10px",fontSize:10.5,fontWeight:800,whiteSpace:"nowrap"}}>{m.icon} {label}</span>;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:m.bg,color:m.c,borderRadius:20,padding:"4px 10px",fontSize:10,fontWeight:800,whiteSpace:"nowrap"}}>{m.icon} {label}</span>;
 }
 function CategoryPills({selected,onSelect,all,counts}){
   const cats=shopCategories();
@@ -6434,11 +6434,11 @@ function CategoryPills({selected,onSelect,all,counts}){
         <button key={c} className="press" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={()=>onSelect(c)} style={{
           flexShrink:0,background:selected===c?"#ffffff":"#f8fafc",color:selected===c?C.text:C.textSub,
           border:`2px solid ${selected===c?C.accent:"transparent"}`,borderRadius:99,padding:"8px 16px",
-          fontSize:12.5,fontWeight:selected===c?700:600,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .3s cubic-bezier(0.34,1.56,0.64,1)",
+          fontSize:12,fontWeight:selected===c?700:600,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .3s cubic-bezier(0.34,1.56,0.64,1)",
           boxShadow:selected===c?"0 6px 18px rgba(14,165,233,.16)":"none",
           display:"flex",alignItems:"center",gap:5}}>
           <span>{icons[c]}</span>{c}
-          {counts&&<span style={{marginLeft:3,background:selected===c?"rgba(14,165,233,.14)":C.border,color:selected===c?C.primary:C.textSub,borderRadius:10,padding:"0 6px",fontSize:10,fontWeight:800,minWidth:14,textAlign:"center"}}>{counts[c]||0}</span>}
+          {counts&&<span style={{marginLeft:3,background:selected===c?"rgba(14,165,233,.14)":C.border,color:selected===c?C.primary:C.textSub,borderRadius:12,padding:"0 6px",fontSize:10,fontWeight:800,minWidth:14,textAlign:"center"}}>{counts[c]||0}</span>}
         </button>
       ))}
     </div>
@@ -6470,7 +6470,7 @@ function RatingSummary({reviews,avgRating}){
     <div style={{display:"flex",gap:16,alignItems:"center",background:C.card,borderRadius:16,padding:"16px",border:`1px solid ${C.border}`,marginBottom:16}}>
       {/* Big score */}
       <div style={{textAlign:"center",flexShrink:0}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:42,fontWeight:800,color:C.text,lineHeight:1}}>{avgRating.toFixed(1)}</div>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:40,fontWeight:800,color:C.text,lineHeight:1}}>{avgRating.toFixed(1)}</div>
         <ReviewStars value={Math.round(avgRating)} size={14}/>
         <div style={{fontSize:11,color:C.textSub,marginTop:4}}>{total} review{total!==1?"s":""}</div>
       </div>
@@ -6482,8 +6482,8 @@ function RatingSummary({reviews,avgRating}){
             <div key={star} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
               <span style={{fontSize:10,color:C.textSub,minWidth:10,textAlign:"right"}}>{star}</span>
               <span style={{fontSize:10,color:"#f59e0b"}}>★</span>
-              <div style={{flex:1,height:6,borderRadius:3,background:C.border,overflow:"hidden"}}>
-                <div style={{height:"100%",borderRadius:3,background:"#f59e0b",width:pct+"%",transition:"width .4s ease"}}/>
+              <div style={{flex:1,height:6,borderRadius:4,background:C.border,overflow:"hidden"}}>
+                <div style={{height:"100%",borderRadius:4,background:"#f59e0b",width:pct+"%",transition:"width .4s ease"}}/>
               </div>
               <span style={{fontSize:10,color:C.textSub,minWidth:16,textAlign:"right"}}>{count}</span>
             </div>
@@ -6535,11 +6535,11 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
   };
 
   return(
-    <div className="slide-up" style={{background:C.card,borderRadius:18,padding:"18px",border:`1.5px solid ${C.border}`,marginBottom:16}}>
+    <div className="slide-up" style={{background:C.card,borderRadius:20,padding:"18px",border:`1.5px solid ${C.border}`,marginBottom:16}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
         <span style={{fontSize:10,fontWeight:800,color:C.success,background:"#dcfce7",padding:"3px 9px",borderRadius:20}}>✓ VERIFIED PURCHASE</span>
       </div>
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,color:C.text,marginBottom:14}}>Write a Review</div>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:14}}>Write a Review</div>
 
       {/* Star picker */}
       <div style={{marginBottom:14}}>
@@ -6552,11 +6552,11 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
       </div>
 
       {/* Aspect ratings — optional, Flipkart-style */}
-      <div style={{marginBottom:16,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px"}}>
+      <div style={{marginBottom:16,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:16,padding:"12px 14px"}}>
         <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>Rate the details <span style={{fontWeight:400,textTransform:"none"}}>(optional)</span></div>
         {[["health","🐟 Fish / Product Condition"],["packing","📦 Packing Quality"],["speed","🚚 Delivery Speed"],["value","💰 Value for Money"]].map(([k,label])=>(
           <div key={k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
-            <span style={{fontSize:12.5,color:C.text,fontWeight:600}}>{label}</span>
+            <span style={{fontSize:12,color:C.text,fontWeight:600}}>{label}</span>
             <ReviewStars value={aspects[k]||0} onChange={v=>setAspects(a=>({...a,[k]:v}))} size={19}/>
           </div>
         ))}
@@ -6579,14 +6579,14 @@ function ReviewForm({onSubmit,onCancel,user,orderId:oid,preset=0}){
         <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Add Photos <span style={{textTransform:"none",letterSpacing:0,fontWeight:600,color:C.textSub}}>(optional · shows others your fish arrived happy)</span></div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           {photos.map((src,i)=>(
-            <div key={i} style={{position:"relative",width:64,height:64,borderRadius:10,overflow:"hidden",border:`1px solid ${C.border}`}}>
+            <div key={i} style={{position:"relative",width:64,height:64,borderRadius:12,overflow:"hidden",border:`1px solid ${C.border}`}}>
               <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
               <button className="press" onClick={()=>setPhotos(p=>p.filter((_,j)=>j!==i))}
                 style={{position:"absolute",top:2,right:2,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:11,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             </div>
           ))}
           {photos.length<MAX_PHOTOS&&(
-            <label style={{width:64,height:64,borderRadius:10,border:`1.5px dashed ${C.border}`,background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",color:C.textSub,gap:2}}>
+            <label style={{width:64,height:64,borderRadius:12,border:`1.5px dashed ${C.border}`,background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",color:C.textSub,gap:2}}>
               {photoBusy?<Spinner/>:<><span style={{fontSize:18,lineHeight:1}}>📷</span><span style={{fontSize:9,fontWeight:700}}>Add</span></>}
               <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{addPhotos(e.target.files);e.target.value="";}}/>
             </label>
@@ -6633,7 +6633,7 @@ function CountdownBanner({endsAt, title="Limited Time Offer", subtitle="Don't mi
         <div style={{fontSize:11,fontWeight:700,opacity:.85,marginBottom:6,letterSpacing:.8}}>Ends in:</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:stockNote?12:14}}>
           {cells.map((c,i)=>(
-            <div key={i} className={c.l==="Secs"?"countdown-cell":""} style={{background:"rgba(255,255,255,.95)",color:C.coral,borderRadius:10,padding:"8px 4px",textAlign:"center"}}>
+            <div key={i} className={c.l==="Secs"?"countdown-cell":""} style={{background:"rgba(255,255,255,.95)",color:C.coral,borderRadius:12,padding:"8px 4px",textAlign:"center"}}>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,lineHeight:1}}>{c.v}</div>
               <div style={{fontSize:9,fontWeight:700,color:"#7a1a08",marginTop:3,textTransform:"uppercase",letterSpacing:.8}}>{c.l}</div>
             </div>
@@ -6656,7 +6656,7 @@ function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToC
   // order of several different options without going back and forth between them.
   const qtyOf=v=>(cart.find(i=>i.key===product.id+"|"+v.id)?.qty)||0;
   const stop=e=>{ e.stopPropagation(); };
-  const stepBtn={background:"none",border:"none",fontSize:17,fontWeight:700,lineHeight:1,cursor:"pointer",padding:"0 2px"};
+  const stepBtn={background:"none",border:"none",fontSize:16,fontWeight:700,lineHeight:1,cursor:"pointer",padding:"0 2px"};
   return(
     <div style={{marginBottom:18}}>
       <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>{variantHeading(product)}</div>
@@ -6680,7 +6680,7 @@ function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToC
                 width:"100%",textAlign:"left",
                 background: out?"#f3f4f6":sel?C.accentLight:C.card,
                 border:`1.5px solid ${sel?C.primary:C.border}`,
-                borderRadius:14, padding:"12px 14px",
+                borderRadius:16, padding:"12px 14px",
                 display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
                 opacity:out?.55:1,cursor:out?"not-allowed":"pointer",
                 fontFamily:"'Plus Jakarta Sans',sans-serif",
@@ -6713,7 +6713,7 @@ function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToC
                           style={{...stepBtn,color:q>=maxV?C.textSub:C.primary,opacity:q>=maxV?.5:1,cursor:q>=maxV?"default":"pointer"}}>+</button>
                       </div>
                     : <button className="press" aria-label={`Add ${v.label} to cart`} onClick={e=>{stop(e);onSelect&&onSelect(v);addToCart(product,1,v);}}
-                        style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:99,padding:"7px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>+ Add</button>}
+                        style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:99,padding:"7px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>+ Add</button>}
             </div>
           );
         })}
@@ -6726,7 +6726,7 @@ function VariantPicker({product, variants, selectedId, onSelect, cart=[], addToC
         const sum=lines.reduce((a,x)=>a+x.q*variantEffPrice(product,x.v),0);
         return(
           <div style={{marginTop:10,padding:"9px 13px",background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-            <span style={{fontSize:11.5,fontWeight:700,color:C.text}}>{lines.length} options · {units} item{units!==1?"s":""} in cart</span>
+            <span style={{fontSize:11,fontWeight:700,color:C.text}}>{lines.length} options · {units} item{units!==1?"s":""} in cart</span>
             <span style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{sum}</span>
           </div>
         );
@@ -6783,17 +6783,17 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
 
       <div style={{textAlign:"center",marginBottom:30,marginTop:20}}>
         <img src={STORE_LOGO} alt="Nemo" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:130,height:130,objectFit:"contain",margin:"0 auto",display:"block",filter:"drop-shadow(0 10px 24px rgba(8,54,64,.35))"}}/>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:26,fontWeight:800,color:C.text,marginTop:16,marginBottom:6}}>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginTop:16,marginBottom:6}}>
           {mode==="checkout"?"Sign in to checkout":"Welcome to Nemo"}
         </div>
-        <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.55,maxWidth:300,margin:"0 auto"}}>
+        <div style={{fontSize:13,color:C.textSub,lineHeight:1.55,maxWidth:300,margin:"0 auto"}}>
           Sign in with Google to place orders, track delivery, and review your purchases.
         </div>
       </div>
 
       <div style={{maxWidth:360,width:"100%",margin:"0 auto"}}>
         <button className="press" onClick={doGoogle} disabled={busy}
-          style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:700,color:C.text,boxShadow:"0 2px 10px rgba(0,0,0,.05)",opacity:busy?.7:1}}>
+          style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:16,padding:"15px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:700,color:C.text,boxShadow:"0 2px 10px rgba(0,0,0,.05)",opacity:busy?.7:1}}>
           {busy?<Spinner/>:<svg width="22" height="22" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>}
           {/* The spinner alone left the label reading "Continue with Google" while the tap was
               already being handled, which on a slow connection looks like nothing happened and
@@ -6801,16 +6801,16 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
           {busy?"Signing you in…":"Continue with Google"}
         </button>
 
-        {err&&<div style={{fontSize:12.5,color:showDemo?C.textSub:C.danger,fontWeight:500,marginTop:14,textAlign:"center",lineHeight:1.5,background:showDemo?C.accentLight:"transparent",borderRadius:12,padding:showDemo?"10px 14px":0}}>{err}</div>}
+        {err&&<div style={{fontSize:12,color:showDemo?C.textSub:C.danger,fontWeight:500,marginTop:14,textAlign:"center",lineHeight:1.5,background:showDemo?C.accentLight:"transparent",borderRadius:12,padding:showDemo?"10px 14px":0}}>{err}</div>}
 
         {!showDemo&&(
           <button className="press" onClick={()=>setShowDemo(true)}
-            style={{width:"100%",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:14,padding:"13px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13.5,fontWeight:700,color:C.textSub}}>
+            style={{width:"100%",marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"transparent",border:`1.5px dashed ${C.border}`,borderRadius:16,padding:"13px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:700,color:C.textSub}}>
             👀 Explore with a demo account
           </button>
         )}
         {showDemo&&(
-          <div style={{fontSize:11.5,color:C.textSub,textAlign:"center",marginTop:14,lineHeight:1.5,background:C.accentLight,borderRadius:12,padding:"10px 14px"}}>
+          <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:14,lineHeight:1.5,background:C.accentLight,borderRadius:12,padding:"10px 14px"}}>
             Demo mode — browse and try every feature. Demo orders are simulated on this device only and are <b>not</b> real purchases.
           </div>
         )}
@@ -6818,11 +6818,11 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
           <div style={{marginTop:16}}>
             {DEMO_GOOGLE_ACCOUNTS.map(acc=>(
               <button key={acc.email} className="press" onClick={()=>onSuccess({name:acc.name,phone:acc.phone,email:acc.email,method:"demo",loginAt:new Date().toISOString(),keep:true})}
-                style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:10,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
-                <span style={{width:34,height:34,borderRadius:"50%",background:acc.color,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,flexShrink:0}}>{acc.name.charAt(0)}</span>
+                style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:"white",border:`1.5px solid ${C.border}`,borderRadius:16,padding:"12px 14px",marginBottom:10,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+                <span style={{width:34,height:34,borderRadius:"50%",background:acc.color,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,flexShrink:0}}>{acc.name.charAt(0)}</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13.5,fontWeight:700,color:C.text}}>{acc.name}</div>
-                  <div style={{fontSize:11.5,color:C.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{acc.email}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text}}>{acc.name}</div>
+                  <div style={{fontSize:11,color:C.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{acc.email}</div>
                 </div>
               </button>
             ))}
@@ -6847,7 +6847,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
         style={{background:C.card,width:"86%",maxWidth:340,height:"100%",padding:"22px 20px 28px",overflowY:"auto",boxShadow:"4px 0 30px rgba(10,36,38,.25)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>Filter &amp; Sort</div>
-          <button className="press" onClick={onClose} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,width:34,height:34,fontSize:17,color:C.textSub,cursor:"pointer"}}>✕</button>
+          <button className="press" onClick={onClose} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,width:34,height:34,fontSize:16,color:C.textSub,cursor:"pointer"}}>✕</button>
         </div>
         <button className="press" onClick={onClear} style={{background:"none",border:"none",fontSize:12,fontWeight:700,color:C.accent,fontFamily:"'Plus Jakarta Sans',sans-serif",padding:0,marginBottom:18,cursor:"pointer"}}>↺ Clear all filters</button>
 
@@ -6865,7 +6865,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
         <div style={{display:"flex",gap:8,marginBottom:22}}>
           {[{id:"all",l:"All"},{id:"instock",l:"In stock"},{id:"limited",l:"Limited"}].map(o=>(
             <button key={o.id} className="press" onClick={()=>setAvailability(o.id)}
-              style={{flex:1,padding:"9px 12px",borderRadius:14,border:`1.5px solid ${availability===o.id?C.primary:C.border}`,background:availability===o.id?C.primary:"transparent",color:availability===o.id?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{flex:1,padding:"9px 12px",borderRadius:16,border:`1.5px solid ${availability===o.id?C.primary:C.border}`,background:availability===o.id?C.primary:"transparent",color:availability===o.id?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               {o.l}
             </button>
           ))}
@@ -6881,7 +6881,7 @@ function SortFilterSheet({open, onClose, sort, setSort, priceMax, priceCap, setP
           style={{width:"100%",accentColor:C.primary,marginBottom:24}}/>
 
         <button className="press" onClick={onClose}
-          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"15px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
           Show {count} result{count!==1?"s":""}
         </button>
       </div>
@@ -6907,13 +6907,13 @@ function ProductReviewPrompt({order, products=[], mediaCache={}, reviewedSet=[],
         return(
           <button key={prod.id} className="press" onClick={()=>onWriteReview&&onWriteReview(prod)}
             style={{width:"100%",display:"flex",alignItems:"center",gap:10,background:"white",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px",marginBottom:7,textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-            <div style={{width:38,height:38,borderRadius:9,flexShrink:0,overflow:"hidden",background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>
+            <div style={{width:38,height:38,borderRadius:8,flexShrink:0,overflow:"hidden",background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>
               {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
             </div>
-            <div style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
+            <div style={{flex:1,minWidth:0,fontSize:12,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
             {already
               ? <span style={{fontSize:11,fontWeight:700,color:C.success,flexShrink:0}}>✓ View review →</span>
-              : <span style={{fontSize:11.5,fontWeight:800,color:C.primary,flexShrink:0}}>Review →</span>}
+              : <span style={{fontSize:11,fontWeight:800,color:C.primary,flexShrink:0}}>Review →</span>}
           </button>
         );
       })}
@@ -6929,19 +6929,19 @@ function SelfCancelBtn({o, onCancel}){
   if(!confirm) return(
     <div style={{marginTop:10}}>
       <button className="press" onClick={()=>setConfirm(true)}
-        style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
         ✕ Cancel this order
       </button>
-      <div style={{fontSize:10.5,color:C.textSub,textAlign:"center",marginTop:5,lineHeight:1.4}}>You can cancel any time until we confirm your order.</div>
+      <div style={{fontSize:10,color:C.textSub,textAlign:"center",marginTop:5,lineHeight:1.4}}>You can cancel any time until we confirm your order.</div>
     </div>
   );
   return(
     <div style={{marginTop:10,background:"#fef2f2",border:`1.5px solid ${C.danger}`,borderRadius:12,padding:"12px"}}>
-      <div style={{fontSize:12.5,fontWeight:800,color:C.danger,marginBottom:4}}>Cancel this order?</div>
-      <div style={{fontSize:11.5,color:"#7f1d1d",lineHeight:1.5,marginBottom:10}}>{paid?"Your order will be cancelled and a refund of the paid amount will be processed to your original payment method.":"Your order will be cancelled."} This can't be undone.</div>
+      <div style={{fontSize:12,fontWeight:800,color:C.danger,marginBottom:4}}>Cancel this order?</div>
+      <div style={{fontSize:11,color:"#7f1d1d",lineHeight:1.5,marginBottom:10}}>{paid?"Your order will be cancelled and a refund of the paid amount will be processed to your original payment method.":"Your order will be cancelled."} This can't be undone.</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <button className="press" onClick={()=>setConfirm(false)} style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Keep order</button>
-        <button className="press" onClick={()=>{setConfirm(false);onCancel&&onCancel(o);}} style={{background:C.danger,color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, cancel</button>
+        <button className="press" onClick={()=>setConfirm(false)} style={{background:"white",color:C.text,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Keep order</button>
+        <button className="press" onClick={()=>{setConfirm(false);onCancel&&onCancel(o);}} style={{background:C.danger,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Yes, cancel</button>
       </div>
     </div>
   );
@@ -6964,7 +6964,7 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
   const pickPhoto=async(file)=>{ if(!file)return; setBusy(true); try{ const d=await compressImage(file,1100,.8); setPhoto(d); }catch(e){} setBusy(false); };
   const submit=async()=>{ if(!sel.length)return; await onRequestReturn(o,{itemIds:sel,reason:reason.trim(),resolution,photo}); setOpen(false); };
   const disclaimer=(
-    <div style={{fontSize:10.5,color:"#9a3412",lineHeight:1.55,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",marginBottom:10}}>
+    <div style={{fontSize:10,color:"#9a3412",lineHeight:1.55,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"9px 11px",marginBottom:10}}>
       <b>Eligible only for damaged dry goods.</b> Item must be unused and returned with all parts in the original packing cover. <b>Feeds, medicines, live fish, plants, pumps &amp; tubes are not eligible.</b> Refunds/coins exclude packing &amp; shipping charges.
     </div>
   );
@@ -6985,21 +6985,21 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
     const retAddr=(rr&&String(rr.returnAddress||"").trim())||settings.returnAddress||"Please contact us on WhatsApp for the return shipping address before sending the parcel.";
     return(
       <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-        <div style={{background:tone.bg,border:`1px solid ${tone.bd}`,borderRadius:10,padding:"11px 12px"}}>
+        <div style={{background:tone.bg,border:`1px solid ${tone.bd}`,borderRadius:12,padding:"11px 12px"}}>
           <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:3}}>↩️ Return / Replacement request</div>
-          <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>{STAT[rr.status]||"Submitted."}</div>
-          {rr.note&&<div style={{fontSize:11.5,color:C.text,marginTop:6,lineHeight:1.5}}><b>Note from store:</b> {rr.note}</div>}
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.55}}>{STAT[rr.status]||"Submitted."}</div>
+          {rr.note&&<div style={{fontSize:11,color:C.text,marginTop:6,lineHeight:1.5}}><b>Note from store:</b> {rr.note}</div>}
           {rr.status==="Approved"&&(
             <div style={{marginTop:10}}>
               <div style={{fontSize:11,fontWeight:800,color:C.text,marginBottom:4}}>📦 Courier it back to{rr.returnAddrLabel?` — ${rr.returnAddrLabel}`:""}:</div>
-              <div style={{fontSize:11.5,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5,background:"white",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{retAddr}</div>
+              <div style={{fontSize:11,color:C.text,whiteSpace:"pre-wrap",lineHeight:1.5,background:"white",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{retAddr}</div>
               <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Attach the consignment bill inside/with the parcel, then enter your courier partner &amp; consignment number below.</div>
               <input value={courier} onChange={e=>setCourier(e.target.value)} placeholder="Courier partner (e.g. DTDC, ST Courier)"
-                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:8}}/>
+                style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:8}}/>
               <input value={consign} onChange={e=>setConsign(e.target.value)} placeholder="Consignment / tracking number"
-                style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:10,fontFamily:"monospace"}}/>
+                style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",marginBottom:10,fontFamily:"monospace"}}/>
               <button className="press" disabled={!courier.trim()||!consign.trim()} onClick={()=>onSubmitReturnShipment(o,{courier:courier.trim(),consignment:consign.trim()})}
-                style={{width:"100%",background:(courier.trim()&&consign.trim())?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Submit return shipment details</button>
+                style={{width:"100%",background:(courier.trim()&&consign.trim())?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Submit return shipment details</button>
             </div>
           )}
           {(rr.status==="Shipped"||rr.status==="Received & Verified"||rr.status==="Resolved")&&(rr.courier||rr.consignment)&&(
@@ -7013,12 +7013,12 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
               is a fact — but a customer being refunded should not still be told a replacement
               is on its way. */}
           {(rr.adminResolution||rr.resolution)==="replacement"&&(rr.replacementCourier||rr.replacementConsignment)&&(
-            <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"10px 12px"}}>
+            <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"10px 12px"}}>
               <div style={{fontSize:12,fontWeight:800,color:"#065f46",marginBottom:3}}>🔁 Your replacement is on its way</div>
-              <div style={{fontSize:11.5,color:"#047857",lineHeight:1.55}}>Sent via <b>{rr.replacementCourier||"courier"}</b>{rr.replacementConsignment?<> · <span style={{fontFamily:"monospace"}}>{rr.replacementConsignment}</span></>:null}</div>
+              <div style={{fontSize:11,color:"#047857",lineHeight:1.55}}>Sent via <b>{rr.replacementCourier||"courier"}</b>{rr.replacementConsignment?<> · <span style={{fontFamily:"monospace"}}>{rr.replacementConsignment}</span></>:null}</div>
               {rr.replacementTrackUrl&&rr.replacementConsignment&&(
                 <button className="press" onClick={()=>trackParcel({courierTrackUrl:rr.replacementTrackUrl,trackingNumber:rr.replacementConsignment})}
-                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:10,padding:"9px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:12,padding:"9px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                   🚚 Track replacement{rr.replacementCourier?` · ${rr.replacementCourier}`:""}
                 </button>
               )}
@@ -7038,27 +7038,27 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
         </button>
       ):(
         <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"13px"}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>↩️ Return / Replacement (damaged item)</div>
+          <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:8}}>↩️ Return / Replacement (damaged item)</div>
           {disclaimer}
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Which item(s)?</div>
           <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
             {returnable.map(it=>(
-              <label key={it.id} style={{display:"flex",alignItems:"center",gap:9,fontSize:12.5,color:C.text,cursor:"pointer"}}>
+              <label key={it.id} style={{display:"flex",alignItems:"center",gap:9,fontSize:12,color:C.text,cursor:"pointer"}}>
                 <input type="checkbox" checked={sel.includes(it.id)} onChange={()=>toggle(it.id)} style={{width:17,height:17,accentColor:C.primary}}/>
                 {it.name} <span style={{color:C.textSub}}>· Qty {it.qty}</span>
               </label>
             ))}
           </div>
           <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder="Describe the damage…"
-            style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",resize:"none",background:"white",marginBottom:10}}/>
+            style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",resize:"none",background:"white",marginBottom:10}}/>
           <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Photo proof</div>
           {photo?(
             <div style={{position:"relative",display:"inline-block",marginBottom:10}}>
-              <img src={photo} alt="" style={{width:84,height:84,objectFit:"cover",borderRadius:10,border:`1px solid ${C.border}`}}/>
+              <img src={photo} alt="" style={{width:84,height:84,objectFit:"cover",borderRadius:12,border:`1px solid ${C.border}`}}/>
               <button onClick={()=>setPhoto("")} style={{position:"absolute",top:-6,right:-6,width:22,height:22,borderRadius:"50%",background:"rgba(0,0,0,.6)",color:"white",border:"none",fontSize:13,cursor:"pointer"}}>×</button>
             </div>
           ):(
-            <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:10,border:`1.5px dashed ${C.border}`,background:"white",padding:"12px",cursor:"pointer",color:C.textSub,fontSize:12.5,fontWeight:600,marginBottom:10}}>
+            <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:12,border:`1.5px dashed ${C.border}`,background:"white",padding:"12px",cursor:"pointer",color:C.textSub,fontSize:12,fontWeight:600,marginBottom:10}}>
               <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{pickPhoto(e.target.files[0]);e.target.value="";}}/>
               {busy?"Processing…":"📷 Add a photo of the damage"}
             </label>
@@ -7067,13 +7067,13 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
           <div style={{display:"flex",gap:8,marginBottom:12}}>
             {[["refund","💸 Refund"],["coins","🪙 Reward coins"]].map(([k,l])=>(
               <button key={k} type="button" className="press" onClick={()=>setResolution(k)}
-                style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${resolution===k?C.primary:C.border}`,background:resolution===k?C.primary:"white",color:resolution===k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
+                style={{flex:1,padding:"9px",borderRadius:12,border:`1.5px solid ${resolution===k?C.primary:C.border}`,background:resolution===k?C.primary:"white",color:resolution===k?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
             ))}
           </div>
           <div style={{display:"flex",gap:8}}>
-            <button className="press" onClick={()=>setOpen(false)} style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+            <button className="press" onClick={()=>setOpen(false)} style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 14px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
             <button className="press" disabled={!sel.length||busy} onClick={submit}
-              style={{flex:1,background:sel.length?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Submit request</button>
+              style={{flex:1,background:sel.length?C.primary:"#cbd5e1",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Submit request</button>
           </div>
         </div>
       )}
@@ -7095,18 +7095,18 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
   const maxQty=Math.max(1,Number(item.qty)||1);
 
   if(claim) return(
-    <div style={{marginTop:6,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:9,padding:"8px 10px"}}>
+    <div style={{marginTop:6,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:8,padding:"8px 10px"}}>
       <div style={{fontSize:11,fontWeight:800,color:"#065f46"}}>🐟 DOA reported · {claim.qty||1} fish</div>
-      {claim.cause&&<div style={{fontSize:10.5,color:"#047857",marginTop:2,lineHeight:1.45}}>{claim.cause}</div>}
+      {claim.cause&&<div style={{fontSize:10,color:"#047857",marginTop:2,lineHeight:1.45}}>{claim.cause}</div>}
       <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${order.orderNo||orderId(order.id)} — item: ${item.name}. Here is my unboxing video.`))}
-        style={{marginTop:7,background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"7px 11px",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video</button>
+        style={{marginTop:7,background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"7px 11px",fontSize:10,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video</button>
     </div>
   );
   if(!windowOpen) return null;
 
   if(!open) return(
     <button className="press" onClick={()=>setOpen(true)}
-      style={{marginTop:6,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"7px 11px",fontSize:10.5,fontWeight:800,color:"#9a3412",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+      style={{marginTop:6,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"7px 11px",fontSize:10,fontWeight:800,color:"#9a3412",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
       {/* The countdown only appears once delivery has been recorded; before that there is no
           deadline running and quoting one would be a lie. */}
       🐟 Report this fish as Dead on Arrival{hoursLeft>0?` · ${hoursLeft}h left`:""}
@@ -7114,19 +7114,19 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
   );
   const ready=!!cause && (cause!=="Other (explain below)" || note.trim().length>0);
   return(
-    <div style={{marginTop:8,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:11,padding:"11px"}}>
-      <div style={{fontSize:11.5,fontWeight:800,color:"#9a3412",marginBottom:7}}>DOA — {item.name}</div>
+    <div style={{marginTop:8,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"11px"}}>
+      <div style={{fontSize:11,fontWeight:800,color:"#9a3412",marginBottom:7}}>DOA — {item.name}</div>
 
-      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>How many arrived dead?</div>
-      <div style={{display:"flex",alignItems:"center",gap:10,background:"#fff",borderRadius:9,padding:"5px 10px",border:"1px solid #fed7aa",width:"fit-content",marginBottom:10}}>
+      <div style={{fontSize:10,fontWeight:800,color:"#9a3412",marginBottom:5}}>How many arrived dead?</div>
+      <div style={{display:"flex",alignItems:"center",gap:10,background:"#fff",borderRadius:8,padding:"5px 10px",border:"1px solid #fed7aa",width:"fit-content",marginBottom:10}}>
         <button className="press" onClick={()=>setQty(q=>Math.max(1,q-1))} style={{background:"none",border:"none",fontSize:16,color:"#9a3412",fontWeight:800,lineHeight:1,cursor:"pointer"}}>−</button>
-        <span style={{fontSize:12.5,fontWeight:800,color:"#9a3412",minWidth:14,textAlign:"center"}}>{qty}</span>
+        <span style={{fontSize:12,fontWeight:800,color:"#9a3412",minWidth:14,textAlign:"center"}}>{qty}</span>
         <button className="press" onClick={()=>setQty(q=>Math.min(maxQty,q+1))} disabled={qty>=maxQty}
           style={{background:"none",border:"none",fontSize:16,color:qty>=maxQty?"#fdba74":"#9a3412",fontWeight:800,lineHeight:1,cursor:qty>=maxQty?"default":"pointer"}}>+</button>
         <span style={{fontSize:10,color:"#c2410c",fontWeight:700}}>of {maxQty}</span>
       </div>
 
-      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>Reason for dead arrival?</div>
+      <div style={{fontSize:10,fontWeight:800,color:"#9a3412",marginBottom:5}}>Reason for dead arrival?</div>
       <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:9}}>
         {DOA_CAUSES.map(c=>(
           <label key={c} style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:"#7c2d12",cursor:"pointer",lineHeight:1.4}}>
@@ -7138,13 +7138,13 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
       </div>
       <textarea value={note} onChange={e=>setNote(e.target.value.slice(0,300))} rows={2}
         placeholder={cause==="Other (explain below)"?"Please describe what happened (required)":"Anything else we should know? (optional)"}
-        style={{width:"100%",boxSizing:"border-box",borderRadius:9,border:"1.5px solid #fed7aa",padding:"8px 10px",fontSize:11.5,outline:"none",resize:"none",lineHeight:1.5,background:"white",marginBottom:9,fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+        style={{width:"100%",boxSizing:"border-box",borderRadius:8,border:"1.5px solid #fed7aa",padding:"8px 10px",fontSize:11,outline:"none",resize:"none",lineHeight:1.5,background:"white",marginBottom:9,fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
 
-      <div style={{fontSize:10.5,fontWeight:800,color:"#9a3412",marginBottom:5}}>Choose your resolution</div>
+      <div style={{fontSize:10,fontWeight:800,color:"#9a3412",marginBottom:5}}>Choose your resolution</div>
       <div style={{display:"flex",gap:6,marginBottom:10}}>
         {[["refund","💸 Refund"],["coins","🪙 Reward coins"]].map(([k,l])=>(
           <button key={k} type="button" className="press" onClick={()=>setReso(k)}
-            style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${reso===k?"#9a3412":"#fed7aa"}`,background:reso===k?"#9a3412":"white",color:reso===k?"white":"#9a3412",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l}</button>
+            style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${reso===k?"#9a3412":"#fed7aa"}`,background:reso===k?"#9a3412":"white",color:reso===k?"white":"#9a3412",fontSize:10,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l}</button>
         ))}
       </div>
       <div style={{fontSize:10,color:"#9a3412",lineHeight:1.5,marginBottom:9}}>
@@ -7157,9 +7157,9 @@ function ItemDoaBlock({order, item, claim, windowOpen, hoursLeft, ownerWA, onRep
             onReportDoa&&onReportDoa(order,{resolution:reso,reason:full,cause,note:note.trim(),qty,itemId:item.id,itemName:item.name});
             setOpen(false);
           }}
-          style={{flex:1,background:ready?"#25D366":"#bbf7d0",color:"white",border:"none",borderRadius:9,padding:"10px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:ready?"pointer":"not-allowed"}}>💬 Share video on WhatsApp</button>
+          style={{flex:1,background:ready?"#25D366":"#bbf7d0",color:"white",border:"none",borderRadius:8,padding:"10px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:ready?"pointer":"not-allowed"}}>💬 Share video on WhatsApp</button>
         <button className="press" onClick={()=>setOpen(false)}
-          style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:9,padding:"10px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Cancel</button>
+          style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Cancel</button>
       </div>
     </div>
   );
@@ -7224,16 +7224,16 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
           <span style={{fontSize:22,color:C.coral}}>♥</span>
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:800,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Saved Items</div>
-            <div style={{fontSize:11.5,color:C.textSub}}>{favorites.length>0?`${favorites.length} item${favorites.length!==1?"s":""} saved`:"Your wishlist is empty"}</div>
+            <div style={{fontSize:11,color:C.textSub}}>{favorites.length>0?`${favorites.length} item${favorites.length!==1?"s":""} saved`:"Your wishlist is empty"}</div>
           </div>
           <span style={{fontSize:18,color:C.textSub}}>›</span>
         </button>
         {myOrders.length===0?(
           <div style={{textAlign:"center",padding:"60px 20px",color:C.textSub}}>
-            <div style={{fontSize:64,marginBottom:14}}>📦</div>
+            <div style={{fontSize:60,marginBottom:14}}>📦</div>
             <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:6}}>No orders yet</div>
             <div style={{fontSize:13,marginBottom:20}}>Your orders will appear here.</div>
-            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Start Shopping</button>
+            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:16,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Start Shopping</button>
           </div>
         ):(
           <>
@@ -7245,14 +7245,14 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
             const isDelivered=o.status==="Delivered";
             const needsProductReview=(o.items||[]).some(it=>products.some(p=>p.id===it.id)&&!reviewedSet.includes(it.id));
             return(
-            <div key={o.id} style={{background:C.card,borderRadius:18,padding:"16px",marginBottom:12,border:`1px solid ${open?C.accent:C.border}`}}>
+            <div key={o.id} style={{background:C.card,borderRadius:20,padding:"16px",marginBottom:12,border:`1px solid ${open?C.accent:C.border}`}}>
               {/* Compact summary — always visible; tap to open full details, bills & invoices (#11/#12) */}
               <button className="press" onClick={()=>setOpenId(open?null:o.id)}
                 style={{width:"100%",background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontFamily:PRICE_FONT,fontSize:13.5,fontWeight:800,color:C.primary,marginBottom:3}}>{o.orderNo||orderId(o.id)}</div>
-                    <div style={{fontSize:12.5,fontWeight:700,color:C.text,lineHeight:1.35,marginBottom:3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{names}</div>
+                    <div style={{fontFamily:PRICE_FONT,fontSize:13,fontWeight:800,color:C.primary,marginBottom:3}}>{o.orderNo||orderId(o.id)}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:C.text,lineHeight:1.35,marginBottom:3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{names}</div>
                     <div style={{fontSize:11,color:C.textSub}}>{fmtDate(o.placedAt)} · {nItems} item{nItems!==1?"s":""} · ₹{o.amountDue??(o.total+o.fee)}</div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
@@ -7261,7 +7261,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                   </div>
                 </div>
                 {isDelivered&&needsProductReview&&!open&&(
-                  <div style={{marginTop:8,fontSize:11.5,fontWeight:800,color:C.primary}}>☆ Share review →</div>
+                  <div style={{marginTop:8,fontSize:11,fontWeight:800,color:C.primary}}>☆ Share review →</div>
                 )}
               </button>
               {open&&(<div style={{marginTop:12}}>
@@ -7280,7 +7280,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                       onKeyDown={open?(e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } }):undefined}
                       aria-label={open?`View ${item.name}`:undefined}
                       style={{display:"flex",gap:10,alignItems:"center",flex:1,minWidth:0,cursor:open?"pointer":"default"}}>
-                      <div style={{width:44,height:44,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0,overflow:"hidden"}}>
+                      <div style={{width:44,height:44,borderRadius:12,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0,overflow:"hidden"}}>
                         {/* Order lines are snapshots and carry no image, so resolve it
                             from the live catalogue — the same helper the cart uses.
                             Reading mediaCache directly only ever worked for legacy
@@ -7321,11 +7321,11 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 const sub = d<0 ? `Expected by ${eta.dateLabel} \u2014 should reach you any moment now` : `Expected by ${eta.dateLabel}`;
                 const urgent = d<=1;
                 return(
-                  <div style={{marginTop:10,display:"flex",alignItems:"center",gap:11,background:urgent?"#fff7ed":C.accentLight,border:`1.5px solid ${urgent?"#fdba74":C.accent}`,borderRadius:14,padding:"11px 13px"}}>
+                  <div style={{marginTop:10,display:"flex",alignItems:"center",gap:11,background:urgent?"#fff7ed":C.accentLight,border:`1.5px solid ${urgent?"#fdba74":C.accent}`,borderRadius:16,padding:"11px 13px"}}>
                     <span style={{fontSize:22,lineHeight:1}}>🚚</span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:14,fontWeight:800,color:urgent?"#9a3412":C.primaryDark,fontFamily:"'Plus Jakarta Sans',sans-serif",lineHeight:1.15}}>{headline}</div>
-                      <div style={{fontSize:11.5,color:urgent?"#9a3412":C.textSub,fontWeight:600,marginTop:2}}>{sub}{o.status==="Shipped"?" \u00b7 on the way":""}</div>
+                      <div style={{fontSize:11,color:urgent?"#9a3412":C.textSub,fontWeight:600,marginTop:2}}>{sub}{o.status==="Shipped"?" \u00b7 on the way":""}</div>
                     </div>
                   </div>
                 );
@@ -7333,30 +7333,30 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               {o.trackingNumber&&<div style={{fontSize:11,color:C.textSub,marginTop:6}}>Consignment: <b style={{color:C.text}}>{o.trackingNumber}</b>{o.courierName?<> · {o.courierName}</>:null}</div>}
               {(o.status==="Shipped"||o.status==="Delivered")&&o.courierTrackUrl&&(
                 <button className="press" onClick={()=>trackParcel(o)}
-                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:12,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
                   🚚 Track Parcel{o.courierName?` · ${o.courierName}`:""}
                 </button>
               )}
               {o.shippingReward&&(
                 <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"11px 13px"}}>
-                  <div style={{fontSize:12.5,fontWeight:800,color:"#15803d",marginBottom:3}}>🎁 Shipping refund — ₹{o.shippingReward.amount} added to your wallet!</div>
-                  <div style={{fontSize:11.5,color:"#166534",lineHeight:1.55}}>Extra shipping paid was returned to your wallet.</div>
+                  <div style={{fontSize:12,fontWeight:800,color:"#15803d",marginBottom:3}}>🎁 Shipping refund — ₹{o.shippingReward.amount} added to your wallet!</div>
+                  <div style={{fontSize:11,color:"#166534",lineHeight:1.55}}>Extra shipping paid was returned to your wallet.</div>
                 </div>
               )}
               {/* Bill button */}
               <div style={{display:"flex",gap:8,marginTop:10}}>
               <button className="press" onClick={()=>openBill(o,settings)}
-                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:12,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                 🧾 Quick Bill
               </button>
               <button className="press" onClick={()=>openInvoice(o,settings)}
-                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                style={{flex:1,background:C.bg,color:C.primary,border:`1px solid ${C.border}`,borderRadius:12,padding:"9px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                 📄 Invoice (PDF)
               </button>
               </div>
               {o.status==="Delivered"&&(
                 <button className="press" onClick={()=>reorder(o)}
-                  style={{width:"100%",marginTop:8,background:C.accentLight,color:C.primary,border:`1.5px solid ${C.accent}`,borderRadius:10,padding:"10px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  style={{width:"100%",marginTop:8,background:C.accentLight,color:C.primary,border:`1.5px solid ${C.accent}`,borderRadius:12,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                   🔁 Reorder these items
                 </button>
               )}
@@ -7368,7 +7368,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     <PaymentPanel order={o} compact onCancelled={onCancelled} onCheckoutCancelled={onCancelPayment}/>
                   ):(
                     <>
-                      <div style={{background:"#fef3c7",border:`1px solid #fde68a`,borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:12,color:"#92400e",fontWeight:600,lineHeight:1.5}}>⏳ Payment pending — complete it to confirm this order (auto-cancels if unpaid).</div>
+                      <div style={{background:"#fef3c7",border:`1px solid #fde68a`,borderRadius:12,padding:"10px 12px",marginBottom:10,fontSize:12,color:"#92400e",fontWeight:600,lineHeight:1.5}}>⏳ Payment pending — complete it to confirm this order (auto-cancels if unpaid).</div>
                       <button className="press" onClick={()=>setPayOpen(o.id)}
                         style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💳 Complete Payment · ₹{o.amountDue??(o.total+o.fee)}</button>
                     </>
@@ -7376,15 +7376,15 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 </div>
               )}
               {o.status==="Payment Review"&&(
-                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>{o.gateway?(o.testPayment?`${gatewayLabel(o.gateway)} test payment recorded — not a fulfilment order.`:`${gatewayLabel(o.gateway)} payment recorded — this order still needs admin review.`):`🔎 Payment submitted${o.txnId?` (Ref: ${o.txnId})`:""} — under verification.`}</div>
+                <div style={{marginTop:10,background:"#ede9fe",border:`1px solid #ddd6fe`,borderRadius:12,padding:"10px 12px",fontSize:12,color:"#6d28d9",fontWeight:600,lineHeight:1.5}}>{o.gateway?(o.testPayment?`${gatewayLabel(o.gateway)} test payment recorded — not a fulfilment order.`:`${gatewayLabel(o.gateway)} payment recorded — this order still needs admin review.`):`🔎 Payment submitted${o.txnId?` (Ref: ${o.txnId})`:""} — under verification.`}</div>
               )}
               {o.status==="Cancelled"&&(
                 <div style={{marginTop:10}}>
-                  <div style={{background:"#fee2e2",border:`1px solid #fecaca`,borderRadius:10,padding:"10px 12px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.55}}>
+                  <div style={{background:"#fee2e2",border:`1px solid #fecaca`,borderRadius:12,padding:"10px 12px",fontSize:12,color:"#b91c1c",fontWeight:600,lineHeight:1.55}}>
                     ✕ Your order has been cancelled.{o.cancelReason?` Reason: ${o.cancelReason}.`:o.paymentStatus&&/unpaid/i.test(o.paymentStatus)?" Payment wasn't completed in time.":""}
                   </div>
                   {o.refund&&o.refund.due&&(
-                    <div style={{marginTop:8,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"11px 12px",fontSize:12.5,color:"#1e3a8a",lineHeight:1.6}}>
+                    <div style={{marginTop:8,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"11px 12px",fontSize:12,color:"#1e3a8a",lineHeight:1.6}}>
                       <div style={{fontWeight:800,marginBottom:3}}>💸 Refund {o.refund.status==="refunded"?"completed":o.refund.status==="processing"?"in progress":"being arranged"}</div>
                       {o.refund.method==="gateway"?(
                         <div>A refund of <b>₹{o.refund.amount}</b> {o.refund.status==="refunded"?"has been":"is being"} returned automatically to your original payment method. Please allow 3–7 working days for it to reflect.</div>
@@ -7394,12 +7394,12 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                     </div>
                   )}
                   {o.refund&&o.refund.due===false&&(
-                    <div style={{marginTop:8,fontSize:11.5,color:C.textSub,lineHeight:1.5}}>No payment was collected for this order, so there's nothing to refund.</div>
+                    <div style={{marginTop:8,fontSize:11,color:C.textSub,lineHeight:1.5}}>No payment was collected for this order, so there's nothing to refund.</div>
                   )}
                 </div>
               )}
               {o.status==="Confirmed"&&(
-                <div style={{marginTop:10,background:"#dcfce7",border:`1px solid #bbf7d0`,borderRadius:10,padding:"10px 12px",fontSize:12,color:"#15803d",fontWeight:600,lineHeight:1.5}}>✅ Payment verified — your order is confirmed &amp; being prepared!</div>
+                <div style={{marginTop:10,background:"#dcfce7",border:`1px solid #bbf7d0`,borderRadius:12,padding:"10px 12px",fontSize:12,color:"#15803d",fontWeight:600,lineHeight:1.5}}>✅ Payment verified — your order is confirmed &amp; being prepared!</div>
               )}
               {/* Dead-on-Arrival — the claim itself is now raised per fish, up with the item it
                   concerns (see ItemDoaBlock above). What stays here is the order-level status of
@@ -7409,7 +7409,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 const win=doaEntryOpen(o), left=doaHoursLeft(o);
                 if(o.liveGuarantee===false) return(
                   <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-                    <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>ℹ️ The <b>Live Arrival Guarantee (DOA cover)</b> doesn't apply to this order — a packing option below our recommendation was chosen at checkout. Per our Terms, DOA claims need the recommended (or safer) packing.</div>
+                    <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"9px 11px",lineHeight:1.5}}>ℹ️ The <b>Live Arrival Guarantee (DOA cover)</b> doesn't apply to this order — a packing option below our recommendation was chosen at checkout. Per our Terms, DOA claims need the recommended (or safer) packing.</div>
                   </div>
                 );
                 if(!claims.length){
@@ -7428,9 +7428,9 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                 const st=(o.doa&&o.doa.status)||"Requested";
                 return(
                   <div style={{marginTop:10,borderTop:`1px dashed ${C.border}`,paddingTop:10}}>
-                    <div style={{background:st==="Declined"?"#fef2f2":st.startsWith("Approved")?"#ecfdf5":"#fff7ed",border:`1px solid ${st==="Declined"?"#fecaca":st.startsWith("Approved")?"#a7f3d0":"#fed7aa"}`,borderRadius:10,padding:"11px 12px"}}>
+                    <div style={{background:st==="Declined"?"#fef2f2":st.startsWith("Approved")?"#ecfdf5":"#fff7ed",border:`1px solid ${st==="Declined"?"#fecaca":st.startsWith("Approved")?"#a7f3d0":"#fed7aa"}`,borderRadius:12,padding:"11px 12px"}}>
                       <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:3}}>🐟 Dead-on-Arrival request · {claims.length} item{claims.length>1?"s":""}</div>
-                      <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>{doaStatusText[st]||"Submitted."}</div>
+                      <div style={{fontSize:11,color:C.textSub,lineHeight:1.55}}>{doaStatusText[st]||"Submitted."}</div>
                       <div style={{marginTop:7,display:"flex",flexDirection:"column",gap:4}}>
                         {claims.map(([iid,c])=>(
                           <div key={iid} style={{fontSize:11,color:C.text,lineHeight:1.45}}>
@@ -7438,12 +7438,12 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
                           </div>
                         ))}
                       </div>
-                      {o.doa&&o.doa.note&&<div style={{fontSize:11.5,color:C.text,marginTop:7,lineHeight:1.5}}><b>Note from store:</b> {o.doa.note}</div>}
+                      {o.doa&&o.doa.note&&<div style={{fontSize:11,color:C.text,marginTop:7,lineHeight:1.5}}><b>Note from store:</b> {o.doa.note}</div>}
                       {(st==="Requested"||st==="Under Review")&&(
                         <button className="press" onClick={()=>openWA(ownerWA,encodeURIComponent(`Hi, regarding my DOA request for order ${o.orderNo||orderId(o.id)} — here is my unboxing video.`))}
-                          style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video on WhatsApp</button>
+                          style={{marginTop:8,background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"8px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>💬 Send video on WhatsApp</button>
                       )}
-                      {win&&(st==="Requested")&&<div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.45}}>Found another one? You can still report other fish above{left>0?` for ${left}h`:""}.</div>}
+                      {win&&(st==="Requested")&&<div style={{fontSize:10,color:C.textSub,marginTop:6,lineHeight:1.45}}>Found another one? You can still report other fish above{left>0?` for ${left}h`:""}.</div>}
                     </div>
                   </div>
                 );
@@ -7470,7 +7470,7 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               Delete my account
             </button>
           ):(
-            <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:14,padding:"14px 16px"}}>
+            <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:16,padding:"14px 16px"}}>
               <div style={{fontSize:14,fontWeight:800,color:"#b91c1c",marginBottom:6}}>Delete my account &amp; data</div>
               <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.6,marginBottom:10}}>
                 This deletes your account and personal data — your profile, saved items, wallet &amp; loyalty coins, referral code and any tank photos you posted. Your past order &amp; payment records are kept only as long as tax law requires, then deleted. <b>This can't be undone.</b>
@@ -7482,11 +7482,11 @@ function OrderHistoryPage({user, orders, products, mediaCache, nav, onLogout, on
               <div style={{display:"flex",gap:8}}>
                 <button className="press" disabled={!delAck||delBusy}
                   onClick={async()=>{ if(!delAck||delBusy)return; setDelBusy(true); try{ await onDeleteAccount(); }catch(e){ setDelBusy(false); } }}
-                  style={{flex:1,background:(!delAck||delBusy)?"#f3a5a5":"#dc2626",color:"white",border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(!delAck||delBusy)?"default":"pointer"}}>
+                  style={{flex:1,background:(!delAck||delBusy)?"#f3a5a5":"#dc2626",color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(!delAck||delBusy)?"default":"pointer"}}>
                   {delBusy?"Deleting…":"Delete my account"}
                 </button>
                 <button className="press" disabled={delBusy} onClick={()=>{setDelOpen(false);setDelAck(false);}}
-                  style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 16px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
+                  style={{background:"white",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 16px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Cancel</button>
               </div>
               <div style={{fontSize:11,color:"#991b1b",marginTop:10,lineHeight:1.5}}>
                 Prefer to ask us directly? <a href="/delete-account.html" style={{color:"#b91c1c",fontWeight:700}}>Other ways to request deletion →</a>
@@ -7518,18 +7518,18 @@ function SkeletonGrid({n=6}){
   return(
     <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
       {Array.from({length:n}).map((_,i)=>(
-        <div key={i} style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`}}>
+        <div key={i} style={{background:C.card,borderRadius:20,overflow:"hidden",border:`1px solid ${C.border}`}}>
           <div className="shimmer-bar" style={{aspectRatio:"1 / 1"}}/>
           <div style={{padding:"11px 12px 12px"}}>
             {/* category */}
-            <div className="shimmer-bar" style={{height:9,borderRadius:6,marginBottom:5,width:"45%"}}/>
+            <div className="shimmer-bar" style={{height:9,borderRadius:8,marginBottom:5,width:"45%"}}/>
             {/* name — two lines inside the card's own minHeight:33 */}
             <div style={{minHeight:33,marginBottom:6}}>
-              <div className="shimmer-bar" style={{height:12,borderRadius:6,marginBottom:5}}/>
-              <div className="shimmer-bar" style={{height:12,borderRadius:6,width:"70%"}}/>
+              <div className="shimmer-bar" style={{height:12,borderRadius:8,marginBottom:5}}/>
+              <div className="shimmer-bar" style={{height:12,borderRadius:8,width:"70%"}}/>
             </div>
             {/* price */}
-            <div className="shimmer-bar" style={{height:16,borderRadius:6,width:"40%",marginBottom:6}}/>
+            <div className="shimmer-bar" style={{height:16,borderRadius:8,width:"40%",marginBottom:6}}/>
             {/* the add-to-cart row: a 11.5px label with 7px padding, so 30px tall */}
             <div className="shimmer-bar" style={{height:30,borderRadius:99}}/>
           </div>
@@ -7630,7 +7630,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   );
   return(
     <div className="lift" ref={cardRef} onClick={()=>onPress(p)} onMouseMove={onTilt} onMouseLeave={onTiltEnd}
-      style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.06)",cursor:"pointer",position:"relative"}}>
+      style={{background:C.card,borderRadius:20,overflow:"hidden",border:`1px solid ${C.border}`,boxShadow:"0 1px 2px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.06)",cursor:"pointer",position:"relative"}}>
       {fine&&<div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:5,opacity:"var(--spot,0)",transition:"opacity .3s ease",background:"radial-gradient(200px circle at var(--mx,50%) var(--my,50%),rgba(14,165,233,.14),transparent 62%)"}}/>}
       {/* The photo is the product — it gets a square tile (roughly 60% of the card) and is fitted
           WHOLE inside it. It used to be a 120px letterbox with object-fit:cover, which cropped a
@@ -7641,7 +7641,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           ? <SmoothImg src={imgSrc} alt={p.name} style={{width:"100%",height:"100%",objectFit:"contain",padding:6}}/>
           : productExpectsImage(p)
             ? <div className="shimmer-bar" style={{position:"absolute",inset:0}}/>
-            : <span style={{fontSize:54}}>{m.emoji}</span>}
+            : <span style={{fontSize:52}}>{m.emoji}</span>}
         {!imgSrc&&<div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(0,0,0,.16),transparent 40%)"}}/>}
         {p.tag&&<span style={{position:"absolute",top:8,left:8,background:"rgba(0,0,0,.32)",color:"white",fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,backdropFilter:"blur(4px)"}}>{p.tag}</span>}
         {onSale&&!soon&&<span style={{position:"absolute",bottom:8,left:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,padding:"3px 8px",borderRadius:20}}>-{activeDiscount(p)}%</span>}
@@ -7655,9 +7655,9 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
         <div style={{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3,marginBottom:6,minHeight:33}}>{p.name}</div>
         {soon ? (
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-            <div style={{fontSize:10.5,color:C.accent,fontWeight:700}}>Launching soon</div>
+            <div style={{fontSize:10,color:C.accent,fontWeight:700}}>Launching soon</div>
             <button className="press" onClick={e=>{e.stopPropagation();if(!isInterested&&onInterest)onInterest(p);}} disabled={isInterested}
-              style={{background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:10,padding:"6px 12px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:isInterested?"default":"pointer"}}>
+              style={{background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:12,padding:"6px 12px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:isInterested?"default":"pointer"}}>
               {isInterested?"✓ Interested":"🔔 Interested"}
             </button>
           </div>
@@ -7672,7 +7672,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
             {oos?"Out of stock":stk<=3?`🔥 Only ${stk} left`:stk<10?`Only ${stk} left`:"In stock"}
           </div>
           {inCart>0 ? (
-            <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:10,padding:"3px 4px",gap:4}}>
+            <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:12,padding:"3px 4px",gap:4}}>
               <button onClick={e=>{e.stopPropagation();onAdd(p,-1);}}
                 style={{background:"transparent",border:"none",color:"white",fontSize:16,fontWeight:700,width:22,height:22,lineHeight:1,cursor:"pointer"}}>−</button>
               <span style={{fontSize:12,fontWeight:800,color:"white",minWidth:14,textAlign:"center"}}>{inCart}</span>
@@ -7683,7 +7683,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
             <button className="cta" onClick={e=>{e.stopPropagation();if(oos)return;
                 if(multi){ onPress(p); return; }            // let the customer pick the option first
                 onAdd(p,1);flyToCart(e.clientX,e.clientY,imgSrc);}} disabled={oos}
-              style={{background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"7px 16px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:oos?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
+              style={{background:oos?"#e5e7eb":C.coral,color:oos?C.textSub:"white",border:"none",borderRadius:99,padding:"7px 16px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:oos?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
               {multi?"Select":"+ Add"}
             </button>
           )}
@@ -7721,7 +7721,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.86eb3aee";
+const APP_BUILD = "v90.5a9d7062";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7809,22 +7809,22 @@ function ReferralDrawerCard({open,user,settings={},orders=[],nav,onClose}){
      and still refreshes underneath. */
   if(settings.referralEnabled===false) return null;
   if(!uk) return(
-    <div style={{margin:"2px 0 12px",background:"linear-gradient(135deg,#ede9fe,#eef2ff)",border:"1px solid #c4b5fd",borderRadius:14,padding:"12px"}}>
-      <div style={{fontSize:12.5,fontWeight:800,color:"#5b21b6",marginBottom:3}}>🎟️ Your referral code</div>
-      <div style={{fontSize:10.8,color:"#6d28d9",lineHeight:1.45,marginBottom:8}}>Sign in to see your spend progress and unlock your unique code.</div>
+    <div style={{margin:"2px 0 12px",background:"linear-gradient(135deg,#ede9fe,#eef2ff)",border:"1px solid #c4b5fd",borderRadius:16,padding:"12px"}}>
+      <div style={{fontSize:12,fontWeight:800,color:"#5b21b6",marginBottom:3}}>🎟️ Your referral code</div>
+      <div style={{fontSize:11,color:"#6d28d9",lineHeight:1.45,marginBottom:8}}>Sign in to see your spend progress and unlock your unique code.</div>
       <button className="press" onClick={()=>{onClose&&onClose();nav&&nav("auth");}}
-        style={{width:"100%",background:"#6d28d9",color:"white",border:"none",borderRadius:9,padding:"8px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>
+        style={{width:"100%",background:"#6d28d9",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>
     </div>
   );
   /* One height for all three states — loading, locked and unlocked. They are within a few
      pixels of each other, and the categories sit directly underneath: a card that grows as it
      resolves moves the thing the customer is reaching for. */
-  const CARD={margin:"2px 0 12px",borderRadius:14,padding:"12px",minHeight:REFERRAL_CARD_MIN,boxSizing:"border-box"};
+  const CARD={margin:"2px 0 12px",borderRadius:16,padding:"12px",minHeight:REFERRAL_CARD_MIN,boxSizing:"border-box"};
   if(loading&&!status) return(
     <div style={{...CARD,background:C.bg,border:`1px solid ${C.border}`}} aria-busy="true">
-      <div style={{fontSize:12.5,fontWeight:800,color:C.textSub,marginBottom:8}}>🎟️ Your referral code</div>
-      <div className="shimmer-bar" style={{height:10,borderRadius:6,marginBottom:7}}/>
-      <div className="shimmer-bar" style={{height:10,borderRadius:6,width:"75%",marginBottom:12}}/>
+      <div style={{fontSize:12,fontWeight:800,color:C.textSub,marginBottom:8}}>🎟️ Your referral code</div>
+      <div className="shimmer-bar" style={{height:10,borderRadius:8,marginBottom:7}}/>
+      <div className="shimmer-bar" style={{height:10,borderRadius:8,width:"75%",marginBottom:12}}/>
       <div className="shimmer-bar" style={{height:31,borderRadius:8}}/>
     </div>
   );
@@ -7832,21 +7832,21 @@ function ReferralDrawerCard({open,user,settings={},orders=[],nav,onClose}){
   const pct=status.threshold<=0?100:Math.min(100,Math.round((status.spent/status.threshold)*100));
   return(
     <div style={{...CARD,background:status.unlocked?"linear-gradient(135deg,#7c3aed,#4f46e5)":"linear-gradient(135deg,#f5f3ff,#eef2ff)",border:`1px solid ${status.unlocked?"#7c3aed":"#c4b5fd"}`,color:status.unlocked?"white":"#4c1d95"}}>
-      <div style={{fontSize:12.5,fontWeight:800,marginBottom:3}}>🎟️ {status.unlocked?"Your referral code":"Referral code locked"}</div>
+      <div style={{fontSize:12,fontWeight:800,marginBottom:3}}>🎟️ {status.unlocked?"Your referral code":"Referral code locked"}</div>
       {status.unlocked?(
         <>
-          <div style={{fontSize:10.8,opacity:.9,lineHeight:1.45,marginBottom:8}}>Friends get {referralOfferLine(settings)} when they use this at checkout.{referralOwnerCoins(settings)>0?` You earn ${referralOwnerCoins(settings)} reward coins once their order is delivered.`:""}</div>
+          <div style={{fontSize:11,opacity:.9,lineHeight:1.45,marginBottom:8}}>Friends get {referralOfferLine(settings)} when they use this at checkout.{referralOwnerCoins(settings)>0?` You earn ${referralOwnerCoins(settings)} reward coins once their order is delivered.`:""}</div>
           <div style={{display:"flex",alignItems:"center",gap:7}}>
             <div style={{flex:1,background:"rgba(255,255,255,.18)",border:"1px dashed rgba(255,255,255,.55)",borderRadius:8,padding:"8px 7px",fontFamily:"monospace",fontSize:13,fontWeight:800,letterSpacing:1.2,textAlign:"center"}}>{status.code}</div>
             <button className="press" onClick={()=>{ try{navigator.clipboard.writeText(status.code);}catch(e){} try{navigator.share&&navigator.share({text:`Use ${status.code} at ${STORE_NAME} and get ${referralOfferLine(settings)}.`});}catch(e){} setCopied(true);setTimeout(()=>setCopied(false),1800); }}
-              style={{background:copied?"white":"rgba(255,255,255,.24)",color:copied?"#6d28d9":"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"9px 10px",fontSize:10.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied?"✓ Copied":"Share"}</button>
+              style={{background:copied?"white":"rgba(255,255,255,.24)",color:copied?"#6d28d9":"white",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"9px 10px",fontSize:10,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{copied?"✓ Copied":"Share"}</button>
           </div>
         </>
       ):(
         <>
-          <div style={{fontSize:10.8,lineHeight:1.45,marginBottom:8}}>Spend ₹{status.remaining.toLocaleString("en-IN")} more successfully to unlock your permanent code.</div>
+          <div style={{fontSize:11,lineHeight:1.45,marginBottom:8}}>Spend ₹{status.remaining.toLocaleString("en-IN")} more successfully to unlock your permanent code.</div>
           <div style={{height:7,background:"#ddd6fe",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:"#7c3aed",borderRadius:99}}/></div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:9.8,fontWeight:700,marginTop:5}}><span>₹{status.spent.toLocaleString("en-IN")} spent</span><span>₹{status.threshold.toLocaleString("en-IN")} goal</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:700,marginTop:5}}><span>₹{status.spent.toLocaleString("en-IN")} spent</span><span>₹{status.threshold.toLocaleString("en-IN")} goal</span></div>
         </>
       )}
     </div>
@@ -7877,22 +7877,22 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
           <button className="press" onClick={onClose} aria-label="Close menu"
             style={{position:"absolute",top:42,right:14,width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:18,cursor:"pointer",lineHeight:1}}>×</button>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800}}>Browse</div>
-          <div style={{fontSize:11.5,color:"rgba(255,255,255,.8)",marginTop:2}}>Shop by category</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,.8)",marginTop:2}}>Shop by category</div>
         </div>
         {/* Only this part scrolls; `overscroll-behavior:contain` stops the flick from
             carrying through to the page behind the drawer once the list hits its end. */}
         <div className="nemo-browse-scroll" style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",padding:"12px 12px 18px"}}>
           <ReferralDrawerCard open={open} user={user} settings={settings} orders={orders} nav={nav} onClose={onClose}/>
           <button className="press" onClick={()=>onSelect("All")}
-            style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderRadius:13,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+            style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderRadius:12,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
             <span style={{fontSize:22,width:28,textAlign:"center"}}>🌊</span>
-            <span style={{fontSize:14.5,fontWeight:800,color:C.text}}>All Products</span>
+            <span style={{fontSize:14,fontWeight:800,color:C.text}}>All Products</span>
           </button>
           {shopCategories().map(cat=>(
             <button key={cat} className="press" onClick={()=>onSelect(cat)}
               style={{display:"flex",alignItems:"center",gap:13,width:"100%",background:"transparent",border:"none",borderTop:`1px solid ${C.border}`,padding:"13px 12px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
               <span style={{fontSize:22,width:28,textAlign:"center"}}>{CAT_META[cat].emoji}</span>
-              <span style={{fontSize:14.5,fontWeight:700,color:C.text}}>{cat}</span>
+              <span style={{fontSize:14,fontWeight:700,color:C.text}}>{cat}</span>
               <span style={{marginLeft:"auto",color:C.textSub,fontSize:16}}>›</span>
             </button>
           ))}
@@ -7900,7 +7900,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
             <div style={{marginTop:18,paddingTop:6}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 12px",marginBottom:8}}>
                 <span style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6}}>Recent searches</span>
-                <button className="press" onClick={()=>onRecent&&onRecent(null)} style={{background:"none",border:"none",color:C.textSub,fontSize:10.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Clear</button>
+                <button className="press" onClick={()=>onRecent&&onRecent(null)} style={{background:"none",border:"none",color:C.textSub,fontSize:10,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Clear</button>
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:7,padding:"0 12px"}}>
                 {recent.map(r=>(
@@ -7915,10 +7915,10 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
           {/* Dedicated refresh — for a device stuck on an old build or a stale catalogue */}
           <div style={{marginTop:16,borderTop:`1px solid ${C.border}`,paddingTop:14}}>
             <button className="press" onClick={()=>{ if(refreshing)return; setRefreshing(true); forceRefresh(); }} disabled={refreshing}
-              style={{display:"flex",alignItems:"center",gap:11,width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:13,padding:"12px",cursor:refreshing?"default":"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+              style={{display:"flex",alignItems:"center",gap:11,width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px",cursor:refreshing?"default":"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
               <span style={{fontSize:20,width:26,textAlign:"center",flexShrink:0}}>{refreshing?"⏳":"🔄"}</span>
               <span style={{minWidth:0}}>
-                <span style={{display:"block",fontSize:13.5,fontWeight:800,color:C.text}}>{refreshing?"Refreshing…":"Refresh app"}</span>
+                <span style={{display:"block",fontSize:13,fontWeight:800,color:C.text}}>{refreshing?"Refreshing…":"Refresh app"}</span>
                 <span style={{display:"block",fontSize:11,color:C.textSub,marginTop:1,lineHeight:1.35}}>Clear the cache and reload the latest products &amp; prices</span>
               </span>
             </button>
@@ -7929,12 +7929,12 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
               <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",marginBottom:4}}>Company</div>
               {COMPANY.map(l=>(
                 <button key={l.label} className="press" onClick={()=>go(l.to)}
-                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l.label}</button>
+                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>{l.label}</button>
               ))}
               <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",margin:"20px 0 4px",borderTop:`1px solid ${C.border}`,paddingTop:16}}>Policies</div>
               {POLICIES.map(l=>(
                 <a key={l.label} className="press" href={l.href||"#"} onClick={e=>{e.preventDefault();go(l.to);}}
-                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",textDecoration:"none",boxSizing:"border-box"}}>{l.label}</a>
+                  style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 12px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",textDecoration:"none",boxSizing:"border-box"}}>{l.label}</a>
               ))}
             </div>
           )}
@@ -7942,7 +7942,7 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
           <PlayAppBlock medium="side_menu" note="Shop and track your orders from your phone."
             style={{marginTop:20,borderTop:`1px solid ${C.border}`,paddingTop:16}}
             headingStyle={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,padding:"0 12px",marginBottom:4}}
-            noteStyle={{fontSize:12.5,color:C.textSub,lineHeight:1.5,padding:"0 12px"}}
+            noteStyle={{fontSize:12,color:C.textSub,lineHeight:1.5,padding:"0 12px"}}
             badgeStyle={{marginLeft:3}}/>
         </div>
       </div>
@@ -7967,27 +7967,27 @@ function PincodeChecker({settings={}}){
     <div style={{margin:"28px 0 0",background:`linear-gradient(135deg,${C.primaryDark},${C.primary})`,borderRadius:20,padding:"22px 20px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
         <span style={{fontSize:22}}>📍</span>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,color:"#fff"}}>Check delivery to your area</span>
+        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:"#fff"}}>Check delivery to your area</span>
       </div>
-      <div style={{fontSize:12.5,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>{LIVE_FISH_ENABLED?"Enter your 6-digit pincode to see if we deliver — and whether live fish reach your area.":"Enter your 6-digit pincode to see if we deliver to your area."}</div>
+      <div style={{fontSize:12,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>{LIVE_FISH_ENABLED?"Enter your 6-digit pincode to see if we deliver — and whether live fish reach your area.":"Enter your 6-digit pincode to see if we deliver to your area."}</div>
       <div style={{display:"flex",gap:8}}>
         <input value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,6));setRes(null);}}
           onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric"
-          style={{flex:1,borderRadius:12,border:"none",padding:"13px 14px",fontSize:15,outline:"none",letterSpacing:2,fontFamily:PRICE_FONT,minWidth:0}}/>
+          style={{flex:1,borderRadius:12,border:"none",padding:"13px 14px",fontSize:14,outline:"none",letterSpacing:2,fontFamily:PRICE_FONT,minWidth:0}}/>
         <button className="press" onClick={check} style={{background:"#fff",color:C.primary,border:"none",borderRadius:12,padding:"0 20px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,cursor:"pointer"}}>Check</button>
       </div>
       {res&&(
-        <div style={{marginTop:14,background:"rgba(255,255,255,.96)",borderRadius:14,padding:"13px 15px"}}>
+        <div style={{marginTop:14,background:"rgba(255,255,255,.96)",borderRadius:16,padding:"13px 15px"}}>
           {res.err?(
             <div style={{fontSize:13,fontWeight:700,color:C.danger}}>Please enter a valid 6-digit pincode.</div>
           ):(<>
             <div style={{fontSize:14,fontWeight:800,color:C.success,marginBottom:6}}>✓ Yes! We deliver to {ZONE_LABELS[res.zone]}.</div>
             {!LIVE_FISH_ENABLED?(
-              <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.5}}>🌿 Plants, tanks, accessories &amp; feed — all available, delivered across India.</div>
+              <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>🌿 Plants, tanks, accessories &amp; feed — all available, delivered across India.</div>
             ):res.live?(
-              <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.5}}>🐠 Live fish, plants &amp; accessories — all available, with our Live Arrival Guarantee.</div>
+              <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>🐠 Live fish, plants &amp; accessories — all available, with our Live Arrival Guarantee.</div>
             ):(
-              <div style={{fontSize:12.5,color:"#b45309",lineHeight:1.5,fontWeight:600}}>📦 Accessories, food &amp; plants ship here. Live fish aren't delivered to this region yet — for their safety we ship live stock only within Tamil Nadu &amp; South India.</div>
+              <div style={{fontSize:12,color:"#b45309",lineHeight:1.5,fontWeight:600}}>📦 Accessories, food &amp; plants ship here. Live fish aren't delivered to this region yet — for their safety we ship live stock only within Tamil Nadu &amp; South India.</div>
             )}
           </>)}
         </div>
@@ -8004,14 +8004,14 @@ function FoodReorderBanner({orders,products,addToCart,nav}){
   const reorder=()=>{ if(inStock){ addToCart(due.product,1); nav("cart"); } else if(due.product){ nav("detail",due.product); } };
   const dismiss=()=>{ try{ localStorage.setItem("nemo-reorder-dismiss",due.key); }catch{} setDismissed(true); };
   return(
-    <div style={{marginBottom:22,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:18,padding:"14px 30px 14px 16px",display:"flex",alignItems:"center",gap:13,position:"relative"}}>
+    <div style={{marginBottom:22,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:20,padding:"14px 30px 14px 16px",display:"flex",alignItems:"center",gap:13,position:"relative"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"#ffedd5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>🥣</div>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14.5,fontWeight:800,color:"#9a3412",lineHeight:1.2}}>Running low on fish food?</div>
-        <div style={{fontSize:11.5,color:"#9a3412",opacity:.85,marginTop:2,lineHeight:1.4}}>You bought {due.item.name} about {due.ageDays} days ago — keep your fish well-fed.</div>
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#9a3412",lineHeight:1.2}}>Running low on fish food?</div>
+        <div style={{fontSize:11,color:"#9a3412",opacity:.85,marginTop:2,lineHeight:1.4}}>You bought {due.item.name} about {due.ageDays} days ago — keep your fish well-fed.</div>
       </div>
       <button className="press" onClick={reorder}
-        style={{flexShrink:0,background:C.coral,color:"white",border:"none",borderRadius:11,padding:"10px 14px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        style={{flexShrink:0,background:C.coral,color:"white",border:"none",borderRadius:12,padding:"10px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
         {inStock?"Reorder":"View"}
       </button>
       <button className="press" onClick={dismiss} aria-label="Dismiss"
@@ -8059,7 +8059,7 @@ function DoaInsights({orders=[]}){
         <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:6}}>{title}</div>
         {arr.map(x=>(
           <div key={x.k} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderTop:`1px solid ${C.border}`}}>
-            <span style={{flex:1,fontSize:12.5,fontWeight:600,color:C.text,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.k}</span>
+            <span style={{flex:1,fontSize:12,fontWeight:600,color:C.text,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.k}</span>
             <span style={{fontSize:11,color:C.textSub,fontWeight:600}}>{x.doa}/{x.d}</span>
             <span style={{fontSize:12,fontWeight:800,color:rateColor(x.rate),minWidth:46,textAlign:"right"}}>{x.rate.toFixed(0)}%</span>
           </div>
@@ -8068,7 +8068,7 @@ function DoaInsights({orders=[]}){
     );
   };
   return(
-    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:14}}>
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:14}}>
       <button className="press" onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:"none",border:"none",padding:0,cursor:"pointer",textAlign:"left"}}>
         <span style={{fontSize:18}}>🩺</span>
         <div style={{flex:1}}>
@@ -8079,7 +8079,7 @@ function DoaInsights({orders=[]}){
         <span style={{fontSize:13,color:C.textSub,marginLeft:6}}>{open?"▲":"▼"}</span>
       </button>
       {open&&(data.doa===0?(
-        <div style={{marginTop:12,fontSize:12,color:"#15803d",fontWeight:600,background:"#ecfdf5",borderRadius:10,padding:"10px 12px"}}>✓ No DOA reported yet — your fish are arriving safe!</div>
+        <div style={{marginTop:12,fontSize:12,color:"#15803d",fontWeight:600,background:"#ecfdf5",borderRadius:12,padding:"10px 12px"}}>✓ No DOA reported yet — your fish are arriving safe!</div>
       ):(
         <div>
           {/* The rates say WHERE losses cluster; this says WHICH orders they were, so a number
@@ -8097,10 +8097,10 @@ function DoaInsights({orders=[]}){
                   <div key={o.id} style={{padding:"8px 0",borderTop:`1px solid ${C.border}`}}>
                     <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
                       <code style={{fontSize:12,fontWeight:800,color:C.text,fontFamily:"monospace"}}>{o.orderNo||orderId(o.id)}</code>
-                      <span style={{fontSize:10.5,color:C.textSub}}>{o.shippingZoneLabel||"Unknown"}</span>
-                      <span style={{fontSize:10.5,fontWeight:800,color:col,marginLeft:"auto"}}>{st}</span>
+                      <span style={{fontSize:10,color:C.textSub}}>{o.shippingZoneLabel||"Unknown"}</span>
+                      <span style={{fontSize:10,fontWeight:800,color:col,marginLeft:"auto"}}>{st}</span>
                     </div>
-                    <div style={{fontSize:10.5,color:C.textSub,marginTop:2,lineHeight:1.45}}>
+                    <div style={{fontSize:10,color:C.textSub,marginTop:2,lineHeight:1.45}}>
                       {claims.length
                         ? claims.map(c=>`${c.name||"Item"} x${c.qty||1}${c.cause?` (${c.cause})`:""}`).join(" · ")
                         : (o.doa&&o.doa.claimReason)||"No item detail recorded"}
@@ -8558,7 +8558,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   const lbl={fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:5};
   const fld={width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:14,outline:"none",background:"#f8fafc"};
   const numIn=(val,set,ph)=>(<input type="number" inputMode="decimal" min="0" value={val} placeholder={ph} onChange={e=>set(e.target.value)} style={{...fld,textAlign:"center"}}/>);
-  const chip=(on)=>({flexShrink:0,padding:"8px 13px",borderRadius:20,border:`1.5px solid ${on?C.primary:C.border}`,background:on?C.primary:"transparent",color:on?"#fff":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"});
+  const chip=(on)=>({flexShrink:0,padding:"8px 13px",borderRadius:20,border:`1.5px solid ${on?C.primary:C.border}`,background:on?C.primary:"transparent",color:on?"#fff":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"});
 
   const applyVolume=()=>{
     persist({...tank,litres:usableL||waterL,lengthCm:Math.round(dimsCm.l)});
@@ -8639,10 +8639,10 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 </div>
               </div>
               {waterL>0&&(
-                <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginTop:12,fontSize:12.5,lineHeight:1.6,color:C.text}}>
+                <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginTop:12,fontSize:12,lineHeight:1.6,color:C.text}}>
                   💧 <b>{waterL} L</b> of water ({usGal(waterL)} US gal · {ukGal(waterL)} UK gal){fullL!==waterL?` — the tank itself holds ${fullL} L`:""}.<br/>
                   Usable after substrate &amp; décor: <b style={{color:C.primary}}>~{usableL} L</b> — plan stocking on that figure.
-                  <button className="press" onClick={applyVolume} style={{display:"block",marginTop:9,background:C.primary,color:"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Save to My Tank</button>
+                  <button className="press" onClick={applyVolume} style={{display:"block",marginTop:9,background:C.primary,color:"#fff",border:"none",borderRadius:12,padding:"9px 14px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Save to My Tank</button>
                   {savedNote&&<div style={{fontSize:11,color:C.success,fontWeight:700,marginTop:6}}>{savedNote}</div>}
                 </div>
               )}
@@ -8651,7 +8651,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
 
           {saved&&!editing&&(
             <div style={{display:"flex",gap:12,alignItems:"center"}}>
-              <div style={{fontSize:12.5,color:C.text,lineHeight:1.7}}>
+              <div style={{fontSize:12,color:C.text,lineHeight:1.7}}>
                 <b>{tank.litres} L</b> usable{tank.lengthCm?` · ${tank.lengthCm} cm long`:""}<br/>
                 <span style={{color:C.textSub}}>
                   {({tropical:"Tropical",coldwater:"Coldwater",pond:"Pond",marine:"Marine"})[tank.type]}
@@ -8671,11 +8671,11 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
           return(
             <div style={{...card,background:L.bg,border:`1.5px solid ${L.bd}`}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                <span style={{fontSize:17}}>{L.icon}</span>
+                <span style={{fontSize:16}}>{L.icon}</span>
                 <span style={{fontSize:10,fontWeight:800,letterSpacing:.6,textTransform:"uppercase",color:L.c}}>{L.label}</span>
-                <span style={{marginLeft:"auto",fontSize:10.5,color:C.textSub}}>{fmtDate(latestTest(tank).at)}</span>
+                <span style={{marginLeft:"auto",fontSize:10,color:C.textSub}}>{fmtDate(latestTest(tank).at)}</span>
               </div>
-              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:L.c,marginBottom:4}}>{verdict.title}</div>
+              <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:L.c,marginBottom:4}}>{verdict.title}</div>
               <div style={{fontSize:12,color:C.text,lineHeight:1.55,marginBottom:verdict.dos.length?10:0}}>{verdict.why}</div>
               {verdict.dos.map((d,i)=>(
                 <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:5}}>
@@ -8685,7 +8685,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
               ))}
               {verdict.level!=="good"&&(
                 <button className="press" onClick={markCareDone}
-                  style={{width:"100%",marginTop:8,background:L.c,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  style={{width:"100%",marginTop:8,background:L.c,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                   ✓ Done — I've made this change
                 </button>
               )}
@@ -8703,15 +8703,15 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:7,marginBottom:9}}>
               {WATER_PARAMS.map(pm=>(
                 <div key={pm.k}>
-                  <div style={{fontSize:9.5,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.4,marginBottom:4,textAlign:"center"}}>{pm.n}</div>
+                  <div style={{fontSize:9,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.4,marginBottom:4,textAlign:"center"}}>{pm.n}</div>
                   <input type="number" inputMode="decimal" min="0" step={pm.step} value={test[pm.k]}
                     onChange={e=>setTest(t=>({...t,[pm.k]:e.target.value}))} placeholder="—"
-                    style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 4px",fontSize:13.5,outline:"none",background:"#f8fafc",textAlign:"center"}}/>
+                    style={{width:"100%",boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 4px",fontSize:13,outline:"none",background:"#f8fafc",textAlign:"center"}}/>
                 </div>
               ))}
             </div>
             <button className="press" onClick={saveTest}
-              style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
               Save today's readings
             </button>
 
@@ -8723,9 +8723,9 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                   return(
                     <div key={pm.k} style={{marginBottom:12}}>
                       <div style={{display:"flex",alignItems:"baseline",gap:7,marginBottom:2}}>
-                        <span style={{width:9,height:9,borderRadius:3,background:pm.color,flexShrink:0}}/>
+                        <span style={{width:9,height:9,borderRadius:4,background:pm.color,flexShrink:0}}/>
                         <span style={{fontSize:12,fontWeight:800,color:C.text}}>{pm.n}</span>
-                        <span style={{fontSize:10.5,color:C.textSub}}>
+                        <span style={{fontSize:10,color:C.textSub}}>
                           {pm.k==="ph"?`safe ${pm.lo}–${pm.hi}`:pm.hi>0?`safe under ${pm.hi} ${pm.unit}`:`must read 0 ${pm.unit}`}
                         </span>
                       </div>
@@ -8741,7 +8741,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 </button>
                 {logOpen&&(
                   <div style={{marginTop:9,overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                       <thead>
                         <tr style={{color:C.textSub}}>
                           <th style={{textAlign:"left",padding:"5px 6px",fontWeight:700}}>Date</th>
@@ -8776,7 +8776,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
               {perm!=="denied"&&(
                 <button className="press" onClick={toggleRemind} role="switch" aria-checked={!!tank.remind}
                   aria-label={tank.remind?"Turn off weekly tank reminders":"Turn on weekly tank reminders"}
-                  style={{display:"flex",alignItems:"center",gap:7,background:tank.remind?"#dcfce7":C.accentLight,border:`1px solid ${tank.remind?"#86efac":C.border}`,borderRadius:10,padding:"6px 11px",fontSize:11,fontWeight:700,color:tank.remind?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  style={{display:"flex",alignItems:"center",gap:7,background:tank.remind?"#dcfce7":C.accentLight,border:`1px solid ${tank.remind?"#86efac":C.border}`,borderRadius:12,padding:"6px 11px",fontSize:11,fontWeight:700,color:tank.remind?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                   <span>{tank.remind?"🔔":"🔕"}</span><span>Remind me</span>
                   <span style={{width:24,height:14,borderRadius:99,background:tank.remind?"#22c55e":"#cbd5e1",position:"relative",flexShrink:0,transition:"background .2s ease"}}>
                     <span style={{position:"absolute",top:2,left:tank.remind?12:2,width:10,height:10,borderRadius:"50%",background:"#fff",transition:"left .2s ease"}}/>
@@ -8791,16 +8791,16 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                  :`Done ${due.days===0?"today":due.days===1?"yesterday":`${due.days} days ago`} · next in ${CARE_INTERVAL_DAYS-due.days} day${CARE_INTERVAL_DAYS-due.days===1?"":"s"}.`}
               </div>
               <button className="press" onClick={markCareDone}
-                style={{background:due.due?C.primary:"#fff",color:due.due?"#fff":C.primary,border:due.due?"none":`1.5px solid ${C.primary}`,borderRadius:10,padding:"8px 13px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",flexShrink:0}}>
+                style={{background:due.due?C.primary:"#fff",color:due.due?"#fff":C.primary,border:due.due?"none":`1.5px solid ${C.primary}`,borderRadius:12,padding:"8px 13px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",flexShrink:0}}>
                 ✓ Done today
               </button>
             </div>
-            {tank.remind&&<div style={{fontSize:10.5,color:C.textSub,marginBottom:10,lineHeight:1.45}}>You'll be reminded when you open the app and the week is up — we can't wake a closed phone yet.</div>}
+            {tank.remind&&<div style={{fontSize:10,color:C.textSub,marginBottom:10,lineHeight:1.45}}>You'll be reminded when you open the app and the week is up — we can't wake a closed phone yet.</div>}
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {weekly.map((w,i)=>(
                 <label key={i} style={{display:"flex",gap:10,alignItems:"flex-start",background:checkedJobs.includes(i)?"#ecfdf5":"#f8fafc",border:`1px solid ${checkedJobs.includes(i)?"#a7f3d0":C.border}`,borderRadius:12,padding:"10px 12px",cursor:"pointer"}}>
                   <input type="checkbox" checked={checkedJobs.includes(i)} onChange={()=>toggleJob(i)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
-                  <div><div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{w.i} {w.t}</div><div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:2}}>{w.s}</div></div>
+                  <div><div style={{fontSize:12,fontWeight:700,color:C.text}}>{w.i} {w.t}</div><div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:2}}>{w.s}</div></div>
                 </label>
               ))}
             </div>
@@ -8820,15 +8820,15 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 const S=SPECIES[key];
                 return(
                   <div key={key} style={{display:"flex",alignItems:"center",gap:10,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 11px"}}>
-                    <span style={{fontSize:17,flexShrink:0}}>{S.e}</span>
+                    <span style={{fontSize:16,flexShrink:0}}>{S.e}</span>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{S.n} {S.big&&<span style={{fontSize:9,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"2px 7px",marginLeft:4}}>LARGE — {S.size} CM</span>}</div>
-                      <div style={{fontSize:10.5,color:C.textSub,fontStyle:"italic"}}>{S.sci} · adult {S.size} cm</div>
+                      <div style={{fontSize:12,fontWeight:700,color:C.text}}>{S.n} {S.big&&<span style={{fontSize:9,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"2px 7px",marginLeft:4}}>LARGE — {S.size} CM</span>}</div>
+                      <div style={{fontSize:10,color:C.textSub,fontStyle:"italic"}}>{S.sci} · adult {S.size} cm</div>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",gap:9,background:"#fff",borderRadius:10,padding:"3px 9px",border:`1.5px solid ${C.border}`,flexShrink:0}}>
-                      <button className="press" onClick={()=>setQty(key,qty-1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>−</button>
+                    <div style={{display:"flex",alignItems:"center",gap:9,background:"#fff",borderRadius:12,padding:"3px 9px",border:`1.5px solid ${C.border}`,flexShrink:0}}>
+                      <button className="press" onClick={()=>setQty(key,qty-1)} style={{background:"none",border:"none",fontSize:16,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>−</button>
                       <span style={{fontSize:13,fontWeight:700,minWidth:16,textAlign:"center"}}>{qty}</span>
-                      <button className="press" onClick={()=>setQty(key,qty+1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>+</button>
+                      <button className="press" onClick={()=>setQty(key,qty+1)} style={{background:"none",border:"none",fontSize:16,color:C.primary,fontWeight:700,cursor:"pointer",lineHeight:1}}>+</button>
                     </div>
                   </div>
                 );
@@ -8836,7 +8836,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             </div>
           )}
 
-          <button className="press" onClick={()=>setPickOpen(v=>!v)} style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",marginBottom:pickOpen?12:0}}>
+          <button className="press" onClick={()=>setPickOpen(v=>!v)} style={{width:"100%",background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",marginBottom:pickOpen?12:0}}>
             {pickOpen?"▲ Close the fish list":"＋ Add fish"}
           </button>
 
@@ -8846,7 +8846,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             return(
               <div key={g.k} style={{marginBottom:12}}>
                 <div style={{...lbl,marginTop:4}}>{g.label}</div>
-                {g.k==="pond"&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:8,lineHeight:1.5}}>Pond fish, not aquarium fish. Koi need a large, deep pond — OATA advises substantially more depth than a tank can offer.</div>}
+                {g.k==="pond"&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"8px 10px",marginBottom:8,lineHeight:1.5}}>Pond fish, not aquarium fish. Koi need a large, deep pond — OATA advises substantially more depth than a tank can offer.</div>}
                 {g.k==="invert"&&<div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Judged separately from fish: "can live together" is not the same as "will not be eaten".</div>}
                 <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
                   {keys.map(k=>{
@@ -8864,9 +8864,9 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
 
           {report&&(
             <div style={{marginTop:14}}>
-              <div style={{background:VERDICT[report.worst].bg,border:`1.5px solid ${VERDICT[report.worst].bd}`,borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+              <div style={{background:VERDICT[report.worst].bg,border:`1.5px solid ${VERDICT[report.worst].bd}`,borderRadius:16,padding:"12px 14px",marginBottom:10}}>
                 <div style={{fontSize:14,fontWeight:800,color:VERDICT[report.worst].c}}>{VERDICT[report.worst].icon} {VERDICT[report.worst].t}</div>
-                <div style={{fontSize:11.5,color:C.textSub,marginTop:4,lineHeight:1.55}}>
+                <div style={{fontSize:11,color:C.textSub,marginTop:4,lineHeight:1.55}}>
                   Confidence: <b style={{color:C.text}}>{report.confidence}</b>
                   {report.missing.length>0&&<> — still missing {report.missing.join(", ")}.</>}
                 </div>
@@ -8876,9 +8876,9 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 <div style={{marginBottom:9}}>
                   <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>🏠 {tank.name||"This tank"}</div>
                   {report.tankLvl.map((it,i)=>(
-                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:12,padding:"8px 11px",marginBottom:5}}>
                       <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
-                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                      <div style={{fontSize:11,lineHeight:1.55,color:C.text}}>{it.r}</div>
                     </div>
                   ))}
                 </div>
@@ -8887,9 +8887,9 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 <div key={key} style={{marginBottom:9}}>
                   <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>{SPECIES[key].e} {qty} × {SPECIES[key].n}</div>
                   {issues.map((it,i)=>(
-                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:12,padding:"8px 11px",marginBottom:5}}>
                       <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
-                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                      <div style={{fontSize:11,lineHeight:1.55,color:C.text}}>{it.r}</div>
                     </div>
                   ))}
                 </div>
@@ -8899,17 +8899,17 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 <div key={i} style={{marginBottom:9}}>
                   <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:5}}>{SPECIES[p.a].n} × {SPECIES[p.b].n}</div>
                   {p.issues.map((it,j)=>(
-                    <div key={j} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:11,padding:"8px 11px",marginBottom:5}}>
+                    <div key={j} style={{display:"flex",gap:8,alignItems:"flex-start",background:VERDICT[it.v].bg,border:`1px solid ${VERDICT[it.v].bd}`,borderRadius:12,padding:"8px 11px",marginBottom:5}}>
                       <span style={{fontSize:13,flexShrink:0}}>{VERDICT[it.v].icon}</span>
-                      <div style={{fontSize:11.5,lineHeight:1.55,color:C.text}}>{it.r}</div>
+                      <div style={{fontSize:11,lineHeight:1.55,color:C.text}}>{it.r}</div>
                     </div>
                   ))}
                 </div>
               ))}
 
-              {report.worst===V_OK&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.55}}>Nothing in this mix conflicts. Add fish a few at a time so the filter can keep up.</div>}
+              {report.worst===V_OK&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.55}}>Nothing in this mix conflicts. Add fish a few at a time so the filter can keep up.</div>}
 
-              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:11.5,lineHeight:1.6,color:C.text,marginTop:6}}>
+              <div style={{background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:11,lineHeight:1.6,color:C.text,marginTop:6}}>
                 🪣 <b>Waste load:</b> {({light:"light — room to add more later",comfortable:"comfortable for this volume",full:"at the comfortable limit",over:"beyond what this volume supports",unknown:"needs the tank volume to judge"})[report.load.level]}
                 {report.load.heavy.length>0&&<> · heavy-waste species here: {report.load.heavy.join(", ")}.</>}
               </div>
@@ -8932,14 +8932,14 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             <div><div style={lbl}>Room temp °C</div>{numIn(roomT,setRoomT,"28")}</div>
             <div><div style={lbl}>Target water °C</div>{numIn(tank.tempC,v=>setF("tempC",v),"26")}</div>
           </div>
-          {!tank.litres&&<div style={{fontSize:11.5,color:C.textSub}}>Set your tank volume above to size a heater.</div>}
+          {!tank.litres&&<div style={{fontSize:11,color:C.textSub}}>Set your tank volume above to size a heater.</div>}
           {heater&&heater.none&&(
-            <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:"#92400e"}}>
+            <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"11px 13px",fontSize:12,lineHeight:1.6,color:"#92400e"}}>
               🔥 Your room already sits at or above the target. A heater would rarely switch on — and in a hot spell the risk is <b>overheating</b>, not cold. Watch for water above {Number(tank.tempC)+2}°C, keep the surface moving, and consider a fan across the surface rather than a heater.
             </div>
           )}
           {heater&&!heater.none&&(
-            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:C.text}}>
+            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12,lineHeight:1.6,color:C.text}}>
               🌡️ About <b style={{color:C.primary}}>{heater.w} W</b> to hold {tank.tempC}°C in a {roomT}°C room ({heater.lift}°C lift).
               {heater.split&&<> Over 200 L, two smaller heaters at opposite ends beat one large one — and a single failure cannot cook or chill the tank.</>}
               {heater.hot&&<> Your room is close to the target, so it will rarely run.</>}
@@ -8953,9 +8953,9 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
           <div style={{fontSize:12,color:C.textSub,lineHeight:1.5,marginBottom:10}}>
             A recommended range, not a guaranteed safe figure — what the filter holds matters more than the number on the box.
           </div>
-          {!filterRec&&<div style={{fontSize:11.5,color:C.textSub}}>Set your tank volume above to size a filter.</div>}
+          {!filterRec&&<div style={{fontSize:11,color:C.textSub}}>Set your tank volume above to size a filter.</div>}
           {filterRec&&(
-            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12.5,lineHeight:1.6,color:C.text}}>
+            <div style={{background:"#f1f9fe",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",fontSize:12,lineHeight:1.6,color:C.text}}>
               🌀 Aim for <b style={{color:C.primary}}>{filterRec.lo}–{filterRec.hi} L/h</b> on a {tank.litres} L tank
               {filterRec.lvl!=="unknown"&&<> at your planned stocking ({filterRec.lvl}).</>}
               {filterRec.heavy.length>0&&<> Heavy-waste species in the plan ({filterRec.heavy.join(", ")}) push you to the top of that range.</>}
@@ -9012,10 +9012,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
         {/* Hamburger — opens category drawer */}
         <button className="press home-hero-chrome" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
-          style={{position:"absolute",top:46,left:16,width:40,height:40,borderRadius:14,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,cursor:"pointer",zIndex:3}}>
-          <span style={{width:17,height:2,background:C.text,borderRadius:2}}/>
-          <span style={{width:17,height:2,background:C.text,borderRadius:2}}/>
-          <span style={{width:17,height:2,background:C.text,borderRadius:2}}/>
+          style={{position:"absolute",top:46,left:16,width:40,height:40,borderRadius:16,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,cursor:"pointer",zIndex:3}}>
+          <span style={{width:17,height:2,background:C.text,borderRadius:4}}/>
+          <span style={{width:17,height:2,background:C.text,borderRadius:4}}/>
+          <span style={{width:17,height:2,background:C.text,borderRadius:4}}/>
         </button>
         {/* Account chip */}
         <div className="home-hero-chrome" style={{position:"absolute",top:46,right:16,display:"flex",alignItems:"center",gap:8}}>
@@ -9023,8 +9023,8 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <button className="press" onClick={()=>setWalletOpen(true)} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your coins & history"}
               style={{position:"relative",display:"flex",alignItems:"center",gap:5,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",borderRadius:99,padding:"7px 12px",color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
               <span style={{fontSize:14,lineHeight:1}}>👛</span>
-              <span style={{fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{walletPts}</span>
-              {walletWarn&&<span style={{position:"absolute",top:-5,right:-4,minWidth:16,height:16,padding:"0 3px",borderRadius:9,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid rgba(13,90,94,.9)"}}>⏳</span>}
+              <span style={{fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{walletPts}</span>
+              {walletWarn&&<span style={{position:"absolute",top:-5,right:-4,minWidth:16,height:16,padding:"0 3px",borderRadius:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid rgba(13,90,94,.9)"}}>⏳</span>}
             </button>
           )}
           <button className="press" onClick={()=>nav("orders")}
@@ -9052,15 +9052,15 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Browse categories — opens the left-slide category sidebar (icon only; shown on desktop, just above the quote). On mobile the top-left hamburger already does this. */}
         <button className="press hero-browse" onClick={()=>setMenuOpen(true)} aria-label="Browse categories"
           style={{display:"none",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:4,width:46,height:46,background:"#f8fafc",border:`1px solid ${C.border}`,boxShadow:"0 2px 10px rgba(15,23,42,.05)",borderRadius:16,color:C.text,cursor:"pointer",marginBottom:18}}>
-          <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
-          <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
-          <span style={{width:18,height:2,background:C.text,borderRadius:2}}/>
+          <span style={{width:18,height:2,background:C.text,borderRadius:4}}/>
+          <span style={{width:18,height:2,background:C.text,borderRadius:4}}/>
+          <span style={{width:18,height:2,background:C.text,borderRadius:4}}/>
         </button>
         {/* Tagline */}
         <div className="hero-tagline" style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:"clamp(23px,6vw,38px)",fontWeight:800,letterSpacing:"-0.03em",color:C.text,lineHeight:1.1,marginBottom:5,textWrap:"balance",textAlign:"center"}}>
           {storeCopy(settings.heroHeadline,"Bring Colour to Your Life","Bring Colour to Your Life")}
         </div>
-        <div className="hero-sub" style={{fontSize:13.5,fontWeight:500,color:C.textSub,marginBottom:0,textAlign:"center"}}>
+        <div className="hero-sub" style={{fontSize:13,fontWeight:500,color:C.textSub,marginBottom:0,textAlign:"center"}}>
           {storeCopy(settings.heroSub,"Quality Fishes · Plants · Accessories","Plants · Tanks · Accessories · Feed")}
         </div>
       </div>
@@ -9080,11 +9080,11 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           )}
           {query&&(
             <button onClick={()=>{setSuggOpen(false);nav("shop");}} className="press"
-              style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 13px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Go</button>
+              style={{flexShrink:0,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"7px 13px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Go</button>
           )}
           {/* Live search suggestions — tap a match to jump straight to the product */}
           {suggOpen&&query.trim()&&suggestions.length>0&&(
-            <div className="sugg-drop" style={{position:"absolute",top:"calc(100% + 8px)",left:0,right:0,background:C.card,borderRadius:14,border:`1px solid ${C.border}`,boxShadow:"0 14px 34px rgba(11,110,114,.18)",overflow:"hidden",zIndex:40}}>
+            <div className="sugg-drop" style={{position:"absolute",top:"calc(100% + 8px)",left:0,right:0,background:C.card,borderRadius:16,border:`1px solid ${C.border}`,boxShadow:"0 14px 34px rgba(11,110,114,.18)",overflow:"hidden",zIndex:40}}>
               {suggestions.map(p=>{
                 const img=getCardImg(p,mediaCache);
                 const cm=CAT_META[p.category]||CAT_META["Live Fish"];
@@ -9092,7 +9092,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                   <button key={p.id} className="press" onMouseDown={e=>e.preventDefault()}
                     onClick={()=>{setRecent(addRecentSearch(p.name));setSuggOpen(false);nav("detail",p);}}
                     style={{display:"flex",alignItems:"center",gap:11,width:"100%",padding:"9px 12px",background:"none",border:"none",borderBottom:`1px solid ${C.border}`,cursor:"pointer",textAlign:"left"}}>
-                    <div style={{width:42,height:42,borderRadius:9,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${cm.c1},${cm.c2})`}}>
+                    <div style={{width:42,height:42,borderRadius:8,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${cm.c1},${cm.c2})`}}>
                       {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:22}}>{cm.emoji}</span>}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
@@ -9101,14 +9101,14 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
                     </div>
                     {/* Option products are quoted from their cheapest option, same as the cards below */}
                     <div style={{flexShrink:0,textAlign:"right"}}>
-                      {hasMultiOptions(p)&&<div style={{fontSize:9.5,color:C.textSub,fontWeight:700,lineHeight:1.1}}>Starts from</div>}
+                      {hasMultiOptions(p)&&<div style={{fontSize:9,color:C.textSub,fontWeight:700,lineHeight:1.1}}>Starts from</div>}
                       <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary}}>₹{hasMultiOptions(p)?variantFromPrice(p):effectivePrice(p)}</div>
                     </div>
                   </button>
                 );
               })}
               <button className="press" onMouseDown={e=>e.preventDefault()} onClick={()=>{setSuggOpen(false);nav("shop");}}
-                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",padding:"11px 12px",background:C.bg,border:"none",cursor:"pointer",color:C.primary,fontWeight:800,fontSize:12.5,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,width:"100%",padding:"11px 12px",background:C.bg,border:"none",cursor:"pointer",color:C.primary,fontWeight:800,fontSize:12,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 See all results for "{query.trim()}" →
               </button>
             </div>
@@ -9148,7 +9148,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         <div className="js-reveal" style={{marginBottom:24}}>
           <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
             <span style={{fontSize:18}}>🕒</span>
-            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Recently Viewed</span>
+            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Recently Viewed</span>
           </div>
           <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
             {recentlyViewed.map(p=>(
@@ -9168,8 +9168,8 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
               <span style={{display:"flex",alignItems:"center",gap:7}}>
                 <span style={{fontSize:20}}>🔥</span>
-                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Offer Zone</span>
-                <span style={{background:C.coral,color:"#fff",fontSize:10.5,fontWeight:800,padding:"2px 8px",borderRadius:20}}>{offerProducts.length}</span>
+                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Offer Zone</span>
+                <span style={{background:C.coral,color:"#fff",fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20}}>{offerProducts.length}</span>
               </span>
               <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.coral,fontWeight:700,background:"none",border:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View All →</button>
             </div>
@@ -9188,7 +9188,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
           <div style={{marginBottom:26}}>
             <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
               <span style={{fontSize:18}}>✨</span>
-              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Based on Your Searches</span>
+              <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Based on Your Searches</span>
             </div>
             <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
               {related.map(p=>(
@@ -9205,7 +9205,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Featured */}
         <div className="js-reveal" style={{marginBottom:26}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,color:C.text}}>Featured</span>
+            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Featured</span>
             <button className="press" onClick={()=>nav("shop")} style={{fontSize:12,color:C.accent,fontWeight:700,background:"none",border:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View All →</button>
           </div>
           {!hydrated ? <SkeletonGrid n={6}/> : (
@@ -9225,9 +9225,9 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {Number(settings.freeDeliveryThreshold) > 0 && (
         <div style={{background:`linear-gradient(135deg,${C.accent},${C.primary})`,borderRadius:20,padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",color:"white",marginBottom:14}}>
           <div>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Free Delivery</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,marginBottom:4}}>Free Delivery</div>
             <div style={{fontSize:12,opacity:.88,marginBottom:12}}>On orders above ₹{settings.freeDeliveryThreshold}</div>
-            <button className="press" onClick={()=>nav("shop")} style={{background:"white",color:C.primary,border:"none",borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Shop Now</button>
+            <button className="press" onClick={()=>nav("shop")} style={{background:"white",color:C.primary,border:"none",borderRadius:12,padding:"8px 16px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Shop Now</button>
           </div>
           <div style={{fontSize:60,userSelect:"none"}}>🚚</div>
         </div>
@@ -9236,13 +9236,13 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         {/* Care Guides + Request */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:14}}>
           <button className="press" onClick={()=>nav("guides")}
-            style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,border:"none",borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white"}}>
+            style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,border:"none",borderRadius:20,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white"}}>
             <span style={{fontSize:28}}>📖</span>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,lineHeight:1.2}}>Care Guides</div>
             <div style={{fontSize:11,opacity:.85,lineHeight:1.4}}>Tips &amp; guides for a healthy tank</div>
           </button>
           <button className="press" onClick={()=>nav("request")}
-            style={{background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:18,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
+            style={{background:C.card,border:`1.5px dashed ${C.accent}`,borderRadius:20,padding:"16px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left"}}>
             <span style={{fontSize:28}}>🦄</span>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.2}}>Exotic Fish or Any Product on Request</div>
             <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>Rare fish or any product? We'll source it for you</div>
@@ -9251,11 +9251,11 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
 
         {/* Aqua Tools — compatibility checker & tank calculators */}
         <button className="press" onClick={()=>nav("tools")}
-          style={{width:"100%",marginTop:12,background:"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:18,padding:"16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white",boxShadow:"0 8px 24px rgba(14,165,233,.22)"}}>
+          style={{width:"100%",marginTop:12,background:"linear-gradient(135deg,#0ea5e9,#0284c7)",border:"none",borderRadius:20,padding:"16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",textAlign:"left",color:"white",boxShadow:"0 8px 24px rgba(14,165,233,.22)"}}>
           <span style={{fontSize:32,flexShrink:0}}>🧪</span>
           <div style={{flex:1}}>
-            <div style={{fontSize:15,fontWeight:800,lineHeight:1.2}}>Aqua Tools — free tank planner</div>
-            <div style={{fontSize:11.5,opacity:.9,marginTop:2,lineHeight:1.4}}>Fish compatibility checker · tank volume · heater &amp; filter size · stocking guide</div>
+            <div style={{fontSize:14,fontWeight:800,lineHeight:1.2}}>Aqua Tools — free tank planner</div>
+            <div style={{fontSize:11,opacity:.9,marginTop:2,lineHeight:1.4}}>Fish compatibility checker · tank volume · heater &amp; filter size · stocking guide</div>
           </div>
           <span style={{fontSize:18,opacity:.85}}>→</span>
         </button>
@@ -9324,19 +9324,19 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             <div>
               <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Contact Us</div>
               {settings.storeAddress&&(
-                <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>📍</span><span>{settings.storeAddress}</span></div>
+                <div style={{fontSize:12,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>📍</span><span>{settings.storeAddress}</span></div>
               )}
               {settings.storeHours&&(
-                <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>🕒</span><span>{settings.storeHours}</span></div>
+                <div style={{fontSize:12,color:C.textSub,lineHeight:1.6,marginBottom:8,display:"flex",gap:7}}><span>🕒</span><span>{settings.storeHours}</span></div>
               )}
               {settings.ownerWhatsapp&&(
                 <a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
-                  style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",marginBottom:8}}>
+                  style={{display:"flex",alignItems:"center",gap:7,fontSize:12,fontWeight:700,color:"#25965a",textDecoration:"none",marginBottom:8}}>
                   <span style={{fontSize:14}}>💬</span> +{settings.ownerWhatsapp.replace(/\D/g,"")}
                 </a>
               )}
               <a href={`mailto:${settings.orderEmail||BUSINESS_EMAIL}`}
-                style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,fontWeight:700,color:C.accent,textDecoration:"none",wordBreak:"break-all"}}>
+                style={{display:"flex",alignItems:"center",gap:7,fontSize:12,fontWeight:700,color:C.accent,textDecoration:"none",wordBreak:"break-all"}}>
                 <span style={{fontSize:14}}>✉️</span> {settings.orderEmail||BUSINESS_EMAIL}
               </a>
             </div>
@@ -9345,16 +9345,16 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
               <div>
                 <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}>Follow Us</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {settings.instagramUrl&&(<a href={settings.instagramUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#c13584",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>📷 Instagram</a>)}
-                  {settings.facebookUrl&&(<a href={settings.facebookUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#1877f2",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>👍 Facebook</a>)}
-                  {settings.ownerWhatsapp&&(<a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:"#25965a",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px"}}>💬 WhatsApp</a>)}
+                  {settings.instagramUrl&&(<a href={settings.instagramUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#c13584",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:12,padding:"7px 12px"}}>📷 Instagram</a>)}
+                  {settings.facebookUrl&&(<a href={settings.facebookUrl} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#1877f2",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:12,padding:"7px 12px"}}>👍 Facebook</a>)}
+                  {settings.ownerWhatsapp&&(<a href={`https://wa.me/${settings.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#25965a",textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:12,padding:"7px 12px"}}>💬 WhatsApp</a>)}
                 </div>
               </div>
             )}
             {/* Get the App — the whole column drops out for visitors who already have it */}
             <PlayAppBlock medium="footer" note="Shop and track your orders from your phone."
               headingStyle={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:11,fontWeight:800,letterSpacing:1,textTransform:"uppercase",color:C.text,marginBottom:10}}
-              noteStyle={{fontSize:12.5,color:C.textSub,lineHeight:1.6,marginBottom:4}}
+              noteStyle={{fontSize:12,color:C.textSub,lineHeight:1.6,marginBottom:4}}
               badgeStyle={{marginLeft:-9}}/>
             {/* Secure Payment */}
             <div>
@@ -9367,7 +9367,7 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             </div>
           </div>
 
-          <div style={{fontSize:10.5,color:C.textSub,opacity:.75,lineHeight:1.5}}>© {new Date().getFullYear()} {STORE_NAME} Aqua Store. All rights reserved.</div>
+          <div style={{fontSize:10,color:C.textSub,opacity:.75,lineHeight:1.5}}>© {new Date().getFullYear()} {STORE_NAME} Aqua Store. All rights reserved.</div>
         </div>
       </div>
     </div>
@@ -9435,15 +9435,15 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,flexShrink:0}}>Shop</div>
           <div style={{display:"flex",alignItems:"center",background:C.bg,borderRadius:12,padding:"8px 12px",gap:8,flex:1,minWidth:0,border:`1.5px solid ${C.border}`}}>
-            <span style={{fontSize:15}}>🔍</span>
+            <span style={{fontSize:14}}>🔍</span>
             <input type="text" placeholder="Search…" value={query} onChange={e=>setQuery(e.target.value)}
               style={{border:"none",background:"transparent",outline:"none",flex:1,fontSize:13,minWidth:0}}/>
-            {query&&<button className="press" onClick={()=>setQuery("")} style={{background:"none",border:"none",fontSize:15,color:C.textSub}}>✕</button>}
+            {query&&<button className="press" onClick={()=>setQuery("")} style={{background:"none",border:"none",fontSize:14,color:C.textSub}}>✕</button>}
           </div>
           <button className="press" onClick={()=>setSheet(true)}
-            style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,background:activeFilters>0?C.primary:C.card,border:`1.5px solid ${activeFilters>0?C.primary:C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:activeFilters>0?"white":C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+            style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,background:activeFilters>0?C.primary:C.card,border:`1.5px solid ${activeFilters>0?C.primary:C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12,fontWeight:700,color:activeFilters>0?"white":C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
-            Filter &amp; Sort{activeFilters>0&&<span style={{background:"rgba(255,255,255,.25)",borderRadius:10,padding:"1px 6px",fontSize:10}}>{activeFilters}</span>}
+            Filter &amp; Sort{activeFilters>0&&<span style={{background:"rgba(255,255,255,.25)",borderRadius:12,padding:"1px 6px",fontSize:10}}>{activeFilters}</span>}
           </button>
         </div>
         <CategoryPills selected={category} onSelect={setCategory} all counts={catCounts}/>
@@ -9458,7 +9458,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
               {recent.map(r=>(
                 <button key={r} className="press" onClick={()=>setQuery(r)}
-                  style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"7px 13px",fontSize:12.5,fontWeight:600,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                  style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"7px 13px",fontSize:12,fontWeight:600,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                   🔍 {r}
                 </button>
               ))}
@@ -9471,7 +9471,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
         {!hydrated?(<SkeletonGrid n={8}/>):list.length===0?(
           <div style={{textAlign:"center",padding:"50px 20px",color:C.textSub}}>
             <div style={{fontSize:52,marginBottom:14}}>🌊</div>
-            <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No products found</div>
+            <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>No products found</div>
             <div style={{fontSize:12}}>Try adjusting your filters</div>
           </div>
         ):(
@@ -9507,7 +9507,7 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
             <div style={{marginTop:28}}>
               <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
                 <span style={{fontSize:18}}>✨</span>
-                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,color:C.text}}>You might also like</span>
+                <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>You might also like</span>
               </div>
               <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
                 {rel.map(p=>(
@@ -9539,18 +9539,18 @@ function DeliveryEstimate({settings={}}){
   const ETA={TN:"1–2 days",SouthIndia:"2–4 days",CentralIndia:"3–5 days",NorthIndia:"4–6 days"};
   const zone=/^\d{6}$/.test(pin)?pincodeToZone(pin):null;
   return(
-    <div style={{margin:"18px 0 0",padding:"13px 14px",background:C.card,borderRadius:14,border:`1px solid ${C.border}`}}>
-      <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:8}}>🚚 Check delivery to your area</div>
+    <div style={{margin:"18px 0 0",padding:"13px 14px",background:C.card,borderRadius:16,border:`1px solid ${C.border}`}}>
+      <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:8}}>🚚 Check delivery to your area</div>
       <div style={{display:"flex",gap:8}}>
         <input value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" placeholder="Enter 6-digit pincode"
-          style={{flex:1,boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13.5,outline:"none",background:"white",fontFamily:"monospace"}}/>
+          style={{flex:1,boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"monospace"}}/>
       </div>
       {pin.length===6&&(zone?(
-        <div style={{marginTop:9,fontSize:12,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
+        <div style={{marginTop:9,fontSize:12,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"9px 11px",lineHeight:1.5}}>
           ✓ Delivers to <b>{ZONE_LABELS[zone]}</b> · Estimated <b>{ETA[zone]||"3–6 days"}</b>. Live fish ship on selected days for safe transit.
         </div>
       ):(
-        <div style={{marginTop:9,fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"9px 11px",lineHeight:1.5}}>
+        <div style={{marginTop:9,fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"9px 11px",lineHeight:1.5}}>
           Pincode not recognised — please message us on WhatsApp to confirm delivery & timing.
         </div>
       ))}
@@ -9573,17 +9573,17 @@ function FrequentlyBought({base, products=[], addToCart, mediaCache={}, nav}){
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>🧰 Frequently bought together</div>
       <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch"}}>
         {fbt.map(x=>{ const img=getCardImg(x,mediaCache); const m=CAT_META[x.category]||CAT_META["Live Fish"]; return(
-          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:120,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"8px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            <div style={{height:74,borderRadius:9,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:6}}>
-              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:30}}>{m.emoji}</span>}
+          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:120,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"8px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            <div style={{height:74,borderRadius:8,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:6}}>
+              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:28}}>{m.emoji}</span>}
             </div>
-            <div style={{fontSize:11.5,fontWeight:700,color:C.text,lineHeight:1.3,height:30,overflow:"hidden"}}>{x.name}</div>
+            <div style={{fontSize:11,fontWeight:700,color:C.text,lineHeight:1.3,height:30,overflow:"hidden"}}>{x.name}</div>
             <div style={{fontFamily:PRICE_FONT,fontSize:13,fontWeight:800,color:C.primary,marginTop:2}}>₹{effectivePrice(x)}</div>
           </button>
         );})}
       </div>
       <button className="press" onClick={()=>{ fbt.forEach(x=>addToCart(x,1)); }}
-        style={{marginTop:8,width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        style={{marginTop:8,width:"100%",background:C.primary,color:"white",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
         ＋ Add these {fbt.length} to cart
       </button>
     </div>
@@ -9599,12 +9599,12 @@ function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>👀 Recently viewed</div>
       <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:6,WebkitOverflowScrolling:"touch"}}>
         {items.map(x=>{ const img=getCardImg(x,mediaCache); const m=CAT_META[x.category]||CAT_META["Live Fish"]; return(
-          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:108,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"7px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            <div style={{height:66,borderRadius:9,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:5}}>
-              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:26}}>{m.emoji}</span>}
+          <button key={x.id} className="press" onClick={()=>nav("detail",x)} style={{flexShrink:0,width:108,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"7px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            <div style={{height:66,borderRadius:8,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",background:img?undefined:`linear-gradient(140deg,${m.c1},${m.c2})`,marginBottom:5}}>
+              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:24}}>{m.emoji}</span>}
             </div>
             <div style={{fontSize:11,fontWeight:700,color:C.text,lineHeight:1.3,height:28,overflow:"hidden"}}>{x.name}</div>
-            <div style={{fontFamily:PRICE_FONT,fontSize:12.5,fontWeight:800,color:C.primary,marginTop:2}}>₹{effectivePrice(x)}</div>
+            <div style={{fontFamily:PRICE_FONT,fontSize:12,fontWeight:800,color:C.primary,marginTop:2}}>₹{effectivePrice(x)}</div>
           </button>
         );})}
       </div>
@@ -9734,7 +9734,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
     <Portal>
       <div className="fade-in" style={{position:"fixed",inset:0,zIndex:9500,background:"rgba(3,10,14,.97)",touchAction:"none",userSelect:"none",overscrollBehavior:"contain"}}>
         <div style={{position:"absolute",top:0,left:0,right:0,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"calc(env(safe-area-inset-top,0px) + 12px) 14px 12px",zIndex:4,pointerEvents:"none"}}>
-          <span style={{color:"#fff",fontSize:12.5,fontWeight:700,background:"rgba(255,255,255,.14)",padding:"6px 13px",borderRadius:20,backdropFilter:"blur(8px)"}}>
+          <span style={{color:"#fff",fontSize:12,fontWeight:700,background:"rgba(255,255,255,.14)",padding:"6px 13px",borderRadius:20,backdropFilter:"blur(8px)"}}>
             {isVideo?"▶ Video":(index+1)+" / "+slides.length}
           </span>
           <button className="press" onClick={onClose} aria-label="Close" style={{...iconBtn,pointerEvents:"auto",width:42,height:42,borderRadius:"50%",fontSize:20}}>✕</button>
@@ -9748,8 +9748,8 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
                 style={{width:"100%",height:"100%",objectFit:"contain",transform:"translate("+tx+"px,"+ty+"px) scale("+scale+")",transition:g.current.mode?"none":"transform .28s cubic-bezier(.22,1,.36,1)",willChange:"transform"}}/>}
         </div>
         {slides.length>1&&(<>
-          <button className="press" onClick={()=>go(-1)} aria-label="Previous" style={{...iconBtn,position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>‹</button>
-          <button className="press" onClick={()=>go(1)} aria-label="Next" style={{...iconBtn,position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:26,zIndex:3}}>›</button>
+          <button className="press" onClick={()=>go(-1)} aria-label="Previous" style={{...iconBtn,position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:24,zIndex:3}}>‹</button>
+          <button className="press" onClick={()=>go(1)} aria-label="Next" style={{...iconBtn,position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",width:46,height:46,borderRadius:"50%",fontSize:24,zIndex:3}}>›</button>
         </>)}
         {slides.length>1&&(
           <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 26px)",left:0,right:0,display:"flex",justifyContent:"center",gap:6,zIndex:3}}>
@@ -9765,7 +9765,7 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
             <button className="press" onClick={()=>zoomBy(1/1.5)} disabled={scale<=1.02} aria-label="Zoom out" style={{...iconBtn,width:42,height:42,borderRadius:12,fontSize:24,opacity:scale<=1.02?0.4:1}}>−</button>
           </div>
         )}
-        <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 6px)",left:0,right:0,textAlign:"center",color:"rgba(255,255,255,.5)",fontSize:10.5,fontWeight:600,letterSpacing:.3,pointerEvents:"none",zIndex:3}}>
+        <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 6px)",left:0,right:0,textAlign:"center",color:"rgba(255,255,255,.5)",fontSize:10,fontWeight:600,letterSpacing:.3,pointerEvents:"none",zIndex:3}}>
           {isVideo?"":"Use + / −, double-tap or pinch to zoom · swipe to browse"}
         </div>
       </div>
@@ -9912,7 +9912,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         )}
         {slides[slide]&&slides[slide].type==="image"&&(
           <button className="press" onClick={()=>openPhoto(slide)} aria-label="Open photo full screen"
-            style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
+            style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
         )}
         {slides[slide]&&<span style={{position:"absolute",top:50,right:16,background:"rgba(0,0,0,.4)",color:"white",fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,backdropFilter:"blur(6px)"}}>
           {slides[slide].type==="video"?"▶ Video":`📷 ${slide+1}/${slides.length}`}
@@ -9927,14 +9927,14 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
           <div style={{flex:1,paddingRight:12}}>
             <div style={{fontSize:10,color:C.accent,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:5}}>{p.category}</div>
-            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,lineHeight:1.2}}>{p.name}</div>
+            <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,lineHeight:1.2}}>{p.name}</div>
             <button className="press" onClick={()=>shareProduct(p)}
-              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:C.accentLight,border:`1px solid ${C.border}`,color:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:C.accentLight,border:`1px solid ${C.border}`,color:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zM18 22a3 3 0 100-6 3 3 0 000 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               Share
             </button>
             <button className="press" onClick={()=>onFav&&onFav(p)}
-              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,marginLeft:8,background:isFav?"#fff1ee":C.accentLight,border:`1px solid ${isFav?C.coral:C.border}`,color:isFav?C.coral:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,marginLeft:8,background:isFav?"#fff1ee":C.accentLight,border:`1px solid ${isFav?C.coral:C.border}`,color:isFav?C.coral:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               <span style={{fontSize:13,lineHeight:1}}>{isFav?"♥":"♡"}</span>{isFav?"Saved":"Save"}
             </button>
           </div>
@@ -9986,12 +9986,12 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         {/* Restock alert for out-of-stock products */}
         <RestockBtn product={p} user={user} restockSet={restockSet} onSubscribe={onRestock}/>
 
-        <div style={{display:"flex",gap:4,marginBottom:18,background:C.card,borderRadius:14,padding:4,border:`1px solid ${C.border}`}}>
+        <div style={{display:"flex",gap:4,marginBottom:18,background:C.card,borderRadius:16,padding:4,border:`1px solid ${C.border}`}}>
           {["desc","reviews"].map(t=>(
             <button key={t} className="press" onClick={()=>setTab(t)}
-              style={{flex:1,padding:"9px 8px",borderRadius:11,border:"none",background:tab===t?C.primary:"transparent",color:tab===t?"white":C.textSub,fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",position:"relative"}}>
+              style={{flex:1,padding:"9px 8px",borderRadius:12,border:"none",background:tab===t?C.primary:"transparent",color:tab===t?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",transition:"all .2s",position:"relative"}}>
               {t==="desc"?"Description":`Reviews`}
-              {t==="reviews"&&reviews.length>0&&<span style={{marginLeft:5,background:tab==="reviews"?"rgba(255,255,255,.25)":C.primary,color:"white",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:800}}>
+              {t==="reviews"&&reviews.length>0&&<span style={{marginLeft:5,background:tab==="reviews"?"rgba(255,255,255,.25)":C.primary,color:"white",borderRadius:12,padding:"1px 7px",fontSize:10,fontWeight:800}}>
                 {reviews.length}
               </span>}
             </button>
@@ -10003,7 +10003,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <div className="fade-in">
             {/* pre-wrap keeps the admin's own line breaks and blank lines — typing the description
                 as paragraphs or a bulleted list used to collapse into one run-on block. */}
-            <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.75,whiteSpace:"pre-wrap"}}>{p.desc}</div>
+            <div style={{fontSize:13,color:C.textSub,lineHeight:1.75,whiteSpace:"pre-wrap"}}>{p.desc}</div>
             {(()=>{
               const care=p.care||{};
               const rows=[
@@ -10019,17 +10019,17 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               if(!rows.length) return null;
               return(
                 <div style={{marginTop:18,background:"#f0fbfc",borderRadius:16,padding:"14px 16px",border:`1px solid ${C.border}`}}>
-                  <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:C.text,marginBottom:10}}>🐠 Care Guide</div>
+                  <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text,marginBottom:10}}>🐠 Care Guide</div>
                   <div style={{display:"flex",flexDirection:"column",gap:0}}>
                     {rows.map(([icon,label,val],i)=>(
                       <div key={label} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 0",borderTop:i?`1px solid ${C.border}`:"none"}}>
-                        <span style={{fontSize:15,flexShrink:0,lineHeight:1.3}}>{icon}</span>
-                        <span style={{fontSize:12.5,fontWeight:700,color:C.textSub,minWidth:118,flexShrink:0}}>{label}</span>
-                        <span style={{fontSize:12.5,fontWeight:600,color:C.text,lineHeight:1.4}}>{val}</span>
+                        <span style={{fontSize:14,flexShrink:0,lineHeight:1.3}}>{icon}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:C.textSub,minWidth:118,flexShrink:0}}>{label}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:C.text,lineHeight:1.4}}>{val}</span>
                       </div>
                     ))}
                   </div>
-                  <div style={{fontSize:10.5,color:C.textSub,marginTop:10,lineHeight:1.5,fontStyle:"italic"}}>Care details are a guide — conditions can vary by individual fish & tank.</div>
+                  <div style={{fontSize:10,color:C.textSub,marginTop:10,lineHeight:1.5,fontStyle:"italic"}}>Care details are a guide — conditions can vary by individual fish & tank.</div>
                 </div>
               );
             })()}
@@ -10041,7 +10041,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <div className="fade-in">
             {/* Success banner */}
             {submitted&&(
-              <div style={{background:"#dcfce7",borderRadius:14,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,border:"1px solid #86efac"}}>
+              <div style={{background:"#dcfce7",borderRadius:16,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,border:"1px solid #86efac"}}>
                 <span style={{fontSize:20}}>🎉</span>
                 <div>
                   <div style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Review submitted!</div>
@@ -10065,11 +10065,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                 <div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
                   <span style={{fontSize:22}}>🔒</span>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:C.text,marginBottom:2}}>Only verified buyers can review</div>
-                    <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5}}>
+                    <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:2}}>Only verified buyers can review</div>
+                    <div style={{fontSize:11,color:C.textSub,lineHeight:1.5}}>
                       {user ? "Review unlocks once you've ordered & received this product." : "Sign in and purchase this product to leave a review."}
                     </div>
-                    {!user&&<button className="press" onClick={goAuth} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"7px 14px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>}
+                    {!user&&<button className="press" onClick={goAuth} style={{marginTop:8,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"7px 14px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>}
                   </div>
                 </div>
               )
@@ -10083,8 +10083,8 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               <div style={{display:"flex",justifyContent:"center",padding:"24px"}}><Spinner/></div>
             ):reviews.length===0?(
               <div style={{textAlign:"center",padding:"32px 16px",color:C.textSub}}>
-                <div style={{fontSize:44,marginBottom:12}}>⭐</div>
-                <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No reviews yet</div>
+                <div style={{fontSize:40,marginBottom:12}}>⭐</div>
+                <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>No reviews yet</div>
                 <div style={{fontSize:13}}>Be the first to share your experience!</div>
               </div>
             ):(
@@ -10113,7 +10113,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                   {r.aspects&&(
                     <div style={{display:"flex",flexWrap:"wrap",gap:6,paddingLeft:44,marginTop:7}}>
                       {[["health","🐟 Condition"],["packing","📦 Packing"],["speed","🚚 Delivery"],["value","💰 Value"]].map(([k,label])=>r.aspects[k]?(
-                        <span key={k} style={{fontSize:10.5,fontWeight:700,color:C.textSub,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:20,padding:"3px 9px"}}>{label} <span style={{color:"#f59e0b"}}>{"★".repeat(r.aspects[k])}</span></span>
+                        <span key={k} style={{fontSize:10,fontWeight:700,color:C.textSub,background:"#f8fafc",border:`1px solid ${C.border}`,borderRadius:20,padding:"3px 9px"}}>{label} <span style={{color:"#f59e0b"}}>{"★".repeat(r.aspects[k])}</span></span>
                       ):null)}
                     </div>
                   )}
@@ -10122,7 +10122,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingLeft:44,marginTop:10}}>
                       {r.photos.map((src,j)=>(
                         <button key={j} className="press" onClick={()=>setPhotoZoom(src)}
-                          style={{padding:0,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",width:72,height:72,cursor:"zoom-in",background:"none"}}>
+                          style={{padding:0,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",width:72,height:72,cursor:"zoom-in",background:"none"}}>
                           <img src={src} alt="" loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         </button>
                       ))}
@@ -10144,7 +10144,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                 <span style={{fontSize:18}}>🧩</span>
                 <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,color:C.text}}>Goes well with</span>
               </div>
-              <div style={{fontSize:11.5,color:C.textSub,marginBottom:12,lineHeight:1.45}}>{p.category==="Live Fish"?"Keep your new fish healthy — food, care & tank essentials.":"Pairs nicely with these."}</div>
+              <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.45}}>{p.category==="Live Fish"?"Keep your new fish healthy — food, care & tank essentials.":"Pairs nicely with these."}</div>
               <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:6,margin:"0 -16px",padding:"0 16px 6px",WebkitOverflowScrolling:"touch"}}>
                 {cross.map(cp=>{
                   const cm=CAT_META[cp.category]||CAT_META["Live Fish"];
@@ -10152,14 +10152,14 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                   const cPrice=effectivePrice(cp);
                   const cOnSale=activeDiscount(cp)>0;
                   return(
-                    <div key={cp.id} style={{flexShrink:0,width:140,background:C.card,borderRadius:14,overflow:"hidden",border:`1px solid ${C.border}`}}>
+                    <div key={cp.id} style={{flexShrink:0,width:140,background:C.card,borderRadius:16,overflow:"hidden",border:`1px solid ${C.border}`}}>
                       <button className="press" onClick={()=>nav("detail",cp)} style={{display:"block",width:"100%",padding:0,border:"none",background:"none",cursor:"pointer",textAlign:"left"}}>
                         <div style={{height:96,background:`linear-gradient(135deg,${cm.c1},${cm.c2})`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-                          {cImg?<img src={cImg} alt={cp.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:34}}>{cm.emoji}</span>}
+                          {cImg?<img src={cImg} alt={cp.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:32}}>{cm.emoji}</span>}
                         </div>
                         <div style={{padding:"8px 10px 2px"}}>
-                          <div style={{fontSize:9.5,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>{cp.category}</div>
-                          <div style={{fontSize:12.5,fontWeight:700,color:C.text,lineHeight:1.25,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",minHeight:31}}>{cp.name}</div>
+                          <div style={{fontSize:9,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>{cp.category}</div>
+                          <div style={{fontSize:12,fontWeight:700,color:C.text,lineHeight:1.25,marginTop:2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",minHeight:31}}>{cp.name}</div>
                         </div>
                       </button>
                       <div style={{padding:"0 10px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
@@ -10172,11 +10172,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
                           const q=inC?inC.qty:0;
                           if(q<=0) return (
                             <button className="press" onClick={()=>addToCart(cp,1)}
-                              style={{background:C.primary,color:"white",border:"none",borderRadius:9,width:32,height:32,fontSize:18,fontWeight:700,lineHeight:1,cursor:"pointer",flexShrink:0}}>+</button>
+                              style={{background:C.primary,color:"white",border:"none",borderRadius:8,width:32,height:32,fontSize:18,fontWeight:700,lineHeight:1,cursor:"pointer",flexShrink:0}}>+</button>
                           );
                           return (
-                            <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:9,flexShrink:0,overflow:"hidden"}}>
-                              <button className="press" onClick={()=>addToCart(cp,-1)} style={{background:"none",color:"white",border:"none",width:28,height:32,fontSize:19,fontWeight:800,lineHeight:1,cursor:"pointer"}}>−</button>
+                            <div style={{display:"flex",alignItems:"center",background:C.primary,borderRadius:8,flexShrink:0,overflow:"hidden"}}>
+                              <button className="press" onClick={()=>addToCart(cp,-1)} style={{background:"none",color:"white",border:"none",width:28,height:32,fontSize:18,fontWeight:800,lineHeight:1,cursor:"pointer"}}>−</button>
                               <span style={{color:"white",fontSize:13,fontWeight:800,minWidth:18,textAlign:"center",fontFamily:PRICE_FONT}}>{q}</span>
                               <button className="press" onClick={()=>addToCart(cp,1)} style={{background:"none",color:"white",border:"none",width:28,height:32,fontSize:18,fontWeight:800,lineHeight:1,cursor:"pointer"}}>+</button>
                             </div>
@@ -10202,7 +10202,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               {[LIVE_FISH_ENABLED?["🛡️","Live Arrival","Guarantee"]:["🚚","Delivery across","India"],["📦","Safe, breathable","Packing"],["🔒","Secure UPI /","Online Pay"]].map(([ic,a,b])=>(
                 <div key={a} style={{display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",gap:5}}>
                   <span style={{fontSize:22,lineHeight:1}}>{ic}</span>
-                  <span style={{fontSize:10.5,fontWeight:700,color:C.text,lineHeight:1.3}}>{a}<br/>{b}</span>
+                  <span style={{fontSize:10,fontWeight:700,color:C.text,lineHeight:1.3}}>{a}<br/>{b}</span>
                 </div>
               ))}
             </div>
@@ -10216,7 +10216,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
         <div className="nemo-product-bottom-bar" style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,
           background:"rgba(255,255,255,.97)",backdropFilter:"blur(16px)",padding:"14px 20px",borderTop:`1px solid ${C.border}`,display:"flex",gap:12,alignItems:"center",zIndex:50}}>
           <button className="press" onClick={()=>{if(!isInterested&&onInterest)onInterest(p);}} disabled={isInterested}
-            style={{flex:1,background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:14,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            style={{flex:1,background:isInterested?"#dcfce7":C.accent,color:isInterested?"#15803d":"white",border:"none",borderRadius:16,padding:"15px 12px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             {isInterested?"✓ We'll notify you when it's in!":"🔔 Coming Soon — I'm Interested"}
           </button>
         </div>
@@ -10228,7 +10228,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
       {photoZoom&&(
         <Portal>
         <div onClick={()=>setPhotoZoom(null)} style={{position:"fixed",inset:0,background:"rgba(4,16,20,.92)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-          <img src={photoZoom} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:10}}/>
+          <img src={photoZoom} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:12}}/>
           <button className="press" onClick={()=>setPhotoZoom(null)} style={{position:"absolute",top:18,right:18,width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"none",color:"white",fontSize:22,cursor:"pointer"}}>×</button>
         </div>
         </Portal>
@@ -10288,14 +10288,14 @@ function MiniCart({open,onClose,cart,total,updateQty,nav,settings={},products=[]
         </div>
         {cart.length>0&&(
           <div style={{padding:"14px 18px calc(16px + env(safe-area-inset-bottom))",borderTop:`1px solid ${C.border}`,background:"#fff"}}>
-            {thr>0&&left>0&&<div style={{fontSize:11.5,color:C.textSub,marginBottom:10,textAlign:"center"}}>Add <b style={{color:C.coral}}>₹{left}</b> more for free delivery 🚚</div>}
+            {thr>0&&left>0&&<div style={{fontSize:11,color:C.textSub,marginBottom:10,textAlign:"center"}}>Add <b style={{color:C.coral}}>₹{left}</b> more for free delivery 🚚</div>}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <span style={{fontSize:14,fontWeight:700,color:C.text}}>Subtotal</span>
-              <span style={{fontFamily:PRICE_FONT,fontSize:19,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
+              <span style={{fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
             </div>
             <div style={{display:"flex",gap:10}}>
-              <button className="press" onClick={()=>{onClose();nav("cart");}} style={{flex:1,background:"#f8fafc",color:C.text,border:`1px solid ${C.border}`,borderRadius:99,padding:"13px",fontSize:13.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>View Cart</button>
-              <button className="cta" onClick={()=>{onClose();nav("checkout");}} style={{flex:1.4,background:C.coral,color:"white",border:"none",borderRadius:99,padding:"13px",fontSize:13.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textTransform:"uppercase",letterSpacing:".05em",cursor:"pointer"}}>Checkout →</button>
+              <button className="press" onClick={()=>{onClose();nav("cart");}} style={{flex:1,background:"#f8fafc",color:C.text,border:`1px solid ${C.border}`,borderRadius:99,padding:"13px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>View Cart</button>
+              <button className="cta" onClick={()=>{onClose();nav("checkout");}} style={{flex:1.4,background:C.coral,color:"white",border:"none",borderRadius:99,padding:"13px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textTransform:"uppercase",letterSpacing:".05em",cursor:"pointer"}}>Checkout →</button>
             </div>
           </div>
         )}
@@ -10308,9 +10308,9 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
   if(!cart.length)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"70vh",padding:"20px",textAlign:"center"}}>
       <div style={{fontSize:80,marginBottom:20}}>🛒</div>
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Cart is empty</div>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:8}}>Cart is empty</div>
       <div style={{fontSize:13,color:C.textSub,marginBottom:24}}>Find something for your aquarium.</div>
-      <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px 32px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Start Shopping</button>
+      <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:16,padding:"14px 32px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Start Shopping</button>
     </div>
   );
   return(
@@ -10343,20 +10343,20 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
           const prod=lineProduct(item,products);
           const open=prod?()=>nav("detail",prod):null;
           return(
-            <div key={item.key} style={{background:C.card,borderRadius:18,padding:"14px",marginBottom:10,display:"flex",gap:14,alignItems:"center",border:`1px solid ${C.border}`}}>
+            <div key={item.key} style={{background:C.card,borderRadius:20,padding:"14px",marginBottom:10,display:"flex",gap:14,alignItems:"center",border:`1px solid ${C.border}`}}>
               {/* Thumbnail + name open the product page. A line whose product has since been
                   removed from the catalogue stays as plain text — there's nothing to open. */}
               <div role={open?"button":undefined} tabIndex={open?0:undefined} onClick={open||undefined}
                 onKeyDown={open?(e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } }):undefined}
                 aria-label={open?`View ${item.name}`:undefined}
                 style={{display:"flex",gap:14,alignItems:"center",flex:1,minWidth:0,cursor:open?"pointer":"default"}}>
-                <div style={{width:58,height:58,borderRadius:14,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,overflow:"hidden"}}>
+                <div style={{width:58,height:58,borderRadius:16,flexShrink:0,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,overflow:"hidden"}}>
                   {cartImg?<img src={cartImg} alt={item.name} loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13.5,fontWeight:700,color:open?C.primaryDark:C.text,marginBottom:2}}>{item.name}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:open?C.primaryDark:C.text,marginBottom:2}}>{item.name}</div>
                   <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>{item.variantLabel||item.category}</div>
-                  <div style={{fontFamily:PRICE_FONT,fontSize:15,fontWeight:800,color:C.primary,marginTop:5}}>₹{item.price*item.qty}</div>
+                  <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary,marginTop:5}}>₹{item.price*item.qty}</div>
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:12,background:C.bg,borderRadius:12,padding:"7px 12px",border:`1.5px solid ${C.border}`}}>
@@ -10367,7 +10367,7 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
             </div>
           );
         })}
-        <div style={{background:C.card,borderRadius:18,padding:"18px",marginTop:18,border:`1px solid ${C.border}`}}>
+        <div style={{background:C.card,borderRadius:20,padding:"18px",marginTop:18,border:`1px solid ${C.border}`}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
             <span style={{fontSize:13,color:C.textSub}}>Subtotal</span>
             <span style={{fontSize:13,fontWeight:700,color:C.text}}><AnimatedNumber value={total} prefix="₹"/></span>
@@ -10378,7 +10378,7 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
           </div>
           <div style={{height:1,background:C.border,margin:"12px 0"}}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:15,fontWeight:700,color:C.text}}>Subtotal (excl. shipping)</span>
+            <span style={{fontSize:14,fontWeight:700,color:C.text}}>Subtotal (excl. shipping)</span>
             <span style={{fontFamily:PRICE_FONT,fontSize:20,fontWeight:800,color:C.primary}}><AnimatedNumber value={total} prefix="₹"/></span>
           </div>
         </div>
@@ -10389,7 +10389,7 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
           const worth=Math.floor(pts*val);
           if(worth<=0) return null;
           return (
-            <div style={{background:"#ecfdf5",borderRadius:12,padding:"11px 14px",marginTop:10,fontSize:12.5,color:"#15803d",fontWeight:700,border:"1px solid #a7f3d0",display:"flex",alignItems:"center",gap:8}}>
+            <div style={{background:"#ecfdf5",borderRadius:12,padding:"11px 14px",marginTop:10,fontSize:12,color:"#15803d",fontWeight:700,border:"1px solid #a7f3d0",display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:16}}>👛</span>
               <span>Earn ₹{worth} in wallet coins after delivery.</span>
             </div>
@@ -10407,8 +10407,8 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
           const pct=Math.max(4,Math.min(100,Math.round(((Number(total)||0)/(n.minOrder||1))*100)));
           const won=n.unlocked;
           return (
-            <div style={{marginTop:14,textAlign:"center",background:won?"#ecfdf5":"#fff7ed",border:`1px solid ${won?"#a7f3d0":"#fed7aa"}`,borderRadius:14,padding:"13px 16px"}}>
-              <div style={{fontSize:13.5,fontWeight:800,color:won?"#15803d":"#9a3412",lineHeight:1.45,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            <div style={{marginTop:14,textAlign:"center",background:won?"#ecfdf5":"#fff7ed",border:`1px solid ${won?"#a7f3d0":"#fed7aa"}`,borderRadius:16,padding:"13px 16px"}}>
+              <div style={{fontSize:13,fontWeight:800,color:won?"#15803d":"#9a3412",lineHeight:1.45,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 {won
                   ? <>🎉 You've unlocked <span style={{color:C.coral}}>{n.off}</span></>
                   : <>Add <span style={{fontFamily:PRICE_FONT,fontSize:16,color:C.coral}}>₹{n.need}</span> more to get <span style={{color:C.coral}}>{n.off}</span></>}
@@ -10416,14 +10416,14 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
               <div style={{height:7,borderRadius:99,background:won?"#a7f3d0":"#fde3c8",margin:"9px auto 0",overflow:"hidden",maxWidth:260}}>
                 <div style={{height:"100%",width:pct+"%",borderRadius:99,background:won?"#16a34a":C.coral,transition:"width .45s cubic-bezier(.22,1,.36,1)"}}/>
               </div>
-              <div style={{fontSize:10.5,color:won?"#15803d":"#9a3412",opacity:.85,fontWeight:600,marginTop:6}}>
+              <div style={{fontSize:10,color:won?"#15803d":"#9a3412",opacity:.85,fontWeight:600,marginTop:6}}>
                 {won?<>Apply code <b>{n.code}</b> at checkout</>:<>on orders above ₹{n.minOrder} · code {n.code}</>}
               </div>
             </div>
           );
         })()}
         <button className="cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={()=>nav("checkout")}
-          style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
           Proceed to Checkout →
         </button>
       </div>
@@ -10445,11 +10445,11 @@ function Collapsible({title, icon="", subtitle="", open=false, tone="plain", chi
           : tone==="amber" ? {bg:"#fff7ed",bd:"#fed7aa",fg:"#9a3412",sub:"#9a3412"}
           :                  {bg:C.card,   bd:C.border,  fg:C.text,   sub:C.textSub};
   return(
-    <div style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+    <div style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:16,marginBottom:12,overflow:"hidden"}}>
       <button className="press" type="button" onClick={()=>setOn(v=>!v)} aria-expanded={on}
         style={{display:"flex",alignItems:"center",gap:9,width:"100%",background:"none",border:"none",
                 padding:"12px 14px",textAlign:"left",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-        {icon&&<span style={{fontSize:17,flexShrink:0}}>{icon}</span>}
+        {icon&&<span style={{fontSize:16,flexShrink:0}}>{icon}</span>}
         <span style={{flex:1,minWidth:0}}>
           <span style={{display:"block",fontSize:13,fontWeight:800,color:t.fg,lineHeight:1.35}}>{title}</span>
           {subtitle&&!on&&<span style={{display:"block",fontSize:11,color:t.sub,opacity:.85,marginTop:2,lineHeight:1.4}}>{subtitle}</span>}
@@ -10544,24 +10544,24 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
     <div style={{width:"100%",maxWidth:compact?"100%":360,margin:"0 auto"}}>
       {/* Countdown */}
       {deadline>0&&(
-        <div style={{background:expired?"#fee2e2":"#fff7ed",border:`1px solid ${expired?"#fca5a5":"#fed7aa"}`,borderRadius:14,padding:"12px 14px",marginBottom:14,textAlign:"center"}}>
+        <div style={{background:expired?"#fee2e2":"#fff7ed",border:`1px solid ${expired?"#fca5a5":"#fed7aa"}`,borderRadius:16,padding:"12px 14px",marginBottom:14,textAlign:"center"}}>
           {expired?(
-            <div style={{fontSize:12.5,color:"#b91c1c",fontWeight:700,lineHeight:1.5}}>⌛ Payment window closed. This order will be cancelled. Please place a new order.</div>
+            <div style={{fontSize:12,color:"#b91c1c",fontWeight:700,lineHeight:1.5}}>⌛ Payment window closed. This order will be cancelled. Please place a new order.</div>
           ):(
             <>
               <div style={{fontSize:11,color:"#9a3412",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>Pay within {PAY_WINDOW_MIN} minutes</div>
-              <div style={{fontFamily:PRICE_FONT,fontSize:26,fontWeight:800,color:"#c2410c",letterSpacing:1}}>{mm}:{ss}</div>
-              <div style={{fontSize:10.5,color:"#9a3412",marginTop:2}}>Auto-cancels when time ends</div>
+              <div style={{fontFamily:PRICE_FONT,fontSize:24,fontWeight:800,color:"#c2410c",letterSpacing:1}}>{mm}:{ss}</div>
+              <div style={{fontSize:10,color:"#9a3412",marginTop:2}}>Auto-cancels when time ends</div>
             </>
           )}
         </div>
       )}
 
-      <div style={{background:C.card,border:`1.5px solid ${C.primary}`,borderRadius:18,padding:"18px"}}>
+      <div style={{background:C.card,border:`1.5px solid ${C.primary}`,borderRadius:20,padding:"18px"}}>
         <div style={{textAlign:"center",marginBottom:14}}>
           <div style={{fontSize:11,color:C.textSub,fontWeight:700,textTransform:"uppercase",letterSpacing:.6}}>Amount due</div>
-          <div style={{fontFamily:PRICE_FONT,fontSize:30,fontWeight:800,color:C.primary,lineHeight:1.1}}>₹{grand}</div>
-          <div style={{fontSize:11.5,color:C.textSub,marginTop:2}}>Order {order.orderNo}</div>
+          <div style={{fontFamily:PRICE_FONT,fontSize:28,fontWeight:800,color:C.primary,lineHeight:1.1}}>₹{grand}</div>
+          <div style={{fontSize:11,color:C.textSub,marginTop:2}}>Order {order.orderNo}</div>
         </div>
 
         {/* ── Gateway path ──────────────────────────────────────────────────────
@@ -10574,12 +10574,12 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
           <>
             {gatewayMode==="sandbox"&&(
               <div style={{background:"#fff7ed",border:"1.5px solid #fb923c",borderRadius:12,padding:"10px 12px",marginBottom:11,textAlign:"center"}}>
-                <div style={{fontSize:11.5,fontWeight:900,color:"#9a3412",letterSpacing:.35}}>CASHFREE SANDBOX · TEST MODE</div>
-                <div style={{fontSize:10.5,color:"#c2410c",marginTop:3,lineHeight:1.45}}>Owner testing only. No real money is charged and the order will not enter fulfilment.</div>
+                <div style={{fontSize:11,fontWeight:900,color:"#9a3412",letterSpacing:.35}}>CASHFREE SANDBOX · TEST MODE</div>
+                <div style={{fontSize:10,color:"#c2410c",marginTop:3,lineHeight:1.45}}>Owner testing only. No real money is charged and the order will not enter fulfilment.</div>
               </div>
             )}
             <button className="press" onClick={payNow} disabled={payBusy||expired}
-              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:(payBusy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:(payBusy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               <span style={{fontSize:18}}>💳</span>
               {payBusy?"Opening secure payment…":expired?"Payment window closed":gatewayMode==="sandbox"?`Try Test Payment ₹${grand}`:`Pay ₹${grand} securely`}
             </button>
@@ -10592,16 +10592,16 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
           </>
         ):(
           <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"13px",textAlign:"center"}}>
-            <div style={{fontSize:12.5,color:"#9a3412",fontWeight:700,lineHeight:1.5}}>
+            <div style={{fontSize:12,color:"#9a3412",fontWeight:700,lineHeight:1.5}}>
               {gatewayChecking?"Checking secure payment…":"⚠ Secure online payment is temporarily unavailable."}
             </div>
             {!gatewayChecking&&(
               <button className="press" onClick={retryGateway}
-                style={{marginTop:10,background:C.primary,color:"white",border:"none",borderRadius:10,padding:"10px 16px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                style={{marginTop:10,background:C.primary,color:"white",border:"none",borderRadius:12,padding:"10px 16px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 Retry secure payment
               </button>
             )}
-            {payNote&&<div style={{fontSize:11.5,color:C.danger,fontWeight:700,marginTop:9,lineHeight:1.45}}>{payNote}</div>}
+            {payNote&&<div style={{fontSize:11,color:C.danger,fontWeight:700,marginTop:9,lineHeight:1.45}}>{payNote}</div>}
           </div>
         )}
       </div>
@@ -10669,15 +10669,15 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
         {stage===1?(<>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:12}}>Are you sure you want to exit?</div>
           {savingsBar("🐠")}
-          <button className="press" onClick={()=>setStage(2)} style={{width:"100%",background:"#fff",color:C.text,border:`1.5px solid ${C.border}`,borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:10,cursor:"pointer"}}>Yes, exit checkout</button>
-          <button className="press" onClick={onStay} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>No, continue checkout</button>
+          <button className="press" onClick={()=>setStage(2)} style={{width:"100%",background:"#fff",color:C.text,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:10,cursor:"pointer"}}>Yes, exit checkout</button>
+          <button className="press" onClick={onStay} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:16,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>No, continue checkout</button>
         </>):(<>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:8}}>Sorry to see you go…</div>
           {savingsBar("🚚")}
-          <div style={{fontSize:13.5,fontWeight:700,color:C.text,marginBottom:12}}>What stopped you from completing your purchase?</div>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:12}}>What stopped you from completing your purchase?</div>
           <div style={{display:"flex",flexDirection:"column",gap:11,marginBottom:14}}>
             {REASONS.map(r=>(
-              <label key={r} style={{display:"flex",alignItems:"center",gap:10,fontSize:13.5,color:C.text,cursor:"pointer",userSelect:"none"}}>
+              <label key={r} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:C.text,cursor:"pointer",userSelect:"none"}}>
                 <input type="checkbox" checked={reasons.includes(r)} onChange={()=>toggle(r)} style={{width:18,height:18,accentColor:C.primary}}/>
                 {r}
               </label>
@@ -10687,7 +10687,7 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
             <textarea value={other} onChange={e=>setOther(e.target.value)} rows={3} placeholder="Others (please specify)"
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",marginBottom:14,background:"#fff"}}/>
           )}
-          <button className="press" onClick={()=>onLeave&&onLeave({reasons,other})} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Skip and exit</button>
+          <button className="press" onClick={()=>onLeave&&onLeave({reasons,other})} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:16,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Skip and exit</button>
           <button className="press" onClick={onStay} style={{width:"100%",background:"none",color:C.textSub,border:"none",padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:4,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}><BackArrow size={16}/> Continue checkout instead</button>
         </>)}
       </div>
@@ -10890,16 +10890,16 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                                   :c.type==="percent"?`${c.value}% off${c.maxDiscount>0?` up to ₹${c.maxDiscount}`:""}`
                                   :`₹${c.value} off`;
                     return(
-                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:minOk?"#f0fdf4":"#fefce8",border:`1px solid ${minOk?"#86efac":"#fde68a"}`,borderRadius:10,padding:"7px 12px"}}>
+                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:minOk?"#f0fdf4":"#fefce8",border:`1px solid ${minOk?"#86efac":"#fde68a"}`,borderRadius:12,padding:"7px 12px"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:12,color:minOk?C.success:"#92400e",background:minOk?"#dcfce7":"#fef3c7",padding:"2px 8px",borderRadius:6}}>{c.code}</span>
-                          <span style={{fontSize:11.5,color:minOk?"#15803d":"#92400e",fontWeight:600}}>{discount}</span>
+                          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:12,color:minOk?C.success:"#92400e",background:minOk?"#dcfce7":"#fef3c7",padding:"2px 8px",borderRadius:8}}>{c.code}</span>
+                          <span style={{fontSize:11,color:minOk?"#15803d":"#92400e",fontWeight:600}}>{discount}</span>
                         </div>
                         {minOk?(
                           <button className="press" onClick={()=>{setCouponCode(c.code);}}
                             style={{background:C.success,color:"white",border:"none",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Apply</button>
                         ):(
-                          <span style={{fontSize:10.5,color:"#92400e",fontWeight:600}}>Add ₹{needed} more</span>
+                          <span style={{fontSize:10,color:"#92400e",fontWeight:600}}>Add ₹{needed} more</span>
                         )}
                       </div>
                     );
@@ -10912,11 +10912,11 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                 placeholder="Enter coupon code"
                 style={{flex:1,borderRadius:12,border:`1.5px solid ${couponMsg.ok?"#22c55e":couponMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
               <button className="press" onClick={applyCoupon}
-                style={{background:C.primary,color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+                style={{background:C.primary,color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
                 Apply
               </button>
             </div>
-            {couponMsg.text&&<div style={{fontSize:11.5,color:couponMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{couponMsg.text}</div>}
+            {couponMsg.text&&<div style={{fontSize:11,color:couponMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{couponMsg.text}</div>}
           </div>
           )}
           {/* Permanent customer codes and qualifying-order codes use the same alphanumeric format. */}
@@ -10928,11 +10928,11 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                 autoCapitalize="characters" maxLength={12} placeholder="Enter referral code"
                 style={{flex:1,borderRadius:12,border:`1.5px solid ${refMsg.ok?"#22c55e":refMsg.text?C.danger:C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white",letterSpacing:2,fontFamily:"monospace"}}/>
               <button className="press" onClick={applyReferral} disabled={!REF_CODE_RE.test(cleanRefCode(refInput))}
-                style={{background:REF_CODE_RE.test(cleanRefCode(refInput))?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
+                style={{background:REF_CODE_RE.test(cleanRefCode(refInput))?"#7c3aed":"#c4b5fd",color:"white",border:"none",borderRadius:12,padding:"0 16px",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0}}>
                 Apply
               </button>
             </div>
-            {refMsg.text&&<div style={{fontSize:11.5,color:refMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{refMsg.text}</div>}
+            {refMsg.text&&<div style={{fontSize:11,color:refMsg.ok?C.success:C.danger,fontWeight:600,marginTop:4}}>{refMsg.text}</div>}
           </div>
           )}
   </>);
@@ -11128,8 +11128,8 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
       {submitted?(
         <>
           <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Payment Verified! 🎉</div>
-          {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:14,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:8}}>Payment Verified! 🎉</div>
+          {placed&&<div style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:16,padding:"10px 18px",marginBottom:16,fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>{placed.orderNo}</div>}
           <div style={{fontSize:13,color:C.textSub,lineHeight:1.55,marginBottom:18,maxWidth:320}}>Payment verified. Your order is <b style={{color:C.text}}>Confirmed</b>. We'll update it when shipped and delivered.</div>
           {/* Care-guide reminder — tailored to what was purchased */}
           {placed&&(()=>{
@@ -11145,12 +11145,12 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                      the customer is still reading their order confirmation. */}
                   <Collapsible icon="🐠" tone="green" title="How to acclimatize your fish"
                     subtitle={`${steps.length} steps — tap to read when your parcel arrives`}>
-                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5,marginBottom:10}}>Save these steps for when your parcel arrives — they keep your new fish safe and stress-free.</div>
+                  <div style={{fontSize:11,color:"#047857",lineHeight:1.5,marginBottom:10}}>Save these steps for when your parcel arrives — they keep your new fish safe and stress-free.</div>
                   <ol style={{margin:0,paddingLeft:18,display:"flex",flexDirection:"column",gap:6}}>
-                    {steps.map((st,i)=>(<li key={i} style={{fontSize:12.5,color:"#065f46",lineHeight:1.5}}>{st}</li>))}
+                    {steps.map((st,i)=>(<li key={i} style={{fontSize:12,color:"#065f46",lineHeight:1.5}}>{st}</li>))}
                   </ol>
                   <button className="press" onClick={()=>nav("guides")}
-                    style={{marginTop:12,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
+                    style={{marginTop:12,background:"none",border:"none",padding:0,color:"#15803d",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer"}}>
                     📖 See full care guides →
                   </button>
                   </Collapsible>
@@ -11160,10 +11160,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             return(
               <button className="press" onClick={()=>nav("guides")}
                 style={{width:"100%",maxWidth:340,background:"#ecfdf5",border:`1.5px solid #a7f3d0`,borderRadius:16,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,textAlign:"left",cursor:"pointer"}}>
-                <span style={{fontSize:30,flexShrink:0}}>📖</span>
+                <span style={{fontSize:28,flexShrink:0}}>📖</span>
                 <div>
-                  <div style={{fontSize:13.5,fontWeight:800,color:"#065f46",marginBottom:2}}>Please read the Care Guide</div>
-                  <div style={{fontSize:11.5,color:"#047857",lineHeight:1.5}}>Settle your new plants in correctly for healthy growth. Tap to read →</div>
+                  <div style={{fontSize:13,fontWeight:800,color:"#065f46",marginBottom:2}}>Please read the Care Guide</div>
+                  <div style={{fontSize:11,color:"#047857",lineHeight:1.5}}>Settle your new plants in correctly for healthy growth. Tap to read →</div>
                 </div>
               </button>
             );
@@ -11173,7 +11173,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             const pts=coinsEarnedFor(placed, settings); // exactly what will be credited on delivery
             return pts>0?(
               <div className="points-pop" style={{background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:16,padding:"12px 20px",marginBottom:14,display:"flex",alignItems:"center",gap:10,width:"100%",maxWidth:340}}>
-                <span style={{fontSize:26}}>👛</span>
+                <span style={{fontSize:24}}>👛</span>
                 <div style={{textAlign:"left"}}>
                   <div style={{fontSize:14,fontWeight:800,color:"white"}}>{pts} wallet points pending</div>
                   <div style={{fontSize:11,color:"rgba(255,255,255,.85)"}}>≈ ₹{Math.floor(pts*Number(settings.loyaltyRedeemValue||1))} — credited after successful payment when your order is delivered</div>
@@ -11183,9 +11183,9 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           })()}
           <div style={{display:"flex",gap:10,width:"100%",maxWidth:340}}>
             <button className="press" onClick={()=>nav("home")}
-              style={{flex:1,background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Home</button>
+              style={{flex:1,background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:16,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Home</button>
             <button className="press" onClick={()=>nav("orders")}
-              style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View Orders</button>
+              style={{flex:1,background:C.primary,color:"white",border:"none",borderRadius:16,padding:"14px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>View Orders</button>
           </div>
         </>
       ):(
@@ -11194,11 +11194,11 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           {placed&&<PaymentPanel order={placed} onVerified={()=>setSubmitted(true)} onCancelled={(o)=>{onCancelled&&onCancelled(o);}} onCheckoutCancelled={onCancelPayment}/>} 
           <div style={{display:"flex",gap:8,marginTop:14,width:"100%",maxWidth:360}}>
             <button className="press" onClick={()=>nav("orders")}
-              style={{flex:1,background:"#fff",border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 10px",color:C.textSub,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{flex:1,background:"#fff",border:`1px solid ${C.border}`,borderRadius:12,padding:"9px 10px",color:C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               Pay later
             </button>
             <button className="press" onClick={()=>{ if(placed) onCancelPayment&&onCancelPayment(placed); else goBack(); }}
-              style={{flex:1,background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"9px 10px",color:C.danger,fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              style={{flex:1,background:"#fff",border:"1px solid #fecaca",borderRadius:12,padding:"9px 10px",color:C.danger,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               Cancel payment
             </button>
           </div>
@@ -11228,7 +11228,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                 {i<step-1?"✓":i+1}
               </div>
               <span style={{fontSize:11,fontWeight:600,color:i===step-1?C.primary:C.textSub}}>{s}</span>
-              {i<2&&<div style={{width:16,height:2,background:i<step-1?C.primary:C.border,borderRadius:2}}/>}
+              {i<2&&<div style={{width:16,height:2,background:i<step-1?C.primary:C.border,borderRadius:4}}/>}
             </div>
           ))}
         </div>
@@ -11237,10 +11237,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
       {step===1&&(
         <div className="dt-read" style={{padding:"20px 16px 100px"}}>
           {/* Shipping rates info */}
-          <div style={{background:C.accentLight,borderRadius:14,padding:"12px 14px",marginBottom:16,border:`1px solid ${C.border}`}}>
+          <div style={{background:C.accentLight,borderRadius:16,padding:"12px 14px",marginBottom:16,border:`1px solid ${C.border}`}}>
             <div style={{fontSize:13,fontWeight:700,color:C.primaryDark}}>🚚 Shipping rates vary by location &amp; weight</div>
-            {zone&&<div style={{fontSize:11.5,color:C.primary,fontWeight:700,marginTop:4}}>📍 Detected zone: <b>{ZONE_LABELS[zone]}</b></div>}
-            {!zone&&addr.pincode.length===6&&<div style={{fontSize:11.5,color:"#b45309",marginTop:4}}>⚠ Pincode not recognized — enter your city below and we'll confirm shipping</div>}
+            {zone&&<div style={{fontSize:11,color:C.primary,fontWeight:700,marginTop:4}}>📍 Detected zone: <b>{ZONE_LABELS[zone]}</b></div>}
+            {!zone&&addr.pincode.length===6&&<div style={{fontSize:11,color:"#b45309",marginTop:4}}>⚠ Pincode not recognized — enter your city below and we'll confirm shipping</div>}
             {hasLiveFish&&(()=>{
               const r2=settings.shippingRates||DEFAULT_SHIPPING_RATES;
               const fishWt=cart.filter(i=>i.category==="Live Fish").reduce((s,i)=>{const wt=Number(i.variantPackagingWeight!=null?i.variantPackagingWeight:i.packagingWeight)||0.2;return s+wt*i.qty;},0);
@@ -11250,7 +11250,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             })()}
           </div>
           {liveBlocked&&(
-            <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:14,padding:"13px 15px",marginBottom:14}}>
+            <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:16,padding:"13px 15px",marginBottom:14}}>
               <div style={{fontSize:13,fontWeight:800,color:"#b91c1c",marginBottom:3}}>🚫 Live fish not deliverable to {zone?ZONE_LABELS[zone]:"this region"}</div>
               <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.5}}>For the safety of the fish we currently ship live stock only within <b>Tamil Nadu</b> and <b>South India</b>. Please use a delivery address in those regions, or remove the live-fish items to continue with the rest of your order.</div>
             </div>
@@ -11262,14 +11262,14 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                choosing packing is repeated inside that chooser below. */}
             <Collapsible icon="🛡️" tone="green" title="Live Arrival Guarantee"
               subtitle="Free with our recommended packing — tap for the terms">
-              <div style={{fontSize:12.5,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish is <b>Dead on Arrival (DOA)</b>, share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery. If approved, <b>you choose either a refund or reward coins</b> for the fish's value. Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
+              <div style={{fontSize:12,color:"#166534",lineHeight:1.6}}>Free on every live-fish order sent with our <b>recommended packing</b>. If a fish is <b>Dead on Arrival (DOA)</b>, share a clear, continuous unboxing video on WhatsApp within <b>2 hours</b> of delivery. If approved, <b>you choose either a refund or reward coins</b> for the fish's value. Shipping charges aren't refundable, and normal-parcel orders aren't covered. Once your fish arrive safely, all sales are final.</div>
             </Collapsible>
             </>
           )}
           {/* Only customer-saved addresses appear here. Past orders never recreate a card. */}
           {savedAddresses.length>0&&(
-            <div style={{background:"#fff",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:16}}>
-              <div style={{fontSize:12.5,fontWeight:800,color:C.text,marginBottom:10}}>📍 Saved Address</div>
+            <div style={{background:"#fff",border:`1px solid ${C.border}`,borderRadius:16,padding:"12px 14px",marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:10}}>📍 Saved Address</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {savedAddresses.map(a=>{
                   const active=addrFingerprint(a)===addrFingerprint(addr);
@@ -11281,23 +11281,23 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                   };
                   return(
                     <div key={a.id} style={{border:`1.5px solid ${active?C.primary:C.border}`,background:active?C.accentLight:"#fff",borderRadius:12,padding:"10px 12px"}}>
-                      <div style={{fontSize:12.5,fontWeight:800,color:C.text}}>
+                      <div style={{fontSize:12,fontWeight:800,color:C.text}}>
                         {a.name||"Address"}{a.label?<span style={{color:C.textSub,fontWeight:600}}> · {a.label}</span>:null}
                       </div>
-                      <div style={{fontSize:11.5,color:C.textSub,lineHeight:1.5,marginTop:3}}>
+                      <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:3}}>
                         {a.address}{a.city?`, ${a.city}`:""} — {a.pincode}{a.phone?<><br/>📞 {a.phone}</>:null}
                       </div>
                       <div style={{display:"flex",gap:8,marginTop:9,flexWrap:"wrap"}}>
                         <button className="press" onClick={()=>{ use(); setAddrFormOpen(false); }}
-                          style={{background:C.primary,color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          style={{background:C.primary,color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:11,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                           {active?"✓ In use":"Use this"}
                         </button>
                         <button className="press" onClick={()=>{ use(); setAddrFormOpen(true); }}
-                          style={{background:"#fff",color:C.primary,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          style={{background:"#fff",color:C.primary,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                           ✏ Edit
                         </button>
                         <button className="press" onClick={()=>onDeleteAddress&&onDeleteAddress(a.id)}
-                          style={{background:"#fff",color:C.danger,border:`1px solid ${C.border}`,borderRadius:9,padding:"8px 12px",fontSize:11.5,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                          style={{background:"#fff",color:C.danger,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                           Delete
                         </button>
                       </div>
@@ -11309,7 +11309,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                       setAddr(cur=>({...BLANK_ADDR,waUpdates:cur.waUpdates,summary:cur.summary}));
                       setAddrEditId(null); setSaveForLater(false); setErrs({}); setErrFocus(""); setAddrFormOpen(true);
                     }}
-                    style={{background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+                    style={{background:"#fff",color:C.primary,border:`1.5px dashed ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
                     ＋ New address
                   </button>
                 )}
@@ -11333,7 +11333,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
               if(!checked&&errs.whatsapp) setErrs(p=>{const n={...p};delete n.whatsapp;return n;});
             }} style={{width:18,height:18,accentColor:"#25D366",flexShrink:0}}/>
             <span aria-hidden="true" style={{width:20,height:20,borderRadius:"50%",background:"#25D366",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900}}>☎</span>
-            <span style={{fontSize:12.5,color:"#166534",fontWeight:700}}>Update me on WhatsApp</span>
+            <span style={{fontSize:12,color:"#166534",fontWeight:700}}>Update me on WhatsApp</span>
           </label>
           {addr.waUpdates&&inp("WhatsApp Number","whatsapp","tel")}
           {showAddrForm&&(<>
@@ -11378,37 +11378,37 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                sees what they are getting and what it costs. */
             <Collapsible icon="🐠" title="Live-fish packing"
               subtitle={`${packingLabel(packing)}${guaranteeActive?" · 🛡️ guaranteed":" · not covered by the guarantee"}`}>
-              <div style={{fontSize:11.5,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> applies when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer option above it. Whatever you choose, we always pack with the utmost care to keep your fish safe in transit.</div>
+              <div style={{fontSize:11,color:"#15803d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:12,padding:"9px 12px",marginBottom:10,lineHeight:1.5}}>🛡️ The <b>Live Arrival Guarantee</b> applies when you choose our recommended packing — <b>{packingLabel(suggestedPacking)}</b> — or a safer option above it. Whatever you choose, we always pack with the utmost care to keep your fish safe in transit.</div>
               {PACKING_OPTIONS.map(opt=>{
                 const sel=packing===opt.key;
                 const isSug=opt.key===suggestedPacking;
                 const covered=opt.rank>=packingOpt(suggestedPacking).rank;
                 const optFee=calcShipping(cart,zone,{packing:opt.key},settings);
                 return(
-                  <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:11,background:sel?"#eff6ff":"#fff",borderRadius:13,padding:"12px 13px",marginBottom:8,cursor:"pointer",userSelect:"none",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
+                  <label key={opt.key} style={{display:"flex",alignItems:"flex-start",gap:11,background:sel?"#eff6ff":"#fff",borderRadius:12,padding:"12px 13px",marginBottom:8,cursor:"pointer",userSelect:"none",border:`1.5px solid ${sel?"#3b82f6":C.border}`}}>
                     <input type="radio" name="packing" checked={sel} onChange={()=>setPacking(opt.key)} style={{width:18,height:18,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
                     <div style={{flex:1}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                        <span style={{fontSize:12.5,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
+                        <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
                         {isSug&&<span style={{fontSize:9,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"2px 7px",letterSpacing:.3}}>RECOMMENDED</span>}
-                        {covered&&<span style={{fontSize:9.5,fontWeight:700,color:"#15803d"}}>🛡️ Guaranteed</span>}
+                        {covered&&<span style={{fontSize:9,fontWeight:700,color:"#15803d"}}>🛡️ Guaranteed</span>}
                       </div>
                       <div style={{fontSize:11,color:C.textSub,marginTop:2,lineHeight:1.45}}>{opt.blurb}</div>
                     </div>
-                    <span style={{fontSize:12.5,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>{zone?`₹${optFee}`:"—"}</span>
+                    <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>{zone?`₹${optFee}`:"—"}</span>
                   </label>
                 );
               })}
               {selPack.rank < packingOpt(suggestedPacking).rank &&(
-                <div style={{fontSize:11,color:"#9a3412",lineHeight:1.45,marginTop:2,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 11px"}}>⚠ You've chosen a lighter packing than we recommend for these fish — that's okay, but <b>live arrival won't be guaranteed</b>.</div>
+                <div style={{fontSize:11,color:"#9a3412",lineHeight:1.45,marginTop:2,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"8px 11px"}}>⚠ You've chosen a lighter packing than we recommend for these fish — that's okay, but <b>live arrival won't be guaranteed</b>.</div>
               )}
             </Collapsible>
           ) : anySuggestSpecial ? (
-            <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"#eff6ff":"#fff",borderRadius:14,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
+            <label style={{display:"flex",alignItems:"flex-start",gap:12,background:specialDelivery?"#eff6ff":"#fff",borderRadius:16,padding:"13px 14px",marginBottom:14,cursor:"pointer",userSelect:"none",border:`1.5px solid ${specialDelivery?"#3b82f6":C.border}`}}>
               <input type="checkbox" checked={specialDelivery} onChange={e=>setSpecialDelivery(e.target.checked)} style={{width:20,height:20,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
               <div>
                 <div style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>⚡ Premium Delivery</div>
-                <div style={{fontSize:11.5,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{zone?speedCourierForZone(zone,settings,cart):(settings.specialDeliveryPrice||200)}</b> to shipping.</div>
+                <div style={{fontSize:11,color:"#1e40af",marginTop:2,lineHeight:1.45}}>Priority courier with extra care for fragile items. Adds <b>₹{zone?speedCourierForZone(zone,settings,cart):(settings.specialDeliveryPrice||200)}</b> to shipping.</div>
               </div>
             </label>
           ) : null}
@@ -11422,16 +11422,16 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           {/* Billing address */}
           <label style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"11px 14px",marginBottom:12,cursor:"pointer",userSelect:"none",border:`1px solid ${C.border}`}}>
             <input type="checkbox" checked={useSameBilling} onChange={e=>setUseSameBilling(e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
-            <span style={{fontSize:12.5,color:C.primaryDark,fontWeight:600}}>🏠 Billing address same as shipping</span>
+            <span style={{fontSize:12,color:C.primaryDark,fontWeight:600}}>🏠 Billing address same as shipping</span>
           </label>
           {!useSameBilling&&(
-            <div style={{background:C.bg,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
+            <div style={{background:C.bg,borderRadius:16,padding:"14px",marginBottom:14,border:`1px solid ${C.border}`}}>
               <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:10}}>Billing Address</div>
               {["name","address","city","pincode"].map(k=>(
                 <div key={k} style={{marginBottom:10}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.6,marginBottom:4}}>{k.charAt(0).toUpperCase()+k.slice(1)}</div>
                   <input value={billing[k]} onChange={e=>fb(k,e.target.value)}
-                    style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
+                    style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white"}}/>
                 </div>
               ))}
             </div>
@@ -11439,17 +11439,17 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           {onSaveAddress&&showAddrForm&&!addrEditId&&(
             <label style={{display:"flex",alignItems:"center",gap:10,background:"#fff",border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 13px",marginBottom:12,cursor:"pointer",userSelect:"none"}}>
               <input type="checkbox" checked={saveForLater} onChange={e=>setSaveForLater(e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0}}/>
-              <span style={{fontSize:12.5,color:C.text,fontWeight:700}}>Save this address for future orders</span>
+              <span style={{fontSize:12,color:C.text,fontWeight:700}}>Save this address for future orders</span>
             </label>
           )}
           {onSaveAddress&&showAddrForm&&addrEditId&&(
             <button className="press" onClick={()=>{ if(validate()) onSaveAddress({...addr,id:addrEditId}); }}
-              style={{width:"100%",marginBottom:10,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              style={{width:"100%",marginBottom:10,background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"11px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
               Update saved address
             </button>
           )}
           <button className="press nemo-native-checkout-cta" onClick={()=>{ if(validate()) setStep(2); else setAddrFormOpen(true); }}
-            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             Continue to Payment →
           </button>
         </div>
@@ -11460,20 +11460,20 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:12}}>Order Items</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
             <button className="press" onClick={()=>nav("shop")}
-              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>＋ Add more items</button>
+              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>＋ Add more items</button>
             <button className="press" onClick={()=>setStep(1)}
-              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:11,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✏ Edit Address</button>
+              style={{background:"#fff",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:12,padding:"10px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>✏ Edit Address</button>
           </div>
           {cart.map(item=>{
             const m=CAT_META[item.category]||CAT_META["Live Fish"];
             const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
             return(
-              <div key={item.key||item.id} style={{background:C.card,borderRadius:14,padding:"12px",marginBottom:8,display:"flex",gap:12,alignItems:"center",border:`1px solid ${C.border}`}}>
+              <div key={item.key||item.id} style={{background:C.card,borderRadius:16,padding:"12px",marginBottom:8,display:"flex",gap:12,alignItems:"center",border:`1px solid ${C.border}`}}>
                 {/* Cart lines are snapshots and carry no picture, so the photo is looked up from
                     the catalogue — the same helper the cart and order history use. This tile
                     showed the bare category emoji until now, which made the last screen before
                     payment the one place you could not see what you were buying. */}
-                <div style={{width:44,height:44,borderRadius:10,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,overflow:"hidden"}}>
+                <div style={{width:44,height:44,borderRadius:12,background:`linear-gradient(135deg,${m.c1},${m.c2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,overflow:"hidden"}}>
                   {(()=>{ const src=getCartLineImg(item,products,mediaCache);
                     return src?<img src={src} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:m.emoji; })()}
                 </div>
@@ -11482,10 +11482,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                   {item.variantLabel&&<div style={{fontSize:12,color:C.textSub}}>{item.variantLabel}</div>}
                   {updateQty?(
                     <div style={{display:"flex",alignItems:"center",gap:10,marginTop:6}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:10,padding:"4px 10px",border:`1.5px solid ${C.border}`}}>
-                        <button className="press" onClick={()=>updateQty(item.key,-1)} style={{background:"none",border:"none",fontSize:17,color:C.primary,fontWeight:700,lineHeight:1,cursor:"pointer"}}>−</button>
+                      <div style={{display:"flex",alignItems:"center",gap:10,background:C.bg,borderRadius:12,padding:"4px 10px",border:`1.5px solid ${C.border}`}}>
+                        <button className="press" onClick={()=>updateQty(item.key,-1)} style={{background:"none",border:"none",fontSize:16,color:C.primary,fontWeight:700,lineHeight:1,cursor:"pointer"}}>−</button>
                         <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:16,textAlign:"center"}}>{item.qty}</span>
-                        <button className="press" onClick={()=>updateQty(item.key,1)} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:17,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,lineHeight:1,cursor:item.qty>=maxAllowed?"default":"pointer"}}>+</button>
+                        <button className="press" onClick={()=>updateQty(item.key,1)} disabled={item.qty>=maxAllowed} style={{background:"none",border:"none",fontSize:16,color:item.qty>=maxAllowed?C.textSub:C.primary,fontWeight:700,lineHeight:1,cursor:item.qty>=maxAllowed?"default":"pointer"}}>+</button>
                       </div>
                       <button className="press" onClick={()=>updateQty(item.key,-item.qty)} style={{background:"none",border:"none",fontSize:12,color:C.danger,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Remove</button>
                     </div>
@@ -11516,7 +11516,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
               <div style={{fontSize:11,color:"#0c4a6e",lineHeight:1.5,marginBottom:10}}>
                 The <b>Live Arrival Guarantee</b> applies on <b>{packingLabel(suggestedPacking)}</b> (our recommendation) or any safer option. Changing this changes your shipping charge below.
               </div>
-              {!zone&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>Enter a recognised pincode on the shipping step to see the charge for each option.</div>}
+              {!zone&&<div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"8px 10px",marginBottom:9,lineHeight:1.45}}>Enter a recognised pincode on the shipping step to see the charge for each option.</div>}
               {PACKING_OPTIONS.map(opt=>{
                 const sel=packing===opt.key;
                 const isSug=opt.key===suggestedPacking;
@@ -11528,12 +11528,12 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
                         <span style={{fontSize:12,fontWeight:800,color:sel?"#0369a1":C.text}}>{opt.label}</span>
-                        {isSug&&<span style={{fontSize:8.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
+                        {isSug&&<span style={{fontSize:9,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
                         {covered
                           ? <span style={{fontSize:9,fontWeight:800,color:"#15803d"}} title="Live Arrival Guarantee applies">🛡️</span>
-                          : <span style={{fontSize:8.5,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"1px 6px"}}>NO DEAD-ON-ARRIVAL COVER</span>}
+                          : <span style={{fontSize:9,fontWeight:800,color:"#9a3412",background:"#ffedd5",borderRadius:20,padding:"1px 6px"}}>NO DEAD-ON-ARRIVAL COVER</span>}
                       </div>
-                      <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
+                      <div style={{fontSize:10,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
                     </div>
                     <span style={{fontSize:12,fontWeight:800,color:sel?"#0369a1":C.text,whiteSpace:"nowrap"}}>{optFee==null?"—":`₹${optFee}`}</span>
                   </label>
@@ -11541,13 +11541,13 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
               })}
             </Collapsible>
             {!guaranteeActive&&(
-              <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:9,padding:"9px 11px",lineHeight:1.5,marginTop:-4,marginBottom:12}}>
+              <div style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8,padding:"9px 11px",lineHeight:1.5,marginTop:-4,marginBottom:12}}>
                 ⚠ You've picked packing below our recommendation. Your fish still travel with our usual care, but a <b>Dead-on-Arrival claim can't be honoured</b> on this order.
               </div>
             )}
             </div>
           )}
-          <div style={{background:C.card,borderRadius:14,padding:"14px",marginTop:12,border:`1px solid ${C.border}`}}>
+          <div style={{background:C.card,borderRadius:16,padding:"14px",marginTop:12,border:`1px solid ${C.border}`}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:13,color:C.textSub}}>Subtotal</span>
               <span style={{fontSize:13,fontWeight:600,color:C.text}}>₹{total}</span>
@@ -11603,10 +11603,10 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                           <div style={{flex:1}}>
                             <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
                               <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{opt.label}</span>
-                              {isSug&&<span style={{fontSize:8.5,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
+                              {isSug&&<span style={{fontSize:9,fontWeight:800,color:"#15803d",background:"#dcfce7",borderRadius:20,padding:"1px 6px"}}>RECOMMENDED</span>}
                               {covered&&<span style={{fontSize:9,fontWeight:700,color:"#15803d"}}>🛡️</span>}
                             </div>
-                            <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
+                            <div style={{fontSize:10,color:C.textSub,marginTop:1,lineHeight:1.4}}>{opt.blurb}</div>
                           </div>
                           <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>₹{optFee}</span>
                         </label>
@@ -11618,7 +11618,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                           <input type="radio" name="packrev" checked={sel} onChange={()=>setSpecialDelivery(o.sp)} style={{width:17,height:17,accentColor:"#3b82f6",flexShrink:0,marginTop:1}}/>
                           <div style={{flex:1}}>
                             <div style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text}}>{o.label}</div>
-                            <div style={{fontSize:10.5,color:C.textSub,marginTop:1,lineHeight:1.4}}>{o.blurb}</div>
+                            <div style={{fontSize:10,color:C.textSub,marginTop:1,lineHeight:1.4}}>{o.blurb}</div>
                           </div>
                           <span style={{fontSize:12,fontWeight:800,color:sel?"#1d4ed8":C.text,whiteSpace:"nowrap"}}>₹{optFee}</span>
                         </label>
@@ -11629,7 +11629,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
                 )}
               </div>
             )}
-            {zone&&fee>0&&<div style={{fontSize:10.5,color:C.textSub,lineHeight:1.45,marginTop:-2,marginBottom:8,background:C.accentLight,borderRadius:8,padding:"7px 10px"}}>ℹ️ Estimated shipping. Any excess returns to your wallet after dispatch.</div>}
+            {zone&&fee>0&&<div style={{fontSize:10,color:C.textSub,lineHeight:1.45,marginTop:-2,marginBottom:8,background:C.accentLight,borderRadius:8,padding:"7px 10px"}}>ℹ️ Estimated shipping. Any excess returns to your wallet after dispatch.</div>}
             {guaranteeActive&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
               <span style={{fontSize:13,color:"#15803d"}}>🛡️ Live Arrival Guarantee</span>
               <span style={{fontSize:13,fontWeight:700,color:"#15803d"}}>Included</span>
@@ -11654,11 +11654,11 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             </div>}
             <div style={{height:1,background:C.border,margin:"10px 0"}}/>
             <div style={{display:"flex",justifyContent:"space-between"}}>
-              <span style={{fontSize:15,fontWeight:700,color:C.text}}>Grand Total</span>
+              <span style={{fontSize:14,fontWeight:700,color:C.text}}>Grand Total</span>
               <span style={{fontFamily:PRICE_FONT,fontSize:18,fontWeight:800,color:C.primary}}>₹{grand}</span>
             </div>
           </div>
-          <div style={{marginTop:16,background:C.card,borderRadius:14,padding:"14px",border:`1px solid ${C.border}`}}>
+          <div style={{marginTop:16,background:C.card,borderRadius:16,padding:"14px",border:`1px solid ${C.border}`}}>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.7,marginBottom:10}}>📍 Shipping To</div>
             {[{l:"Name",v:addr.name},{l:"Phone",v:addr.phone},{l:"Address",v:addr.address},{l:"City",v:`${addr.city} — ${addr.pincode}`}].map((r,i)=>(
               <div key={i} style={{display:"flex",gap:10,marginBottom:6}}>
@@ -11681,9 +11681,9 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             </div>
           </Collapsible>
 
-          {placeErr&&<div style={{marginTop:14,background:"#fef2f2",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12.5,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
+          {placeErr&&<div style={{marginTop:14,background:"#fef2f2",border:`1.5px solid #fecaca`,borderRadius:12,padding:"11px 14px",fontSize:12,color:"#b91c1c",fontWeight:600,lineHeight:1.5}}>⚠ {placeErr}</div>}
           <button className="cta nemo-native-checkout-cta" onMouseMove={magnetMove} onMouseLeave={magnetLeave} onClick={handlePlaceOrder} disabled={placing}
-            style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,opacity:placing?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+            style={{width:"100%",background:C.coral,color:"white",border:"none",borderRadius:99,padding:"17px 16px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:18,opacity:placing?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
             {placing?"Checking stock…":"Place Order"}
           </button>
         </div>
@@ -11704,10 +11704,10 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
         <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"18px 22px",color:"#fff"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:13,fontWeight:700,opacity:.92}}>👛 Your Wallet</span>
-            <button onClick={onClose} aria-label="Close" style={{background:"rgba(255,255,255,.18)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:15,cursor:"pointer"}}>✕</button>
+            <button onClick={onClose} aria-label="Close" style={{background:"rgba(255,255,255,.18)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:14,cursor:"pointer"}}>✕</button>
           </div>
           <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:8}}>
-            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:34,fontWeight:800,lineHeight:1}}>{points}</span>
+            <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:32,fontWeight:800,lineHeight:1}}>{points}</span>
             <span style={{fontSize:13,opacity:.9}}>coins · ₹1 each</span>
           </div>
         </div>
@@ -11726,7 +11726,7 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
         })()}
         <div className="wallet-log-scroll" style={{maxHeight:"min(48vh,420px)",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}}>
           {hist.length===0?(
-            <div style={{padding:"30px 22px",textAlign:"center",color:C.textSub,fontSize:12.5,lineHeight:1.6}}>No coin activity yet.<br/>Coins from successful delivered orders and approved rewards will show here.</div>
+            <div style={{padding:"30px 22px",textAlign:"center",color:C.textSub,fontSize:12,lineHeight:1.6}}>No coin activity yet.<br/>Coins from successful delivered orders and approved rewards will show here.</div>
           ):hist.map((h,i)=>{
             const pos=(h.pts||0)>=0;
             const label=h.note||({credit:"Coins earned",earn:"Coins earned",reverse:"Coins reversed",redeem:"Coins used on order"}[h.type])||(pos?"Coins earned":"Coins used");
@@ -11737,7 +11737,7 @@ function WalletModal({open,onClose,points=0,user,settings={}}){
                   <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
                   {d&&<div style={{fontSize:11,color:C.textSub,marginTop:2}}>{d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</div>}
                 </div>
-                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,color:pos?C.primary:C.coral,flexShrink:0}}>{pos?"+":"−"}{Math.abs(h.pts||0)}</div>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:pos?C.primary:C.coral,flexShrink:0}}>{pos?"+":"−"}{Math.abs(h.pts||0)}</div>
               </div>
             );
           })}
@@ -11853,21 +11853,21 @@ function WhyNemoPopup({open,onClose,nav}){
     <div onClick={onClose} role="dialog" aria-modal="true" aria-label="Why shop at Nemo Aqua Store"
       style={{position:"fixed",inset:0,background:"rgba(6,40,43,.58)",backdropFilter:"blur(3px)",zIndex:9200,display:"flex",alignItems:"center",justifyContent:"center",padding:"14px 12px",animation:"fadeIn .2s ease"}}>
       <div onClick={e=>e.stopPropagation()} className="slide-up why-panel"
-        style={{width:"100%",maxWidth:430,maxHeight:"92vh",background:C.card,borderRadius:22,overflow:"hidden",boxShadow:"0 26px 64px rgba(0,0,0,.34)",display:"flex",flexDirection:"column"}}>
+        style={{width:"100%",maxWidth:430,maxHeight:"92vh",background:C.card,borderRadius:20,overflow:"hidden",boxShadow:"0 26px 64px rgba(0,0,0,.34)",display:"flex",flexDirection:"column"}}>
         <div style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"14px 18px 12px",color:"#fff",flexShrink:0,position:"relative",overflow:"hidden"}}>
           <div style={{position:"absolute",top:-34,right:-24,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.09)"}}/>
           <button onClick={onClose} aria-label="Close"
-            style={{position:"absolute",top:14,right:14,background:"rgba(255,255,255,.2)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:15,cursor:"pointer",lineHeight:1,zIndex:2}}>✕</button>
+            style={{position:"absolute",top:14,right:14,background:"rgba(255,255,255,.2)",border:"none",color:"#fff",width:30,height:30,borderRadius:"50%",fontSize:14,cursor:"pointer",lineHeight:1,zIndex:2}}>✕</button>
           <div style={{fontSize:11,fontWeight:800,letterSpacing:1,opacity:.85,textTransform:"uppercase"}}>Welcome to {STORE_NAME} 🐠</div>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:19,fontWeight:800,marginTop:4,lineHeight:1.25,paddingRight:34}}>Why we're not like the others</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:18,fontWeight:800,marginTop:4,lineHeight:1.25,paddingRight:34}}>Why we're not like the others</div>
         </div>
         <div style={{overflowY:"auto",padding:"9px 10px 2px",background:C.bg}}>
           {/* The two column headings carry the "Others vs At Nemo" framing once, at the top — the
               rows below stay label-free so all 8 points fit on one screen without scrolling. */}
           <div style={{display:"flex",gap:6,padding:"0 3px 6px",position:"sticky",top:0,background:C.bg,zIndex:1}}>
             <div style={{width:22,flexShrink:0}}/>
-            <div style={{flex:1,fontSize:9.5,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.6}}>❌ Elsewhere</div>
-            <div style={{flex:1,fontSize:9.5,fontWeight:800,color:"#0d9488",textTransform:"uppercase",letterSpacing:.6}}>✅ At {STORE_NAME}</div>
+            <div style={{flex:1,fontSize:9,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.6}}>❌ Elsewhere</div>
+            <div style={{flex:1,fontSize:9,fontWeight:800,color:"#0d9488",textTransform:"uppercase",letterSpacing:.6}}>✅ At {STORE_NAME}</div>
           </div>
           {/* The "Us" side is the point of the whole popup, so it's the one that's meant to pop:
               green, slightly raised, with the "Others" side deliberately washed out. */}
@@ -11875,14 +11875,14 @@ function WhyNemoPopup({open,onClose,nav}){
           {WHY_US_ROWS.map(r=>(
             <div key={r.title} style={{display:"flex",gap:6,alignItems:"stretch",marginBottom:5}}>
               <div title={r.title} style={{width:22,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,lineHeight:1}}>{r.icon}</div>
-              <div style={{flex:1,background:"#f8fafc",borderRadius:10,padding:"6px 8px",border:`1px solid ${C.border}`,opacity:.85}}>
-                <div style={{fontSize:9.5,fontWeight:800,color:"#94a3b8",marginBottom:2,lineHeight:1.3}}>{r.title}</div>
-                <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.35}}>{r.them}</div>
+              <div style={{flex:1,background:"#f8fafc",borderRadius:12,padding:"6px 8px",border:`1px solid ${C.border}`,opacity:.85}}>
+                <div style={{fontSize:9,fontWeight:800,color:"#94a3b8",marginBottom:2,lineHeight:1.3}}>{r.title}</div>
+                <div style={{fontSize:10,color:C.textSub,lineHeight:1.35}}>{r.them}</div>
               </div>
-              <div style={{flex:1,background:"linear-gradient(160deg,#ecfdf5,#f0fdfa)",borderRadius:10,padding:"6px 8px",border:"1.5px solid #5eead4",boxShadow:"0 3px 10px rgba(13,148,136,.12)"}}>
+              <div style={{flex:1,background:"linear-gradient(160deg,#ecfdf5,#f0fdfa)",borderRadius:12,padding:"6px 8px",border:"1.5px solid #5eead4",boxShadow:"0 3px 10px rgba(13,148,136,.12)"}}>
                 <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
                   <span style={{fontSize:10,lineHeight:1.35,color:"#0d9488",flexShrink:0}}>✔</span>
-                  <span style={{fontSize:10.5,color:"#134e4a",lineHeight:1.35,fontWeight:600}} dangerouslySetInnerHTML={html(r.us)}/>
+                  <span style={{fontSize:10,color:"#134e4a",lineHeight:1.35,fontWeight:600}} dangerouslySetInnerHTML={html(r.us)}/>
                 </div>
               </div>
             </div>
@@ -11896,7 +11896,7 @@ function WhyNemoPopup({open,onClose,nav}){
           </button>
           <div style={{textAlign:"center",marginTop:6}}>
             <button className="press" onClick={()=>{onClose&&onClose();nav&&nav("policy-terms");}}
-              style={{background:"none",border:"none",fontSize:9.5,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer",padding:2}}>
+              style={{background:"none",border:"none",fontSize:9,color:C.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",textDecoration:"underline",cursor:"pointer",padding:2}}>
               Subject to our terms &amp; conditions
             </button>
           </div>
@@ -11914,12 +11914,12 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
   const [walletOpen,setWalletOpen]=useState(false);
   const wexp=user&&settings.loyaltyEnabled!==false?walletExpiryInfo(loadLoyaltyLocal(userKey(user)),settings):null;
   const walletWarn=!!(wexp&&(wexp.expiringSoon||wexp.expired));
-  const linkStyle=on=>({background:on?"#eef9fa":"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:on?800:600,color:on?C.primary:C.text,padding:"8px 12px",borderRadius:10,fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"});
+  const linkStyle=on=>({background:on?"#eef9fa":"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:on?800:600,color:on?C.primary:C.text,padding:"8px 12px",borderRadius:12,fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"});
   return(
     <div className="desk-nav" style={{flexShrink:0,alignSelf:"center",alignItems:"center",gap:6,background:"rgba(255,255,255,0.8)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",border:"1px solid rgba(15,23,42,0.06)",borderRadius:99,padding:"8px 14px",margin:"14px auto 6px",position:"sticky",top:14,zIndex:60,boxShadow:"0 10px 34px rgba(15,23,42,.09)",maxWidth:"calc(100% - 28px)",overflowX:"auto"}}>
       {page!=="home"&&(
         <button className="press" onClick={()=>nav("home")} title="Back to home"
-          style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 14px",marginRight:12,fontSize:14,fontWeight:800,color:C.primary,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"}}><BackArrow size={16}/> Home</button>
+          style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 14px",marginRight:12,fontSize:14,fontWeight:800,color:C.primary,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"}}><BackArrow size={16}/> Home</button>
       )}
       <div className="press" onClick={onSecretTap} title="Nemo Aqua Store" style={{display:"flex",flexDirection:"column",alignItems:"flex-start",cursor:"pointer",marginRight:16,lineHeight:1}}>
         <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{height:34,width:"auto",objectFit:"contain",display:"block",pointerEvents:"none"}}/>
@@ -11929,20 +11929,20 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
       ))}
       <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
         <button className="desk-link" onClick={()=>nav("orders")} style={{...linkStyle(active==="orders"),position:"relative",fontWeight:800}}>📦 Orders
-          {ordersCount>0&&<span className="cart-pop" style={{position:"absolute",top:-6,right:-5,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>{ordersCount>99?"99+":ordersCount}</span>}
+          {ordersCount>0&&<span className="cart-pop" style={{position:"absolute",top:-6,right:-5,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:12,padding:"1px 5px",minWidth:16,textAlign:"center"}}>{ordersCount>99?"99+":ordersCount}</span>}
         </button>
         {user&&settings.loyaltyEnabled!==false&&(
           <button className="press" onClick={()=>setWalletOpen(true)} title={walletWarn?(wexp.expired?"Your coins have expired":"Your coins expire soon — use them!"):"Your coins & history"}
-            style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,color:C.primary,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-            <span style={{fontSize:15,lineHeight:1}}>👛</span>{walletPts}
-            {walletWarn&&<span style={{position:"absolute",top:-6,right:-6,minWidth:16,height:16,padding:"0 3px",borderRadius:9,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${C.card}`}}>⏳</span>}
+            style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,color:C.primary,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 13px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+            <span style={{fontSize:14,lineHeight:1}}>👛</span>{walletPts}
+            {walletWarn&&<span style={{position:"absolute",top:-6,right:-6,minWidth:16,height:16,padding:"0 3px",borderRadius:8,background:C.coral,color:"white",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${C.card}`}}>⏳</span>}
           </button>
         )}
-        <button data-cart-target="" className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:11,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+        <button data-cart-target="" className="press" onClick={()=>nav("cart")} style={{position:"relative",display:"inline-flex",alignItems:"center",gap:6,background:active==="cart"?C.primary:C.accentLight,color:active==="cart"?"white":C.primary,border:`1px solid ${active==="cart"?C.primary:C.border}`,borderRadius:12,padding:"8px 13px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
           🛒 Cart
-          {cartCount>0&&<span key={cartCount} className="cart-pop" style={{position:"absolute",top:-6,right:-6,background:C.coral,color:"white",fontSize:10,fontWeight:800,borderRadius:10,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{cartCount>99?"99+":cartCount}</span>}
+          {cartCount>0&&<span key={cartCount} className="cart-pop" style={{position:"absolute",top:-6,right:-6,background:C.coral,color:"white",fontSize:10,fontWeight:800,borderRadius:12,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{cartCount>99?"99+":cartCount}</span>}
         </button>
-        <button className="press" onClick={()=>nav("orders")} style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:`1px solid ${C.border}`,borderRadius:30,padding:"5px 12px 5px 5px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        <button className="press" onClick={()=>nav("orders")} style={{display:"inline-flex",alignItems:"center",gap:8,background:"none",border:`1px solid ${C.border}`,borderRadius:99,padding:"5px 12px 5px 5px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
           <span style={{width:28,height:28,borderRadius:"50%",background:C.primary,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>{user?(user.name||"U").charAt(0).toUpperCase():"👤"}</span>
           <span style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap"}}>{user?(user.name||"").split(" ")[0]||"Account":"Sign in"}</span>
         </button>
@@ -11968,12 +11968,12 @@ function BottomNav({page,nav,cartCount,ordersCount=0}){
               <div style={{position:"relative"}} {...(t.id==="cart"?{"data-cart-target":""}:{})}>
                 <span style={{fontSize:24,filter:on?"none":"grayscale(1) opacity(.45)",transition:"filter .2s",display:"block"}}>{t.icon}</span>
                 {t.id==="cart"&&cartCount>0&&(
-                  <span key={cartCount} className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
+                  <span key={cartCount} className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:12,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
                     {cartCount>99?"99+":cartCount}
                   </span>
                 )}
                 {t.id==="orders"&&ordersCount>0&&(
-                  <span className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:10,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
+                  <span className="cart-pop" style={{position:"absolute",top:-4,right:-8,background:C.coral,color:"white",fontSize:9,fontWeight:800,borderRadius:12,padding:"1px 5px",minWidth:16,textAlign:"center"}}>
                     {ordersCount>99?"99+":ordersCount}
                   </span>
                 )}
@@ -12031,17 +12031,17 @@ function AdminExitConfirm({onStay,onLeave}){
     <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,.55)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:4000}} onClick={onStay}>
       <div className="slide-up" onClick={e=>e.stopPropagation()}
         style={{width:"100%",maxWidth:440,background:"#fff",borderRadius:"20px 20px 0 0",padding:"22px 20px calc(22px + env(safe-area-inset-bottom))",boxShadow:"0 -12px 40px rgba(0,0,0,.25)"}}>
-        <div style={{fontSize:34,textAlign:"center",marginBottom:10}}>⚠️</div>
+        <div style={{fontSize:32,textAlign:"center",marginBottom:10}}>⚠️</div>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text,marginBottom:8,textAlign:"center"}}>Leave the Admin panel?</div>
-        <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.6,marginBottom:18,textAlign:"center"}}>
+        <div style={{fontSize:13,color:C.textSub,lineHeight:1.6,marginBottom:18,textAlign:"center"}}>
           You'll go back to the store. Anything you were typing but haven't saved will be lost.
         </div>
         <button className="press" onClick={onStay}
-          style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:10,cursor:"pointer"}}>
+          style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:16,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:10,cursor:"pointer"}}>
           Stay in Admin
         </button>
         <button className="press" onClick={onLeave}
-          style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+          style={{width:"100%",background:"#fff",color:C.danger,border:`1.5px solid ${C.danger}`,borderRadius:16,padding:"15px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
           Leave Admin
         </button>
       </div>
@@ -12194,7 +12194,7 @@ function PosterReel({posters=[],start=0,onClose}){
     }catch(e){ /* user cancelled */ }
   };
 
-  const btn={width:38,height:38,borderRadius:11,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:19,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,backdropFilter:"blur(6px)"};
+  const btn={width:38,height:38,borderRadius:12,border:"none",background:"rgba(255,255,255,.16)",color:"white",fontSize:18,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,backdropFilter:"blur(6px)"};
   const pct=Math.round(scale*100);
   return(
     <Portal>
@@ -12202,11 +12202,11 @@ function PosterReel({posters=[],start=0,onClose}){
       {/* top bar */}
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",color:"white",flexShrink:0,zIndex:5}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.title||"Care Guide"}</div>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.title||"Care Guide"}</div>
           {posters.length>1&&<div style={{fontSize:11,fontWeight:700,opacity:.7,marginTop:2}}>{idx+1} / {posters.length}</div>}
         </div>
-        <button className="press" onClick={share} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800}} aria-label="Share poster">{shared||"⤴ Share"}</button>
-        {cur.notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 13px",fontSize:12.5,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
+        <button className="press" onClick={share} style={{...btn,width:"auto",padding:"0 13px",fontSize:12,fontWeight:800}} aria-label="Share poster">{shared||"⤴ Share"}</button>
+        {cur.notes&&<button className="press" onClick={()=>setShowNotes(v=>!v)} style={{...btn,width:"auto",padding:"0 13px",fontSize:12,fontWeight:800,background:showNotes?C.primary:"rgba(255,255,255,.16)"}}>ℹ Notes</button>}
         <button className="press" onClick={onClose} style={btn} aria-label="Close">✕</button>
       </div>
 
@@ -12236,7 +12236,7 @@ function PosterReel({posters=[],start=0,onClose}){
         {posters.length>1&&posters.length<=12&&(
           <div style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",display:"flex",flexDirection:"column",gap:6,zIndex:4}}>
             {posters.map((p,i)=>(
-              <div key={i} onClick={()=>setIdx(i)} style={{width:6,height:i===idx?18:6,borderRadius:6,background:i===idx?"#fff":"rgba(255,255,255,.4)",transition:"height .2s,background .2s",cursor:"pointer"}}/>
+              <div key={i} onClick={()=>setIdx(i)} style={{width:6,height:i===idx?18:6,borderRadius:8,background:i===idx?"#fff":"rgba(255,255,255,.4)",transition:"height .2s,background .2s",cursor:"pointer"}}/>
             ))}
           </div>
         )}
@@ -12245,14 +12245,14 @@ function PosterReel({posters=[],start=0,onClose}){
         {hint&&scale<=1&&idx<posters.length-1&&(
           <div style={{position:"absolute",bottom:16,left:0,right:0,display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:"rgba(255,255,255,.85)",pointerEvents:"none",zIndex:4,animation:"bobUp 1.4s ease-in-out infinite"}}>
             <span style={{fontSize:22,lineHeight:1}}>⌃</span>
-            <span style={{fontSize:11.5,fontWeight:700,letterSpacing:.3}}>Swipe up for next</span>
+            <span style={{fontSize:11,fontWeight:700,letterSpacing:.3}}>Swipe up for next</span>
           </div>
         )}
       </div>
 
       {/* notes panel */}
       {cur.notes&&showNotes&&(
-        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13.5,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cur.notes}</div>
+        <div style={{flexShrink:0,maxHeight:"34vh",overflowY:"auto",background:"rgba(255,255,255,.96)",padding:"16px 18px",fontSize:13,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cur.notes}</div>
       )}
 
       {/* zoom controls */}
@@ -12260,7 +12260,7 @@ function PosterReel({posters=[],start=0,onClose}){
         <button className="press" onClick={()=>applyScale(scale-0.5)} style={btn} aria-label="Zoom out">−</button>
         <input type="range" min="1" max="5" step="0.1" value={scale} onChange={e=>applyScale(Number(e.target.value))} style={{flex:1,accentColor:C.accent,height:4}}/>
         <button className="press" onClick={()=>applyScale(scale+0.5)} style={btn} aria-label="Zoom in">+</button>
-        <div style={{minWidth:52,textAlign:"center",color:"white",fontSize:12.5,fontWeight:800}}>{pct}%</div>
+        <div style={{minWidth:52,textAlign:"center",color:"white",fontSize:12,fontWeight:800}}>{pct}%</div>
         <button className="press" onClick={()=>applyScale(1)} style={{...btn,width:"auto",padding:"0 12px",fontSize:12,fontWeight:800}}>Fit</button>
       </div>
     </div>
@@ -12295,7 +12295,7 @@ function CareGuidesPage({nav,goBack,guides,mediaCache}){
         {list.length===0?(
           <div style={{textAlign:"center",padding:"50px 20px",color:C.textSub}}>
             <div style={{fontSize:52,marginBottom:14}}>📖</div>
-            <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:6}}>No guides yet</div>
+            <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:6}}>No guides yet</div>
             <div style={{fontSize:12}}>Care guides will appear here soon.</div>
           </div>
         ):list.map(g=>{
@@ -12311,14 +12311,14 @@ function CareGuidesPage({nav,goBack,guides,mediaCache}){
                   {hasPoster? <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontSize:22}}>📋</span>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"inline-block",fontSize:9.5,fontWeight:800,color:C.accent,background:C.accentLight,padding:"2px 9px",borderRadius:20,marginBottom:5,letterSpacing:.5}}>{g.category}</div>
-                  <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15.5,fontWeight:800,color:C.text,lineHeight:1.25}}>{g.title}</div>
+                  <div style={{display:"inline-block",fontSize:9,fontWeight:800,color:C.accent,background:C.accentLight,padding:"2px 9px",borderRadius:20,marginBottom:5,letterSpacing:.5}}>{g.category}</div>
+                  <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:C.text,lineHeight:1.25}}>{g.title}</div>
                   <div style={{fontSize:11,color:C.textSub,marginTop:3,fontWeight:600}}>{hasPoster?"":content?(open?"Tap to collapse":"Tap to read"):""}</div>
                 </div>
                 <span style={{flexShrink:0,fontSize:18,color:C.textSub,transform:(!hasPoster&&open)?"rotate(90deg)":"none",transition:"transform .2s"}}>{hasPoster?"⛶":"›"}</span>
               </button>
               {!hasPoster&&open&&content&&(
-                <div style={{padding:"0 16px 16px",fontSize:13.5,color:C.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{content}</div>
+                <div style={{padding:"0 16px 16px",fontSize:13,color:C.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{content}</div>
               )}
             </div>
           );
@@ -12338,7 +12338,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
     <div className="slide-up">
       <div className="vh-head" style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>♥ Saved Items</div>
-        <div style={{fontSize:12.5,color:C.textSub,marginTop:2}}>{saved.length} item{saved.length!==1?"s":""} saved for later</div>
+        <div style={{fontSize:12,color:C.textSub,marginTop:2}}>{saved.length} item{saved.length!==1?"s":""} saved for later</div>
       </div>
       <div className="dt-read" style={{padding:"16px 16px 100px"}}>
         {saved.length===0?(
@@ -12346,7 +12346,7 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
             <div style={{fontSize:60,marginBottom:14}}>🤍</div>
             <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:6}}>No saved items yet</div>
             <div style={{fontSize:13,marginBottom:20,lineHeight:1.5}}>Tap the ♥ on any product to save it here and order later.</div>
-            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Browse Products</button>
+            <button className="press" onClick={()=>nav("shop")} style={{background:C.primary,color:"white",border:"none",borderRadius:16,padding:"13px 28px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Browse Products</button>
           </div>
         ):(
           <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
@@ -12369,12 +12369,12 @@ function SavedPage({nav,products,mediaCache,favorites=[],addToCart,cartMap,onFav
 function AboutPage({nav,goBack,settings={}}){
   const s={...DEFAULT_SETTINGS,...settings};
   const Section=({icon,title,body,accent})=>(
-    <div style={{background:C.card,borderRadius:18,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
+    <div style={{background:C.card,borderRadius:20,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-        <div style={{width:38,height:38,borderRadius:11,background:accent||C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{icon}</div>
+        <div style={{width:38,height:38,borderRadius:12,background:accent||C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{icon}</div>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>{title}</div>
       </div>
-      <div style={{fontSize:13.5,color:C.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{body}</div>
+      <div style={{fontSize:13,color:C.textSub,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{body}</div>
     </div>
   );
   return(
@@ -12385,9 +12385,9 @@ function AboutPage({nav,goBack,settings={}}){
         <Section icon="🐠" title={`Our Story`} body={s.aboutStory} accent="#ffe9d6"/>
         <Section icon="🚚" title="Delivery Areas" body={s.deliveryAreas} accent="#d4f4f5"/>
         {/* Policies — each opens its own focused page */}
-        <div style={{background:C.card,borderRadius:18,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
+        <div style={{background:C.card,borderRadius:20,padding:"18px",marginBottom:14,border:`1px solid ${C.border}`}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-            <div style={{width:38,height:38,borderRadius:11,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📋</div>
+            <div style={{width:38,height:38,borderRadius:12,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📋</div>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text}}>Our Policies</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -12401,8 +12401,8 @@ function AboutPage({nav,goBack,settings={}}){
               <button key={l.to} className="press" onClick={()=>nav(l.to)}
                 style={{display:"flex",alignItems:"center",gap:11,width:"100%",textAlign:"left",background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
                 <span style={{fontSize:18}}>{l.icon}</span>
-                <span style={{flex:1,fontSize:13.5,fontWeight:700,color:C.text}}>{l.label}</span>
-                <span style={{color:C.textSub,fontSize:17}}>›</span>
+                <span style={{flex:1,fontSize:13,fontWeight:700,color:C.text}}>{l.label}</span>
+                <span style={{color:C.textSub,fontSize:16}}>›</span>
               </button>
             ))}
           </div>
@@ -12411,18 +12411,18 @@ function AboutPage({nav,goBack,settings={}}){
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px",marginTop:6}}>
           <div style={{fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Business Information</div>
           <div style={{fontSize:13,fontWeight:800,color:C.text,marginBottom:2}}>{s.legalName||(STORE_NAME+" Aqua Store")}</div>
-          {s.legalEntity&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>{s.legalEntity}</div>}
-          {s.legalActivity&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>{s.legalActivity}</div>}
-          {(s.legalAddress||s.legalCity)&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6,marginTop:4}}>📍 {s.legalAddress||s.legalCity}</div>}
-          {s.gstin&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>GSTIN: {s.gstin}</div>}
-          {s.orderEmail&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>✉ {s.orderEmail}</div>}
-          {s.ownerWhatsapp&&<div style={{fontSize:11.5,color:C.textSub,lineHeight:1.6}}>💬 +{s.ownerWhatsapp.replace(/\D/g,"")}</div>}
-          <div style={{fontSize:10.5,color:C.textSub,lineHeight:1.6,marginTop:8,fontStyle:"italic"}}>Jurisdiction: {s.jurisdiction||"India"}. © {new Date().getFullYear()} {s.legalName||STORE_NAME}. All rights reserved.</div>
+          {s.legalEntity&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6}}>{s.legalEntity}</div>}
+          {s.legalActivity&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6}}>{s.legalActivity}</div>}
+          {(s.legalAddress||s.legalCity)&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6,marginTop:4}}>📍 {s.legalAddress||s.legalCity}</div>}
+          {s.gstin&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6}}>GSTIN: {s.gstin}</div>}
+          {s.orderEmail&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6}}>✉ {s.orderEmail}</div>}
+          {s.ownerWhatsapp&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.6}}>💬 +{s.ownerWhatsapp.replace(/\D/g,"")}</div>}
+          <div style={{fontSize:10,color:C.textSub,lineHeight:1.6,marginTop:8,fontStyle:"italic"}}>Jurisdiction: {s.jurisdiction||"India"}. © {new Date().getFullYear()} {s.legalName||STORE_NAME}. All rights reserved.</div>
         </div>
         <div style={{textAlign:"center",marginTop:18}}>
           {s.ownerWhatsapp&&(
             <a href={`https://wa.me/${s.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
-              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:"white",borderRadius:14,padding:"13px 24px",fontSize:14,fontWeight:700,textDecoration:"none"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:"white",borderRadius:16,padding:"13px 24px",fontSize:14,fontWeight:700,textDecoration:"none"}}>
               💬 Questions? Chat with us
             </a>
           )}
@@ -12444,40 +12444,40 @@ function ContactPage({nav,goBack,settings={}}){
       <HeroHeader onBack={goBack} title={"Contact Us"}
         subtitle={"Customer support for orders, payments, cancellations, returns, refunds and delivery."}/>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
-        <div style={{background:C.accentLight,border:`1px solid ${C.primary}33`,borderRadius:18,padding:"17px",marginBottom:14}}>
-          <div style={{fontSize:15,fontWeight:900,color:C.text,marginBottom:5}}>{s.legalName||(STORE_NAME+" Aqua Store")}</div>
-          <div style={{fontSize:12.5,color:C.textSub,lineHeight:1.65}}>Please include your order number when contacting us about an existing purchase so we can help quickly.</div>
+        <div style={{background:C.accentLight,border:`1px solid ${C.primary}33`,borderRadius:20,padding:"17px",marginBottom:14}}>
+          <div style={{fontSize:14,fontWeight:900,color:C.text,marginBottom:5}}>{s.legalName||(STORE_NAME+" Aqua Store")}</div>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.65}}>Please include your order number when contacting us about an existing purchase so we can help quickly.</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:11}}>
           <a className="press" href={`https://wa.me/${phone}`} target="_blank" rel="noopener" style={card}>
-            <span style={{width:42,height:42,borderRadius:12,background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>💬</span>
+            <span style={{width:42,height:42,borderRadius:12,background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>💬</span>
             <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>WhatsApp / Customer Support</span><span style={{display:"block",fontSize:14,fontWeight:800,color:"#15803d",marginTop:3}}>+{phone}</span></span>
           </a>
           <a className="press" href={`tel:+${phone}`} style={card}>
-            <span style={{width:42,height:42,borderRadius:12,background:"#e0f2fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>📞</span>
+            <span style={{width:42,height:42,borderRadius:12,background:"#e0f2fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📞</span>
             <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Phone</span><span style={{display:"block",fontSize:14,fontWeight:800,color:C.primaryDark,marginTop:3}}>+{phone}</span></span>
           </a>
           <a className="press" href={`mailto:${email}`} style={card}>
-            <span style={{width:42,height:42,borderRadius:12,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>✉️</span>
-            <span style={{minWidth:0}}><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Email</span><span style={{display:"block",fontSize:13.5,fontWeight:800,color:"#6d28d9",marginTop:3,wordBreak:"break-word"}}>{email}</span></span>
+            <span style={{width:42,height:42,borderRadius:12,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>✉️</span>
+            <span style={{minWidth:0}}><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Email</span><span style={{display:"block",fontSize:13,fontWeight:800,color:"#6d28d9",marginTop:3,wordBreak:"break-word"}}>{email}</span></span>
           </a>
           <div style={card}>
-            <span style={{width:42,height:42,borderRadius:12,background:"#ffedd5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>📍</span>
-            <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Business Address</span><span style={{display:"block",fontSize:13.5,fontWeight:700,color:C.text,marginTop:3,lineHeight:1.55}}>{address}</span></span>
+            <span style={{width:42,height:42,borderRadius:12,background:"#ffedd5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📍</span>
+            <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Business Address</span><span style={{display:"block",fontSize:13,fontWeight:700,color:C.text,marginTop:3,lineHeight:1.55}}>{address}</span></span>
           </div>
           {s.storeHours&&(
             <div style={card}>
-              <span style={{width:42,height:42,borderRadius:12,background:"#fef3c7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>🕒</span>
-              <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Support Hours</span><span style={{display:"block",fontSize:13.5,fontWeight:700,color:C.text,marginTop:3,lineHeight:1.55}}>{s.storeHours}</span></span>
+              <span style={{width:42,height:42,borderRadius:12,background:"#fef3c7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🕒</span>
+              <span><span style={{display:"block",fontSize:11,fontWeight:800,color:C.textSub,textTransform:"uppercase",letterSpacing:.5}}>Support Hours</span><span style={{display:"block",fontSize:13,fontWeight:700,color:C.text,marginTop:3,lineHeight:1.55}}>{s.storeHours}</span></span>
             </div>
           )}
         </div>
         <div style={{marginTop:20,background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px"}}>
-          <div style={{fontSize:13.5,fontWeight:800,color:C.text,marginBottom:9}}>Before contacting us</div>
+          <div style={{fontSize:13,fontWeight:800,color:C.text,marginBottom:9}}>Before contacting us</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            <a href="/cancellations-returns-refunds" onClick={e=>{e.preventDefault();nav("policy-returns");}} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,textDecoration:"none"}}>Cancellations, Returns &amp; Refunds</a>
-            {LIVE_FISH_ENABLED&&<button className="press" onClick={()=>nav("policy-guarantee")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Live Arrival Guarantee</button>}
-            <button className="press" onClick={()=>nav("orders")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 11px",fontSize:11.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Track My Orders</button>
+            <a href="/cancellations-returns-refunds" onClick={e=>{e.preventDefault();nav("policy-returns");}} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 11px",fontSize:11,fontWeight:700,color:C.text,textDecoration:"none"}}>Cancellations, Returns &amp; Refunds</a>
+            {LIVE_FISH_ENABLED&&<button className="press" onClick={()=>nav("policy-guarantee")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 11px",fontSize:11,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Live Arrival Guarantee</button>}
+            <button className="press" onClick={()=>nav("orders")} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"8px 11px",fontSize:11,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Track My Orders</button>
           </div>
         </div>
       </div>
@@ -12509,15 +12509,15 @@ function PolicyPage({nav,goBack,settings={},which}){
       <HeroHeader onBack={goBack} title={<>{meta.icon} {meta.title}</>}
         subtitle={meta.sub}/>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
-        <div style={{background:C.card,borderRadius:18,padding:"20px",border:`1px solid ${C.border}`,fontSize:13.5,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{policyText(meta.key, s)}</div>
+        <div style={{background:C.card,borderRadius:20,padding:"20px",border:`1px solid ${C.border}`,fontSize:13,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{policyText(meta.key, s)}</div>
         {/* The tracking & collection clause is part of the terms whether or not the saved text
             carries it — a store that customised its terms before this clause existed would
             otherwise show terms that don't match what checkout tells the customer. Shown only
             when the saved text doesn't already cover it, so it never appears twice. */}
         {which==="terms" && !/collect it from the courier/i.test(String(s.termsPolicy||"")) && (
-          <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:18,padding:"18px 20px",marginTop:12}}>
+          <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:20,padding:"18px 20px",marginTop:12}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-              <span style={{fontSize:17}}>📦</span>
+              <span style={{fontSize:16}}>📦</span>
               <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,color:"#92400e"}}>Tracking &amp; collection</span>
             </div>
             <div style={{fontSize:13,color:"#78350f",lineHeight:1.75}}>{courierCollectTerm().replace(/^Tracking & collection: /,"")}</div>
@@ -12527,7 +12527,7 @@ function PolicyPage({nav,goBack,settings={},which}){
         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
           {others.map(k=>(
             <button key={k} className="press" onClick={()=>nav("policy-"+k)}
-              style={{display:"inline-flex",alignItems:"center",gap:7,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12.5,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:7,background:C.card,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"9px 13px",fontSize:12,fontWeight:700,color:C.text,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
               <span>{POLICY_META[k].icon}</span>{POLICY_META[k].title}
             </button>
           ))}
@@ -12535,7 +12535,7 @@ function PolicyPage({nav,goBack,settings={},which}){
         {s.ownerWhatsapp&&(
           <div style={{textAlign:"center",marginTop:22}}>
             <a href={`https://wa.me/${s.ownerWhatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener"
-              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:"white",borderRadius:14,padding:"13px 24px",fontSize:14,fontWeight:700,textDecoration:"none"}}>
+              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#25D366",color:"white",borderRadius:16,padding:"13px 24px",fontSize:14,fontWeight:700,textDecoration:"none"}}>
               💬 Questions? Chat with us
             </a>
           </div>
@@ -12586,13 +12586,13 @@ function RequestPage({nav,goBack,user,onSubmit,myRequests}){
   if(done)return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"80vh",padding:"24px",textAlign:"center"}}>
       <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:20,animation:"checkPop .4s ease both"}}>✓</div>
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:23,fontWeight:800,color:C.text,marginBottom:8}}>Request Sent! 🙌</div>
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:8}}>Request Sent! 🙌</div>
       <div style={{fontSize:14,color:C.textSub,lineHeight:1.7,marginBottom:24,maxWidth:300}}>We've received your request. We'll source it and reach out on WhatsApp if it's available.</div>
       <div style={{display:"flex",gap:10}}>
         <button className="press" onClick={()=>{setDone(false);setForm(f=>({...f,product:"",brand:"",link:"",notes:""}));setImgB64(null);setImgPrev(null);}}
-          style={{background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:14,padding:"13px 22px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>+ Another</button>
+          style={{background:"transparent",color:C.primary,border:`1.5px solid ${C.primary}`,borderRadius:16,padding:"13px 22px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>+ Another</button>
         <button className="press" onClick={()=>nav("home")}
-          style={{background:C.primary,color:"white",border:"none",borderRadius:14,padding:"13px 28px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Back Home</button>
+          style={{background:C.primary,color:"white",border:"none",borderRadius:16,padding:"13px 28px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Back Home</button>
       </div>
     </div>
   );
@@ -12643,7 +12643,7 @@ function RequestPage({nav,goBack,user,onSubmit,myRequests}){
         </div>
         {errs.submit&&<div style={{fontSize:12,color:C.danger,fontWeight:700,marginBottom:8,textAlign:"center"}}>{errs.submit}</div>}
         <button className="press" onClick={submit} disabled={saving}
-          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:15,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
+          style={{width:"100%",background:C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:14,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?.7:1}}>
           {saving?<><Spinner/>Sending…</>:"📨 Send Request"}
         </button>
       </div>
@@ -12665,7 +12665,7 @@ class ErrorBoundary extends React.Component {
         <div style={{fontSize:52}}>🐠</div>
         <h1 style={{fontSize:22,fontWeight:800,margin:0}}>Something went wrong</h1>
         <p style={{fontSize:14,color:"#64748b",maxWidth:340,lineHeight:1.5,margin:0}}>The app hit an unexpected error. Reloading usually fixes it. If it keeps happening, message us on WhatsApp and we'll sort it out.</p>
-        <button onClick={()=>{ try{ location.reload(); }catch(e){} }} style={{background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"14px 28px",fontSize:15,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",boxShadow:"0 6px 20px rgba(14,165,233,.35)"}}>Reload</button>
+        <button onClick={()=>{ try{ location.reload(); }catch(e){} }} style={{background:C.primary,color:"#fff",border:"none",borderRadius:16,padding:"14px 28px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer",boxShadow:"0 6px 20px rgba(14,165,233,.35)"}}>Reload</button>
       </div>
     );
   }
@@ -14537,13 +14537,13 @@ function NemoStore(){
         return(
           <button className="press floating-cart-bar" onClick={()=>setMiniOpen(true)}
             style={{position:"absolute",left:"50%",transform:"translateX(-50%)",bottom:"calc(76px + env(safe-area-inset-bottom))",zIndex:90,width:"calc(100% - 28px)",maxWidth:440,background:"#0f172a",color:"white",border:"none",borderRadius:99,padding:"7px 8px 7px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,boxShadow:"0 14px 34px rgba(15,23,42,.35)",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
-            <span style={{fontSize:12.5,fontWeight:700,textAlign:"left",lineHeight:1.3,minWidth:0,flex:1,overflow:"visible",textOverflow:"clip",whiteSpace:"normal"}}>
+            <span style={{fontSize:12,fontWeight:700,textAlign:"left",lineHeight:1.3,minWidth:0,flex:1,overflow:"visible",textOverflow:"clip",whiteSpace:"normal"}}>
               {showFree?<>🚚 Add <b style={{color:"#fda4af"}}>₹{left}</b> more for free delivery</>
                :dc?<>🏷️ Add <b style={{color:"#fda4af"}}>₹{dc.need}</b> more to get <b>{dc.off}</b></>
                :thr>0&&cartTotal>=thr?<>🎉 Free delivery unlocked!</>
                :<>🛒 {cartCount} item{cartCount!==1?"s":""} in your cart</>}
             </span>
-            <span style={{flexShrink:0,display:"inline-flex",alignItems:"center",gap:7,background:C.coral,borderRadius:99,padding:"9px 16px",fontSize:12.5,fontWeight:800,boxShadow:"0 6px 16px rgba(244,63,94,.4)"}}>
+            <span style={{flexShrink:0,display:"inline-flex",alignItems:"center",gap:7,background:C.coral,borderRadius:99,padding:"9px 16px",fontSize:12,fontWeight:800,boxShadow:"0 6px 16px rgba(244,63,94,.4)"}}>
               🛒 Cart · {cartCount}<span style={{opacity:.9}}>₹{cartTotal}</span>
             </span>
           </button>
