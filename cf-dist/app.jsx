@@ -4357,6 +4357,16 @@ function generateBillHTML(order, settings){
   <div style="font-size:11px;opacity:.75;margin-top:6px">📅 ${dateStr}</div>
 </div>
 <div class="body">
+  ${String(o.status||"")==="Cancelled"?`<div style="background:#fdecec;border:2px solid #c0392b;border-radius:10px;padding:11px 14px;margin-bottom:16px">
+    <div style="font-size:14px;font-weight:800;color:#c0392b;letter-spacing:.4px">\u2715 ORDER CANCELLED</div>
+    <div style="font-size:11.5px;color:#7f2418;line-height:1.55;margin-top:3px">${
+      o.cancelReason?`Reason: ${E(o.cancelReason)}. `:""
+    }${
+      (o.refund&&o.refund.due)
+        ? (o.refund.status==="refunded"?"The amount paid has been refunded.":"A refund of the amount paid is being processed.")
+        : "No goods were supplied against this bill."
+    }</div>
+  </div>`:""}
   <div class="r2">
     <div class="box"><h4>📦 Ship To</h4>
       <p>${E(addr.name)||"—"}</p>
@@ -4580,6 +4590,8 @@ function generateInvoiceHTML(order, settings, opts){
   // A proforma is a quote for payment, not a tax document — it must not carry the tax-invoice
   // certification, and the buyer must not be able to claim input credit against it.
   const proforma=!cn&&docLabel==="PROFORMA INVOICE";
+  // A credit note is itself the record of a reversal, so it never carries the cancelled banner.
+  const cancelledDoc=!cn&&String(o.status||"")==="Cancelled";
   const docWord=cn?"credit note":docLabel.toLowerCase();
   /* Policy text is typed into a settings textarea, so it arrives with real line breaks and "* "
      bullets. Escaped straight into one <p> it printed as an unreadable wall; keep the author's
@@ -4793,7 +4805,18 @@ table.kv td.v{color:#1f2733;font-weight:700}
 .sigimg{display:block;margin:0 auto;max-width:190px;max-height:66px;object-fit:contain}
 /* No signature on file: the space carries the reason instead of a rule nobody signs. */
 .signosig{font-size:10px;font-weight:600;line-height:1.45;color:#7a8694}
-.fitwrap{transform-origin:top left}
+/* Auto margins matter only at full scale, and that is exactly where they were missing: the
+   script pins this wrapper to the 780px design width so the fit maths is honest, and on any
+   window wider than that a 780px block with no margins sits against the left edge of the
+   screen. Below 780 the box is wider than its container, the auto margins collapse to zero,
+   and the transform fills the viewport from the left as before. */
+.fitwrap{transform-origin:top left;margin:0 auto}
+/* A cancelled order still has an invoice — it is a record, and the customer may be owed a
+   refund against it — but nothing on the sheet said so, and a document that reads as a live
+   bill for goods nobody is sending is the kind of thing that ends up in a dispute. */
+.cancelbar{background:#fdecec;border:2px solid #c0392b;border-radius:6px;padding:12px 16px;margin-bottom:20px}
+.cancelbar b{display:block;font-size:15px;font-weight:800;color:#c0392b;letter-spacing:.5px}
+.cancelbar span{display:block;font-size:11.5px;color:#7f2418;line-height:1.55;margin-top:3px}
 /* Only while fitted. "Actual size" keeps the fit class too, so this used to clip the sheet
    horizontally in exactly the mode whose whole point is scrolling across a full-width bill —
    which is why the invoice number and date block at the top right could not be reached. */
@@ -4805,6 +4828,13 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
 @media print{body{background:#fff;padding:0}.page{box-shadow:none;max-width:none;width:auto;padding:0}.np{display:none!important}.fitwrap{transform:none!important;width:auto!important;height:auto!important}table.items tbody tr,.infoblk,.words{page-break-inside:avoid}table.items thead{display:table-header-group}}
 </style></head>
 <body class="fit"><div class="fitwrap"><div class="page">
+  ${cancelledDoc?`<div class="cancelbar"><b>\u2715 ORDER CANCELLED</b><span>${
+    o.cancelReason?`Reason: ${E(o.cancelReason)}. `:""
+  }${
+    (o.refund&&o.refund.due)
+      ? (o.refund.status==="refunded"?"The amount paid has been refunded.":"A refund of the amount paid is being processed.")
+      : "No goods were supplied against this document."
+  }</span></div>`:""}
   <div class="top">
     <div class="co">
       ${logo?`<img class="lg" src="${logo}" alt=""/>`:""}
@@ -6814,7 +6844,11 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
     Shipped:"We've noted your courier details — we'll verify the parcel on arrival.",
     Declined:"Reviewed — this request was not approved.",
     "Received & Verified":"Parcel received & verified ✓ — your resolution is being processed.",
-    Resolved:"Resolved ✓ — your refund / coins have been processed. Thank you!",
+    // A replacement is not a refund, and telling someone their refund has been processed when a
+    // parcel is on the way is the kind of message that turns into a WhatsApp conversation.
+    Resolved:(rr&&(rr.adminResolution||rr.resolution))==="replacement"
+      ? "Resolved ✓ — a replacement has been arranged. Thank you!"
+      : "Resolved ✓ — your refund / coins have been processed. Thank you!",
   };
   if(rr){
     const tone=rr.status==="Declined"?{bg:"#fef2f2",bd:"#fecaca"}:rr.status==="Resolved"?{bg:"#ecfdf5",bd:"#a7f3d0"}:{bg:"#eff6ff",bd:"#bfdbfe"};
@@ -6840,6 +6874,21 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
           )}
           {(rr.status==="Shipped"||rr.status==="Received & Verified"||rr.status==="Resolved")&&(rr.courier||rr.consignment)&&(
             <div style={{fontSize:11,color:C.textSub,marginTop:8}}>Sent via <b style={{color:C.text}}>{rr.courier||"courier"}</b>{rr.consignment?<> · <span style={{fontFamily:"monospace"}}>{rr.consignment}</span></>:null}</div>
+          )}
+          {/* The store's replacement parcel. Deliberately a separate line from the customer's own
+              return shipment above — on a replacement two parcels are in the air at once, and one
+              "tracking number" for both is the fastest way to have the customer chase the wrong one. */}
+          {(rr.replacementCourier||rr.replacementConsignment)&&(
+            <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"10px 12px"}}>
+              <div style={{fontSize:12,fontWeight:800,color:"#065f46",marginBottom:3}}>🔁 Your replacement is on its way</div>
+              <div style={{fontSize:11.5,color:"#047857",lineHeight:1.55}}>Sent via <b>{rr.replacementCourier||"courier"}</b>{rr.replacementConsignment?<> · <span style={{fontFamily:"monospace"}}>{rr.replacementConsignment}</span></>:null}</div>
+              {rr.replacementTrackUrl&&rr.replacementConsignment&&(
+                <button className="press" onClick={()=>trackParcel({courierTrackUrl:rr.replacementTrackUrl,trackingNumber:rr.replacementConsignment})}
+                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:10,padding:"9px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  🚚 Track replacement{rr.replacementCourier?` · ${rr.replacementCourier}`:""}
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -7524,7 +7573,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.907090ee";
+const APP_BUILD = "v90.dbf93e72";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true

@@ -4356,6 +4356,16 @@ function generateBillHTML(order, settings){
   <div style="font-size:11px;opacity:.75;margin-top:6px">📅 ${dateStr}</div>
 </div>
 <div class="body">
+  ${String(o.status||"")==="Cancelled"?`<div style="background:#fdecec;border:2px solid #c0392b;border-radius:10px;padding:11px 14px;margin-bottom:16px">
+    <div style="font-size:14px;font-weight:800;color:#c0392b;letter-spacing:.4px">\u2715 ORDER CANCELLED</div>
+    <div style="font-size:11.5px;color:#7f2418;line-height:1.55;margin-top:3px">${
+      o.cancelReason?`Reason: ${E(o.cancelReason)}. `:""
+    }${
+      (o.refund&&o.refund.due)
+        ? (o.refund.status==="refunded"?"The amount paid has been refunded.":"A refund of the amount paid is being processed.")
+        : "No goods were supplied against this bill."
+    }</div>
+  </div>`:""}
   <div class="r2">
     <div class="box"><h4>📦 Ship To</h4>
       <p>${E(addr.name)||"—"}</p>
@@ -4579,6 +4589,8 @@ function generateInvoiceHTML(order, settings, opts){
   // A proforma is a quote for payment, not a tax document — it must not carry the tax-invoice
   // certification, and the buyer must not be able to claim input credit against it.
   const proforma=!cn&&docLabel==="PROFORMA INVOICE";
+  // A credit note is itself the record of a reversal, so it never carries the cancelled banner.
+  const cancelledDoc=!cn&&String(o.status||"")==="Cancelled";
   const docWord=cn?"credit note":docLabel.toLowerCase();
   /* Policy text is typed into a settings textarea, so it arrives with real line breaks and "* "
      bullets. Escaped straight into one <p> it printed as an unreadable wall; keep the author's
@@ -4792,7 +4804,18 @@ table.kv td.v{color:#1f2733;font-weight:700}
 .sigimg{display:block;margin:0 auto;max-width:190px;max-height:66px;object-fit:contain}
 /* No signature on file: the space carries the reason instead of a rule nobody signs. */
 .signosig{font-size:10px;font-weight:600;line-height:1.45;color:#7a8694}
-.fitwrap{transform-origin:top left}
+/* Auto margins matter only at full scale, and that is exactly where they were missing: the
+   script pins this wrapper to the 780px design width so the fit maths is honest, and on any
+   window wider than that a 780px block with no margins sits against the left edge of the
+   screen. Below 780 the box is wider than its container, the auto margins collapse to zero,
+   and the transform fills the viewport from the left as before. */
+.fitwrap{transform-origin:top left;margin:0 auto}
+/* A cancelled order still has an invoice — it is a record, and the customer may be owed a
+   refund against it — but nothing on the sheet said so, and a document that reads as a live
+   bill for goods nobody is sending is the kind of thing that ends up in a dispute. */
+.cancelbar{background:#fdecec;border:2px solid #c0392b;border-radius:6px;padding:12px 16px;margin-bottom:20px}
+.cancelbar b{display:block;font-size:15px;font-weight:800;color:#c0392b;letter-spacing:.5px}
+.cancelbar span{display:block;font-size:11.5px;color:#7f2418;line-height:1.55;margin-top:3px}
 /* Only while fitted. "Actual size" keeps the fit class too, so this used to clip the sheet
    horizontally in exactly the mode whose whole point is scrolling across a full-width bill —
    which is why the invoice number and date block at the top right could not be reached. */
@@ -4804,6 +4827,13 @@ body.actual .fitwrap{transform:none!important;width:auto!important;height:auto!i
 @media print{body{background:#fff;padding:0}.page{box-shadow:none;max-width:none;width:auto;padding:0}.np{display:none!important}.fitwrap{transform:none!important;width:auto!important;height:auto!important}table.items tbody tr,.infoblk,.words{page-break-inside:avoid}table.items thead{display:table-header-group}}
 </style></head>
 <body class="fit"><div class="fitwrap"><div class="page">
+  ${cancelledDoc?`<div class="cancelbar"><b>\u2715 ORDER CANCELLED</b><span>${
+    o.cancelReason?`Reason: ${E(o.cancelReason)}. `:""
+  }${
+    (o.refund&&o.refund.due)
+      ? (o.refund.status==="refunded"?"The amount paid has been refunded.":"A refund of the amount paid is being processed.")
+      : "No goods were supplied against this document."
+  }</span></div>`:""}
   <div class="top">
     <div class="co">
       ${logo?`<img class="lg" src="${logo}" alt=""/>`:""}
@@ -6810,7 +6840,11 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
     Shipped:"We've noted your courier details — we'll verify the parcel on arrival.",
     Declined:"Reviewed — this request was not approved.",
     "Received & Verified":"Parcel received & verified ✓ — your resolution is being processed.",
-    Resolved:"Resolved ✓ — your refund / coins have been processed. Thank you!",
+    // A replacement is not a refund, and telling someone their refund has been processed when a
+    // parcel is on the way is the kind of message that turns into a WhatsApp conversation.
+    Resolved:(rr&&(rr.adminResolution||rr.resolution))==="replacement"
+      ? "Resolved ✓ — a replacement has been arranged. Thank you!"
+      : "Resolved ✓ — your refund / coins have been processed. Thank you!",
   };
   if(rr){
     const tone=rr.status==="Declined"?{bg:"#fef2f2",bd:"#fecaca"}:rr.status==="Resolved"?{bg:"#ecfdf5",bd:"#a7f3d0"}:{bg:"#eff6ff",bd:"#bfdbfe"};
@@ -6836,6 +6870,21 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
           )}
           {(rr.status==="Shipped"||rr.status==="Received & Verified"||rr.status==="Resolved")&&(rr.courier||rr.consignment)&&(
             <div style={{fontSize:11,color:C.textSub,marginTop:8}}>Sent via <b style={{color:C.text}}>{rr.courier||"courier"}</b>{rr.consignment?<> · <span style={{fontFamily:"monospace"}}>{rr.consignment}</span></>:null}</div>
+          )}
+          {/* The store's replacement parcel. Deliberately a separate line from the customer's own
+              return shipment above — on a replacement two parcels are in the air at once, and one
+              "tracking number" for both is the fastest way to have the customer chase the wrong one. */}
+          {(rr.replacementCourier||rr.replacementConsignment)&&(
+            <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"10px 12px"}}>
+              <div style={{fontSize:12,fontWeight:800,color:"#065f46",marginBottom:3}}>🔁 Your replacement is on its way</div>
+              <div style={{fontSize:11.5,color:"#047857",lineHeight:1.55}}>Sent via <b>{rr.replacementCourier||"courier"}</b>{rr.replacementConsignment?<> · <span style={{fontFamily:"monospace"}}>{rr.replacementConsignment}</span></>:null}</div>
+              {rr.replacementTrackUrl&&rr.replacementConsignment&&(
+                <button className="press" onClick={()=>trackParcel({courierTrackUrl:rr.replacementTrackUrl,trackingNumber:rr.replacementConsignment})}
+                  style={{width:"100%",marginTop:8,background:"#0c2b30",color:"white",border:"none",borderRadius:10,padding:"9px",fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  🚚 Track replacement{rr.replacementCourier?` · ${rr.replacementCourier}`:""}
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -13111,6 +13160,13 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
   const [retAddrKey,setRetAddrKey]=useState(rr?.returnAddrKey||(retAddrOpts[0]&&retAddrOpts[0].key)||"1");
   const [retAdminReason,setRetAdminReason]=useState(rr?.adminReason||"");                       // reason admin records on approval
   const [retResolution,setRetResolution]=useState(rr?.adminResolution||rr?.resolution||"refund"); // how admin resolves: refund / replacement / coins
+  /* The REPLACEMENT parcel — the one the store sends back out. Kept apart from the order's own
+     courier/trackingNumber, which describe the original delivery and are still the record of it;
+     overwriting those would erase how the first parcel reached the customer. The customer's own
+     return shipment is a third thing again (rr.courier / rr.consignment), entered by them. */
+  const [retRepCourierId,setRetRepCourierId]=useState(rr?.replacementCourierId||"");
+  const [retRepConsign,setRetRepConsign]=useState(rr?.replacementConsignment||"");
+  const retRepCourier=(settings.couriers||[]).find(c=>c.id===retRepCourierId)||null;
   const saveReturn=async(resolveNow)=>{
     if(resolveNow&&retResolution==="coins"&&!paymentSucceeded(o)){
       showToast("Verify the payment before issuing reward coins","error"); return;
@@ -13122,6 +13178,13 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
       returnAddress:chosen?chosen.text:((o.returnReq&&o.returnReq.returnAddress)||""),
       returnAddrKey:chosen?chosen.key:"",
       returnAddrLabel:chosen?chosen.label:"",
+      ...(retResolution==="replacement"?{
+        replacementCourierId:retRepCourierId,
+        replacementCourier:retRepCourier?.name||"",
+        replacementTrackUrl:retRepCourier?.trackUrl||"",
+        replacementConsignment:retRepConsign.trim(),
+        replacementSentAt:(retRepConsign.trim()&&!(o.returnReq&&o.returnReq.replacementSentAt))?new Date().toISOString():((o.returnReq&&o.returnReq.replacementSentAt)||""),
+      }:{}),
       updatedAt:new Date().toISOString()};
     let patch={...o,returnReq:next};
     if(resolveNow){
@@ -13621,6 +13684,26 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   style={{padding:"9px 4px",borderRadius:10,border:`1.5px solid ${retResolution===k?C.primary:C.border}`,background:retResolution===k?C.primary:"transparent",color:retResolution===k?"white":C.textSub,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{l}</button>
               ))}
             </div>
+            {retResolution==="replacement"&&(
+              <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px",marginBottom:10}}>
+                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>🔁 Replacement shipment <span style={{fontWeight:400,textTransform:"none"}}>(the parcel you send back out)</span></div>
+                {(settings.couriers||[]).length>0?(
+                  <select value={retRepCourierId} onChange={e=>setRetRepCourierId(e.target.value)}
+                    style={{...refundFld,marginBottom:8,background:"white"}}>
+                    <option value="">Select courier…</option>
+                    {(settings.couriers||[]).map(c=><option key={c.id} value={c.id}>{c.name||"(unnamed)"}</option>)}
+                  </select>
+                ):(
+                  <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Add your courier partners in Settings → Shipping to offer the customer a Track button.</div>
+                )}
+                <input value={retRepConsign} onChange={e=>setRetRepConsign(e.target.value)} placeholder="Replacement consignment / tracking number"
+                  style={{...refundFld,fontFamily:"monospace"}}/>
+                <div style={{fontSize:10.5,color:C.textSub,marginTop:6,lineHeight:1.5}}>
+                  Shown to the customer on their order as soon as you Save. The original delivery&#39;s courier and consignment above are left untouched.
+                  {retRepCourier&&retRepCourier.trackUrl&&retRepConsign.trim()?<> They&#39;ll get a <b>Track replacement</b> button for {retRepCourier.name}.</>:null}
+                </div>
+              </div>
+            )}
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:6}}>Reason on approval <span style={{fontWeight:400,textTransform:"none"}}>(for your records — what the photo/video showed)</span></div>
             <input value={retAdminReason} onChange={e=>setRetAdminReason(e.target.value)} placeholder="e.g. Verified photo — item cracked in transit; genuine damage"
               style={{...refundFld,marginBottom:10}}/>
