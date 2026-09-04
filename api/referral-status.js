@@ -79,10 +79,18 @@ export default async function handler(req, res) {
     });
     if (!profile || typeof profile !== 'object') profile = candidate;
 
-    const threshold = Math.max(0, Number(profile.threshold) || 0);
+    // The owner's current setting governs anyone still locked: the admin field is a live
+    // control, so lowering it unlocks the customers it now covers on their next visit. A
+    // profile that has already unlocked keeps the limit that let it in — raising the bar must
+    // never revoke a code that is already out there being shared. The patch below is what
+    // freezes it, at the moment of unlocking.
+    const alreadyUnlocked = profile.unlocked === true;
+    const threshold = alreadyUnlocked
+      ? Math.max(0, Number(profile.threshold) || 0)
+      : thresholdFrom(settings);
     const spent = successfulSpend(await dbGet(`orders/${encodeURIComponent(uid)}`));
     let code = String(profile.code || '').toUpperCase();
-    let unlocked = profile.unlocked === true || spent >= threshold;
+    let unlocked = alreadyUnlocked || spent >= threshold;
     if (unlocked) {
       code = await registerCode(uid, code, threshold, Number(profile.createdAt) || Date.now());
       await dbPatch(`userrefs/${encodeURIComponent(uid)}`, {

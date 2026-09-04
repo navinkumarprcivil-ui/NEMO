@@ -2054,7 +2054,7 @@ const DEFAULT_SETTINGS = { ownerWhatsapp:BUSINESS_WA, supporterWhatsapp:"", supp
   /* Referral. One code per customer: you unlock yours by spending, friends redeem it, and you
      are paid in reward coins when what they bought actually reaches them. */
   referralEnabled: true,
-  referralLifetimeSpendMin: 1000, // successful lifetime spend that unlocks a customer's own code
+  referralLifetimeSpendMin: 1000, // successful lifetime spend that unlocks a customer's own code (live)
   referralDiscountType: "flat",   // "flat" → referralDiscount rupees; "percent" → referralDiscountPct of subtotal
   referralDiscount: 50,           // ₹ off the friend's cart when the type is flat
   referralDiscountPct: 5,         // % off the friend's cart when the type is percent
@@ -2210,6 +2210,15 @@ function lifetimeReferralLimit(settings){
   const n=Number(settings&&settings.referralLifetimeSpendMin);
   return Math.max(0,Number.isFinite(n)?n:Number(settings&&settings.referralMinOrder)||0);
 }
+/* Which limit a given customer is measured against. Still locked → the owner's current
+   setting, so the admin field behaves like a control rather than a stamp collected on the day
+   the customer first opened the drawer. Already unlocked → the limit that let them in, kept as
+   it was: raising the bar later must never revoke a code that is already being shared. */
+function activeReferralThreshold(profile,settings){
+  return profile&&profile.unlocked===true
+    ? Math.max(0,Number(profile.threshold)||0)
+    : lifetimeReferralLimit(settings);
+}
 /* The friend's side of the deal: how big their cart has to be before a code applies, and what
    it takes off. Both are the owner's to set, and both are read wherever the discount is shown
    or charged, so the number quoted on the referral card, in checkout and on the order can never
@@ -2250,7 +2259,9 @@ function localReferralProfile(uid,settings){
     localStorage.setItem(key,JSON.stringify(fresh)); return fresh;
   }catch(e){ return {code:genRefCode(),threshold:lifetimeReferralLimit(settings),createdAt:Date.now(),unlocked:false}; }
 }
-/* Threshold is captured once. Later admin changes therefore apply to upcoming customers only. */
+/* The threshold stored on a profile is a record of the limit that unlocked that customer, not
+   a live limit. While a customer is still locked, the owner's current setting governs — see
+   customerReferralStatus. */
 async function ensureReferralProfile(uid,settings){
   if(!uid) return null;
   if(!FB_OK) return localReferralProfile(uid,settings);
@@ -2272,7 +2283,7 @@ async function ensureReferralProfile(uid,settings){
 async function customerReferralStatus(uid,settings,orders){
   const profile=await ensureReferralProfile(uid,settings);
   if(!profile) return null;
-  const spent=successfulSpend(orders), threshold=Math.max(0,Number(profile.threshold)||0);
+  const spent=successfulSpend(orders), threshold=activeReferralThreshold(profile,settings);
   let code=cleanRefCode(profile.code), unlocked=profile.unlocked===true;
   /* Unlocking is server-authoritative: the endpoint re-reads this customer's paid orders and
      creates the active code with service credentials. A customer cannot turn on their own
@@ -2294,14 +2305,6 @@ async function customerReferralStatus(uid,settings,orders){
     try{ localStorage.setItem("nemo-ref-profile-"+uid,JSON.stringify(p)); }catch(e){}
   }
   return {code,threshold,spent,remaining:Math.max(0,threshold-spent),unlocked};
-}
-/* Before the owner changes the unlock limit, freeze the previous limit for every customer
-   already represented in the order book. Profiles that already exist are left untouched;
-   customers who join after the save receive the new limit. */
-async function snapshotExistingReferralProfiles(orders,settings){
-  if(!FB_OK) return;
-  const uids=[...new Set((orders||[]).map(o=>o&&o.userUid).filter(Boolean))];
-  await Promise.allSettled(uids.map(uid=>ensureReferralProfile(uid,settings)));
 }
 /* There were once two kinds of referral code: this permanent one, and a single-use code minted
    by every order over a threshold. The two taught customers contradictory things — one code is
@@ -16246,7 +16249,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Lifetime spend to unlock (₹)</div>
             <input type="number" min="0" value={f.referralLifetimeSpendMin??1000} onChange={e=>set("referralLifetimeSpendMin",Number(e.target.value))}
               style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
-            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Changing this affects upcoming new customers only.</div>
+            <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Applies to everyone still locked. Customers who already unlocked keep their code.</div>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Friend&#39;s minimum order (₹)</div>
@@ -17213,7 +17216,6 @@ function NemoStore(){
   },[]);
 
   const saveSettingsHandler=async(s)=>{
-    if(lifetimeReferralLimit(s)!==lifetimeReferralLimit(settings)) await snapshotExistingReferralProfiles(orders,settings);
     if(isMainAdminUid(FB_AUTH&&FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)){
       try{ await saveAdminAccess({coAdminUid:s.coAdminUid||"",permissions:s.coAdminPermissions||{}}); }catch(e){ showToast("Could not save co-admin access","error"); return; }
     }

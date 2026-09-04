@@ -1,4 +1,4 @@
-/** Referral eligibility, threshold snapshots, the redeem rules and code format. */
+/** Referral eligibility, which unlock limit applies, the redeem rules and code format. */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -9,7 +9,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(root, 'app.jsx'), 'utf8');
 
 const spendCode = src.slice(src.indexOf('function paymentSucceeded('), src.indexOf('function returnWindowOpen('));
-const referralCode = src.slice(src.indexOf('const REF_CODE_RE='), src.indexOf('/* Threshold is captured once.'));
+const referralCode = src.slice(src.indexOf('const REF_CODE_RE='), src.indexOf('async function ensureReferralProfile('));
 const storage = new Map();
 const localStorage = {
   getItem: key => storage.has(key) ? storage.get(key) : null,
@@ -17,8 +17,8 @@ const localStorage = {
 };
 const M = new Function('localStorage', `${spendCode}\n${referralCode}\nreturn {
   paymentSucceeded,successfulSpend,REF_CODE_RE,cleanRefCode,genRefCode,
-  lifetimeReferralLimit,referralRedeemMin,referralDiscountFor,referralOwnerCoins,
-  referralOfferLine,localReferralProfile
+  lifetimeReferralLimit,activeReferralThreshold,referralRedeemMin,referralDiscountFor,
+  referralOwnerCoins,referralOfferLine,localReferralProfile
 };`)(localStorage);
 
 test('only successful non-cancelled payments count toward lifetime spend', () => {
@@ -140,4 +140,44 @@ test("the code owner is paid on delivery, once, and reversed if the order is can
   const delivered = src.slice(src.indexOf('if(updated.status==="Delivered" && paymentSucceeded(updated)){'),
     src.indexOf('// ── On CANCEL: restock once'));
   assert.ok(delivered.includes('referralOwnerUid'), 'the referral payout is not in the delivery branch');
+});
+
+/* The unlock limit used to be stamped onto each customer the first time their profile was
+   created, so changing the admin field moved nothing for anyone who had already visited — the
+   setting looked broken. It is now live for anyone still locked, and frozen only at the moment
+   someone unlocks, so a code already out there with friends can never be revoked. */
+test('a locked customer is measured against the limit the owner has set today', () => {
+  const profile = {code:'AB23CD45EF', threshold:1000, createdAt:1, unlocked:false};
+  assert.equal(M.activeReferralThreshold(profile, {referralLifetimeSpendMin:2500}), 2500);
+  assert.equal(M.activeReferralThreshold(profile, {referralLifetimeSpendMin:300}), 300);
+  assert.equal(M.activeReferralThreshold(profile, {referralLifetimeSpendMin:0}), 0);
+});
+
+test('an unlocked customer keeps the limit that let them in', () => {
+  const profile = {code:'AB23CD45EF', threshold:1000, createdAt:1, unlocked:true};
+  assert.equal(M.activeReferralThreshold(profile, {referralLifetimeSpendMin:99999}), 1000);
+  assert.equal(M.activeReferralThreshold(profile, {referralLifetimeSpendMin:10}), 1000);
+});
+
+test('a missing profile still falls back to the current setting', () => {
+  assert.equal(M.activeReferralThreshold(null, {referralLifetimeSpendMin:750}), 750);
+  assert.equal(M.activeReferralThreshold({unlocked:true}, {referralLifetimeSpendMin:750}), 0);
+});
+
+test('saving settings no longer freezes existing customers at the old limit', () => {
+  assert.doesNotMatch(src, /snapshotExistingReferralProfiles/,
+    'the pre-save snapshot is what made the admin field inert — it must stay removed');
+  assert.match(src, /const spent=successfulSpend\(orders\), threshold=activeReferralThreshold\(profile,settings\);/,
+    'customerReferralStatus must read the shared helper, not a stored number');
+});
+
+/* The endpoint is authoritative — a customer signed in with Firebase gets its answer, not the
+   client's — so the same rule has to hold there or the fix only works when the API is down. */
+test('the referral-status endpoint applies the same live limit', () => {
+  const api = readFileSync(join(root, 'api', 'referral-status.js'), 'utf8');
+  assert.match(api, /const alreadyUnlocked = profile\.unlocked === true;/);
+  assert.match(api, /const threshold = alreadyUnlocked\s*\n?\s*\? Math\.max\(0, Number\(profile\.threshold\) \|\| 0\)\s*\n?\s*: thresholdFrom\(settings\);/);
+  assert.match(api, /let unlocked = alreadyUnlocked \|\| spent >= threshold;/);
+  // Unlocking is still the moment the number is frozen onto the profile.
+  assert.match(api, /unlocked: true,/);
 });
