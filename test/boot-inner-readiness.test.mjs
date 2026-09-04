@@ -8,7 +8,7 @@ for (const file of ["app.jsx","src/app.jsx"]) {
     assert.match(source,/const \[communityReady,setCommunityReady\] = useState\(false\)/);
     assert.match(source,/showcaseSettled&&testimonialsSettled\)\{ clearTimeout\(guard\); setCommunityReady\(true\); \}/);
     assert.match(source,/waitForFirebase\(4000\)/);
-    assert.match(source,/if\(loading\|\|!hydrated\|\|!settingsReady\|\|!communityReady\|\|!walletReady\) return/);
+    assert.match(source,/if\(loading\|\|!hydrated\|\|!settingsReady\|\|!communityReady\|\|!walletReady\|\|!fontsReady\) return/);
     assert.match(source,/setTimeout\(\(\)=>\{ if\(alive\) setCommunityReady\(true\); \},8000\)/);
   });
 }
@@ -43,8 +43,34 @@ for (const file of ["app.jsx","src/app.jsx"]) {
     const source=fs.readFileSync(new URL("../"+file,import.meta.url),"utf8");
     assert.match(source,/function bootProgress\(pct\)/);
     // Progress is derived from real readiness, never from a timer.
-    assert.match(source,/\[!loading,hydrated,settingsReady,communityReady,walletReady\]\.filter\(Boolean\)\.length/);
-    assert.match(source,/bootProgress\(40\+done\*12\)/);
+    assert.match(source,/\[!loading,hydrated,settingsReady,communityReady,walletReady,fontsReady\]\.filter\(Boolean\)\.length/);
+    assert.match(source,/bootProgress\(40\+done\*10\)/);
     assert.match(source,/bootProgress\(100\)/);
+  });
+}
+
+/* The sixth gate is the webfont. It is the one boot gate that is not about data — it exists so
+   the page does not re-typeset itself a moment after the shopper starts reading — and it has
+   two halves that are easy to get subtly wrong. */
+test("the font gate waits for the faces, not merely for the stylesheet",()=>{
+  const index=fs.readFileSync(new URL("../index.html",import.meta.url),"utf8");
+  // document.fonts.ready would resolve immediately here: the @font-face rules have only just
+  // become active, so nothing is pending yet. Named faces are what wait for the files.
+  assert.match(index,/f\.load\("400 1rem 'Plus Jakarta Sans'"\)/);
+  assert.match(index,/f\.load\("800 1rem 'Plus Jakarta Sans'"\)/);
+  assert.doesNotMatch(index,/document\.fonts\.ready/);
+  // A stylesheet that never loads, or a browser with no Font Loading API, must still release.
+  assert.match(index,/onerror="nemoFontsDone\(\)"/);
+  assert.match(index,/if \(!f \|\| !f\.load\) \{ window\.nemoFontsDone\(\); return; \}/);
+});
+
+for (const file of ["app.jsx","src/app.jsx"]) {
+  test(file+" bounds the font wait so typography cannot hold the store",()=>{
+    const source=fs.readFileSync(new URL("../"+file,import.meta.url),"utf8");
+    assert.match(source,/const cap=setTimeout\(done,1200\);/);
+    assert.match(source,/window\.addEventListener\("nemo-fonts-ready",done,\{once:true\}\)/);
+    // Already-loaded fonts (a warm cache fires the event before this effect runs) must not
+    // leave the gate closed forever, so the initial state reads the flag index.html set.
+    assert.match(source,/useState\(\(\)=>\{ try\{ return window\.__nemoFontsReady===true; \}catch\(e\)\{ return true; \} \}\)/);
   });
 }

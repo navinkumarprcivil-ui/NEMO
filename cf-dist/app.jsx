@@ -7410,16 +7410,30 @@ function productExpectsImage(p){
 }
 
 /* Shimmer skeleton grid — shown on a cold first load until product data hydrates */
+/* Deliberately the same GEOMETRY as ProductCard, box for box, not just the same idea.
+   It used to be a 120px-tall image block over three short bars, while a real card is a
+   square image over a taller body — so the moment the catalogue arrived every card grew by
+   about a third and the whole page below it jumped. A placeholder that changes the layout
+   when it is replaced is worse than no placeholder: it moves what the shopper is reading.
+   Any change to the card's image ratio, padding or block heights belongs here too. */
 function SkeletonGrid({n=6}){
   return(
     <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
       {Array.from({length:n}).map((_,i)=>(
         <div key={i} style={{background:C.card,borderRadius:18,overflow:"hidden",border:`1px solid ${C.border}`}}>
-          <div className="shimmer-bar" style={{height:120}}/>
-          <div style={{padding:"14px 12px 12px"}}>
-            <div className="shimmer-bar" style={{height:9,borderRadius:6,marginBottom:8,width:"45%"}}/>
-            <div className="shimmer-bar" style={{height:12,borderRadius:6,marginBottom:10}}/>
-            <div className="shimmer-bar" style={{height:16,borderRadius:6,width:"40%"}}/>
+          <div className="shimmer-bar" style={{aspectRatio:"1 / 1"}}/>
+          <div style={{padding:"11px 12px 12px"}}>
+            {/* category */}
+            <div className="shimmer-bar" style={{height:9,borderRadius:6,marginBottom:5,width:"45%"}}/>
+            {/* name — two lines inside the card's own minHeight:33 */}
+            <div style={{minHeight:33,marginBottom:6}}>
+              <div className="shimmer-bar" style={{height:12,borderRadius:6,marginBottom:5}}/>
+              <div className="shimmer-bar" style={{height:12,borderRadius:6,width:"70%"}}/>
+            </div>
+            {/* price */}
+            <div className="shimmer-bar" style={{height:16,borderRadius:6,width:"40%",marginBottom:6}}/>
+            {/* the add-to-cart row: a 11.5px label with 7px padding, so 30px tall */}
+            <div className="shimmer-bar" style={{height:30,borderRadius:99}}/>
           </div>
         </div>
       ))}
@@ -7609,7 +7623,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.308cba09";
+const APP_BUILD = "v90.12a53b9c";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -7671,17 +7685,30 @@ if(typeof window!=="undefined"){
 }
 
 /* ═══════════════════ CATEGORY DRAWER (left slide-in) ═══════════════════ */
+/* The referral card sits at the top of the drawer, above the category list, and resolves
+   asynchronously — so its height is the one thing in the panel that can move everything else.
+   Pinned, rather than left to the content. */
+const REFERRAL_CARD_MIN = 116;
 function ReferralDrawerCard({open,user,settings={},orders=[],nav,onClose}){
   const [status,setStatus]=useState(null);
   const [loading,setLoading]=useState(false);
   const [copied,setCopied]=useState(false);
   const uk=userKey(user);
+  /* What the answer actually depends on. `orders` was in the dependency list, and it is a new
+     array on most renders, so the drawer re-asked the server for a status that had not changed.
+     Paid spend is the only part of it this card reads. */
+  const spend=successfulSpend(orders);
+  useEffect(()=>{ if(!uk||settings.referralEnabled===false) setStatus(null); },[uk,settings.referralEnabled]);
   useEffect(()=>{
-    if(!open||!uk||settings.referralEnabled===false){ setStatus(null); return; }
+    if(!open||!uk||settings.referralEnabled===false) return;
     let alive=true; setLoading(true);
     customerReferralStatus(uk,settings,orders).then(s=>{ if(alive){setStatus(s);setLoading(false);} }).catch(()=>{if(alive)setLoading(false);});
     return ()=>{alive=false;};
-  },[open,uk,orders,settings.referralEnabled,settings.referralLifetimeSpendMin]);
+  },[open,uk,spend,settings.referralEnabled,settings.referralLifetimeSpendMin]);
+  /* Held across closes. Clearing it when the drawer shut meant every reopen went back through
+     "Loading your referral code…" and then grew into a full card, shoving the whole category
+     list down the panel each time. Keeping the last answer means the second open is instant
+     and still refreshes underneath. */
   if(settings.referralEnabled===false) return null;
   if(!uk) return(
     <div style={{margin:"2px 0 12px",background:"linear-gradient(135deg,#ede9fe,#eef2ff)",border:"1px solid #c4b5fd",borderRadius:14,padding:"12px"}}>
@@ -7691,11 +7718,22 @@ function ReferralDrawerCard({open,user,settings={},orders=[],nav,onClose}){
         style={{width:"100%",background:"#6d28d9",color:"white",border:"none",borderRadius:9,padding:"8px",fontSize:11.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Sign in</button>
     </div>
   );
-  if(loading&&!status) return <div style={{margin:"2px 0 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px",fontSize:11.5,color:C.textSub}}>Loading your referral code…</div>;
+  /* One height for all three states — loading, locked and unlocked. They are within a few
+     pixels of each other, and the categories sit directly underneath: a card that grows as it
+     resolves moves the thing the customer is reaching for. */
+  const CARD={margin:"2px 0 12px",borderRadius:14,padding:"12px",minHeight:REFERRAL_CARD_MIN,boxSizing:"border-box"};
+  if(loading&&!status) return(
+    <div style={{...CARD,background:C.bg,border:`1px solid ${C.border}`}} aria-busy="true">
+      <div style={{fontSize:12.5,fontWeight:800,color:C.textSub,marginBottom:8}}>🎟️ Your referral code</div>
+      <div className="shimmer-bar" style={{height:10,borderRadius:6,marginBottom:7}}/>
+      <div className="shimmer-bar" style={{height:10,borderRadius:6,width:"75%",marginBottom:12}}/>
+      <div className="shimmer-bar" style={{height:31,borderRadius:8}}/>
+    </div>
+  );
   if(!status) return null;
   const pct=status.threshold<=0?100:Math.min(100,Math.round((status.spent/status.threshold)*100));
   return(
-    <div style={{margin:"2px 0 12px",background:status.unlocked?"linear-gradient(135deg,#7c3aed,#4f46e5)":"linear-gradient(135deg,#f5f3ff,#eef2ff)",border:`1px solid ${status.unlocked?"#7c3aed":"#c4b5fd"}`,borderRadius:14,padding:"12px",color:status.unlocked?"white":"#4c1d95"}}>
+    <div style={{...CARD,background:status.unlocked?"linear-gradient(135deg,#7c3aed,#4f46e5)":"linear-gradient(135deg,#f5f3ff,#eef2ff)",border:`1px solid ${status.unlocked?"#7c3aed":"#c4b5fd"}`,color:status.unlocked?"white":"#4c1d95"}}>
       <div style={{fontSize:12.5,fontWeight:800,marginBottom:3}}>🎟️ {status.unlocked?"Your referral code":"Referral code locked"}</div>
       {status.unlocked?(
         <>
@@ -12611,6 +12649,10 @@ function NemoStore(){
   const [selProduct,setSelProduct] = useState(null);
   const [walletPts,setWalletPts]   = useState(0);
   const [walletReady,setWalletReady] = useState(false);
+  /* The sixth boot gate: the webfont. Every other gate is about data; this one is about the
+     page not re-typesetting itself a second after the shopper starts reading it. index.html
+     starts the stylesheet immediately and reports the FACES being usable, not just the CSS. */
+  const [fontsReady,setFontsReady] = useState(()=>{ try{ return window.__nemoFontsReady===true; }catch(e){ return true; } });
   // Cart persists across sessions (localStorage) — a returning shopper finds their items waiting,
   // which itself recovers otherwise-abandoned carts.
   // `shoppable` drops any live-fish line a shopper had in their basket from before the
@@ -12854,24 +12896,37 @@ function NemoStore(){
   // from the local value after a short grace period even if Firebase is slow/blocked.
   useEffect(()=>{ const t=setTimeout(()=>setSettingsReady(true), 650); return()=>clearTimeout(t); },[]);
 
+  /* Bounded like every other boot gate: a webfont that never arrives must not hold the store
+     behind the splash. 1.2s is comfortably longer than a warm cache — where the event has
+     usually fired before this effect even runs — and short enough that nobody on a bad
+     connection is made to wait on typography. */
+  useEffect(()=>{
+    if(fontsReady) return;
+    let alive=true;
+    const done=()=>{ if(alive) setFontsReady(true); };
+    const cap=setTimeout(done,1200);
+    window.addEventListener("nemo-fonts-ready",done,{once:true});
+    return ()=>{ alive=false; clearTimeout(cap); window.removeEventListener("nemo-fonts-ready",done); };
+  },[fontsReady]);
+
   /* The cinematic opening may lift only after the visible Home data has settled:
      catalogue, settings, Customer Tanks, testimonials and the signed-in wallet. Each source
      carries its own bounded fallback, so this waits for real inner completion without hanging. */
   /* Drive the splash percentage from the same five gates the reveal waits on, so the number
      reflects work that actually finished rather than a timer. 40% is the shell existing at
      all — React mounted and this component is rendering — and the five data gates share the
-     rest, 12 points each. index.html keeps it monotonic and creeps between milestones. */
+     rest, 10 points each. index.html keeps it monotonic and creeps between milestones. */
   useEffect(()=>{
-    const done=[!loading,hydrated,settingsReady,communityReady,walletReady].filter(Boolean).length;
-    bootProgress(40+done*12);
-  },[loading,hydrated,settingsReady,communityReady,walletReady]);
+    const done=[!loading,hydrated,settingsReady,communityReady,walletReady,fontsReady].filter(Boolean).length;
+    bootProgress(40+done*10);
+  },[loading,hydrated,settingsReady,communityReady,walletReady,fontsReady]);
 
   useEffect(()=>{
-    if(loading||!hydrated||!settingsReady||!communityReady||!walletReady) return;
+    if(loading||!hydrated||!settingsReady||!communityReady||!walletReady||!fontsReady) return;
     try{ window.__nemoBootReady=true; }catch(e){}
     bootProgress(100);
     revealStore();
-  },[loading,hydrated,settingsReady,communityReady,walletReady]);
+  },[loading,hydrated,settingsReady,communityReady,walletReady,fontsReady]);
 
   const deepLinkRef = useRef((()=>{ try{ return new URLSearchParams(window.location.search).get("p")||""; }catch(e){ return ""; } })());
   useEffect(()=>{

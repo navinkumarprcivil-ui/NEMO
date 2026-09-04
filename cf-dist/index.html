@@ -119,8 +119,33 @@
 <link rel="preconnect" href="https://nemo-aqua-store-default-rtdb.asia-southeast1.firebasedatabase.app" crossorigin/>
 <link rel="dns-prefetch" href="https://firebasedatabase.app"/>
 <link rel="dns-prefetch" href="https://firebaseio.com"/>
-<!-- Fonts: load async (media=print trick), won't block first paint -->
-<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"/>
+<!-- Fonts: load async (media=print trick), so they never block first paint of the splash.
+     The splash then WAITS for the faces before it lifts (see the fontsReady gate in app.jsx).
+     A webfont that swaps in after the store is already visible re-renders every line of text
+     on the page at once, and on a cold load that is the most visible flicker a shopper gets.
+     The wait is bounded there, so a font that never arrives cannot hold the store. -->
+<script>
+  window.__nemoFontsReady = false;
+  window.nemoFontsDone = function(){
+    if (window.__nemoFontsReady) return;
+    window.__nemoFontsReady = true;
+    try { window.dispatchEvent(new Event("nemo-fonts-ready")); } catch(e) {}
+  };
+  window.nemoFontCssLoaded = function(link){
+    try { link.media = "all"; } catch(e) {}
+    var f = document.fonts;
+    /* No Font Loading API (or the stylesheet failed): nothing to wait for, so do not make
+       anyone wait. The page still renders, in the fallback stack. */
+    if (!f || !f.load) { window.nemoFontsDone(); return; }
+    /* Named faces, not the `fonts.ready` promise, which resolves as soon as nothing is pending —
+       and at this instant nothing is, because the @font-face rules have only just become
+       active. Asking for the two weights above the fold is what makes this wait for the font
+       FILES rather than for the CSS that mentions them. */
+    Promise.all([f.load("400 1rem 'Plus Jakarta Sans'"), f.load("800 1rem 'Plus Jakarta Sans'")])
+      .then(window.nemoFontsDone, window.nemoFontsDone);
+  };
+</script>
+<link rel="stylesheet" media="print" onload="nemoFontCssLoaded(this)" onerror="nemoFontsDone()" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"/>
 <style>
   html,body,#root{height:100%;margin:0;padding:0;background:#ffffff;}
   body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
