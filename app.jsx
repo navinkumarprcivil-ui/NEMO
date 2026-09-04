@@ -6266,6 +6266,25 @@ function BackArrow({size=20,stroke=2.6}){
    phrase — "MAX TOTAL DISCOUNT PER ORDER (% OF SUBTOTAL)" is a sentence shouted. */
 const ADMIN_LABEL={fontSize:11,fontWeight:800,color:C.textSub,letterSpacing:.1,marginBottom:5};
 
+/* An Admin settings hint is doing two jobs at once: reminding you what a field does while you
+   are setting it, and explaining a rule you need to read exactly once. Printed in full under
+   every field, the second job crowds out the first — the panel becomes a wall of prose with the
+   controls buried inside it, and the owner reported it as most of the screen's text. Not one
+   word is cut; the paragraph moves one tap away, where it is still there the day you need it. */
+function Hint({children,label="What this does"}){
+  const [open,setOpen]=useState(false);
+  return(
+    <div style={{marginTop:5}}>
+      <button className="press" type="button" onClick={()=>setOpen(o=>!o)} aria-expanded={open}
+        style={{display:"inline-flex",alignItems:"center",gap:5,background:"none",border:"none",padding:0,cursor:"pointer",fontSize:10,fontWeight:800,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        <span aria-hidden="true" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:14,height:14,borderRadius:99,border:`1.5px solid ${C.primary}`,fontSize:9,fontWeight:800,lineHeight:1,flexShrink:0}}>i</span>
+        {open?"Hide":label}
+      </button>
+      {open&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginTop:6,background:C.bg,borderRadius:8,padding:"9px 11px"}}>{children}</div>}
+    </div>
+  );
+}
+
 /* ═══════════════════ PAGE HERO HEADER ═══════════════════ */
 /* The coloured banner every secondary page opens with. There were five hand-rolled copies of
    it — Care Guides, About, Contact, a policy page and Request a Product — and they had drifted
@@ -15521,11 +15540,11 @@ function SettingsPanel({settings,onSave,products=[]}){
             </span>
           </span>
         </label>
-        <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginTop:10,background:C.bg,borderRadius:12,padding:"10px 12px"}}>
+        <Hint>
           <b>Nothing is ever deleted.</b> Turning this off hides live fish; every product, past order, DOA claim and refund stays exactly where it is, and comes straight back when you turn it on. Your saved fish wording is never rewritten — while the switch is off the storefront simply shows fish-free copy in its place.
           <span style={{display:"block",marginTop:6}}>Customers already on the site pick up the change when they next open it. Your product pages on Google follow within the hour.</span>
           {f.liveFishEnabled===true&&<span style={{display:"block",marginTop:6,color:"#9a3412",fontWeight:600}}>⚠ Check your payment gateway allows live animals before you switch this on.</span>}
-        </div>
+        </Hint>
       </Collapsible>
 
       {/* WhatsApp */}
@@ -15624,7 +15643,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         {/* Admin copy of each new order — OFF by default (opt in to receive the "order received" mail yourself) */}
         <div style={{borderTop:`1px solid ${C.border}`,marginTop:14,paddingTop:12}}>
           <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:4}}>Send a copy to admin</div>
-          <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Order-received / payment-verification emails to your own inbox are turned off. Tick this to opt in and receive a copy of every new order at your Notification Email above.</div>
+          <Hint>Order-received / payment-verification emails to your own inbox are turned off. Tick this to opt in and receive a copy of every new order at your Notification Email above.</Hint>
           <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",userSelect:"none"}}>
             <input type="checkbox" checked={f.adminOrderEmail===true} onChange={e=>set("adminOrderEmail",e.target.checked)} style={{width:18,height:18,accentColor:C.primary,flexShrink:0,marginTop:1}}/>
             <span><span style={{fontSize:13,color:C.text,fontWeight:700}}>📥 Email me each new order</span><br/><span style={{fontSize:11,color:C.textSub}}>Sends the order-received copy to admin</span></span>
@@ -15667,7 +15686,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         </div>
         <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,marginTop:14}}>
           <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:8}}>🤝 Co-admin access</div>
-          <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginBottom:9}}>Paste the UID copied after the helper signs in with Google. Saving here activates database access; no source-code or Firebase-console edit is required.</div>
+          <Hint>Paste the UID copied after the helper signs in with Google. Saving here activates database access; no source-code or Firebase-console edit is required.</Hint>
           <input value={f.coAdminUid||""} onChange={e=>set("coAdminUid",e.target.value.trim())} placeholder="Co-admin Google UID" aria-label="Co-admin Google UID" style={{width:"100%",boxSizing:"border-box",border:`1.5px solid ${C.border}`,borderRadius:8,padding:"9px 10px",fontFamily:"monospace",fontSize:11}}/>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginTop:10}}>
             {[['orders','📋 Orders'],['dashboard','📊 Dashboard'],['products','📦 Products'],['wallets','👛 Wallets'],['reviews','⭐ Reviews'],['requests','📨 Requests'],['guides','📖 Guides'],['settings','⚙️ Settings']].map(([key,label])=>(
@@ -15742,7 +15761,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         {area("Cancellations, Returns & DOA Policy","returnPolicy")}
         <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px 12px 2px",marginBottom:14}}>
           <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:4}}>↩️ Return Shipping Addresses</div>
-          <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Set up to <b>2</b> pickup/return points (e.g. main store + warehouse). When you approve a return you'll choose which one the customer should courier the item to.</div>
+          <Hint>Set up to <b>2</b> pickup/return points (e.g. main store + warehouse). When you approve a return you'll choose which one the customer should courier the item to.</Hint>
           {field("Address 1 — short name","returnAddress1Label","e.g. Salem Store")}
           {area("Address 1 — full address","returnAddress")}
           {field("Address 2 — short name (optional)","returnAddress2Label","e.g. Chennai Warehouse")}
@@ -15776,7 +15795,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             product editor under "Claim GST on this product". */}
         <div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:800,color:"#5b21b6",marginBottom:4}}>🧾 GST is set per product</div>
-          <div style={{fontSize:11,color:C.textSub,lineHeight:1.55}}>HSN and rate live on each product — open a product and tick <b>Claim GST on this product</b>. Live fish stay off, so those orders bill as a Bill of Supply with no tax. Shipping follows the biggest item in the order.</div>
+          <Hint>HSN and rate live on each product — open a product and tick <b>Claim GST on this product</b>. Live fish stay off, so those orders bill as a Bill of Supply with no tax. Shipping follows the biggest item in the order.</Hint>
           {(()=>{
             const gaps=(products||[]).filter(p=>p.gstApplicable&&(!String(p.hsn||"").trim()||!(Number(p.gstRate)>0)));
             if(!gaps.length) return null;
@@ -15794,7 +15813,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         <div style={{fontSize:12,color:C.textSub,marginBottom:14,lineHeight:1.5}}><b>Customer payments use the integrated gateway checkout (PhonePe and Razorpay).</b> Their production credentials are stored securely on Cloudflare and are never entered here. The optional UPI details below are printed on invoices only.</div>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:4}}>Primary gateway</div>
-          <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Checkout tries this one first. The other is used automatically if it can't create a session for a customer — no code change or app update needed to switch.</div>
+          <Hint>Checkout tries this one first. The other is used automatically if it can't create a session for a customer — no code change or app update needed to switch.</Hint>
           <div style={{display:"flex",gap:8}}>
             {[["phonepe","PhonePe"],["razorpay","Razorpay"]].map(([k,l])=>{
               const active=(f.paymentPrimary||"phonepe")===k;
@@ -15814,7 +15833,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             optional: any field left blank simply doesn't print. */}
         <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px 12px 2px",marginTop:6}}>
           <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:4}}>🏦 Bank Details (printed on invoices)</div>
-          <div style={{fontSize:11,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Optional, but wholesale/GST buyers expect it. Leave any field blank to hide it. This is <b>business account</b> information that already appears on your invoices — never enter a personal PIN, password or OTP anywhere.</div>
+          <Hint>Optional, but wholesale/GST buyers expect it. Leave any field blank to hide it. This is <b>business account</b> information that already appears on your invoices — never enter a personal PIN, password or OTP anywhere.</Hint>
           {field("Account Name","bankAccountName","NEMO AQUA STORE")}
           {field("Bank","bankName","ICICI Bank")}
           {field("Branch","bankBranch","Salem")}
@@ -15829,9 +15848,9 @@ function SettingsPanel({settings,onSave,products=[]}){
             signature. */}
         <div style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:12,padding:"12px",marginTop:12}}>
           <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:4}}>✍️ Authorised Signature (printed on invoices)</div>
-          <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>
+          <Hint>
             Signs on a white background, cropped close, PNG or JPG. Upload one and the invoice prints that signature and nothing else. Leave it empty and the invoice prints <b>This is auto generated &amp; not required signature</b> in its place — those are the only two things that ever appear there, so no bill goes out waiting for a pen.
-          </div>
+          </Hint>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             <div style={{width:120,height:56,borderRadius:12,background:"white",border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0}}>
               {f.invoiceSignature
@@ -15856,7 +15875,7 @@ function SettingsPanel({settings,onSave,products=[]}){
       <Collapsible icon="🚚" title="Shipping Rates">
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.5}}>Edit shipping prices per zone. Leave blank to use default rates. Changes apply immediately after Save.</div>
         <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>⚖️ Packaging weight added by item-weight bracket</div>
-        <div style={{fontSize:10,color:C.textSub,marginBottom:10,lineHeight:1.45}}>Set the box, oxygen bag and packing-material weight separately for each order-weight range. The app adds it before choosing the courier rate.</div>
+        <Hint>Set the box, oxygen bag and packing-material weight separately for each order-weight range. The app adds it before choosing the courier rate.</Hint>
         {[['dry','Dry Goods','basePackagingByWeight','basePackagingKg'],['live','Live Fish · oxygen bag + box','liveBasePackagingByWeight','liveBasePackagingKg']].map(([kind,label,mapKey,legacyKey])=>{
           const cur=f.shippingRates||DEFAULT_SHIPPING_RATES;
           const map=cur[mapKey]||{};
@@ -15942,7 +15961,7 @@ function SettingsPanel({settings,onSave,products=[]}){
           })}
         </div>
         <div style={{fontSize:12,fontWeight:800,color:C.primary,marginTop:14,marginBottom:6}}>📦 Standard packing charge (₹ per parcel-weight bracket)</div>
-        <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>Base packing — carton box, or a courier bag for small/dry items. Added to <b>dry-goods parcels</b> and to live-fish orders packed with a <b>Standard</b> option. Charged by total parcel weight.</div>
+        <Hint>Base packing — carton box, or a courier bag for small/dry items. Added to <b>dry-goods parcels</b> and to live-fish orders packed with a <b>Standard</b> option. Charged by total parcel weight.</Hint>
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:8}}>
           {SHIP_TIERS.map(t=>{
             const cur=f.shippingRates||{...DEFAULT_SHIPPING_RATES};
@@ -15961,7 +15980,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         <div style={{height:1,background:C.border,margin:"14px 0"}}/>
         {/* Shipping-overcharge reward */}
         <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:6}}>🎁 Shipping-overcharge reward</div>
-        <div style={{fontSize:11,color:C.textSub,marginBottom:8,lineHeight:1.5}}>When you ship an order you can enter what the courier actually cost. If it's lower than what the customer paid by at least this amount, the app creates a reward code in their orders to use next time — so you're never overcharging for shipping.</div>
+        <Hint>When you ship an order you can enter what the courier actually cost. If it's lower than what the customer paid by at least this amount, the app creates a reward code in their orders to use next time — so you're never overcharging for shipping.</Hint>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
           <span style={{fontSize:11,color:C.text,fontWeight:700}}>Minimum difference to reward (₹)</span>
           <input type="number" min="0" value={f.shippingRewardMin??10} onChange={e=>set("shippingRewardMin",Number(e.target.value)||0)}
@@ -15970,7 +15989,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         <div style={{height:1,background:C.border,margin:"14px 0"}}/>
         {/* Courier partners */}
         <div style={{fontSize:12,fontWeight:800,color:C.primary,marginBottom:4}}>🚚 Courier partners &amp; tracking links</div>
-        <div style={{fontSize:11,color:C.textSub,marginBottom:10,lineHeight:1.5}}>Add the couriers you use and each one's public tracking-page link. When you mark an order Shipped you'll pick the courier and enter the consignment number — the customer gets a <b>Track</b> button. Tip: if a courier's URL accepts the number directly, put <b style={{fontFamily:"monospace"}}>{"{awb}"}</b> where the number goes (e.g. <span style={{fontFamily:"monospace"}}>https://dtdc.in/track?awb={"{awb}"}</span>) and it'll auto-fill; otherwise we copy the number for the customer to paste.</div>
+        <Hint>Add the couriers you use and each one's public tracking-page link. When you mark an order Shipped you'll pick the courier and enter the consignment number — the customer gets a <b>Track</b> button. Tip: if a courier's URL accepts the number directly, put <b style={{fontFamily:"monospace"}}>{"{awb}"}</b> where the number goes (e.g. <span style={{fontFamily:"monospace"}}>https://dtdc.in/track?awb={"{awb}"}</span>) and it'll auto-fill; otherwise we copy the number for the customer to paste.</Hint>
         {(f.couriers||[]).map((c,i)=>(
           <div key={c.id||i} style={{background:C.bg,borderRadius:12,padding:"10px 12px",border:`1px solid ${C.border}`,marginBottom:8}}>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -16046,11 +16065,11 @@ function SettingsPanel({settings,onSave,products=[]}){
           matching the invoices behind it. Products carrying the old code are
           listed under each row so they can be corrected by hand. */}
       <Collapsible icon="🧾" title="HSN Master List">
-        <div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginBottom:14}}>
+        <Hint>
           Every HSN code and GST rate you've used, kept so you never type one twice. When you list a
           product and tick "Claim GST", the code you enter is added here automatically — and suggested
           on the next product with a similar name or the same category.
-        </div>
+        </Hint>
 
         {(() => {
           const master = readHsnMaster(f);
@@ -16299,9 +16318,12 @@ function SettingsPanel({settings,onSave,products=[]}){
                 style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
             </div>
           </div>
-          <div style={{fontSize:10,color:C.textSub,marginTop:8,lineHeight:1.5}}>
-            A customer can put at most <b>{walletCoinCap(f)===Infinity?"unlimited":walletCoinCap(f)+" coins"}</b>{walletCoinCap(f)===Infinity?null:<> (≈ ₹{Math.floor(walletCoinCap(f)*(f.loyaltyRedeemValue||1))})</>} toward one order{(f.walletMinOrder??0)>0?<>, and only on orders of ₹{f.walletMinOrder} or more</>:null}. Coins never pay for shipping, and never more than the order still owes after a coupon. <b>0 = no cap.</b>
+          {/* This one is a live readout of the two boxes above, not an explanation, so it stays
+              where it can be checked against them. Only the rule behind it moves out of the way. */}
+          <div style={{fontSize:11,color:C.textSub,lineHeight:1.5,marginTop:6}}>
+            A customer can put at most <b>{walletCoinCap(f)===Infinity?"unlimited":walletCoinCap(f)+" coins"}</b>{walletCoinCap(f)===Infinity?null:<> (≈ ₹{Math.floor(walletCoinCap(f)*(f.loyaltyRedeemValue||1))})</>} toward one order{(f.walletMinOrder??0)>0?<>, and only on orders of ₹{f.walletMinOrder} or more</>:null}.
           </div>
+          <Hint>Coins never pay for shipping, and never more than the order still owes after a coupon. <b>0 = no cap.</b></Hint>
         </div>
         {/* The overall discount ceiling is edited in "How discounts combine", which is where it
             belongs — it caps coupon, referral and coins together, not just coins. A second box
@@ -16365,7 +16387,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = unlimited / day</div>
           </div>
         </div>
-        <div style={{fontSize:11,color:C.textSub,marginTop:10,lineHeight:1.5,background:C.bg,borderRadius:12,padding:"9px 11px"}}>A code reserves at checkout but counts as used <b>only after that buyer&#39;s payment succeeds</b>; an unpaid or cancelled order releases it. Each customer may use any given code once. The owner&#39;s reward coins are credited when you mark the referred order <b>Delivered</b> — so a cancelled or unpaid referral never pays out.</div>
+        <Hint>A code reserves at checkout but counts as used <b>only after that buyer&#39;s payment succeeds</b>; an unpaid or cancelled order releases it. Each customer may use any given code once. The owner&#39;s reward coins are credited when you mark the referred order <b>Delivered</b> — so a cancelled or unpaid referral never pays out.</Hint>
       </Collapsible>
 
       {/* Tank showcase */}

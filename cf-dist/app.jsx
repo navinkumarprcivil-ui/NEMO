@@ -6270,6 +6270,25 @@ function BackArrow({size=20,stroke=2.6}){
    phrase — "MAX TOTAL DISCOUNT PER ORDER (% OF SUBTOTAL)" is a sentence shouted. */
 const ADMIN_LABEL={fontSize:11,fontWeight:800,color:C.textSub,letterSpacing:.1,marginBottom:5};
 
+/* An Admin settings hint is doing two jobs at once: reminding you what a field does while you
+   are setting it, and explaining a rule you need to read exactly once. Printed in full under
+   every field, the second job crowds out the first — the panel becomes a wall of prose with the
+   controls buried inside it, and the owner reported it as most of the screen's text. Not one
+   word is cut; the paragraph moves one tap away, where it is still there the day you need it. */
+function Hint({children,label="What this does"}){
+  const [open,setOpen]=useState(false);
+  return(
+    <div style={{marginTop:5}}>
+      <button className="press" type="button" onClick={()=>setOpen(o=>!o)} aria-expanded={open}
+        style={{display:"inline-flex",alignItems:"center",gap:5,background:"none",border:"none",padding:0,cursor:"pointer",fontSize:10,fontWeight:800,color:C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        <span aria-hidden="true" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:14,height:14,borderRadius:99,border:`1.5px solid ${C.primary}`,fontSize:9,fontWeight:800,lineHeight:1,flexShrink:0}}>i</span>
+        {open?"Hide":label}
+      </button>
+      {open&&<div style={{fontSize:11,color:C.textSub,lineHeight:1.55,marginTop:6,background:C.bg,borderRadius:8,padding:"9px 11px"}}>{children}</div>}
+    </div>
+  );
+}
+
 /* ═══════════════════ PAGE HERO HEADER ═══════════════════ */
 /* The coloured banner every secondary page opens with. There were five hand-rolled copies of
    it — Care Guides, About, Contact, a policy page and Request a Product — and they had drifted
@@ -7721,7 +7740,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.5a9d7062";
+const APP_BUILD = "v90.a8c37a1c";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true

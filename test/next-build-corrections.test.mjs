@@ -107,3 +107,26 @@ test('Admin forms use one field-label style', () => {
   assert.doesNotMatch(admin, /fontSize:10\.5,fontWeight:700,color:C\.textSub,textTransform:"uppercase"/);
   assert.ok((admin.match(/style=\{ADMIN_LABEL\}/g) || []).length >= 20, 'every field label shares it');
 });
+
+/* Long settings hints moved behind an info tap. The words are kept verbatim — the panel was a
+   wall of prose with the controls buried in it, not a panel that said too much. */
+test('long Admin settings hints collapse behind an info tap', () => {
+  const start = src.indexOf('/* ═══════════════════ ADMIN SETTINGS PANEL');
+  const end = src.indexOf('/* ═══════════════════ POSTER RECOVERY');
+  const panel = src.slice(start, end);
+  assert.ok((panel.match(/<Hint>/g) || []).length >= 14, 'every long explanation is collapsed');
+  assert.match(src, /function Hint\(\{children,label="What this does"\}\)/);
+  // It must be operable and announce its state, not just look like a link.
+  const hint = src.slice(src.indexOf('function Hint('), src.indexOf('/* ═══════════════════ PAGE HERO HEADER'));
+  assert.match(hint, /aria-expanded=\{open\}/);
+  assert.match(hint, /type="button"/, 'inside a settings form, an untyped button submits it');
+
+  // Nothing short was hidden, and no live readout was hidden either: a computed line is there to
+  // be checked against the boxes above it.
+  for (const m of panel.matchAll(/<Hint>([\s\S]*?)<\/Hint>/g)) {
+    const plain = m[1].replace(/\{[^{}]*\}/g, '·').replace(/<[^>]+>/g, '');
+    assert.ok(plain.trim().length > 60, `a short hint was collapsed: ${plain.trim().slice(0, 60)}`);
+  }
+  assert.match(panel, /A customer can put at most <b>\{walletCoinCap/);
+  assert.doesNotMatch(panel, /<Hint>\s*\n\s*A customer can put at most/);
+});
