@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-for (const file of ["app.jsx","src/app.jsx"]) {
+for (const file of ["app.jsx"]) {
   const source=fs.readFileSync(new URL("../"+file,import.meta.url),"utf8");
   test(file+" exposes deterministic Android Back handling",()=>{
     assert.match(source,/window\.__nemoHandleAndroidBack=handleAndroidBack/);

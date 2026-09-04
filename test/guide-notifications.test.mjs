@@ -10,7 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-for (const file of ['app.jsx', 'src/app.jsx']) {
+for (const file of ['app.jsx']) {
   const src = readFileSync(new URL('../' + file, import.meta.url), 'utf8');
   const block = src.slice(src.indexOf('function GuideNotifBtn('), src.indexOf('function StockBadge('));
 

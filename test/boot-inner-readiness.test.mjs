@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-for (const file of ["app.jsx","src/app.jsx"]) {
+for (const file of ["app.jsx"]) {
   const source=fs.readFileSync(new URL("../"+file,import.meta.url),"utf8");
   test(file+" holds the cinematic opening for inner boot data",()=>{
     assert.match(source,/const \[communityReady,setCommunityReady\] = useState\(false\)/);
@@ -38,7 +38,7 @@ test("the splash shows determinate progress, not an indeterminate spinner",()=>{
   assert.match(index,/progCeil=Math\.min\(96/);
 });
 
-for (const file of ["app.jsx","src/app.jsx"]) {
+for (const file of ["app.jsx"]) {
   test(file+" reports boot progress from the same gates that release the splash",()=>{
     const source=fs.readFileSync(new URL("../"+file,import.meta.url),"utf8");
     assert.match(source,/function bootProgress\(pct\)/);
@@ -64,7 +64,7 @@ test("the font gate waits for the faces, not merely for the stylesheet",()=>{
   assert.match(index,/if \(!f \|\| !f\.load\) \{ window\.nemoFontsDone\(\); return; \}/);
 });
 
-for (const file of ["app.jsx","src/app.jsx"]) {
+for (const file of ["app.jsx"]) {
   test(file+" bounds the font wait so typography cannot hold the store",()=>{
     const source=fs.readFileSync(new URL("../"+file,import.meta.url),"utf8");
     assert.match(source,/const cap=setTimeout\(done,1200\);/);

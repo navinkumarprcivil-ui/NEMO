@@ -5114,11 +5114,19 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
   const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID","State","Counts for GST","Supply Type","HSN Breakup","Taxable (Rs.)","No-GST Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","GST Total (Rs.)","Delivered On","DOA Qty","DOA Claim (customer)","DOA Approval Reason","DOA Refund (Rs.)","Return Reason (customer)","Return Approval Reason","Return Resolution","Return/Refund (Rs.)","Placed At (ISO)","Paid At (ISO)","Delivered On (ISO)",
-    // Appended, never inserted — see isoStamp above. The return journey had no columns at all:
-    // the parcel the customer sent back, and the replacement the store sent out, were only ever
-    // visible by opening the order. Referral coins are a real wallet liability and belong here
-    // beside the discount that created them.
-    "Return Courier (customer)","Return Consignment (customer)","Replacement Courier","Replacement Consignment","Referral Coins Paid to Owner"];
+    /* Appended, never inserted — see isoStamp above.
+
+       The return journey had no columns at all: the parcel the customer sent back, and the
+       replacement the store sent out, were only ever visible by opening the order. Nor did
+       money going OUT — the refund record, its status and its reference — which is half of
+       what a set of books is for. Nor which gateway took the payment, which is what a month's
+       rows have to be reconciled against now that two of them are live. Referral coins are a
+       real wallet liability and belong beside the discount that created them. */
+    "Return Courier (customer)","Return Consignment (customer)","Replacement Courier","Replacement Consignment","Referral Coins Paid to Owner",
+    "Gateway","Payment Method","Gateway Payment ID","Test Payment",
+    "Refund Due (Rs.)","Refund Status","Refund Reference","Refunded via Gateway (Rs.)",
+    "Return Status","Replacement Sent At (ISO)","Referral Code Owner (Customer ID)",
+    "Cancel Reason","Cancelled By"];
   const pph=Number(settings?.loyaltyPointsPerHundred||10);
   const rupeePerPoint=Number(settings?.loyaltyRedeemValue||1);
   const rows=list.map(o=>{
@@ -5139,7 +5147,11 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||"",g.state,isSupply?"Yes":"No",isSupply?(g.inter?"IGST (inter-state)":"CGST+SGST (intra-state)"):"",hsnTxt,isSupply?g.taxable:"",isSupply?(g.exempt||0):"",isSupply?g.cgst:"",isSupply?g.sgst:"",isSupply?g.igst:"",isSupply?g.total:"",delOn?fmtDate(delOn):"",o.doa?.qty||"",o.doa?.claimReason||"",o.doa?.adminReason||"",o.doa?.refundAmount||"",o.returnReq?.reason||"",o.returnReq?.adminReason||"",o.returnReq?.adminResolution||o.returnReq?.resolution||"",o.returnReq?.refundAmount||"",isoStamp(o.placedAt),isoStamp(o.paidAt),isoStamp(delOn),
       o.returnReq?.courier||"",o.returnReq?.consignment||"",
       o.returnReq?.replacementCourier||"",o.returnReq?.replacementConsignment||"",
-      Number(o.referralCoinsPaid)||0].map(esc).join(",");
+      Number(o.referralCoinsPaid)||0,
+      o.gateway?gatewayLabel(o.gateway):"",o.gatewayPaymentGroup||"",o.gatewayPaymentId||"",o.testPayment?"Yes":"",
+      (o.refund&&o.refund.due)?(Number(o.refund.amount)||0):"",o.refund?.status||"",o.refund?.refundTxnId||"",Number(o.refundedAmount)||0,
+      o.returnReq?.status||"",isoStamp(o.returnReq?.replacementSentAt),o.referralOwnerUid||"",
+      o.cancelReason||"",o.cancelledBy||""].map(esc).join(",");
   });
   const csv="\uFEFF"+[head.map(esc).join(","),...rows].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -7645,7 +7657,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.b87b7693";
+const APP_BUILD = "v90.2ce61658";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true

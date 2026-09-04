@@ -8,9 +8,9 @@
  * setting is genuinely the single control, so this suite guards the ways it could quietly stop
  * being one:
  *
- *   1. A second copy of the answer. The switch used to be a constant declared in app.jsx, its
- *      src/ mirror and lib/catalog.mjs, kept in step by this file. Any constant like that
- *      coming back means the storefront and Google can show different shops again.
+ *   1. A second copy of the answer. The switch used to be a constant declared in app.jsx and
+ *      in lib/catalog.mjs, kept in step by this file. Any constant like that coming back means
+ *      the storefront and Google can show different shops again.
  *   2. Reading it too late. The client seeds it from the cached settings blob at module load
  *      and updates it in the settings SETTER, before the render that follows — not in an
  *      effect afterwards, which would leave the storefront a render behind. The server
@@ -30,14 +30,13 @@ import { readFileSync } from 'node:fs';
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
 const appJsx = read('app.jsx');
-const srcJsx = read('src/app.jsx');
 const catalog = read('lib/catalog.mjs');
 const share = read('api/share.js');
 const appJs = read('app.js');
 const indexHtml = read('index.html');
 
 test('the switch is a setting, not a constant compiled into the build', () => {
-  for (const [label, src] of [['app.jsx', appJsx], ['src/app.jsx', srcJsx], ['lib/catalog.mjs', catalog]]) {
+  for (const [label, src] of [['app.jsx', appJsx], ['lib/catalog.mjs', catalog]]) {
     assert.ok(!/(?:export\s+)?const LIVE_FISH_ENABLED\s*=/.test(src),
       `${label} pins LIVE_FISH_ENABLED to a constant — the owner can no longer change it from Admin`);
   }
@@ -86,7 +85,7 @@ test('an unreachable database fails closed, never open', () => {
 });
 
 test('values derived from the switch are computed per call, not once at load', () => {
-  for (const [label, src] of [['app.jsx', appJsx], ['src/app.jsx', srcJsx]]) {
+  for (const [label, src] of [['app.jsx', appJsx]]) {
     assert.match(src, /const shopCategories = \(\) => LIVE_FISH_ENABLED \? CATEGORIES : CATEGORIES\.filter/,
       `${label}: the category list must be a function`);
     assert.match(src, /const hiddenPolicyRoutes = \(\) => LIVE_FISH_ENABLED \? \[\]/,

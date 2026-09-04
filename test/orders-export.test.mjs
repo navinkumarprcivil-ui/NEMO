@@ -6,13 +6,15 @@ import test from 'node:test';
 import assert from 'node:assert';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(root, 'app.jsx'), 'utf8');
+const src = stripComments(readFileSync(join(root, 'app.jsx'), 'utf8'));
 
-/** Strip `//` comments, which sit between columns and would otherwise be read as one. */
-function stripLineComments(body) {
+/* Strip comments before scanning. Both matter: a `//` comment sits between columns and would
+   be read as one of them, and a `/* *\/` comment can contain an apostrophe, which a scanner
+   tracking string quotes would take as the start of a string and never close. */
+function stripComments(source) {
   let out = '', quote = '', escaped = false;
-  for (let i = 0; i < body.length; i += 1) {
-    const c = body[i];
+  for (let i = 0; i < source.length; i += 1) {
+    const c = source[i];
     if (escaped) { escaped = false; out += c; continue; }
     if (quote) {
       if (c === '\\') escaped = true;
@@ -20,15 +22,15 @@ function stripLineComments(body) {
       out += c; continue;
     }
     if (c === '"' || c === "'" || c === '`') { quote = c; out += c; continue; }
-    if (c === '/' && body[i + 1] === '/') { while (i < body.length && body[i] !== '\n') i += 1; out += '\n'; continue; }
+    if (c === '/' && source[i + 1] === '/') { while (i < source.length && source[i] !== '\n') i += 1; out += '\n'; continue; }
+    if (c === '/' && source[i + 1] === '*') { i += 2; while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) i += 1; i += 1; out += ' '; continue; }
     out += c;
   }
   return out;
 }
 
 /** Split an array literal's source on its TOP-LEVEL commas, ignoring strings and nesting. */
-function topLevelItems(rawBody) {
-  const body = stripLineComments(rawBody);
+function topLevelItems(body) {
   const items = [];
   let depth = 0, quote = '', escaped = false, start = 0;
   for (let i = 0; i < body.length; i += 1) {
@@ -89,10 +91,16 @@ test('the timestamp columns stay at the end of the header, in order', () => {
   assert.deepEqual(head.slice(at, at + 3), iso, 'the ISO columns were reordered');
 });
 
-test('the return journey and the referral payout are exported', () => {
+/* Money out, and which gateway took the money in, are as much a part of the books as the sale.
+   These went in together with the return journey and the referral payout. */
+test('the return journey, the refunds and the gateway are all exported', () => {
   const head = topLevelItems(arrayBody(src, src.indexOf('[', headStart))).map(s => s.replace(/^"|"$/g, ''));
   for (const col of ['Return Courier (customer)', 'Return Consignment (customer)',
-    'Replacement Courier', 'Replacement Consignment', 'Referral Coins Paid to Owner']) {
+    'Replacement Courier', 'Replacement Consignment', 'Referral Coins Paid to Owner',
+    'Gateway', 'Payment Method', 'Gateway Payment ID', 'Test Payment',
+    'Refund Due (Rs.)', 'Refund Status', 'Refund Reference', 'Refunded via Gateway (Rs.)',
+    'Return Status', 'Replacement Sent At (ISO)', 'Referral Code Owner (Customer ID)',
+    'Cancel Reason', 'Cancelled By']) {
     assert.ok(head.includes(col), `the export has no "${col}" column`);
   }
 });

@@ -89,8 +89,11 @@ claim flow, the `/p/` product pages, the shop index, the sitemap, share cards, a
 
 # The change list, file by file
 
-## 1. `app.jsx` (and `src/app.jsx`, its mirror — kept byte-identical apart from one pre-existing
-`?v=product-photo-2` / `-3` drift that predates this work and was left as found)
+## 1. `app.jsx`
+
+(There was a second copy at `src/app.jsx` while this work was done. Nothing built it — only
+tests read it — so every edit had to be made twice or the suite failed, and the two had already
+drifted apart by one cache-busting string. It has been deleted; `app.jsx` is the only source.)
 
 | # | Where | Change | Reverse |
 |---|-------|--------|---------|
