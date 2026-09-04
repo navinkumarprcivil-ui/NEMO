@@ -39,8 +39,8 @@ for (const file of ['app.jsx']) {
   test(file + ': an absent API is not reported as a block', () => {
     assert.match(block, /perm==="unsupported"/);
     assert.match(block, /can't show notifications/);
-    // A real denial still explains where to undo it, rather than just stating the fact.
-    assert.match(block, /browser or phone settings/);
+    // A real denial still points at where to undo it, rather than just stating the fact.
+    assert.match(block, /Turn on notifications in settings/);
   });
 
   test(file + ': the switch is never disabled', () => {
@@ -65,7 +65,18 @@ for (const file of ['app.jsx']) {
     // "This browser" is wrong wording inside the installed app, where there is no browser UI
     // for the customer to go and change.
     assert.match(block, /window\.nemoInApp/);
-    assert.match(block, /open the store in your browser/);
+    assert.match(block, /The app can't show notifications yet/);
+  });
+
+  test(file + ': the notes stay to one line and are legible on the header', () => {
+    // The switch sits in the Care Guides header, a blue gradient. A four-line grey paragraph
+    // there reads as an error, and C.textSub is picked for the off-white page, not for blue.
+    const notes = block.match(/"Saved\.[^"]*"/g) || [];
+    assert.ok(notes.length >= 4, 'every permission outcome still gets its own sentence');
+    for (const n of notes) {
+      assert.ok(n.length <= 52, `note is too long for the header corner: ${n}`);
+    }
+    assert.doesNotMatch(block, /role="status"[\s\S]{0,120}color:C\.textSub/);
   });
 
   test(file + ': permission changed outside the page is picked up', () => {

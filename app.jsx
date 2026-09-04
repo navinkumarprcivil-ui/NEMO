@@ -227,6 +227,28 @@ function customerOrderStage(o,now=Date.now()){
   if(o&&o.status==="Shipped") return "Shipped";
   return "Orders Placed";
 }
+/* What actually BECAME of an order, in the customer's words.
+
+   "Past Orders" is the name of a shelf. It says where the order has been filed, not what
+   happened to it -- and what happened to it is the single thing a customer opens an old order
+   to find out. A cancellation, a return that was refunded, a replacement that was sent and a
+   delivery that simply ran its course were all badged with the same grey folder.
+
+   Cancelled outranks everything: nothing was delivered. A resolved return or an approved DOA
+   claim outranks the delivery that came before it, because it is the later and more
+   surprising fact. Everything else that got as far as the customer is Delivered. */
+function customerOrderOutcome(o){
+  if(!o) return "";
+  if(o.status==="Cancelled") return "Cancelled";
+  const rr=o.returnReq;
+  if(rr&&String(rr.status||"")==="Resolved"){
+    return (rr.adminResolution||rr.resolution)==="replacement" ? "Replaced" : "Returned";
+  }
+  const doa=String((o.doa&&o.doa.status)||"");
+  if(doa.indexOf("Approved")===0) return doa==="Approved - Replacement" ? "Replaced" : "Refunded";
+  if(o.status==="Delivered") return "Delivered";
+  return "";
+}
 function adminOrderNeedsAttention(o){
   if(!o) return false;
   const ret=String((o.returnReq&&o.returnReq.status)||"");
@@ -5452,8 +5474,24 @@ input:focus,textarea:focus,select:focus{border-color:#0ea5e9 !important;box-shad
 .kpi-rise{animation:kpiRise .45s cubic-bezier(.22,1,.36,1) both;}
 @keyframes heartPop{0%{transform:scale(1)}40%{transform:scale(1.45)}70%{transform:scale(.88)}100%{transform:scale(1)}}
 .heart-pop{animation:heartPop .35s ease both;display:inline-block;}
-@keyframes pageIn{from{opacity:0;transform:translateY(12px) scale(.992)}to{opacity:1;transform:none}}
-.page-swap{animation:pageIn .36s cubic-bezier(.22,1,.36,1) both;}
+/* The page-swap entrance. The scale is gone from it: scaling a whole page of text forces the
+   engine to re-rasterise every glyph on the way through, which a desktop absorbs and the
+   Android WebView does not -- it drops frames, and a dropped frame in a 360ms entrance is
+   exactly what "the shift between pages feels stuck" describes. A translate is a composited
+   move of the layer that already exists. It ends at transform:none rather than
+   translate3d(0,0,0) on purpose: fill-mode both leaves the last frame applied for good, and a
+   lingering transform would make this element a containing block for every position:fixed
+   descendant inside the page. (No backticks in here: this whole stylesheet is a JS template
+   literal, so one ends the string and the build stops on the CSS that follows.) */
+@keyframes pageIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes pageFade{from{opacity:0}to{opacity:1}}
+.page-swap{animation:pageIn .3s cubic-bezier(.22,1,.36,1) both;}
+/* Nearly every page's root element carries .slide-up, so one navigation used to run TWO
+   full-page transform+opacity animations at once -- this wrapper and the page inside it --
+   over a tree React had just finished mounting. The inner one animates the same pixels the
+   outer one is already animating, so it is pure cost. Cards and sections deeper in the page
+   are not direct children and keep theirs. */
+.page-swap>.slide-up{animation:none;}
 @keyframes showcaseSlide{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
 .showcase-slide{animation:showcaseSlide .3s ease both;}
 /* Gentle fade + rise — for promo banners and content that appears after data loads */
@@ -5473,6 +5511,11 @@ img.smooth-img[data-loaded="1"]{opacity:1;}
   .lift:hover img{transform:none;}
   .aurora-layer,.float-soft,.countdown-cell,.festival-pulse,.glow-btn::after,
   .betta-fish,.betta-tail,.betta-fin-top,.betta-fin-bot,.bub-1,.bub-2,.bub-3{animation:none!important;}
+  /* On a phone the page swap is a plain fade. There is no transform, so no layer for the
+     compositor to build and tear down around a tree that was mounted microseconds ago, and
+     it is over in 220ms instead of 300 -- short enough that a stray dropped frame stops
+     being something you can feel. */
+  .page-swap{animation:pageFade .22s ease both;}
 }
 /* Respect users who prefer less motion — disable decorative loops & transitions */
 @media(prefers-reduced-motion: reduce){
@@ -6367,12 +6410,16 @@ function GuideNotifBtn(){
     return()=>{ document.removeEventListener("visibilitychange",sync); if(status) status.onchange=null; };
   },[]);
 
-  const BLOCKED="Saved. Notifications are switched off for Nemo in your browser or phone settings — turn them on there and these will start arriving.";
+  /* One line each. These sit in the corner of a header, not in a paragraph of body text, and
+     a sentence that wraps to four lines there reads as an error rather than a receipt. The
+     preference is already saved by the time any of them appears — all they have to say is
+     what is standing between it and an actual notification. */
+  const BLOCKED="Saved. Turn on notifications in settings.";
   const UNSUPPORTED=(typeof window!=="undefined"&&window.nemoInApp)
-    ? "Saved. The app can't show notifications yet — you'll get these when you open the store in your browser."
-    : "Saved. This browser can't show notifications, so these won't appear here.";
+    ? "Saved. The app can't show notifications yet."
+    : "Saved. This browser can't show notifications.";
   const noteFor=(p)=> p==="granted"?"" : p==="denied"?BLOCKED : p==="unsupported"?UNSUPPORTED
-    : "Saved. Allow notifications when your browser asks and these will start arriving.";
+    : "Saved. Allow it when your browser asks.";
   const toggle=()=>{
     // Turning OFF is only ever a local preference, so it must work in every state.
     if(on){ apply(false); setNote(""); return; }
@@ -6401,7 +6448,10 @@ function GuideNotifBtn(){
           <span style={{position:"absolute",top:2,left:active?13:2,width:11,height:11,borderRadius:"50%",background:"#fff",transition:"left .2s ease"}}/>
         </span>
       </button>
-      {note&&<div role="status" style={{fontSize:10,color:C.textSub,fontWeight:600,lineHeight:1.45,maxWidth:210,textAlign:"right"}}>{note}</div>}
+      {/* This switch lives in the Care Guides header, which is a blue gradient. C.textSub is a
+          grey chosen to sit on the off-white page background and is close to unreadable there,
+          so the note carries its own contrast instead of borrowing the page's. */}
+      {note&&<div role="status" style={{fontSize:10,color:"#ffffff",fontWeight:700,lineHeight:1.45,maxWidth:200,textAlign:"right",background:"rgba(2,32,71,.34)",borderRadius:8,padding:"5px 8px"}}>{note}</div>}
     </div>
   );
 }
@@ -6424,19 +6474,33 @@ function StatusBadge({status}){
    badge shows the payment state instead. Only the badge changes: the order still groups under
    Orders Placed in the tabs, which is where a customer goes looking for it. The override is
    scoped to that one stage so a cancelled or archived order can never be relabelled as pending. */
+/* The stage names are tab headings and are plural on purpose -- "Orders Placed" is a drawer
+   with orders in it. On one order the badge has to name that order, so it is looked up here
+   rather than printed straight from the stage. */
+const ORDER_BADGE={
+  "Order Placed":{c:"#1d4ed8",bg:"#dbeafe",icon:"📦"},
+  Shipped:{c:"#c2410c",bg:"#fff7ed",icon:"🚚"},
+  Delivered:{c:"#15803d",bg:"#dcfce7",icon:"✓"},
+  Returned:{c:"#7c3aed",bg:"#ede9fe",icon:"↩️"},
+  Replaced:{c:"#0369a1",bg:"#e0f2fe",icon:"🔁"},
+  Refunded:{c:"#0369a1",bg:"#e0f2fe",icon:"₹"},
+  Cancelled:{c:"#b91c1c",bg:"#fee2e2",icon:"✕"},
+  Closed:{c:"#475569",bg:"#f1f5f9",icon:"🗂️"},
+};
+const STAGE_BADGE_LABEL={"Orders Placed":"Order Placed","Past Orders":"Closed"};
 function CustomerStageBadge({order}){
   const stage=customerOrderStage(order);
   const unpaid=stage==="Orders Placed"?{
     "Awaiting Payment":{c:"#b45309",bg:"#fef3c7",icon:"⏳"},
     "Payment Review":{c:"#7c3aed",bg:"#ede9fe",icon:"🔎"},
   }[order&&order.status]:null;
-  const label=unpaid?order.status:stage;
-  const m=unpaid||{
-    "Orders Placed":{c:"#1d4ed8",bg:"#dbeafe",icon:"📦"},
-    Shipped:{c:"#c2410c",bg:"#fff7ed",icon:"🚚"},
-    Delivered:{c:"#15803d",bg:"#dcfce7",icon:"✓"},
-    "Past Orders":{c:"#475569",bg:"#f1f5f9",icon:"🗂️"},
-  }[stage];
+  /* Once an order has reached the customer, the outcome is more use than the stage: a
+     cancelled, returned or replaced order was badged "Past Orders" alongside one that was
+     simply delivered and left alone. "Closed" is only the fallback for an order that was
+     filed away without ever reaching any of those endings. */
+  const outcome=(stage==="Past Orders"||stage==="Delivered")?customerOrderOutcome(order):"";
+  const label=unpaid?order.status:(outcome||STAGE_BADGE_LABEL[stage]||stage);
+  const m=unpaid||ORDER_BADGE[label]||ORDER_BADGE.Closed;
   return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:m.bg,color:m.c,borderRadius:20,padding:"4px 10px",fontSize:10,fontWeight:800,whiteSpace:"nowrap"}}>{m.icon} {label}</span>;
 }
 function CategoryPills({selected,onSelect,all,counts}){
@@ -12080,8 +12144,11 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100%",background:C.bg,padding:"24px",position:"relative"}}>
       <button className="press" onClick={onBack} style={{display:"flex",alignItems:"center",justifyContent:"center",position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44}}><BackArrow/></button>
       <div style={{fontSize:52,marginBottom:14}}>🔐</div>
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:7}}>Admin</div>
-      <div style={{fontSize:12,color:C.textSub,textAlign:"center",lineHeight:1.6,maxWidth:380,marginBottom:18}}>Enter the Admin password every time you open Admin. Google sign-in is needed only for shared Firebase data and changes; only the main admin or the added co-admin UID can sync changes.</div>
+      {/* No standing instructions here. The screen is one password box: that it is asked for
+          every time is learned by being asked, and who may sync what is a rule the buttons
+          below enforce and report on when it bites. A paragraph of it above the field was
+          read once and then sat in the way of the only thing on the page. */}
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:18}}>Admin</div>
       <div style={{width:"min(100%,360px)"}}>
         {/* PasswordField lives in the main bundle (see app.jsx) and carries the show/hide eye,
             so a mistyped password on a phone keyboard can be checked rather than retyped. */}
@@ -17826,7 +17893,12 @@ function NemoStore(){
   const handleSecretTap=()=>{
     clearTimeout(tapTimer.current);
     tapCount.current+=1;
-    if(tapCount.current>=SECRET_TAPS){
+    /* Browser only. The gesture exists so the owner can reach Admin from a shop-front that
+       shows no door — but the installed app is the copy on a phone in a pocket, handed
+       around, and the one place the owner never needs the door because they can open the
+       store in a browser instead. Counting taps but never opening keeps the logo behaving
+       exactly as it does for a shopper: taps go Home, and nothing hints there is more. */
+    if(tapCount.current>=SECRET_TAPS && !(typeof window!=="undefined" && window.nemoInApp)){
       tapCount.current=0;
       nav("admin-login");
     } else {

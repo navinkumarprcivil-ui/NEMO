@@ -47,10 +47,13 @@ function AdminLogin({onSuccess,onBack,onAdminSignIn,settings={}}){
 
   return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100%",background:C.bg,padding:"24px",position:"relative"}}>
-      <button className="press" onClick={onBack} style={{position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44}}>←</button>
-      <div style={{fontSize:56,marginBottom:14}}>🔐</div>
-      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:7}}>Admin</div>
-      <div style={{fontSize:12.5,color:C.textSub,textAlign:"center",lineHeight:1.6,maxWidth:380,marginBottom:18}}>Enter the Admin password every time you open Admin. Google sign-in is needed only for shared Firebase data and changes; only the main admin or the added co-admin UID can sync changes.</div>
+      <button className="press" onClick={onBack} style={{display:"flex",alignItems:"center",justifyContent:"center",position:"absolute",top:20,left:16,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44}}><BackArrow/></button>
+      <div style={{fontSize:52,marginBottom:14}}>🔐</div>
+      {/* No standing instructions here. The screen is one password box: that it is asked for
+          every time is learned by being asked, and who may sync what is a rule the buttons
+          below enforce and report on when it bites. A paragraph of it above the field was
+          read once and then sat in the way of the only thing on the page. */}
+      <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:18}}>Admin</div>
       <div style={{width:"min(100%,360px)"}}>
         {/* PasswordField lives in the main bundle (see app.jsx) and carries the show/hide eye,
             so a mistyped password on a phone keyboard can be checked rather than retyped. */}
