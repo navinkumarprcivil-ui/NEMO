@@ -5,6 +5,12 @@
  * a dismissed prompt, a browser with no Notification API, and an actual denial. In all three
  * the switch was replaced by static text, so the customer could not even turn the preference
  * back OFF. These assertions pin the distinction and the escape route.
+ *
+ * The switch then stayed dead in one of those states for a different reason: with no
+ * Notification API at all — which is every Android WebView, so the whole installed app — it
+ * rendered `disabled`, and tapping it did nothing in either direction and said nothing. The
+ * preference is the customer's and is now storable in every state; the permission only decides
+ * whether a note appears underneath.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,9 +38,34 @@ for (const file of ['app.jsx']) {
 
   test(file + ': an absent API is not reported as a block', () => {
     assert.match(block, /perm==="unsupported"/);
-    assert.match(block, /This browser can't show notifications\./);
+    assert.match(block, /can't show notifications/);
     // A real denial still explains where to undo it, rather than just stating the fact.
     assert.match(block, /browser or phone settings/);
+  });
+
+  test(file + ': the switch is never disabled', () => {
+    // `disabled` on a WebView (no Notification API) is what made this control dead in the app.
+    assert.doesNotMatch(block, /disabled=\{/);
+    assert.doesNotMatch(block, /cursor:off\?"not-allowed"/);
+    // What the switch shows is the customer's preference, not the browser permission.
+    assert.match(block, /const active = on;/);
+  });
+
+  test(file + ': turning it on records the preference before asking the browser', () => {
+    const turnOn = block.slice(block.indexOf('const toggle=()=>{'), block.indexOf('\n  return('));
+    const applyAt = turnOn.indexOf('apply(true);');
+    const askAt = turnOn.indexOf('requestNotifPerm(');
+    assert.ok(applyAt > -1 && askAt > -1, 'both the store and the request must be present');
+    assert.ok(applyAt < askAt, 'the preference is stored first, so a refused prompt cannot discard it');
+    // Every outcome the browser can return gets its own sentence.
+    assert.match(block, /const noteFor=\(p\)=>/);
+  });
+
+  test(file + ': the app names itself when it cannot deliver', () => {
+    // "This browser" is wrong wording inside the installed app, where there is no browser UI
+    // for the customer to go and change.
+    assert.match(block, /window\.nemoInApp/);
+    assert.match(block, /open the store in your browser/);
   });
 
   test(file + ': permission changed outside the page is picked up', () => {

@@ -6245,6 +6245,24 @@ function TestimonialsSection({testimonials=[],user,onSubmit,onSignIn}){
   );
 }
 
+/* ═══════════════════ BACK ARROW ═══════════════════ */
+/* One back arrow for the whole app. It used to be the text character "←", which renders in
+   whatever the system font gives it — a hairline next to headings set at weight 800, and a
+   different thickness on every platform. Worse, being text it scaled with each button's own
+   fontSize, so the same control was a different size on the header, the sheet and the policy
+   pages. A stroked path is the same weight and the same size wherever it is placed, and
+   inherits `color` so every existing button keeps its own colour. */
+function BackArrow({size=20,stroke=2.6}){
+  return(
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"
+      style={{display:"block",flexShrink:0}}>
+      <path d="M19 12H5"/>
+      <path d="M12 19l-7-7 7-7"/>
+    </svg>
+  );
+}
+
 /* ═══════════════════ RESTOCK ALERT BUTTON ═══════════════════ */
 function RestockBtn({product,user,restockSet,onSubscribe}){
   const already=restockSet.includes(product.id);
@@ -6262,8 +6280,10 @@ function RestockBtn({product,user,restockSet,onSubscribe}){
    back. So keying the UI off Notification.permission alone meant that the moment a customer
    said yes, the control became the static words "Notifications on" with no way to change
    their mind — permanently, since clearing it requires digging through browser site settings.
-   The switch the customer actually operates is kept here instead, with the browser permission
-   as a prerequisite for turning it ON. Granted-but-off is then a normal, reversible state. */
+   The switch the customer actually operates is kept here instead. It is a preference, storable
+   in every state — granted-but-off, denied, and on a surface with no Notification API at all —
+   and the permission only decides whether a note appears explaining that nothing can be
+   delivered yet. Nothing about the browser's answer can leave the control stuck. */
 const GUIDE_NOTIF_KEY="nemo-guide-notif";
 function guideNotifOn(){ try{ return localStorage.getItem(GUIDE_NOTIF_KEY)==="1"; }catch(e){ return false; } }
 function setGuideNotifPref(on){ try{ localStorage.setItem(GUIDE_NOTIF_KEY,on?"1":"0"); }catch(e){} }
@@ -6271,7 +6291,13 @@ function GuideNotifBtn(){
   const [perm,setPerm]=useState(notifPermNow);
   const [on,setOn]=useState(guideNotifOn);
   const [note,setNote]=useState("");
-  const active = on && perm==="granted";
+  /* The switch shows the customer's own preference, not the browser permission. Those are two
+     different facts, and tying the visible state to the permission is what made this control
+     dead in the Android app: a WebView has no Notification API at all, so the permission reads
+     "unsupported", the button was rendered disabled, and tapping it did nothing in EITHER
+     direction with no explanation. The preference is ours and always settable; whether it can
+     be delivered right now is a separate line of text underneath. */
+  const active = on;
   const apply=(v)=>{ setOn(v); setGuideNotifPref(v); };
 
   /* Permission can change outside the page — in browser site settings, or in Android's app
@@ -6291,30 +6317,30 @@ function GuideNotifBtn(){
     return()=>{ document.removeEventListener("visibilitychange",sync); if(status) status.onchange=null; };
   },[]);
 
-  const BLOCKED="Notifications are switched off for Nemo in your browser or phone settings. Turn them on there, then tap again.";
+  const BLOCKED="Saved. Notifications are switched off for Nemo in your browser or phone settings — turn them on there and these will start arriving.";
+  const UNSUPPORTED=(typeof window!=="undefined"&&window.nemoInApp)
+    ? "Saved. The app can't show notifications yet — you'll get these when you open the store in your browser."
+    : "Saved. This browser can't show notifications, so these won't appear here.";
+  const noteFor=(p)=> p==="granted"?"" : p==="denied"?BLOCKED : p==="unsupported"?UNSUPPORTED
+    : "Saved. Allow notifications when your browser asks and these will start arriving.";
   const toggle=()=>{
-    // Turning OFF is only ever a local preference, so it must work in every state. It used to
-    // be impossible the moment permission was denied, because the switch was replaced by text.
+    // Turning OFF is only ever a local preference, so it must work in every state.
     if(on){ apply(false); setNote(""); return; }
-    if(perm==="granted"){ apply(true); setNote(""); return; }
-    if(perm==="unsupported"){ setNote("This browser can't show notifications."); return; }
-    if(perm==="denied"){ setNote(BLOCKED); return; }
-    requestNotifPerm(res=>{
-      setPerm(res);
-      if(res==="granted"){ apply(true); setNote(""); }
-      else if(res==="denied") setNote(BLOCKED);
-      else if(res==="unsupported") setNote("This browser can't show notifications.");
-      // Dismissed rather than answered: nothing is blocked and it can simply be asked again.
-      else setNote("Not allowed yet — tap to ask again.");
-    });
+    /* Turning ON records the preference FIRST and unconditionally. Asking the browser is a
+       best effort on top of it: where the API is missing or already denied there is nothing to
+       ask, and refusing to store the preference just left the customer tapping a switch that
+       never moved. The note says what will actually happen. */
+    apply(true);
+    if(perm==="granted"){ setNote(""); return; }
+    if(perm==="denied"||perm==="unsupported"){ setNote(noteFor(perm)); return; }
+    setNote("");
+    requestNotifPerm(res=>{ setPerm(res); setNote(noteFor(res)); });
   };
-
-  const off = perm==="unsupported";
   return(
     <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
-      <button className="press" onClick={toggle} role="switch" aria-checked={active} disabled={off}
+      <button className="press" onClick={toggle} role="switch" aria-checked={active}
         aria-label={active?"Turn off new-guide notifications":"Turn on new-guide notifications"}
-        style={{display:"flex",alignItems:"center",gap:8,background:active?"#dcfce7":C.accentLight,border:`1px solid ${active?"#86efac":C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:active?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:off?"not-allowed":"pointer",opacity:off?.55:1}}>
+        style={{display:"flex",alignItems:"center",gap:8,background:active?"#dcfce7":C.accentLight,border:`1px solid ${active?"#86efac":C.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,fontWeight:700,color:active?"#15803d":C.primary,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
         <span>{active?"🔔":"🔕"}</span>
         {/* One word. The switch beside it is what says on or off — spelling that out again in
             the label made a control the size of a sentence, and the aria-label still carries
@@ -6718,7 +6744,7 @@ function PhoneAuth({onSuccess, onBack, mode="signin", settings}){
 
   return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",minHeight:"100%",background:C.bg,padding:"56px 22px 32px",position:"relative"}}>
-      <button className="press" onClick={onBack} style={{position:"absolute",top:20,left:14,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center"}}>←</button>
+      <button className="press" onClick={onBack} style={{position:"absolute",top:20,left:14,background:"none",border:"none",fontSize:24,color:C.textSub,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center"}}><BackArrow/></button>
 
       <div style={{textAlign:"center",marginBottom:30,marginTop:20}}>
         <img src={STORE_LOGO} alt="Nemo" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:130,height:130,objectFit:"contain",margin:"0 auto",display:"block",filter:"drop-shadow(0 10px 24px rgba(8,54,64,.35))"}}/>
@@ -7660,7 +7686,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.e307bf1b";
+const APP_BUILD = "v90.86b3b110";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -8509,7 +8535,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
     <div className="slide-up">
       <div className="vh-head" style={{background:"linear-gradient(180deg,#f1f9fe 0%,#ffffff 100%)",padding:"52px 16px 18px",borderRadius:"0 0 28px 28px"}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <button className="press" onClick={goBack} style={{background:"none",border:"none",fontSize:20,color:C.textSub,cursor:"pointer"}}>←</button>
+          <button className="press" onClick={goBack} style={{display:"flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:20,color:C.textSub,cursor:"pointer"}}><BackArrow/></button>
           <div>
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text}}>🧪 Aqua Tools</div>
             <div style={{fontSize:12,color:C.textSub}}>Plan it. Cycle it. Keep it healthy.</div>
@@ -9839,7 +9865,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             of it. Working down a long shop list and losing the place on every product opened
             is what made browsing feel like starting over each time. */}
         <button className="press" onClick={goBack}
-          style={{position:"absolute",top:50,left:16,background:"rgba(255,255,255,.2)",border:"1.5px solid rgba(255,255,255,.35)",borderRadius:12,width:40,height:40,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)"}}>←</button>
+          style={{position:"absolute",top:50,left:16,background:"rgba(255,255,255,.2)",border:"1.5px solid rgba(255,255,255,.35)",borderRadius:12,width:40,height:40,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)"}}><BackArrow/></button>
         {slides.length>1&&galArrow(-1,"left","Previous photo","‹")}
         {slides.length>1&&galArrow(1,"right","Next photo","›")}
         {slides.length>1&&(
@@ -10627,7 +10653,7 @@ function ExitIntentModal({savings=0, onStay, onLeave}){
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",resize:"none",marginBottom:14,background:"#fff"}}/>
           )}
           <button className="press" onClick={()=>onLeave&&onLeave({reasons,other})} style={{width:"100%",background:C.primary,color:"#fff",border:"none",borderRadius:14,padding:"15px",fontSize:14.5,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>Skip and exit</button>
-          <button className="press" onClick={onStay} style={{width:"100%",background:"none",color:C.textSub,border:"none",padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:4,cursor:"pointer"}}>← Continue checkout instead</button>
+          <button className="press" onClick={onStay} style={{width:"100%",background:"none",color:C.textSub,border:"none",padding:"12px",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:4,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}><BackArrow size={16}/> Continue checkout instead</button>
         </>)}
       </div>
     </div>
@@ -11153,7 +11179,7 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
       <div className="vh-head" style={{background:C.card,padding:"52px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
           <button className="press" onClick={()=>{ if(step!==1){ setStep(1); } else if(cart.length){ setExitAsk(true); } else { goBack(); } }}
-            style={{background:"none",border:"none",fontSize:20,color:C.textSub}}>←</button>
+            style={{display:"flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:20,color:C.textSub}}><BackArrow/></button>
           <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,color:C.text}}>
             {step===1?"Address":"Review Order"}
           </div>
@@ -11858,7 +11884,7 @@ function DesktopNav({page,nav,cartCount,user,settings={},onSecretTap,walletPts=0
     <div className="desk-nav" style={{flexShrink:0,alignSelf:"center",alignItems:"center",gap:6,background:"rgba(255,255,255,0.8)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",border:"1px solid rgba(15,23,42,0.06)",borderRadius:99,padding:"8px 14px",margin:"14px auto 6px",position:"sticky",top:14,zIndex:60,boxShadow:"0 10px 34px rgba(15,23,42,.09)",maxWidth:"calc(100% - 28px)",overflowX:"auto"}}>
       {page!=="home"&&(
         <button className="press" onClick={()=>nav("home")} title="Back to home"
-          style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 14px",marginRight:12,fontSize:14,fontWeight:800,color:C.primary,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"}}>← Home</button>
+          style={{display:"inline-flex",alignItems:"center",gap:6,background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:11,padding:"8px 14px",marginRight:12,fontSize:14,fontWeight:800,color:C.primary,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"}}><BackArrow size={16}/> Home</button>
       )}
       <div className="press" onClick={onSecretTap} title="Nemo Aqua Store" style={{display:"flex",flexDirection:"column",alignItems:"flex-start",cursor:"pointer",marginRight:16,lineHeight:1}}>
         <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{height:34,width:"auto",objectFit:"contain",display:"block",pointerEvents:"none"}}/>
@@ -12215,14 +12241,15 @@ function CareGuidesPage({nav,goBack,guides,mediaCache}){
   const posterList=list.filter(g=>mediaCache["img-"+g.id]).map(g=>({src:mediaCache["img-"+g.id],title:g.title,notes:g.content||""}));
   return(
     <div className="slide-up">
-      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 22px",color:"white",position:"relative",overflow:"hidden"}}>
+      {/* Back, title and switch on ONE row. This header used to put the back button on a line
+          of its own above the title, and with no strapline under the heading the result was a
+          band of empty blue taller than everything in it. The other headers in the app that
+          carry no subtitle are laid out exactly this way. */}
+      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 16px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
-        {/* Title and switch on one line. The old header stacked a two-line heading over a
-            strapline that only restated it, with the switch squeezed alongside — the page
-            says what it is by listing guides. */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800}}>Care Guides</div>
+        <div style={{display:"flex",alignItems:"center",gap:12,position:"relative"}}>
+          <button className="press" onClick={goBack} aria-label="Back" style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",flexShrink:0}}><BackArrow/></button>
+          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,flex:1,minWidth:0}}>Care Guides</div>
           <div style={{flexShrink:0}}>
             <GuideNotifBtn/>
           </div>
@@ -12330,7 +12357,7 @@ function AboutPage({nav,goBack,settings={}}){
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
+        <button className="press" onClick={goBack} style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}><BackArrow/></button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>About Us</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>Who we are, how we deliver, and our promises to you.</div>
       </div>
@@ -12396,7 +12423,7 @@ function ContactPage({nav,goBack,settings={}}){
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
+        <button className="press" onClick={goBack} style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}><BackArrow/></button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>Contact Us</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:330}}>Customer support for orders, payments, cancellations, returns, refunds and delivery.</div>
       </div>
@@ -12465,7 +12492,7 @@ function PolicyPage({nav,goBack,settings={},which}){
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
+        <button className="press" onClick={goBack} style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}><BackArrow/></button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>{meta.icon} {meta.title}</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>{meta.sub}</div>
       </div>
@@ -12562,7 +12589,7 @@ function RequestPage({nav,goBack,user,onSubmit,myRequests}){
     <div className="slide-up">
       <div className="vh-head" style={{background:`linear-gradient(150deg,${C.accent},${C.primary})`,padding:"52px 18px 24px",color:"white",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:-30,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.1)"}}/>
-        <button className="press" onClick={goBack} style={{background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}>←</button>
+        <button className="press" onClick={goBack} style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}><BackArrow/></button>
         <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Request a Product</div>
         <div style={{fontSize:13,opacity:.9,lineHeight:1.55,maxWidth:340}}>
           Rare fish, plants or special gear?<br/>
@@ -14507,7 +14534,7 @@ function NemoStore(){
             style={{position:"absolute",left:"50%",transform:"translateX(-50%)",bottom:"calc(76px + env(safe-area-inset-bottom))",zIndex:90,width:"calc(100% - 28px)",maxWidth:440,background:"#0f172a",color:"white",border:"none",borderRadius:99,padding:"7px 8px 7px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,boxShadow:"0 14px 34px rgba(15,23,42,.35)",fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
             <span style={{fontSize:12.5,fontWeight:700,textAlign:"left",lineHeight:1.3,minWidth:0,flex:1,overflow:"visible",textOverflow:"clip",whiteSpace:"normal"}}>
               {showFree?<>🚚 Add <b style={{color:"#fda4af"}}>₹{left}</b> more for free delivery</>
-               :dc?<>🏷️ Add <b style={{color:"#fda4af"}}>₹{dc.need}</b> more to get <b>{dc.off}</b> ({dc.code})</>
+               :dc?<>🏷️ Add <b style={{color:"#fda4af"}}>₹{dc.need}</b> more to get <b>{dc.off}</b></>
                :thr>0&&cartTotal>=thr?<>🎉 Free delivery unlocked!</>
                :<>🛒 {cartCount} item{cartCount!==1?"s":""} in your cart</>}
             </span>
