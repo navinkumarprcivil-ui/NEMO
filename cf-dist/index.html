@@ -686,130 +686,32 @@
      has to exist, or the puff is a slideshow. Every dimension below is a function of `q`, the
      inflation from 0 to 1, so the shape, the spines, the face and the fins all arrive
      together. */
-  /* At rest a puffer is a teardrop: full round belly behind, tapering to a blunt snout. A
-     plain ellipse gave it the same girth at the nose as amidships, which reads as a balloon
-     that has not been inflated yet rather than as a fish. `taperAt` squeezes the head end
-     vertically, and does less of it the more inflated the fish is — at q=1 nothing is left of
-     it and the outline is the circle the reference shows. The spines sit on the same curve, so
-     they never float off the skin partway through a puff. */
-  function taperAt(cs,q){ return 1-(1-q)*0.30*Math.max(0,-cs); }
-  function bodyPath(L,Rh,q){
-    ctx.beginPath();
-    var N=54;
-    for(var i=0;i<=N;i++){
-      var th=(Math.PI*2/N)*i, cs=Math.cos(th), sn=Math.sin(th);
-      var px=cs*L, py=sn*Rh*taperAt(cs,q);
-      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
-    }
-    ctx.closePath();
+  /* ── The puffer ────────────────────────────────────────────────────────────────
+     Three of the owner's own stickers -- calm, half up, fully round -- cut out of the sheet at
+     art/puffer-sticker.jpg by scripts/sprite/split-sprite.mjs, mirrored to face left the way
+     the betta and clownfish sprites do, and loaded lazily beside them.
+
+     The inflation cross-fades between consecutive frames rather than cutting, and every frame
+     is drawn at one shared pixels-per-source-pixel scale -- so the growth is the artwork's own
+     (293px of calm fish becomes 300px of ball, drawn 0.63 to 1.32 of a body width tall) and
+     nothing has to be tuned by hand to match it. drawFish does the drawing, so the tail keeps
+     the same undulation as the other two. */
+  var puffImgs=null;
+  function loadPuffer(){
+    if(puffImgs) return puffImgs;
+    puffImgs=[fishSprite('fish-puffer-1'), fishSprite('fish-puffer-2'), fishSprite('fish-puffer-3')];
+    return puffImgs;
   }
+  var PUFFER_SRC_W=293;                    // the calm sticker's own width, the scale's anchor
   function drawPuffer(x,y,w,dir,tilt,a,wag,q){
+    var f=loadPuffer();
     q=Math.max(0,Math.min(1,q));
-    var L=w*(0.50+q*0.13);              // half length — grows a little
-    var Rh=w*(0.30+q*0.30);             // half height — grows a lot, until it is a circle
-    ctx.save(); ctx.translate(x,y); ctx.rotate(tilt*dir); ctx.scale(dir,1); ctx.globalAlpha=a;
-
-    var tail=Math.sin(wag)*0.34;        // the tail fan sweeps; the body barely moves
-    var brown='rgba(122,75,40,';
-    var line=Math.max(1,w*0.028);
-
-    // ── tail fan, behind the body (the fish faces left, so the tail is on the right)
-    ctx.save(); ctx.translate(L*0.86,0); ctx.rotate(tail*0.5);
-    ctx.beginPath();
-    ctx.moveTo(0,0);
-    ctx.quadraticCurveTo(w*0.16,-Rh*0.72, w*0.24,-Rh*0.52);
-    ctx.quadraticCurveTo(w*0.19,0, w*0.24,Rh*0.52);
-    ctx.quadraticCurveTo(w*0.16,Rh*0.72, 0,0);
-    ctx.closePath();
-    ctx.fillStyle='#eec089'; ctx.fill();
-    ctx.strokeStyle=brown+'.9)'; ctx.lineWidth=line; ctx.stroke();
-    ctx.restore();
-
-    // ── spines. Nothing at rest; they rise out of the skin as it inflates, so there is never
-    //    a frame where a calm fish is wearing them.
-    if(q>0.02){
-      var N=22, sl=w*0.115*q;
-      ctx.beginPath();
-      for(var i=0;i<N;i++){
-        var th=(Math.PI*2/N)*i+0.14;
-        var cs=Math.cos(th), sn=Math.sin(th);
-        var bx=cs*L, by=sn*Rh*taperAt(cs,q);
-        var nx=cs/L, ny=sn/Rh, nl=Math.hypot(nx,ny)||1; nx/=nl; ny/=nl;   // ellipse normal
-        var tx=-ny*w*0.030, ty=nx*w*0.030;                                 // base half-width
-        ctx.moveTo(bx+tx,by+ty);
-        ctx.lineTo(bx+nx*sl,by+ny*sl);
-        ctx.lineTo(bx-tx,by-ty);
-        ctx.closePath();
-      }
-      ctx.fillStyle='#e3ad6b'; ctx.fill();
-      ctx.strokeStyle=brown+(0.75*q)+')'; ctx.lineWidth=line*0.8; ctx.stroke();
-    }
-
-    // ── body: tan back over a cream belly
-    bodyPath(L,Rh,q);
-    var bg2=ctx.createLinearGradient(0,-Rh,0,Rh);
-    /* A hard stop here drew a horizon across the fish. The back and the belly meet over a
-       band, not on a line. */
-    bg2.addColorStop(0,'#e9b978'); bg2.addColorStop(0.38,'#e2ac66');
-    bg2.addColorStop(0.66,'#fbf1dd'); bg2.addColorStop(1,'#f3e3c6');
-    ctx.fillStyle=bg2; ctx.fill();
-
-    // spots along the back, inside the body outline
-    ctx.save(); ctx.clip();
-    ctx.fillStyle='rgba(186,124,58,.55)';
-    var SP=[[-0.34,-0.46,0.070],[-0.08,-0.60,0.082],[0.22,-0.48,0.070],[0.04,-0.30,0.055],[0.42,-0.22,0.050],[-0.20,-0.66,0.048]];
-    for(var s2=0;s2<SP.length;s2++){
-      ctx.beginPath();
-      ctx.ellipse(L*SP[s2][0], Rh*SP[s2][1], w*SP[s2][2]*0.9, w*SP[s2][2]*0.72, 0, 0, Math.PI*2);
-      ctx.fill();
-    }
-    ctx.restore();
-    bodyPath(L,Rh,q);
-    ctx.strokeStyle=brown+'.95)'; ctx.lineWidth=line*1.25; ctx.stroke();
-
-    // ── pectoral fin, on the flank. Drawn after the body: behind it, which is where a fin
-    //    on the far side would be, it was simply invisible at every inflation.
-    ctx.save(); ctx.translate(L*0.10,Rh*0.06); ctx.rotate(tail*0.34);
-    ctx.beginPath();
-    ctx.moveTo(0,0);
-    ctx.quadraticCurveTo(w*0.10,-Rh*0.10, w*0.17,Rh*0.05);
-    ctx.quadraticCurveTo(w*0.11,Rh*0.22, 0,0);
-    ctx.closePath();
-    ctx.fillStyle='#eec089'; ctx.fill();
-    ctx.strokeStyle=brown+'.85)'; ctx.lineWidth=line; ctx.stroke();
-    ctx.restore();
-
-    // ── face. The eye opens from a small dark bead into a wide startled one, the blush comes
-    //    up, and the smile gives way to a small round "oh" — all cross-faded on q so there is
-    //    no frame where it swaps.
-    var ex=-L*0.44, ey=-Rh*0.16;
-    var e=Math.max(0,Math.min(1,(q-0.32)/0.42));   // how far into "startled" the face is
-    if(e>0.02){                                    // white of the eye, only once it is wide
-      ctx.beginPath(); ctx.ellipse(ex,ey,w*0.088*e+w*0.052,w*0.10*e+w*0.052,0,0,Math.PI*2);
-      ctx.fillStyle='rgba(255,255,255,'+e+')'; ctx.fill();
-      ctx.strokeStyle=brown+(0.7*e)+')'; ctx.lineWidth=line*0.8; ctx.stroke();
-    }
-    ctx.beginPath();
-    ctx.arc(ex, ey-w*0.022*e, w*(0.050-0.012*e), 0, Math.PI*2);   // pupil rides up when startled
-    ctx.fillStyle='#3a2a1c'; ctx.fill();
-    ctx.beginPath(); ctx.arc(ex-w*0.016, ey-w*0.038*e-w*0.012, w*0.017, 0, Math.PI*2);
-    ctx.fillStyle='#fff'; ctx.fill();
-    // blush
-    ctx.beginPath(); ctx.ellipse(ex-w*0.045, ey+w*0.10, w*0.062, w*0.036, 0, 0, Math.PI*2);
-    ctx.fillStyle='rgba(238,150,140,'+(0.30+0.45*q)+')'; ctx.fill();
-    // mouth
-    if(e<0.98){
-      ctx.beginPath();
-      ctx.moveTo(-L*0.80, Rh*0.16);
-      ctx.quadraticCurveTo(-L*0.70, Rh*0.30, -L*0.58, Rh*0.16);
-      ctx.strokeStyle=brown+(0.9*(1-e))+')'; ctx.lineWidth=line; ctx.stroke();
-    }
-    if(e>0.02){
-      ctx.beginPath(); ctx.ellipse(-L*0.70, Rh*0.22, w*0.036*e, w*0.048*e, 0, 0, Math.PI*2);
-      ctx.fillStyle='rgba(214,117,107,'+e+')'; ctx.fill();
-      ctx.strokeStyle=brown+(0.8*e)+')'; ctx.lineWidth=line*0.7; ctx.stroke();
-    }
-    ctx.restore(); ctx.globalAlpha=1;
+    var A,B,t;
+    if(q<0.5){ A=0; B=1; t=q/0.5; } else { A=1; B=2; t=(q-0.5)/0.5; }
+    var scale=w/PUFFER_SRC_W;
+    // A half-blended pair reads as a morph at this size; a hard cut reads as a glitch.
+    if(t<0.999 && f[A].naturalWidth) drawFish(f[A], x, y, f[A].naturalWidth*scale, dir, tilt, a*(1-t), wag);
+    if(t>0.001 && f[B].naturalWidth) drawFish(f[B], x, y, f[B].naturalWidth*scale, dir, tilt, a*t, wag);
   }
 
   /* One puffer, and the four things it can be doing. `q` is the inflation the drawing reads;
@@ -865,8 +767,7 @@
   // wallpaper already tracks — the canvas is pointer-events:none and must never eat a tap.
   function puffAt(px,py){
     if(!puffer||puffer.state!=='calm') return false;
-    var L=puffer.w*0.5, Rh=puffer.w*0.30;
-    if(Math.hypot(px-puffer.x,py-puffer.y) > Math.max(L,Rh)+20) return false;
+    if(Math.hypot(px-puffer.x,py-puffer.y) > puffer.w*0.5+20) return false;
     puffer.state='puff';
     return true;
   }
@@ -1099,9 +1000,13 @@
     (function(){
       var w=window.innerWidth<560?Math.max(44,Math.round(window.innerWidth*0.14)):78;
       loadFish();
+      var calm=loadPuffer()[0];
       var rdz=function(){ drawFish(bettaImg,W*0.55,H*0.32,w,1,0,0.92,0); drawFish(clownImg,W*0.7,H*0.5,Math.round(w*0.92),-1,0,0.92,0);
         drawPuffer(W*0.32,H*0.62,Math.round(w*0.86),-1,0,0.92,0,0); };
-      bettaImg.onload=rdz; clownImg.onload=rdz; rdz();
+      /* This frame is painted once and never again, so every sprite has to be able to ask for
+         a repaint when it lands — the puffer included, or a slower connection leaves a gap in
+         the still where it should be. */
+      bettaImg.onload=rdz; clownImg.onload=rdz; calm.onload=rdz; rdz();
     })();
   }
   else { start(); }
@@ -1116,10 +1021,11 @@
 <div id="nemo-jelly" aria-hidden="true"></div>
 <style>
   #nemo-jelly{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;}
-  #nemo-jelly svg{position:absolute;left:0;top:0;will-change:transform;}
-  /* Fine ripple along each tentacle, staggered so they don't move as one rigid comb. */
-  @keyframes jellyTentacle{0%,100%{transform:translateX(0) scaleY(1)}50%{transform:translateX(2.5px) scaleY(1.05)}}
-  .jt{transform-box:fill-box;transform-origin:top center;animation:jellyTentacle 4.6s ease-in-out infinite;}
+  #nemo-jelly .jelly{position:absolute;left:0;top:0;will-change:transform;}
+  /* The squash rides on the image inside the wrapper, so the wrapper is free to carry the
+     position and the bank without the two transforms fighting over one element. Origin at the
+     top: the bell is what contracts, and everything below it is dragged along by it. */
+  #nemo-jelly .jelly img{display:block;width:100%;height:100%;transform-origin:50% 12%;}
   @media(prefers-reduced-motion:reduce){#nemo-jelly{display:none;}}
 </style>
 <script>
@@ -1127,72 +1033,25 @@
   var host=document.getElementById('nemo-jelly'); if(!host) return;
   if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-  // ── Artwork ────────────────────────────────────────────────────────────────
-  // Drawn from the reference the owner supplied: a periwinkle bell marbled with cream, a soft
-  // violet outline, small round eyes with one highlight each, blush and a barely-there smile.
-  // No star sparkles, no open mouth. Frilled cream oral arms hang in the middle and ten long
-  // thin tentacles trail well past them — that length is most of the silhouette.
-  // Grouped so the bell, arms and tentacles animate separately.
-  function svg(uid){
-    var g='jg'+uid, t='jt'+uid, a='ja'+uid;
-    /* Five tentacle curves, each drawn once and then again inside a mirrored group, so the
-       two sides trail away from each other instead of combing the same way. Writing them out
-       twice by hand is how the old set ended up subtly asymmetric. */
-    var TENT=[[34,'c-10 44-7 96 2 138 5 26 2 48-8 66'],
-              [52,'c-7 46-4 100 4 142 4 24 1 44-7 60'],
-              [70,'c-5 48-2 104 4 146 3 22 1 40-5 54'],
-              [86,'c-3 50-1 106 3 150 2 20 1 36-4 48'],
-              [97,'c-1 52 0 108 2 152 1 18 0 32-3 42']];
-    function side(mirror){
-      var out=mirror?'<g transform="translate(200,0) scale(-1,1)">':'<g>';
-      for(var i=0;i<TENT.length;i++){
-        var delay=-(i*0.7+(mirror?0.35:0));
-        out+='<path class="jt" style="animation-delay:'+delay.toFixed(2)+'s" d="M'+TENT[i][0]+' 108'+TENT[i][1]+
-             '" stroke="url(#'+t+')" stroke-width="4.6" stroke-linecap="round" fill="none"/>';
-      }
-      return out+'</g>';
-    }
-    return ''+
-    '<svg width="200" height="380" viewBox="0 0 200 380" fill="none" xmlns="http://www.w3.org/2000/svg">'+
-      '<defs>'+
-        '<linearGradient id="'+g+'" x1="0" y1="0" x2="0" y2="1">'+
-          '<stop offset="0%" stop-color="#c6cbec"/><stop offset="55%" stop-color="#bcc2e8"/>'+
-          '<stop offset="100%" stop-color="#b3b9e2"/></linearGradient>'+
-        '<linearGradient id="'+t+'" x1="0" y1="0" x2="0" y2="1">'+
-          '<stop offset="0%" stop-color="#a3abd8"/><stop offset="100%" stop-color="#c2c8ea"/></linearGradient>'+
-        '<linearGradient id="'+a+'" x1="0" y1="0" x2="0" y2="1">'+
-          '<stop offset="0%" stop-color="#fbf4dd"/><stop offset="70%" stop-color="#efeee2"/>'+
-          '<stop offset="100%" stop-color="#c9cfe8"/></linearGradient>'+
-      '</defs>'+
-      '<g class="jelly-tents">'+side(false)+side(true)+'</g>'+
-      '<g class="jelly-arms">'+
-        // two frilled oral arms either side of a longer one down the middle
-        '<path d="M84 112c-10 30-15 64-12 96 2 22-2 42-10 58 14-6 22-22 26-42 5-26 6-76 3-112z" fill="url(#'+a+')" stroke="#6f6a99" stroke-width="3" stroke-linejoin="round"/>'+
-        '<path d="M116 112c10 30 15 64 12 96-2 22 2 42 10 58-14-6-22-22-26-42-5-26-6-76-3-112z" fill="url(#'+a+')" stroke="#6f6a99" stroke-width="3" stroke-linejoin="round"/>'+
-        '<path d="M100 116c-7 34-9 78-5 114 3 24 1 44-4 60 12-8 18-26 20-50 3-34 2-90-3-124z" fill="url(#'+a+')" stroke="#6f6a99" stroke-width="3" stroke-linejoin="round"/>'+
-      '</g>'+
-      '<g class="jelly-bell">'+
-        // dome with a soft scalloped hem
-        '<path d="M16 108c0-50 38-90 84-90s84 40 84 90c0 6-4 10-9 8-5 6-13 7-18 1-5 6-13 7-18 1-5 6-13 7-18 1-5 6-13 7-18 1-5 6-13 7-18 1-5 6-13 7-18 1-5 6-13 7-18-1-5 2-9-2-9-8z" fill="url(#'+g+')" stroke="#565081" stroke-width="4" stroke-linejoin="round"/>'+
-        // cream marbling running down from the crown
-        '<path d="M100 24c6 0 10 6 9 16-2 14-4 26-3 38 1 8-2 13-6 13s-7-5-6-13c2-13 1-26 0-38-1-10 1-16 6-16z" fill="#f8f2da" opacity=".85"/>'+
-        '<path d="M67 32c5-2 8 3 7 11-2 13-7 23-9 35-2 8-6 11-9 9s-3-8-1-14c4-13 6-23 6-32 0-5 1-8 6-9z" fill="#f8f2da" opacity=".7"/>'+
-        '<path d="M133 32c-5-2-8 3-7 11 2 13 7 23 9 35 2 8 6 11 9 9s3-8 1-14c-4-13-6-23-6-32 0-5-1-8-6-9z" fill="#f8f2da" opacity=".7"/>'+
-        '<circle cx="42" cy="86" r="3.4" fill="#f8f2da" opacity=".75"/>'+
-        '<circle cx="158" cy="86" r="3.4" fill="#f8f2da" opacity=".75"/>'+
-        '<circle cx="53" cy="63" r="2.6" fill="#f8f2da" opacity=".6"/>'+
-        // gloss
-        '<path d="M42 72c6-21 22-35 39-39-14 11-25 25-29 43-2.4 8.6-12.6 6-10-4z" fill="#fff" opacity=".55"/>'+
-        // face — small round eyes, one highlight each, blush outside them, a whisper of a smile
-        '<ellipse cx="55" cy="100" rx="11" ry="6" fill="#eaa9bd" opacity=".5"/>'+
-        '<ellipse cx="145" cy="100" rx="11" ry="6" fill="#eaa9bd" opacity=".5"/>'+
-        '<circle cx="78" cy="90" r="8.4" fill="#2f2b45"/>'+
-        '<circle cx="122" cy="90" r="8.4" fill="#2f2b45"/>'+
-        '<circle cx="75" cy="86.5" r="2.9" fill="#fff"/>'+
-        '<circle cx="119" cy="86.5" r="2.9" fill="#fff"/>'+
-        '<path d="M92 101c3 4 13 4 16 0" stroke="#565081" stroke-width="2.6" stroke-linecap="round" fill="none" opacity=".8"/>'+
-      '</g>'+
-    '</svg>';
+  /* ── Artwork ────────────────────────────────────────────────────────────────
+     The owner's own sticker, cut out of the sheet they supplied (art/jelly-sticker.jpg) by
+     scripts/sprite/split-sprite.mjs and served the same way the betta and clownfish are: WebP
+     first, PNG for anything that cannot read it, fetched only when this layer actually runs.
+
+     It was a hand-drawn SVG until now, with the bell, the oral arms and each tentacle in their
+     own animated group. A flat image cannot be taken apart like that, so the contraction is
+     applied to the whole sticker from an origin up inside the bell -- the bell squashes and
+     everything hanging off it follows, which is the same order of events, just without the
+     tentacles rippling independently of it. */
+  function jellyEl(){
+    var wrap=document.createElement('div');
+    wrap.className='jelly';
+    var img=document.createElement('img');
+    img.alt=''; img.decoding='async';
+    img.onerror=function(){ img.onerror=null; img.src='assets/fish-jelly.png'; };
+    img.src='assets/fish-jelly.webp';
+    wrap.appendChild(img);
+    return wrap;
   }
 
   // ── Pointer / touch: getting close wakes it up ─────────────────────────────
@@ -1226,10 +1085,8 @@
     var W=window.innerWidth, H=window.innerHeight;
     // The betta and clownfish in the wallpaper render 72-78px wide; keep this well under half
     // of that. The bell is ~86% of the SVG width, so a 34px svg gives a ~29px bell.
-    var w=26+Math.random()*7, h=w*(380/200);
-    var box=document.createElement('div');
-    box.innerHTML=svg(uid);
-    var el=box.firstChild;
+    var w=26+Math.random()*7, h=w*(389/180);        // the sticker's own proportions
+    var el=jellyEl();
     host.appendChild(el);                          // append — never wipe the other drifter
     el.style.width=w+'px'; el.style.height=h+'px';
     // Like the fish in the wallpaper, it crosses: enters at a random point along the bottom and
@@ -1266,14 +1123,11 @@
       pulseDur:2.5+Math.random()*0.9,              // seconds per contraction cycle
       rise:12+Math.random()*3,                     // net px/sec after the coast — just above the bubbles
       act:0,                                       // 0 = calm drift, 1 = stirred up by the pointer
-      bell:el.querySelector('.jelly-bell'),
-      arms:el.querySelector('.jelly-arms'),
-      tents:el.querySelector('.jelly-tents')
+      // One part now, not three. The squash goes on the image; `arms` and `tents` stay null
+      // and every use of them below is already guarded.
+      bell:el.querySelector('img'), arms:null, tents:null
     };
-    // keep the artwork's own origin sensible for squash/stretch
-    if(jf.bell){ jf.bell.style.transformBox='fill-box'; jf.bell.style.transformOrigin='center bottom'; }
-    if(jf.arms){ jf.arms.style.transformBox='fill-box'; jf.arms.style.transformOrigin='top center'; }
-    if(jf.tents){ jf.tents.style.transformBox='fill-box'; jf.tents.style.transformOrigin='top center'; }
+    // The origin lives in the stylesheet now (#nemo-jelly .jelly img).
     live.push(jf);
     return jf;
   }
