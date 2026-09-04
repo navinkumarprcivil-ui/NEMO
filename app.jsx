@@ -6259,6 +6259,34 @@ function BackArrow({size=20,stroke=2.6}){
   );
 }
 
+/* ═══════════════════ PAGE HERO HEADER ═══════════════════ */
+/* The coloured banner every secondary page opens with. There were five hand-rolled copies of
+   it — Care Guides, About, Contact, a policy page and Request a Product — and they had drifted
+   the way copies do: titles at 24 and 25, a decorative circle 130px wide in four of them and
+   120px in the fifth at a different opacity, bottom padding of 16, 24 and 26, and a back button
+   of 36px, which is under the 44px a thumb can reliably hit. None of it is visible on any one
+   screen; all of it is visible moving between them, which is exactly what "unorganised" looks
+   like. One component now, with the parts that genuinely differ passed in. */
+function HeroHeader({title,subtitle,onBack,right,gradient,children}){
+  return(
+    <div className="vh-head" style={{background:gradient||`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 20px",color:"white",position:"relative",overflow:"hidden"}}>
+      <div aria-hidden="true" style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)",pointerEvents:"none"}}/>
+      <div style={{display:"flex",alignItems:"center",gap:12,position:"relative"}}>
+        {onBack&&(
+          <button className="press" onClick={onBack} aria-label="Back"
+            style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:13,width:44,height:44,color:"white",flexShrink:0,cursor:"pointer"}}>
+            <BackArrow/>
+          </button>
+        )}
+        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,flex:1,minWidth:0,lineHeight:1.2}}>{title}</div>
+        {right&&<div style={{flexShrink:0}}>{right}</div>}
+      </div>
+      {subtitle&&<div style={{fontSize:13,opacity:.9,lineHeight:1.55,maxWidth:340,marginTop:9,position:"relative"}}>{subtitle}</div>}
+      {children}
+    </div>
+  );
+}
+
 /* ═══════════════════ RESTOCK ALERT BUTTON ═══════════════════ */
 function RestockBtn({product,user,restockSet,onSubscribe}){
   const already=restockSet.includes(product.id);
@@ -16775,20 +16803,9 @@ function CareGuidesPage({nav,goBack,guides,mediaCache}){
   const posterList=list.filter(g=>mediaCache["img-"+g.id]).map(g=>({src:mediaCache["img-"+g.id],title:g.title,notes:g.content||""}));
   return(
     <div className="slide-up">
-      {/* Back, title and switch on ONE row. This header used to put the back button on a line
-          of its own above the title, and with no strapline under the heading the result was a
-          band of empty blue taller than everything in it. The other headers in the app that
-          carry no subtitle are laid out exactly this way. */}
-      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 16px",color:"white",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <div style={{display:"flex",alignItems:"center",gap:12,position:"relative"}}>
-          <button className="press" onClick={goBack} aria-label="Back" style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",flexShrink:0}}><BackArrow/></button>
-          <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,flex:1,minWidth:0}}>Care Guides</div>
-          <div style={{flexShrink:0}}>
-            <GuideNotifBtn/>
-          </div>
-        </div>
-      </div>
+      {/* No strapline here — the page says what it is by listing guides — so back, title and
+          switch share the header's one row and nothing sits in a band of empty colour. */}
+      <HeroHeader onBack={goBack} title="Care Guides" right={<GuideNotifBtn/>}/>
 
       {cats.length>1&&(
         <div style={{display:"flex",gap:8,overflowX:"auto",padding:"14px 16px 4px",WebkitOverflowScrolling:"touch"}}>
@@ -16889,12 +16906,8 @@ function AboutPage({nav,goBack,settings={}}){
   );
   return(
     <div className="slide-up">
-      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <button className="press" onClick={goBack} style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}><BackArrow/></button>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>About Us</div>
-        <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>Who we are, how we deliver, and our promises to you.</div>
-      </div>
+      <HeroHeader onBack={goBack} title={"About Us"}
+        subtitle={"Who we are, how we deliver, and our promises to you."}/>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
         <Section icon="🐠" title={`Our Story`} body={s.aboutStory} accent="#ffe9d6"/>
         <Section icon="🚚" title="Delivery Areas" body={s.deliveryAreas} accent="#d4f4f5"/>
@@ -16955,12 +16968,8 @@ function ContactPage({nav,goBack,settings={}}){
   const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"16px",display:"flex",alignItems:"flex-start",gap:12,textDecoration:"none"};
   return(
     <div className="slide-up">
-      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <button className="press" onClick={goBack} style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}><BackArrow/></button>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>Contact Us</div>
-        <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:330}}>Customer support for orders, payments, cancellations, returns, refunds and delivery.</div>
-      </div>
+      <HeroHeader onBack={goBack} title={"Contact Us"}
+        subtitle={"Customer support for orders, payments, cancellations, returns, refunds and delivery."}/>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
         <div style={{background:C.accentLight,border:`1px solid ${C.primary}33`,borderRadius:18,padding:"17px",marginBottom:14}}>
           <div style={{fontSize:15,fontWeight:900,color:C.text,marginBottom:5}}>{s.legalName||(STORE_NAME+" Aqua Store")}</div>
@@ -17024,12 +17033,8 @@ function PolicyPage({nav,goBack,settings={},which}){
   const others=Object.keys(POLICY_META).filter(k=>k!==which);
   return(
     <div className="slide-up">
-      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.primaryDark},${C.primary})`,padding:"52px 18px 26px",color:"white",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",top:-30,right:-20,width:130,height:130,borderRadius:"50%",background:"rgba(255,255,255,.08)"}}/>
-        <button className="press" onClick={goBack} style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}><BackArrow/></button>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:25,fontWeight:800,marginBottom:6}}>{meta.icon} {meta.title}</div>
-        <div style={{fontSize:13,opacity:.9,lineHeight:1.5,maxWidth:320}}>{meta.sub}</div>
-      </div>
+      <HeroHeader onBack={goBack} title={<>{meta.icon} {meta.title}</>}
+        subtitle={meta.sub}/>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
         <div style={{background:C.card,borderRadius:18,padding:"20px",border:`1px solid ${C.border}`,fontSize:13.5,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{policyText(meta.key, s)}</div>
         {/* The tracking & collection clause is part of the terms whether or not the saved text
@@ -17121,16 +17126,9 @@ function RequestPage({nav,goBack,user,onSubmit,myRequests}){
 
   return(
     <div className="slide-up">
-      <div className="vh-head" style={{background:`linear-gradient(150deg,${C.accent},${C.primary})`,padding:"52px 18px 24px",color:"white",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",top:-30,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,.1)"}}/>
-        <button className="press" onClick={goBack} style={{display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.18)",border:"none",borderRadius:10,width:36,height:36,color:"white",fontSize:18,marginBottom:14}}><BackArrow/></button>
-        <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:800,marginBottom:6}}>Request a Product</div>
-        <div style={{fontSize:13,opacity:.9,lineHeight:1.55,maxWidth:340}}>
-          Rare fish, plants or special gear?<br/>
-          Tell us what you need.<br/>
-          <b>We source hard-to-find products.</b>
-        </div>
-      </div>
+      <HeroHeader onBack={goBack} title="Request a Product"
+        gradient={`linear-gradient(150deg,${C.accent},${C.primary})`}
+        subtitle={<>Rare fish, plants or special gear?<br/>Tell us what you need.<br/><b>We source hard-to-find products.</b></>}/>
       <div className="dt-read" style={{padding:"20px 16px 100px"}}>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Product Name *</div>

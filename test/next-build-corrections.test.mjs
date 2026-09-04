@@ -50,15 +50,23 @@ test('the overall discount cap has exactly one control', () => {
 
 test('the Care Guides header puts back, title and switch on one row', () => {
   const page = src.slice(src.indexOf('function CareGuidesPage('), src.indexOf('/* ═══════════════════ SAVED ITEMS PAGE'));
-  const head = page.slice(page.indexOf('className="vh-head"'), page.indexOf('{cats.length>1&&('));
-  const backAt = head.indexOf('<BackArrow/>');
-  const titleAt = head.indexOf('Care Guides<');
-  const switchAt = head.indexOf('<GuideNotifBtn/>');
-  assert.ok(backAt > -1 && titleAt > -1 && switchAt > -1);
-  assert.ok(backAt < titleAt && titleAt < switchAt, 'reading order: back, title, switch');
-  // A back button on a line of its own, above a heading with no strapline under it, left a band
-  // of empty colour taller than anything in it.
-  assert.doesNotMatch(head, /marginBottom:14\}\}><BackArrow\/>/);
+  // It uses the shared banner rather than a sixth hand-rolled copy of it.
+  assert.match(page, /<HeroHeader onBack=\{goBack\} title="Care Guides" right=\{<GuideNotifBtn\/>\}\/>/);
+  assert.doesNotMatch(page, /className="vh-head"/, 'no bespoke header left on this page');
+});
+
+/* One banner for every secondary page. Five hand-rolled copies had drifted to two title sizes,
+   two circle sizes and opacities, three bottom paddings and a 36px back button — none of it
+   visible on one screen, all of it visible moving between them. */
+test('every coloured page banner is the shared component', () => {
+  const heroPages = src.match(/<HeroHeader /g) || [];
+  assert.ok(heroPages.length >= 5, `expected every page migrated, found ${heroPages.length}`);
+  // The gradient banner markup must not reappear inline anywhere.
+  assert.doesNotMatch(src, /className="vh-head" style=\{\{background:`linear-gradient\(150deg/);
+  // The back control meets the 44px a thumb can reliably hit.
+  const hero = src.slice(src.indexOf('function HeroHeader('), src.indexOf('/* ═══════════════════ RESTOCK ALERT BUTTON'));
+  assert.match(hero, /width:44,height:44/);
+  assert.match(hero, /aria-label="Back"/);
 });
 
 /* The export grew columns for refunds, the gateway and test payments. The dashboard is what the
