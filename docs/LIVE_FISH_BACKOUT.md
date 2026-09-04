@@ -27,16 +27,18 @@ claims and refunds — those are GST records.
    Customers pick it up when they next open the site; Google's copy of the `/p/` pages follows
    within the hour.
 
-2. **Do the one manual step the setting cannot cover:** the static SEO copy in `index.html` —
-   the `<title>`, `<meta name="description">` and `<noscript>` block a crawler reads before any
-   script runs. See [§ index.html](#5-indexhtml--static-seo-copy-manual-revert) for the exact
-   original strings to paste back, then:
+2. **There is no second step.** The static SEO copy in `index.html` used to be the one surface
+   the setting could not reach — a file, not a render, so it needed a hand edit and a deploy.
+   The Cloudflare Worker now rewrites it on the way out, from the same `liveFishEnabled` value,
+   using HTMLRewriter: the three description metas, the `Store` JSON-LD entity, and the
+   `<noscript>` block a crawler reads before any script runs. Only the fish-free wording is
+   committed and the rewrite runs **only while the switch is on**, so the off state costs
+   nothing — no settings read, no rewrite pass.
 
-   ```bash
-   node scripts/build.mjs   # app.js is a committed artifact; a stale one is served silently
-   npm run check
-   npm run deploy
-   ```
+   The rewritten strings live in `cloudflare/worker.js` (`LIVE_FISH_SEO`, `LIVE_FISH_COPY`,
+   `LIVE_FISH_STORE_DESCRIPTION`) and are matched to `index.html` by `id`. A renamed id would
+   fail silently and serve the wrong store to Google, so `test/live-fish-seo-rewrite.test.mjs`
+   checks every selector the Worker targets against the real file.
 
 > **Check your payment gateway first.** Some gateways do not onboard merchants selling live
 > animals — that is why the switch exists. Confirm before you turn it on.
@@ -164,41 +166,35 @@ Every assertion in both files holds in **both** states of the switch, so turning
 does not turn the suite red. Verified: flipped on, rebuilt, `157/157` passing; flipped off,
 rebuilt, `157/157` passing, and `app.jsx` came back byte-identical.
 
-## 5. `index.html` — static SEO copy (**manual revert**)
+## 5. `index.html` — static SEO copy (**now automatic**)
 
-This is the only part the switch cannot reach: `index.html` is static and has no JavaScript
-evaluated at build time. Six strings changed. To restore, paste these back:
+This used to be the only part the switch could not reach: `index.html` is a static file with no
+JavaScript evaluated at build time, so six strings had to be pasted back by hand and deployed.
 
-```html
-<!-- 1 -->
-<meta name="description" content="Buy premium aquarium fish, live plants, tanks &amp; accessories online at Nemo Aqua Store — hand-picked, healthy livestock delivered with care across India."/>
+The Cloudflare Worker rewrites them instead. `staticAssetResponse()` reads `liveFishEnabled`
+(cached per isolate for a minute; a cold isolate waits at most 1.5 s for the first read, and a
+read that fails or stalls leaves the store fish-free) and, **only when the switch is on**, runs
+one HTMLRewriter pass over the HTML it is already serving:
 
-<!-- 2 -->
-<meta property="og:title" content="Nemo Aqua Store — Premium Aquarium Fish, Plants & Accessories"/>
+| Target in `index.html` | Rewritten from |
+|---|---|
+| `meta[name="description"]` | `LIVE_FISH_SEO` |
+| `meta[property="og:description"]` | `LIVE_FISH_SEO` |
+| `meta[name="twitter:description"]` | `LIVE_FISH_SEO` |
+| `script#ld-store` → the `Store` entity's `description` | `LIVE_FISH_STORE_DESCRIPTION` |
+| `h1#seo-h1`, `p#seo-lede`, `p#seo-range` in `<noscript>` | `LIVE_FISH_COPY` |
 
-<!-- 3 -->
-<meta property="og:description" content="Hand-picked healthy fish, live plants & quality accessories — delivered with care across India."/>
+Only the fish-free wording is committed. The rewrite adds live fish; it never takes them away,
+so the file on disk stays the safe default and the off state costs nothing — no settings read
+and no rewrite pass at all.
 
-<!-- 4 -->
-<meta name="twitter:description" content="Premium aquarium fish, plants & accessories — delivered with care."/>
+**To change the live-fish wording**, edit those three constants in `cloudflare/worker.js`, not
+`index.html`. The elements are matched by `id`, and a renamed id would fail silently while
+serving Google the wrong store, so `test/live-fish-seo-rewrite.test.mjs` checks every selector
+the Worker targets against the real file, and pins that the committed copy mentions no fish.
 
-<!-- 5 — the JSON-LD Store "description" field -->
-"description":"Premium aquarium fish, live plants, tanks & accessories — hand-picked, healthy livestock delivered with care across India."
-
-<!-- 6 — the <noscript> block -->
-    <h1 style="font-size:26px;margin:0 0 8px">Nemo Aqua Store — Buy Aquarium Fish Online in India</h1>
-    <p style="font-size:16px;margin:0 0 16px">Nemo Aqua Store is an online aquarium shop delivering hand-picked, healthy <strong>aquarium fish, live plants, tanks and accessories</strong> across India. Shop betta, guppy, molly, platy, goldfish, tetra and more — each order packed with oxygen and care, backed by our Live Arrival Guarantee.</p>
-    <p style="font-size:14px;margin:0 0 16px;color:#0a2426">Our online aquarium store offers ornamental freshwater fish, live aquatic plants, fish tanks and aquariums, fish food, filters, and aquarium accessories — with safe doorstep delivery and a dead-on-arrival guarantee on livestock.</p>
-```
-
-Or, more simply, take them straight from git:
-
-```bash
-git show <the commit before this change>:index.html > index.html
-```
-
-`test/live-fish-switch.test.mjs` only enforces the *absence* of live-fish selling copy while the
-switch is off, so restoring this copy with the switch on is not blocked.
+`test/live-fish-switch.test.mjs` enforces only the *absence* of live-fish selling copy in the
+committed source while the switch is off, which is exactly what the Worker relies on.
 
 ## 6. Build artifacts (regenerated, never hand-edited)
 

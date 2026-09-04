@@ -9,6 +9,7 @@ import tankCleanup from '../api/cron-tank-cleanup.js';
 import sharePage from '../api/share.js';
 import productPage from '../api/product-page.js';
 import sitemap from '../api/sitemap.js';
+import { loadStoreSettings } from '../lib/catalog.mjs';
 
 const API = new Map([
   ['/api/pay-create', payCreate],
@@ -211,18 +212,108 @@ async function shareImageResponse(request, url, mediaKey) {
   });
 }
 
-async function staticAssetResponse(request, env, path) {
+/* ── The live-fish switch, applied to the shipped HTML ────────────────────────────────────
+   Everything else the switch controls is rendered from settings at runtime. index.html is not:
+   it is a static file, and its SEO copy — the metas, the Store entity and the no-JavaScript
+   block a crawler reads — was the one surface the owner's switch could not reach, needing a
+   hand edit and a deploy. The Worker already serves this file, so it rewrites those strings
+   from the same setting on the way out.
+
+   Only the fish-free wording is committed, and the rewrite runs only when the switch is ON, so
+   the default state costs nothing at all: no settings read, no HTMLRewriter, no change. */
+const LIVE_FISH_SEO = {
+  'meta[name="description"]':
+    'Buy live fish, aquarium plants, tanks, filters, lighting, feed & accessories online at Nemo Aqua Store — hand-picked quality, delivered with care across India.',
+  'meta[property="og:description"]':
+    'Hand-picked live fish, live plants, tanks, feed & quality accessories — delivered with care across India.',
+  'meta[name="twitter:description"]':
+    'Live fish, aquarium plants, tanks & accessories — delivered with care.',
+};
+const LIVE_FISH_STORE_DESCRIPTION =
+  'Live fish, aquarium plants, tanks, filters, feed & accessories — hand-picked quality, delivered with care across India.';
+const LIVE_FISH_COPY = {
+  'h1#seo-h1': 'Nemo Aqua Store — Buy Live Fish, Aquarium Plants &amp; Supplies Online in India',
+  'p#seo-lede': 'Nemo Aqua Store is an online aquarium shop delivering hand-picked <strong>live fish, live aquatic plants, tanks, filters, lighting and accessories</strong> across India — each order packed personally and with care.',
+  'p#seo-range': 'Our online aquarium store offers live fish, live aquatic plants, fish tanks and aquariums, fish food, filters, medicines and aquarium accessories — with safe doorstep delivery across India.',
+};
+
+/* Read once per isolate per minute, not once per request. The first read of a cold isolate is
+   allowed to hold the page up briefly and no longer; past that the last known answer is served
+   and the refresh happens behind the response. A read that fails leaves the previous answer in
+   place, and the starting answer is "off" — advertising live animals for a shop that has
+   switched them off is exactly what this switch exists to prevent. */
+const SETTINGS_TTL_MS = 60_000;
+const SETTINGS_FIRST_READ_MS = 1_500;
+let liveFishKnown = false;
+let liveFishReadAt = 0;
+let liveFishInFlight = null;
+
+function refreshLiveFish() {
+  if (!liveFishInFlight) {
+    liveFishInFlight = loadStoreSettings()
+      .then((settings) => { liveFishKnown = settings?.liveFishEnabled === true; liveFishReadAt = Date.now(); })
+      .catch(() => {})
+      .finally(() => { liveFishInFlight = null; });
+  }
+  return liveFishInFlight;
+}
+
+async function liveFishForSeo(ctx) {
+  if (Date.now() - liveFishReadAt < SETTINGS_TTL_MS) return liveFishKnown;
+  const pending = refreshLiveFish();
+  if (liveFishReadAt === 0) {
+    // Cold isolate: wait, but never longer than the budget.
+    await Promise.race([pending, new Promise((resolve) => setTimeout(resolve, SETTINGS_FIRST_READ_MS))]);
+  } else if (ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(pending);
+  }
+  return liveFishKnown;
+}
+
+function withLiveFishSeo(response) {
+  let rewriter = new HTMLRewriter();
+  for (const [selector, content] of Object.entries(LIVE_FISH_SEO)) {
+    rewriter = rewriter.on(selector, { element(el) { el.setAttribute('content', content); } });
+  }
+  for (const [selector, html] of Object.entries(LIVE_FISH_COPY)) {
+    rewriter = rewriter.on(selector, { element(el) { el.setInnerContent(html, { html: true }); } });
+  }
+  /* The Store entity is one JSON string, and only its description changes. HTMLRewriter hands
+     script text in chunks that can split anywhere, so the chunks are buffered and the whole
+     value is re-emitted on the last one rather than pattern-matched chunk by chunk. */
+  let ldBuffer = '';
+  rewriter = rewriter.on('script#ld-store', {
+    text(chunk) {
+      ldBuffer += chunk.text;
+      if (!chunk.lastInTextNode) { chunk.remove(); return; }
+      let out = ldBuffer;
+      try {
+        const parsed = JSON.parse(ldBuffer);
+        parsed.description = LIVE_FISH_STORE_DESCRIPTION;
+        out = JSON.stringify(parsed);
+      } catch { /* leave the committed markup exactly as it is rather than emit broken JSON-LD */ }
+      ldBuffer = '';
+      chunk.replace(out, { html: true });
+    },
+  });
+  return rewriter.transform(response);
+}
+
+async function staticAssetResponse(request, env, path, ctx) {
   const response = await env.ASSETS.fetch(request);
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(securityHeaders)) headers.set(name, value);
   if (path.startsWith('/assets/')) {
     headers.set('Cache-Control', 'public, max-age=31536000, immutable');
   }
-  return new Response(response.body, {
+  const out = new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers,
   });
+  const isHtml = (headers.get('Content-Type') || '').includes('text/html');
+  if (!isHtml || !response.ok) return out;
+  return (await liveFishForSeo(ctx)) ? withLiveFishSeo(out) : out;
 }
 
 async function scheduledCleanup(env) {
@@ -239,7 +330,7 @@ async function scheduledCleanup(env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (url.hostname === 'nemoaquastore.in') return redirectApex(url);
@@ -277,7 +368,7 @@ export default {
       });
     }
 
-    return staticAssetResponse(request, env, path);
+    return staticAssetResponse(request, env, path, ctx);
   },
 
   async scheduled(_controller, env, ctx) {
