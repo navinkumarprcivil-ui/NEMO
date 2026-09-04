@@ -6263,6 +6263,13 @@ function BackArrow({size=20,stroke=2.6}){
   );
 }
 
+/* One label style for every field in the Admin forms. There were three, all in the same
+   scrolling column: 12px uppercase with wide tracking on the product form and two of the
+   settings helpers, 10.5px uppercase with narrower tracking on the discount caps, and 11px
+   sentence case everywhere else. Uppercase also reads badly on the labels that are a whole
+   phrase — "MAX TOTAL DISCOUNT PER ORDER (% OF SUBTOTAL)" is a sentence shouted. */
+const ADMIN_LABEL={fontSize:11,fontWeight:800,color:C.textSub,letterSpacing:.1,marginBottom:5};
+
 /* ═══════════════════ PAGE HERO HEADER ═══════════════════ */
 /* The coloured banner every secondary page opens with. There were five hand-rolled copies of
    it — Care Guides, About, Contact, a policy page and Request a Product — and they had drifted
@@ -7714,7 +7721,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.4b65cea1";
+const APP_BUILD = "v90.86eb3aee";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true

@@ -6259,6 +6259,13 @@ function BackArrow({size=20,stroke=2.6}){
   );
 }
 
+/* One label style for every field in the Admin forms. There were three, all in the same
+   scrolling column: 12px uppercase with wide tracking on the product form and two of the
+   settings helpers, 10.5px uppercase with narrower tracking on the discount caps, and 11px
+   sentence case everywhere else. Uppercase also reads badly on the labels that are a whole
+   phrase — "MAX TOTAL DISCOUNT PER ORDER (% OF SUBTOTAL)" is a sentence shouted. */
+const ADMIN_LABEL={fontSize:11,fontWeight:800,color:C.textSub,letterSpacing:.1,marginBottom:5};
+
 /* ═══════════════════ PAGE HERO HEADER ═══════════════════ */
 /* The coloured banner every secondary page opens with. There were five hand-rolled copies of
    it — Care Guides, About, Contact, a policy page and Request a Product — and they had drifted
@@ -12537,7 +12544,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
 
   const fld=(label,key,type="text",ph="",opts={})=>(
     <div style={{marginBottom:16}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>{label}</div>
+      <div style={ADMIN_LABEL}>{label}</div>
       {opts.textarea
         ?<textarea value={form[key]} onChange={e=>f(key,e.target.value)} rows={4} placeholder={ph} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,resize:"vertical",outline:"none",lineHeight:1.6,background:"white"}}/>
         :<input type={type} value={form[key]} onChange={e=>f(key,e.target.value)} placeholder={ph} style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:14,outline:"none",background:"white"}}/>
@@ -12655,7 +12662,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
               </div>
               {variants.filter(v=>String(v.label||"").trim()).length>0&&(
                 <div style={{marginTop:10}}>
-                  <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>One ID per option — use these in inventory</div>
+                  <div style={ADMIN_LABEL}>One ID per option — use these in inventory</div>
                   <div style={{display:"flex",flexDirection:"column",gap:4}}>
                     {variants.filter(v=>String(v.label||"").trim()).map((v,i)=>(
                       <div key={v.id} style={{display:"flex",gap:8,alignItems:"baseline",fontSize:11.5}}>
@@ -12700,7 +12707,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
                   the master only holds codes actually used here, never a guess. */}
               {hsnSuggestions.length>0&&(
                 <div style={{gridColumn:"1 / -1"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Use a code from your HSN master</div>
+                  <div style={ADMIN_LABEL}>Use a code from your HSN master</div>
                   <select value="" onChange={e=>{
                       const pick=hsnSuggestions[Number(e.target.value)];
                       if(!pick) return;
@@ -12718,12 +12725,12 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
                 </div>
               )}
               <div>
-                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>HSN code</div>
+                <div style={ADMIN_LABEL}>HSN code</div>
                 <input value={form.hsn} onChange={e=>f("hsn",e.target.value)} placeholder="e.g. 2309"
                   style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${form.hsn?C.border:"#fca5a5"}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none"}}/>
               </div>
               <div>
-                <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>GST rate %</div>
+                <div style={ADMIN_LABEL}>GST rate %</div>
                 <input type="number" min="0" max="28" step="0.5" value={form.gstRate} onChange={e=>f("gstRate",e.target.value)} placeholder="e.g. 18"
                   style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${String(form.gstRate).trim()?C.border:"#fca5a5"}`,fontSize:13,fontFamily:"'Plus Jakarta Sans',sans-serif",outline:"none"}}/>
               </div>
@@ -13290,11 +13297,11 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
       </div>
       <div style={{display:"flex",gap:8,marginBottom:10}}>
         <div style={{flex:1}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Refund amount (₹)</div>
+          <div style={ADMIN_LABEL}>Refund amount (₹)</div>
           <input type="number" min="0" value={refundAmt} onChange={e=>setRefundAmt(Number(e.target.value))} style={refundFld}/>
         </div>
         <div style={{flex:1}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Refund status</div>
+          <div style={ADMIN_LABEL}>Refund status</div>
           <select value={refundStatus} onChange={e=>setRefundStatus(e.target.value)} style={refundFld}>
             <option value="pending">Pending</option>
             <option value="processing">Processing</option>
@@ -13304,7 +13311,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
       </div>
       {refundMethod==="upi"?(
         <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Refund Transaction / UPI Ref ID</div>
+          <div style={ADMIN_LABEL}>Refund Transaction / UPI Ref ID</div>
           <input value={refundTxn} onChange={e=>setRefundTxn(e.target.value)} placeholder="e.g. 4231XXXXXX98" style={refundFld}/>
           <div style={{fontSize:10.5,color:C.textSub,marginTop:4,lineHeight:1.5}}>Shown to the customer on their order page so they can match the UPI refund you sent.</div>
         </div>
@@ -13618,7 +13625,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
                   const val=def?new Date(def.getTime()-def.getTimezoneOffset()*60000).toISOString().slice(0,10):"";
                   return (
                     <div style={{marginBottom:10}}>
-                      <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Auto-close on</div>
+                      <div style={ADMIN_LABEL}>Auto-close on</div>
                       <input type="date" defaultValue={val} onChange={e=>{ const d=e.target.value; onUpdateOrder({...o,autoCloseAt:d?new Date(d+"T23:59:59").toISOString():"",updatedAt:new Date().toISOString()}); }}
                         style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:C.bg}}/>
                     </div>
@@ -13969,7 +13976,7 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
             </>
           ):cancelOpen?(
             <div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:12,padding:"14px"}}>
-              <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Reason <span style={{fontWeight:400,textTransform:"none"}}>(optional, shown to customer)</span></div>
+              <div style={ADMIN_LABEL}>Reason <span style={{fontWeight:400,textTransform:"none"}}>(optional, shown to customer)</span></div>
               <input value={cancelReason} onChange={e=>setCancelReason(e.target.value)} placeholder="e.g. Out of stock"
                 style={{...refundFld,marginBottom:12}}/>
               {paidish?(
@@ -15472,7 +15479,7 @@ function SettingsPanel({settings,onSave,products=[]}){
   };
   const field=(label,k,ph,note,type="text")=>(
     <div style={{marginBottom:16}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>{label}</div>
+      <div style={ADMIN_LABEL}>{label}</div>
       <input type={type} value={f[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph}
         style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white"}}/>
       {note&&<div style={{fontSize:11,color:C.textSub,marginTop:4,lineHeight:1.45}}>{note}</div>}
@@ -15480,7 +15487,7 @@ function SettingsPanel({settings,onSave,products=[]}){
   );
   const area=(label,k)=>(
     <div style={{marginBottom:14}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>{label}</div>
+      <div style={ADMIN_LABEL}>{label}</div>
       <textarea value={f[k]||""} onChange={e=>set(k,e.target.value)} rows={4}
         style={{width:"100%",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"11px 14px",fontSize:13,outline:"none",resize:"vertical",lineHeight:1.6,background:"white"}}/>
     </div>
@@ -16133,7 +16140,7 @@ function SettingsPanel({settings,onSave,products=[]}){
 
         {(f.coupons||[]).map((c,i)=>{
           const upd=(patch)=>{ const arr=[...(f.coupons||[])]; arr[i]={...arr[i],...patch}; set("coupons",arr); };
-          const lbl={fontSize:10.5,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.5,marginBottom:4};
+          const lbl=ADMIN_LABEL;
           const box={width:"100%",borderRadius:9,border:`1.5px solid ${C.border}`,padding:"8px 10px",fontSize:12.5,outline:"none",background:"white",fontFamily:"'Plus Jakarta Sans',sans-serif"};
           const chk={display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:11.5,fontWeight:600,color:C.text};
           return(
@@ -16238,12 +16245,12 @@ function SettingsPanel({settings,onSave,products=[]}){
         </label>
         <div style={{display:"flex",gap:10}}>
           <div style={{flex:1}}>
-            <div style={{fontSize:10.5,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Max total discount ₹</div>
+            <div style={ADMIN_LABEL}>Max total discount ₹</div>
             <input type="number" min="0" value={f.maxDiscountRs||""} onChange={e=>set("maxDiscountRs",Number(e.target.value)||0)} placeholder="0 = no cap"
               style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white"}}/>
           </div>
           <div style={{flex:1}}>
-            <div style={{fontSize:10.5,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Max total discount % of subtotal</div>
+            <div style={ADMIN_LABEL}>Max total discount % of subtotal</div>
             <input type="number" min="0" max="100" value={f.maxDiscountPct||""} onChange={e=>set("maxDiscountPct",Number(e.target.value)||0)} placeholder="0 = no cap"
               style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:12.5,outline:"none",background:"white"}}/>
           </div>
@@ -16259,17 +16266,17 @@ function SettingsPanel({settings,onSave,products=[]}){
         </label>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Pts per ₹100</div>
+            <div style={ADMIN_LABEL}>Pts per ₹100</div>
             <input type="number" min="1" value={f.loyaltyPointsPerHundred||10} onChange={e=>set("loyaltyPointsPerHundred",Number(e.target.value))}
               style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min to redeem</div>
+            <div style={ADMIN_LABEL}>Min to redeem</div>
             <input type="number" min="1" value={f.loyaltyRedeemMin||100} onChange={e=>set("loyaltyRedeemMin",Number(e.target.value))}
               style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>₹ per point (coin value)</div>
+            <div style={ADMIN_LABEL}>₹ per point (coin value)</div>
             <input type="number" min="0.1" step="0.1" value={f.loyaltyRedeemValue||1} onChange={e=>set("loyaltyRedeemValue",Number(e.target.value))}
               style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
           </div>
@@ -16282,12 +16289,12 @@ function SettingsPanel({settings,onSave,products=[]}){
         <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <div>
-              <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Max coins per order</div>
+              <div style={ADMIN_LABEL}>Max coins per order</div>
               <input type="number" min="0" value={f.walletMaxCoins??100} onChange={e=>set("walletMaxCoins",Number(e.target.value))}
                 style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
             </div>
             <div>
-              <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Min order to spend coins ₹</div>
+              <div style={ADMIN_LABEL}>Min order to spend coins ₹</div>
               <input type="number" min="0" value={f.walletMinOrder??0} onChange={e=>set("walletMinOrder",Number(e.target.value))}
                 style={{width:"100%",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 10px",fontSize:13,outline:"none",background:"white"}}/>
             </div>
@@ -16301,7 +16308,7 @@ function SettingsPanel({settings,onSave,products=[]}){
             here wrote the same maxDiscountPct, so the two could show different numbers until a
             reload and it was never clear which one had won. */}
         <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Coin validity (months)</div>
+          <div style={ADMIN_LABEL}>Coin validity (months)</div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <input type="number" min="0" value={f.walletValidityMonths??0} onChange={e=>set("walletValidityMonths",Number(e.target.value))}
               style={{width:"90px",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
@@ -16319,7 +16326,7 @@ function SettingsPanel({settings,onSave,products=[]}){
         <div style={{fontSize:12,color:C.textSub,marginBottom:12,lineHeight:1.55}}>One code per customer. They unlock it by spending, friends redeem it at checkout for a discount, and the owner is paid reward coins when the referred order is delivered.</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div style={{gridColumn:"1 / -1"}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Friend&#39;s discount</div>
+            <div style={ADMIN_LABEL}>Friend&#39;s discount</div>
             <div style={{display:"flex",gap:8}}>
               {[["flat","₹ off"],["percent","% off"]].map(([k,l])=>(
                 <button key={k} type="button" className="press" onClick={()=>set("referralDiscountType",k)}
@@ -16334,25 +16341,25 @@ function SettingsPanel({settings,onSave,products=[]}){
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Friends currently get <b>{referralOfferLine(f)}</b>. A percentage is worked out on the cart before shipping and rounded down.</div>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Lifetime spend to unlock (₹)</div>
+            <div style={ADMIN_LABEL}>Lifetime spend to unlock (₹)</div>
             <input type="number" min="0" value={f.referralLifetimeSpendMin??1000} onChange={e=>set("referralLifetimeSpendMin",Number(e.target.value))}
               style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Applies to everyone still locked. Customers who already unlocked keep their code.</div>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Friend&#39;s minimum order (₹)</div>
+            <div style={ADMIN_LABEL}>Friend&#39;s minimum order (₹)</div>
             <input type="number" min="0" value={f.referralRedeemMinOrder??0} onChange={e=>set("referralRedeemMinOrder",Number(e.target.value))}
               style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = any cart size</div>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Owner&#39;s reward coins</div>
+            <div style={ADMIN_LABEL}>Owner&#39;s reward coins</div>
             <input type="number" min="0" value={f.referralCoins??0} onChange={e=>set("referralCoins",Number(e.target.value))}
               style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>Paid on delivery · 0 = no payout</div>
           </div>
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:C.textSub,marginBottom:5}}>Daily limit</div>
+            <div style={ADMIN_LABEL}>Daily limit</div>
             <input type="number" min="0" value={f.referralDailyLimit||0} onChange={e=>set("referralDailyLimit",Number(e.target.value))}
               style={{width:"100%",boxSizing:"border-box",borderRadius:10,border:`1.5px solid ${C.border}`,padding:"9px 12px",fontSize:13,outline:"none",background:"white"}}/>
             <div style={{fontSize:10,color:C.textSub,marginTop:3}}>0 = unlimited / day</div>

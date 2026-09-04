@@ -94,3 +94,16 @@ test('the sales dashboard splits takings by gateway and quarantines test payment
   assert.match(dash, /o\.gateway\?gatewayLabel\(o\.gateway\):"Not recorded"/);
   assert.match(dash, /test payment\{d\.testCount!==1\?"s":""\} excluded/);
 });
+
+test('Admin forms use one field-label style', () => {
+  // Three styles shared one scrolling column: 12px uppercase with wide tracking, 10.5px
+  // uppercase with narrow tracking, and 11px sentence case. Uppercase also shouts the labels
+  // that are a whole phrase.
+  assert.match(src, /const ADMIN_LABEL=\{fontSize:11,fontWeight:800,color:C\.textSub/);
+  const adminStart = src.indexOf('/* ═══════════════════ ADMIN LOGIN');
+  const adminEnd = src.indexOf('/* ═══════════════════ CARE GUIDES PAGE');
+  const admin = src.slice(adminStart, adminEnd);
+  assert.doesNotMatch(admin, /textTransform:"uppercase",letterSpacing:\.8,marginBottom:6\}\}>\{label\}/);
+  assert.doesNotMatch(admin, /fontSize:10\.5,fontWeight:700,color:C\.textSub,textTransform:"uppercase"/);
+  assert.ok((admin.match(/style=\{ADMIN_LABEL\}/g) || []).length >= 20, 'every field label shares it');
+});
