@@ -190,7 +190,7 @@ function storeCopy(saved, whenOn, whenOff){
 
 const ORDER_STATUSES = ["Confirmed","Shipped","Delivered"]; // the gateway confirms; admin ships and delivers
 const ALL_STATUSES   = ["Awaiting Payment","Payment Review","Confirmed","Shipped","Delivered","Cancelled"];
-const ADMIN_ORDER_FILTERS = ["All","Order Placed","Shipped","Delivered","Past Orders","Return/Replacement"];
+const ADMIN_ORDER_FILTERS = ["All","Awaiting Payment","Order Placed","Shipped","Delivered","Past Orders","Return/Replacement"];
 const PAY_WINDOW_MIN = 20; // gateways reject an expiry under ~15 minutes; 20 keeps a margin
 const DEFAULT_STOCK  = 10;
 const MAX_PER_ORDER  = 10;
@@ -240,6 +240,16 @@ function adminOrderStage(o,now=Date.now()){
   if(orderIsPast(o,now)) return "Past Orders";
   if(o&&o.status==="Delivered") return "Delivered";
   if(o&&o.status==="Shipped") return "Shipped";
+  /* An order nobody has paid for is not a new order to act on — it is a checkout still in
+     progress, and one that will auto-cancel itself if the payment window closes. It used to
+     land in "Order Placed", which is also the tab the New badge counts, so every abandoned
+     checkout arrived as work waiting to be done. Its own stage instead: still visible, still
+     one tap away, but no longer counted as something to pack.
+
+     Payment Review belongs here too. Since the gateway became the only thing that can confirm
+     a payment, an order sits in that state only when the money did not really move — a sandbox
+     test payment — so it is not an order to fulfil either. */
+  if(o&&(o.status==="Awaiting Payment"||o.status==="Payment Review")) return "Awaiting Payment";
   return "Order Placed";
 }
 /* An order the customer walked away from: cancelled by their own press, or auto-cancelled
@@ -5102,7 +5112,12 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
   if(from){ const f=new Date(from+"T00:00:00").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()>=f); }
   if(to){ const t=new Date(to+"T23:59:59").getTime(); list=list.filter(o=>new Date(o.placedAt).getTime()<=t); }
   list.sort((a,b)=>(b.placedAt||"").localeCompare(a.placedAt||""));
-  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID","State","Counts for GST","Supply Type","HSN Breakup","Taxable (Rs.)","No-GST Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","GST Total (Rs.)","Delivered On","DOA Qty","DOA Claim (customer)","DOA Approval Reason","DOA Refund (Rs.)","Return Reason (customer)","Return Approval Reason","Return Resolution","Return/Refund (Rs.)","Placed At (ISO)","Paid At (ISO)","Delivered On (ISO)"];
+  const head=["Order ID","Date","Status","Payment Status","Txn / Ref ID","Paid At","Amount (Rs.)","Customer","Phone","WhatsApp","Email","Address","City","Pincode","Zone","Items","Subtotal","Shipping","Courier (Rs.)","Premium Courier Extra (Rs.)","Thermacol Packing (Rs.)","Standard Packing (Rs.)","Premium Delivery","Live Guarantee","Suggested Packing","Opted Packing","Courier Partner","Consignment","ETA (days)","Shipping Refund -> Wallet (Rs.)","Coupon","Coupon Discount","Referral Code","Referral Discount (Rs.)","Wallet Used (Rs.)","Wallet Coins Used","Wallet Coins Earned","Customer Wallet Balance (coins)","Grand Total","DOA Status","Order Closed","Customer Summary","WhatsApp Updates","Customer ID","State","Counts for GST","Supply Type","HSN Breakup","Taxable (Rs.)","No-GST Value (Rs.)","CGST (Rs.)","SGST (Rs.)","IGST (Rs.)","GST Total (Rs.)","Delivered On","DOA Qty","DOA Claim (customer)","DOA Approval Reason","DOA Refund (Rs.)","Return Reason (customer)","Return Approval Reason","Return Resolution","Return/Refund (Rs.)","Placed At (ISO)","Paid At (ISO)","Delivered On (ISO)",
+    // Appended, never inserted — see isoStamp above. The return journey had no columns at all:
+    // the parcel the customer sent back, and the replacement the store sent out, were only ever
+    // visible by opening the order. Referral coins are a real wallet liability and belong here
+    // beside the discount that created them.
+    "Return Courier (customer)","Return Consignment (customer)","Replacement Courier","Replacement Consignment","Referral Coins Paid to Owner"];
   const pph=Number(settings?.loyaltyPointsPerHundred||10);
   const rupeePerPoint=Number(settings?.loyaltyRedeemValue||1);
   const rows=list.map(o=>{
@@ -5120,7 +5135,10 @@ function exportOrdersCSV(orders, from="", to="", settings={}, walletBalances={})
     // filled in, so a stray row can't quietly inflate the output tax you file.
     const isSupply=countsForGST(o);
     const hsnTxt=isSupply?Object.values(g.byHsn).map(b=>`${b.hsn} @${b.rate}%: taxable Rs.${b.taxable.toFixed(2)}, tax Rs.${b.tax.toFixed(2)}`).join(" | "):"";
-    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||"",g.state,isSupply?"Yes":"No",isSupply?(g.inter?"IGST (inter-state)":"CGST+SGST (intra-state)"):"",hsnTxt,isSupply?g.taxable:"",isSupply?(g.exempt||0):"",isSupply?g.cgst:"",isSupply?g.sgst:"",isSupply?g.igst:"",isSupply?g.total:"",delOn?fmtDate(delOn):"",o.doa?.qty||"",o.doa?.claimReason||"",o.doa?.adminReason||"",o.doa?.refundAmount||"",o.returnReq?.reason||"",o.returnReq?.adminReason||"",o.returnReq?.adminResolution||o.returnReq?.resolution||"",o.returnReq?.refundAmount||"",isoStamp(o.placedAt),isoStamp(o.paidAt),isoStamp(delOn)].map(esc).join(",");
+    return [o.orderNo||orderId(o.id),fmtDate(o.placedAt),o.status,o.paymentStatus||"",o.txnId||"",o.paidAt?fmtDate(o.paidAt):"",grand,o.address?.name,o.address?.phone,o.address?.whatsapp||o.address?.phone,o.userEmail||"",o.address?.address,o.address?.city,o.address?.pincode,o.shippingZoneLabel||"",items,o.total,o.fee,bd.courier||0,bd.special||0,bd.thermacol||0,bd.carton||0,o.specialDelivery?"Yes":"",o.liveGuaranteeFee||0,o.suggestedPackingLabel||"",o.packingLabel||"",o.courierName||"",o.trackingNumber||"",(o.etaDays===""||o.etaDays==null)?"":o.etaDays,o.shippingReward?.amount||"",o.coupon||"",o.couponDiscount||0,o.referralCode||"",o.referralDiscount||0,loyaltyUsed,ptsRedeemed,ptsEarned,wBal,grand,o.doa?.status||"",o.closed?"Yes":"",o.summary||"",o.waUpdates===false?"No":"Yes",o.userUid||"",g.state,isSupply?"Yes":"No",isSupply?(g.inter?"IGST (inter-state)":"CGST+SGST (intra-state)"):"",hsnTxt,isSupply?g.taxable:"",isSupply?(g.exempt||0):"",isSupply?g.cgst:"",isSupply?g.sgst:"",isSupply?g.igst:"",isSupply?g.total:"",delOn?fmtDate(delOn):"",o.doa?.qty||"",o.doa?.claimReason||"",o.doa?.adminReason||"",o.doa?.refundAmount||"",o.returnReq?.reason||"",o.returnReq?.adminReason||"",o.returnReq?.adminResolution||o.returnReq?.resolution||"",o.returnReq?.refundAmount||"",isoStamp(o.placedAt),isoStamp(o.paidAt),isoStamp(delOn),
+      o.returnReq?.courier||"",o.returnReq?.consignment||"",
+      o.returnReq?.replacementCourier||"",o.returnReq?.replacementConsignment||"",
+      Number(o.referralCoinsPaid)||0].map(esc).join(",");
   });
   const csv="\uFEFF"+[head.map(esc).join(","),...rows].join("\r\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -6910,7 +6928,11 @@ function ReturnRequestBlock({o, products=[], ownerWA, settings={}, onRequestRetu
           {/* The store's replacement parcel. Deliberately a separate line from the customer's own
               return shipment above — on a replacement two parcels are in the air at once, and one
               "tracking number" for both is the fastest way to have the customer chase the wrong one. */}
-          {(rr.replacementCourier||rr.replacementConsignment)&&(
+          {/* Gated on the resolution as well as the data. The shipment record is kept even if
+              the store later resolves the case a different way — a parcel that really went out
+              is a fact — but a customer being refunded should not still be told a replacement
+              is on its way. */}
+          {(rr.adminResolution||rr.resolution)==="replacement"&&(rr.replacementCourier||rr.replacementConsignment)&&(
             <div style={{marginTop:10,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"10px 12px"}}>
               <div style={{fontSize:12,fontWeight:800,color:"#065f46",marginBottom:3}}>🔁 Your replacement is on its way</div>
               <div style={{fontSize:11.5,color:"#047857",lineHeight:1.55}}>Sent via <b>{rr.replacementCourier||"courier"}</b>{rr.replacementConsignment?<> · <span style={{fontFamily:"monospace"}}>{rr.replacementConsignment}</span></>:null}</div>
@@ -7870,7 +7892,7 @@ function PincodeChecker({settings={}}){
       <div style={{fontSize:12.5,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>{LIVE_FISH_ENABLED?"Enter your 6-digit pincode to see if we deliver — and whether live fish reach your area.":"Enter your 6-digit pincode to see if we deliver to your area."}</div>
       <div style={{display:"flex",gap:8}}>
         <input value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,6));setRes(null);}}
-          onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric" placeholder="e.g. 600001"
+          onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric"
           style={{flex:1,borderRadius:12,border:"none",padding:"13px 14px",fontSize:15,outline:"none",letterSpacing:2,fontFamily:PRICE_FONT,minWidth:0}}/>
         <button className="press" onClick={check} style={{background:"#fff",color:C.primary,border:"none",borderRadius:12,padding:"0 20px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,cursor:"pointer"}}>Check</button>
       </div>
@@ -8492,7 +8514,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
             <>
               <div style={{marginBottom:12}}>
                 <div style={lbl}>Tank name</div>
-                <input value={tank.name} onChange={e=>setF("name",e.target.value)} placeholder="Living room tank" style={fld}/>
+                <input value={tank.name} onChange={e=>setF("name",e.target.value)} style={fld}/>
               </div>
               <div style={{marginBottom:12}}>
                 <div style={lbl}>Type</div>
@@ -8521,8 +8543,8 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
                 {numIn(tank.waterH,v=>setF("waterH",v),`Water line, not the rim`)}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-                <div><div style={lbl}>Filter</div><input value={tank.filter} onChange={e=>setF("filter",e.target.value)} placeholder="Sponge / HOB 500 L-h" style={fld}/></div>
-                <div><div style={lbl}>Heater</div><input value={tank.heater} onChange={e=>setF("heater",e.target.value)} placeholder="100 W" style={fld}/></div>
+                <div><div style={lbl}>Filter</div><input value={tank.filter} onChange={e=>setF("filter",e.target.value)} style={fld}/></div>
+                <div><div style={lbl}>Heater</div><input value={tank.heater} onChange={e=>setF("heater",e.target.value)} style={fld}/></div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
                 <div><div style={lbl}>Target temp °C</div>{numIn(tank.tempC,v=>setF("tempC",v),"26")}</div>
@@ -11202,8 +11224,13 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             </div>
           )}
           {showAddrForm&&(<>
-          {inp("Full Name","name","text","John Doe")}
-          {inp("Mobile Number","phone","tel","9876543210")}
+          {/* No sample values in these placeholders. An invented name or pincode greyed into an
+              empty field reads as something already filled in — people tab past it, and some try
+              to type around it. Every field here is labelled above, so the hint was adding
+              nothing but doubt. Format constraints that genuinely need saying (10 digits, 6
+              digits) are enforced by maxLength and inputMode, and said by the error text. */}
+          {inp("Full Name","name","text")}
+          {inp("Mobile Number","phone","tel")}
           </>)}
           {/* WhatsApp is requested only when the customer opts into status updates. */}
           <label style={{display:"flex",alignItems:"center",gap:10,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"11px 13px",marginBottom:addr.waUpdates?10:14,cursor:"pointer",userSelect:"none"}}>
@@ -11215,12 +11242,12 @@ function CheckoutPage({cart,total,nav,goBack,onOrderPlaced,onCancelled,onCancelP
             <span aria-hidden="true" style={{width:20,height:20,borderRadius:"50%",background:"#25D366",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900}}>☎</span>
             <span style={{fontSize:12.5,color:"#166534",fontWeight:700}}>Update me on WhatsApp</span>
           </label>
-          {addr.waUpdates&&inp("WhatsApp Number","whatsapp","tel","9876543210")}
+          {addr.waUpdates&&inp("WhatsApp Number","whatsapp","tel")}
           {showAddrForm&&(<>
-          {inp("Street Address","address","text","123, Main Street")}
+          {inp("Street Address","address","text")}
           <div style={{display:"flex",gap:12}}>
-            {inp("City","city","text","Chennai",true)}
-            {inp("Pincode","pincode","text","600001",true)}
+            {inp("City","city","text","",true)}
+            {inp("Pincode","pincode","text","",true)}
           </div>
           {(()=>{ const d=pincodeToState(addr.pincode); const six=/^\d{6}$/.test(addr.pincode||"");
             return (
@@ -13282,6 +13309,12 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
 
   const handleUpdate=async()=>{
     if(o.closed){ showToast("Order is closed — reopen it to change status"); return; }
+    /* The UI above disables the fulfilment buttons on an unpaid order; this is the same rule
+       enforced where the write happens, so a stale screen or a status left over from before
+       the payment failed cannot save a confirmed, unpaid order. */
+    if(!paymentSucceeded(o) && ORDER_STATUSES.includes(status)){
+      showToast("This order has not been paid — the gateway confirms it, not the store","error"); return;
+    }
     setSaving(true);
     try{
       const etaNum=etaDays===""?"":Math.max(0,Number(etaDays)||0);
@@ -13399,10 +13432,18 @@ function AdminOrderDetail({order:o,onBack,onUpdateOrder,onDeleteOrder,showToast,
           {o.closed&&(
             <div style={{fontSize:11.5,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5,fontWeight:600}}>🔒 This order is closed, so its status is locked. Reopen it below if you really need to change anything.</div>
           )}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12,opacity:o.closed?.55:1,pointerEvents:o.closed?"none":"auto"}}>
+          {/* Fulfilment is for orders that have been paid for. Removing the "Verify & Confirm"
+              button below would have meant little while this row could put an unpaid order
+              straight into Confirmed in one tap — same outcome, one control over. It also took
+              the customer's self-cancel button away, because that is offered only while an
+              order is still awaiting payment. The gateway confirms; this row ships. */}
+          {!o.closed&&!verified&&(
+            <div style={{fontSize:11.5,color:"#92400e",background:"#fef3c7",border:"1px solid #fde68a",borderRadius:10,padding:"9px 12px",marginBottom:10,lineHeight:1.5,fontWeight:600}}>⏳ Not paid yet — fulfilment opens once {o.gateway?gatewayLabel(o.gateway):"the gateway"} confirms the payment.</div>
+          )}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12,opacity:(o.closed||!verified)?.55:1,pointerEvents:(o.closed||!verified)?"none":"auto"}}>
             {ORDER_STATUSES.map(s=>(
-              <button key={s} className="press" disabled={o.closed} onClick={()=>setStatus(s)}
-                style={{padding:"9px 12px",borderRadius:12,border:`1.5px solid ${status===s?C.primary:C.border}`,background:status===s?C.primary:"transparent",color:status===s?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:o.closed?"default":"pointer"}}>
+              <button key={s} className="press" disabled={o.closed||!verified} onClick={()=>setStatus(s)}
+                style={{padding:"9px 12px",borderRadius:12,border:`1.5px solid ${status===s?C.primary:C.border}`,background:status===s?C.primary:"transparent",color:status===s?"white":C.textSub,fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:(o.closed||!verified)?"default":"pointer"}}>
                 {s}
               </button>
             ))}
@@ -17042,13 +17083,13 @@ function RequestPage({nav,goBack,user,onSubmit,myRequests}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Your Name *</div>
-            <input value={form.name} onChange={e=>f("name",e.target.value)} placeholder="Name"
+            <input value={form.name} onChange={e=>f("name",e.target.value)}
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.name?C.danger:C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white"}}/>
             {errs.name&&<div style={{fontSize:11,color:C.danger,fontWeight:600,marginTop:4}}>{errs.name}</div>}
           </div>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:C.textSub,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Phone *</div>
-            <input type="tel" value={form.phone} onChange={e=>f("phone",e.target.value.replace(/\D/g,""))} maxLength={10} placeholder="9876543210"
+            <input type="tel" value={form.phone} onChange={e=>f("phone",e.target.value.replace(/\D/g,""))} maxLength={10}
               style={{width:"100%",borderRadius:12,border:`1.5px solid ${errs.phone?C.danger:C.border}`,padding:"12px 14px",fontSize:14,outline:"none",background:"white"}}/>
             {errs.phone&&<div style={{fontSize:11,color:C.danger,fontWeight:600,marginTop:4}}>{errs.phone}</div>}
           </div>

@@ -20,9 +20,13 @@ test('customer orders are the original single list, without lifecycle tabs', () 
 });
 
 test('admin orders use the requested lifecycle and claim filters', () => {
-  assert.match(app, /const ADMIN_ORDER_FILTERS = \["All","Order Placed","Shipped","Delivered","Past Orders","Return\/Replacement"\]/);
+  assert.match(app, /const ADMIN_ORDER_FILTERS = \["All","Awaiting Payment","Order Placed","Shipped","Delivered","Past Orders","Return\/Replacement"\]/);
   assert.match(app, /function adminOrderStage\(/);
   assert.match(app, /if\(adminOrderNeedsAttention\(o\)\) return "Return\/Replacement"/);
+  /* An unpaid checkout is not work waiting. It gets its own stage, so the "New" badge — which
+     counts the Order Placed tab — stops counting abandoned checkouts as orders to pack. */
+  assert.match(app, /if\(o&&\(o\.status==="Awaiting Payment"\|\|o\.status==="Payment Review"\)\) return "Awaiting Payment"/);
+  assert.match(app, /const newOrderCount=orders\.filter\(o=>adminOrderStage\(o\)==="Order Placed"\)\.length/);
   assert.match(app, /adminOrderStage\(o\)===s/);
   const admin = app.slice(app.indexOf('function AdminHub('), app.indexOf('function SettingsPanel('));
   assert.doesNotMatch(admin, /\["All",\.\.\.ALL_STATUSES\]/);
