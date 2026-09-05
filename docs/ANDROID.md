@@ -84,7 +84,7 @@ requirement for personal developer accounts: at least 12 testers opted in contin
 | Version code | Name | Date | Track | Carries the UPI fixes |
 |---|---|---|---|---|
 | 11 | `2.0.0` | Aug 2026 | Closed testing | no |
-| 12 | `2.0.1` | Sep 2026 | Closed testing | yes |
+| 12 | `2.0.1` | Sep 2026 | Closed testing | yes — **verified at checkout on a Play-signed install** |
 
 That gap is the thing to notice: the two fixes below sat in the local working copy for a
 release without ever being built into a bundle, because the version code was never bumped
@@ -98,6 +98,17 @@ applying early is not free, it costs another fortnight. Wait out the full window
 pressing **Apply for production**. Publishing further closed-testing releases during that
 window is fine and resets nothing; it also gives the testers a reason to open the app, which
 is what the requirement is really measuring.
+
+### Installing a Play build over an Android Studio one
+
+The update fails, and Play offers only its generic "check your connection" help. The cause is
+signing: Play App Signing re-signs the uploaded bundle with the app signing key, while the
+build installed from Android Studio carries the upload key, and Android refuses to update an
+app whose signature does not match. Uninstall the developer build first, then install from the
+testing link — it is a fresh install rather than an update, and every Play update after that
+behaves normally. Uninstalling clears the WebView's data, so the customer is signed out and the
+locally-stored tank profile is gone; orders, wallet and referral code live in Firebase and are
+untouched.
 
 ## Building a release bundle
 
