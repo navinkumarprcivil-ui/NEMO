@@ -1535,6 +1535,45 @@ if(typeof window!=="undefined"){
   window.addEventListener("nemo-fb-ready",savePushToken);
 }
 
+/* Only the reminder SCHEDULE leaves the device. The tank profile, its photo, the stock list
+   and the water-test log stay in localStorage where they have always been (saveMyTank) — the
+   server needs one date to know when to send, and knowing anything more about someone's
+   aquarium would be collecting it for no reason.
+
+   Switching reminders off removes the row rather than flagging it: there should be no
+   server-side record at all of a customer who opted out.
+
+   The uid comes from the auth session, not from userKey(): userKey falls back to a "ph-"
+   pseudo-key for phone accounts, which no security rule can match, so a write under it would
+   be denied and swallowed. */
+function syncCareReminder(tank){
+  if(!FB_OK||!FB_DB||!FB_AUTH) return;
+  let uid="";
+  try{ uid=(FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||""; }catch(e){}
+  if(!uid) return;
+  let ref;
+  try{ ref=FB_DB.ref("careReminders/"+uid); }catch(e){ return; }
+  if(!tank||!tank.remind||!tank.litres){ try{ ref.remove().catch(()=>{}); }catch(e){} return; }
+  const d=careDue(tank);
+  /* A tank with no set-up date and no logged care reads as due right now, which is right on
+     the page but wrong as a push: nobody wants a notification the second they flick the
+     switch. Give that case its first reminder a week out. */
+  const nextAt=Number(d&&d.nextAt)||(Date.now()+CARE_INTERVAL_DAYS*864e5);
+  try{ ref.set({nextAt,at:Date.now()}).catch(()=>{}); }catch(e){}
+}
+
+/* Queued when the admin marks an order Shipped; the Worker sends on its next tick.
+   The row carries only WHO and WHICH ORDER — never the words. The server re-reads the order,
+   confirms it really is Shipped, and composes the message itself, so a queue row can never
+   become a way to put arbitrary text on a customer's phone. */
+function queueOrderPush(uid,orderId,kind){
+  if(!FB_OK||!FB_DB||!uid||!orderId) return;
+  try{
+    FB_DB.ref("pushQueue").push({uid:String(uid),orderId:String(orderId),kind:String(kind),at:Date.now()})
+      .catch(()=>{});
+  }catch(e){}
+}
+
 /* The Firebase scripts load async, so on a cold cache the app can boot before FB_OK is true.
    Wait a bounded moment for the connection rather than deciding there's no cloud yet — but
    never longer than `ms`, because a shopper with no connection still has a store to browse. */
@@ -7857,7 +7896,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.b75eb867";
+const APP_BUILD = "v90.8546d4b0";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -8542,7 +8581,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   const [editing,setEditing]=useState(()=>!loadMyTank(userKey(user)));
   const [savedNote,setSavedNote]=useState("");
   const saved=!!tank.litres;
-  const persist=(next)=>{ setTank(next); saveMyTank(uid,next); };
+  const persist=(next)=>{ setTank(next); saveMyTank(uid,next); syncCareReminder(next); };
   const setF=(k,v)=>persist({...tank,[k]:v});
 
   /* ── Volume, from the shape and units on the profile ── */
@@ -13893,6 +13932,11 @@ function NemoStore(){
     const old=orders.find(o=>o.id===updated.id);
     const prevStatus=old?old.status:"";
     const becamePaid=paymentSucceeded(updated)&&!paymentSucceeded(old);
+    /* Only on the crossing, not on every save of an already-shipped order — re-saving one to
+       correct a courier number must not tell the customer it shipped again. */
+    if(updated.status==="Shipped" && prevStatus!=="Shipped" && updated.userUid){
+      queueOrderPush(updated.userUid, updated.id, "shipped");
+    }
     if(becamePaid){
       if(updated.referralCode){
         const consumed=await finalizeReferralOnPayment(updated.referralCode,updated.userUid,updated.id);

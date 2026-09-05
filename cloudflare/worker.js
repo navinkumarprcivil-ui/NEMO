@@ -6,6 +6,7 @@ import loyaltyRestore from '../api/loyalty-restore.js';
 import referralStatus from '../api/referral-status.js';
 import tankStreak from '../api/tank-streak.js';
 import tankCleanup from '../api/cron-tank-cleanup.js';
+import cronPush from '../api/cron-push.js';
 import sharePage from '../api/share.js';
 import productPage from '../api/product-page.js';
 import sitemap from '../api/sitemap.js';
@@ -20,6 +21,7 @@ const API = new Map([
   ['/api/referral-status', referralStatus],
   ['/api/tank-streak', tankStreak],
   ['/api/cron-tank-cleanup', tankCleanup],
+  ['/api/cron-push', cronPush],
 ]);
 
 const securityHeaders = {
@@ -316,16 +318,16 @@ async function staticAssetResponse(request, env, path, ctx) {
   return (await liveFishForSeo(ctx)) ? withLiveFishSeo(out) : out;
 }
 
-async function scheduledCleanup(env) {
-  const url = new URL('https://nemo.internal/api/cron-tank-cleanup');
+async function runCron(env, name, handler) {
+  const url = new URL(`https://nemo.internal/api/${name}`);
   const req = new Request(url, {
     method: 'GET',
     headers: { authorization: `Bearer ${env.CRON_SECRET || ''}` },
   });
-  const response = await runHandler(tankCleanup, req, url);
+  const response = await runHandler(handler, req, url);
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new Error(`tank-cleanup ${response.status}: ${detail.slice(0, 200)}`);
+    throw new Error(`${name} ${response.status}: ${detail.slice(0, 200)}`);
   }
 }
 
@@ -372,6 +374,10 @@ export default {
   },
 
   async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(scheduledCleanup(env));
+    /* Kept independent: a failing tank cleanup must not stop shipping notices going out, and
+       a push outage must not leave expired showcase entries on the home page. Each rejection
+       surfaces in the Worker's own logs. */
+    ctx.waitUntil(runCron(env, 'cron-tank-cleanup', tankCleanup));
+    ctx.waitUntil(runCron(env, 'cron-push', cronPush));
   },
 };
