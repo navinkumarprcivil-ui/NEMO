@@ -147,6 +147,54 @@ is the worst shape for a bug: a debug run looks perfect. Turning R8 on later mea
 keep rules for that bridge and then re-testing sign-in, sharing and a real payment on a
 device. Worth doing once the app is through its qualifying run; not worth doing during it.
 
+## Pending for version code 13
+
+Three changes agreed but not yet applied. They exist only here: the Android project is not in
+this repository, so nothing else records them.
+
+**1. Firebase Cloud Messaging — the app half of push.** The server half shipped in
+`lib/push.mjs` and `api/cron-push.js` and is live; nothing can reach a phone until the app
+holds an FCM token.
+
+- `app/build.gradle.kts`: add `implementation("com.google.firebase:firebase-messaging")`
+  under the existing auth line. No version — the BOM supplies it.
+- `AndroidManifest.xml`: add `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />`,
+  and inside `<application>` a `<service android:name=".NemoMessagingService" android:exported="false">`
+  with an intent filter for `com.google.firebase.MESSAGING_EVENT`.
+- A `NemoMessagingService` that builds the notification itself. Messages are sent data-only
+  precisely so that it always runs — see the reasoning in `lib/push.mjs`.
+- `MainActivity`: request `POST_NOTIFICATIONS` at runtime on Android 13+, fetch the token, and
+  hand it to the site with `webView.evaluateJavascript("window.__nemoPushToken('…')")`. That
+  global is already deployed (`app.jsx`), and stores the token under the signed-in uid.
+
+**2. Google sign-in throws `NoCredentialException` on the first attempt after a fresh
+install.** Confirmed on 2.0.1: first tap failed, second succeeded. The name misleads — it is
+not "no Google account on this phone", it is "Play services has not populated the account list
+yet". A retry finds them:
+
+```kotlin
+private suspend fun getGoogleCredential(): GetCredentialResponse {
+    return try {
+        credentialManager.getCredential(this@MainActivity, googleCredentialRequest())
+    } catch (notReady: NoCredentialException) {
+        delay(700)
+        credentialManager.getCredential(this@MainActivity, googleCredentialRequest())
+    }
+}
+```
+
+A customer who taps *Cancel* on the picker gets `GetCredentialCancellationException`, a
+different type, so this can never re-prompt someone who dismissed it deliberately.
+
+**3. Sign-in errors are shown to customers as Java class names.** `startNativeGoogleSignIn()`
+builds its message as `"${e::class.java.simpleName}: " + e.message`, so a new customer's first
+action in the app can produce "NoCredentialException: No credentials available". Log the
+exception under a `NemoAuth` tag for diagnosis and show plain language instead. Nothing is lost
+from Logcat; the customer stops reading stack-trace vocabulary.
+
+Also open, lower priority: `android:usesCleartextTraffic="true"` is in the manifest and is not
+needed — the app only ever loads `https://www.nemoaquastore.in`.
+
 ## If the app is ever migrated to a TWA
 
 `android-twa/` holds the configuration for it and the asset links are already live, so the
