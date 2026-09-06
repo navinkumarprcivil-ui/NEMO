@@ -42,3 +42,25 @@ test('the two policy pages people read when worried carry no emoji heading', () 
   // The chips under "More policies" keep theirs — six similar buttons need telling apart.
   assert.match(app, /<span>\{POLICY_META\[k\]\.icon\}<\/span>\{POLICY_META\[k\]\.title\}/);
 });
+
+test('a product page shows exactly one "what else?" rail', () => {
+  // Cross-sell, frequently-bought and recently-viewed are three scrolling strips asking the
+  // same question. Stacked they read as filler and push the reviews off the end of the page.
+  assert.match(app, /function detailRail\(cross, fbt, recent\)\{/);
+  assert.match(app, /if\(cross\.length\) return "cross";/,
+    'items picked for this product outrank the generic ones');
+  assert.match(app, /if\(fbt\.length>=2\) return "fbt";/);
+  assert.match(app, /if\(recent\.length>=2\) return "recent";/,
+    'a history rail knows nothing about the product and goes last');
+  assert.match(app, /const rail\s+= detailRail\(crossSell,fbtList,recentList\);/);
+});
+
+test('each rail is gated on having won, not merely on having content', () => {
+  assert.match(app, /if\(rail!=="cross"\) return null;/);
+  assert.match(app, /\{rail==="fbt"&&<FrequentlyBought /);
+  assert.match(app, /\{rail==="recent"&&<RecentlyViewedRail /);
+  // The emptiness test has to be answerable about all three at once, so the lists live
+  // outside the components that draw them.
+  assert.match(app, /function fbtItems\(base, products=\[\]\)\{/);
+  assert.match(app, /function recentlyViewedItems\(currentId, products=\[\]\)\{/);
+});

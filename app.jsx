@@ -9777,15 +9777,33 @@ function DeliveryEstimate({settings={}}){
 }
 
 /* Frequently bought together — complementary in-stock items + add-all */
+/* Both rails' contents, computed outside the components that draw them. A product page shows
+   at most ONE "what else?" rail (see detailRail), and it cannot choose between them without
+   first knowing which of them would have anything in it. */
+function fbtItems(base, products=[]){
+  const pool=products.filter(x=>x.id!==base.id && !x.comingSoon && (x.stockCount??DEFAULT_STOCK)>0);
+  const prefer = (base.category==="Live Fish"||base.category==="Plants") ? ["Feed","Accessories","Tanks"] : ["Accessories","Feed","Tanks"];
+  const score=x=>{ const i=prefer.indexOf(x.category); return i<0?0:(prefer.length-i); };
+  return [...pool].sort((a,b)=>score(b)-score(a)||(b.ratingAvg||0)-(a.ratingAvg||0)).slice(0,3);
+}
+function recentlyViewedItems(currentId, products=[]){
+  return loadRecentlyViewed().filter(id=>id!==currentId).map(id=>products.find(p=>p.id===id)).filter(Boolean).slice(0,8);
+}
+/* Which of the three rails this product page gets — and it gets exactly one.
+   Stacked, they were three near-identical scrolling strips asking the same question under one
+   product, which reads as filler and pushes the reviews off the end of the page. The order is
+   by how much each one knows about the product actually in front of the customer: items chosen
+   to complement THIS product, then the generic companion picks, then a history rail that knows
+   nothing about it at all and is only better than empty space. */
+function detailRail(cross, fbt, recent){
+  if(cross.length) return "cross";
+  if(fbt.length>=2) return "fbt";
+  if(recent.length>=2) return "recent";
+  return "";
+}
 function FrequentlyBought({base, products=[], addToCart, mediaCache={}, nav}){
-  const fbt=useMemo(()=>{
-    const pool=products.filter(x=>x.id!==base.id && !x.comingSoon && (x.stockCount??DEFAULT_STOCK)>0);
-    const prefer = (base.category==="Live Fish"||base.category==="Plants") ? ["Feed","Accessories","Tanks"] : ["Accessories","Feed","Tanks"];
-    const score=x=>{ const i=prefer.indexOf(x.category); return i<0?0:(prefer.length-i); };
-    return [...pool].sort((a,b)=>score(b)-score(a)||(b.ratingAvg||0)-(a.ratingAvg||0)).slice(0,3);
-  },[products,base.id]);
+  const fbt=useMemo(()=>fbtItems(base,products),[products,base.id]);
   if(fbt.length<2) return null;
-  const total=fbt.reduce((s,x)=>s+effectivePrice(x),0)+effectivePrice(base);
   return(
     <div style={{margin:"18px 0 0"}}>
       <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:C.text,marginBottom:10}}>🧰 Frequently bought together</div>
@@ -9810,7 +9828,7 @@ function FrequentlyBought({base, products=[], addToCart, mediaCache={}, nav}){
 
 /* Recently viewed rail on the product page */
 function RecentlyViewedRail({currentId, products=[], mediaCache={}, nav}){
-  const items=useMemo(()=>loadRecentlyViewed().filter(id=>id!==currentId).map(id=>products.find(p=>p.id===id)).filter(Boolean).slice(0,8),[products,currentId]);
+  const items=useMemo(()=>recentlyViewedItems(currentId,products),[products,currentId]);
   if(items.length<2) return null;
   return(
     <div style={{margin:"22px 0 0"}}>
@@ -10051,6 +10069,14 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   const [photoZoom,setPhotoZoom] = useState(null); // review photo lightbox src
   const [lightbox,setLightbox] = useState(-1); // product gallery lightbox — active slide index (-1 = closed)
   const galRef                 = useRef(null); // the hero scroller, so the arrows can drive it
+
+  /* One rail per page, chosen before anything is drawn — see detailRail. Each list is worked
+     out here rather than inside the component that renders it, because "is this rail empty?"
+     has to be answerable about all three at once. */
+  const crossSell   = useMemo(()=>crossSellProducts(p,products,6),[p,products]);
+  const fbtList     = useMemo(()=>p.comingSoon?[]:fbtItems(p,products),[p,products]);
+  const recentList  = useMemo(()=>recentlyViewedItems(p.id,products),[p.id,products]);
+  const rail        = detailRail(crossSell,fbtList,recentList);
 
   useEffect(()=>{
     setLoadingRev(true);
@@ -10388,10 +10414,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           </div>
         )}
 
-        {/* Goes well with — cross-sell complementary products */}
+        {/* Goes well with — cross-sell complementary products. First claim on the page's one
+            rail: these are picked for the product being looked at, not for the shop. */}
         {(()=>{
-          const cross=crossSellProducts(p,products,6);
-          if(!cross.length) return null;
+          const cross=crossSell;
+          if(rail!=="cross") return null;
           return(
             <div style={{marginTop:26}}>
               <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
@@ -10445,10 +10472,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           );
         })()}
 
-        {/* Delivery estimate, frequently-bought-together & recently viewed */}
+        {/* Delivery estimate, then whichever rail is left — never both, and never either one
+            when "Goes well with" above already answered the question. */}
         {!p.comingSoon&&<DeliveryEstimate/>}
-        {!p.comingSoon&&<FrequentlyBought base={p} products={products} addToCart={addToCart} mediaCache={mediaCache} nav={nav}/>}
-        <RecentlyViewedRail currentId={p.id} products={products} mediaCache={mediaCache} nav={nav}/>
+        {rail==="fbt"&&<FrequentlyBought base={p} products={products} addToCart={addToCart} mediaCache={mediaCache} nav={nav}/>}
+        {rail==="recent"&&<RecentlyViewedRail currentId={p.id} products={products} mediaCache={mediaCache} nav={nav}/>}
         {/* Trust signals — reassurance right at the buy decision */}
         {!p.comingSoon&&(
           <div style={{margin:"22px 0 6px",padding:"14px 12px",background:C.card,borderRadius:16,border:`1px solid ${C.border}`}}>
