@@ -7821,7 +7821,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
           WHOLE inside it. It used to be a 120px letterbox with object-fit:cover, which cropped a
           portrait fish photo down to a horizontal sliver and cut the animal in half. */}
       <div style={{aspectRatio:"1 / 1",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden",
-        background:imgSrc?"#f7fbfc":`linear-gradient(140deg,${m.c1},${m.c2})`}}>
+        background:imgSrc?"#ffffff":`linear-gradient(140deg,${m.c1},${m.c2})`}}>
         {imgSrc
           ? <SmoothImg src={imgSrc} alt={p.name} style={{width:"100%",height:"100%",objectFit:"contain",padding:6}}/>
           : productExpectsImage(p)
@@ -7906,7 +7906,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.1b46aeb0";
+const APP_BUILD = "v90.1ecdd646";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -10088,15 +10088,23 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
     const left=i*el.clientWidth;
     if(el.scrollTo) el.scrollTo({left,behavior:"smooth"}); else el.scrollLeft=left;
   };
+  /* One control style for everything sitting over the hero, whatever is behind it. The photo
+     area is white now, so the old white-on-translucent-black buttons — which relied on a dark
+     scrim across the top to be readable at all — would have vanished into the picture. A page
+     whose product has no photo yet still shows a deep category gradient, and a video frame is
+     black, so the buttons cannot simply invert either. Dark ink on a translucent white chip is
+     the one thing legible on all three. */
+  const heroBtn={background:"rgba(255,255,255,.88)",border:"1px solid rgba(15,23,42,.10)",color:C.text,
+    backdropFilter:"blur(6px)",boxShadow:"0 2px 10px rgba(15,23,42,.16)"};
   /* Prev/next arrow over the hero. Dimmed and inert at either end, so the shopper can see
      where they are in the set without counting dots. */
   const galArrow=(dir,side,label,glyph)=>{
     const off = dir<0 ? slide<=0 : slide>=slides.length-1;
     return(
       <button className="press" onClick={()=>goSlide(dir)} disabled={off} aria-label={label}
-        style={{position:"absolute",top:150,transform:"translateY(-50%)",[side]:12,width:38,height:38,borderRadius:"50%",
-          background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:22,lineHeight:1,
-          paddingBottom:3,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2,
+        style={{...heroBtn,position:"absolute",top:150,transform:"translateY(-50%)",[side]:12,width:38,height:38,borderRadius:"50%",
+          fontSize:22,lineHeight:1,
+          paddingBottom:3,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,
           opacity:off?.28:1,cursor:off?"default":"pointer",transition:"opacity .18s"}}>{glyph}</button>
     );
   };
@@ -10144,7 +10152,11 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
   return(
     <div className="slide-up">
       {/* Hero media gallery */}
-      <div style={{position:"relative",background:slides.length?"#000":`linear-gradient(155deg,${m.c1},${m.c2})`}}>
+      {/* White behind the product, not black. A photo shot on a white sweep used to sit in a
+          black surround that made the fish look like a specimen in a case; on the page the
+          panel below is white too, so the picture now runs into the page instead of being
+          framed against it. */}
+      <div style={{position:"relative",background:slides.length?"#ffffff":`linear-gradient(155deg,${m.c1},${m.c2})`}}>
         <div ref={galRef} style={{height:300,display:"flex",overflowX:"auto",scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch"}}
           onScroll={e=>{ const i=Math.round(e.target.scrollLeft/e.target.clientWidth); if(i!==slide)setSlide(i); }}>
           {slides.length===0 && (
@@ -10152,35 +10164,43 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
               <span style={{fontSize:110,userSelect:"none"}}>{m.emoji}</span>
             </div>
           )}
+          {/* Video keeps its black surround: letterboxing a clip against white reads as a
+              broken player, where a still photograph against white reads as a catalogue. */}
           {slides.map((s,i)=>(
-            <div key={i} onClick={()=>{ if(s.type==="image") openPhoto(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:"#000",cursor:s.type==="image"?"zoom-in":"default"}}>
+            <div key={i} onClick={()=>{ if(s.type==="image") openPhoto(i); }} style={{minWidth:"100%",height:"100%",scrollSnapAlign:"start",display:"flex",alignItems:"center",justifyContent:"center",background:s.type==="video"?"#000":"#ffffff",cursor:s.type==="image"?"zoom-in":"default"}}>
               {s.type==="video"
                 ? <video src={s.src} controls autoPlay muted loop playsInline preload="auto" style={{width:"100%",height:"100%",objectFit:"contain"}}/>
                 : <SmoothImg src={s.src} alt={p.name} loading="eager" style={{width:"100%",height:"100%",objectFit:"contain"}}/>}
             </div>
           ))}
         </div>
-        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,.3) 0%,transparent 35%)",pointerEvents:"none"}}/>
+        {/* The dark wash across the top has gone with the white controls it was there to make
+            readable. Over a white photo it was just a grey smear on the product. */}
         {/* Same goBack the phone's own Back button runs, so this arrow — the one most people
             actually tap — returns to the spot in the list they came from rather than the top
             of it. Working down a long shop list and losing the place on every product opened
             is what made browsing feel like starting over each time. */}
         <button className="press" onClick={goBack}
-          style={{position:"absolute",top:50,left:16,background:"rgba(255,255,255,.2)",border:"1.5px solid rgba(255,255,255,.35)",borderRadius:12,width:40,height:40,color:"white",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)"}}><BackArrow/></button>
+          style={{...heroBtn,position:"absolute",top:50,left:16,borderRadius:12,width:40,height:40,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}><BackArrow/></button>
         {slides.length>1&&galArrow(-1,"left","Previous photo","‹")}
         {slides.length>1&&galArrow(1,"right","Next photo","›")}
         {slides.length>1&&(
-          <div style={{position:"absolute",bottom:36,left:0,right:0,display:"flex",justifyContent:"center",gap:6,pointerEvents:"none"}}>
-            {slides.map((s,i)=>(
-              <div key={i} style={{width:i===slide?20:7,height:7,borderRadius:20,background:i===slide?"white":"rgba(255,255,255,.5)",transition:"width .2s"}}/>
-            ))}
+          <div style={{position:"absolute",bottom:36,left:0,right:0,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
+            {/* On their own chip. White dots vanished against a white photo and dark ones would
+                vanish against a video, and the dots are the only thing here that has to be read
+                at a glance rather than aimed at. */}
+            <div style={{...heroBtn,display:"flex",alignItems:"center",gap:6,padding:"6px 9px",borderRadius:20}}>
+              {slides.map((s,i)=>(
+                <div key={i} style={{width:i===slide?20:7,height:7,borderRadius:20,background:i===slide?C.text:"rgba(15,23,42,.28)",transition:"width .2s"}}/>
+              ))}
+            </div>
           </div>
         )}
         {slides[slide]&&slides[slide].type==="image"&&(
           <button className="press" onClick={()=>openPhoto(slide)} aria-label="Open photo full screen"
-            style={{position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,background:"rgba(0,0,0,.42)",border:"1px solid rgba(255,255,255,.28)",color:"white",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(6px)",zIndex:2}}>⤢</button>
+            style={{...heroBtn,position:"absolute",bottom:34,right:14,width:38,height:38,borderRadius:12,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}>⤢</button>
         )}
-        {slides[slide]&&<span style={{position:"absolute",top:50,right:16,background:"rgba(0,0,0,.4)",color:"white",fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,backdropFilter:"blur(6px)"}}>
+        {slides[slide]&&<span style={{...heroBtn,position:"absolute",top:50,right:16,fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,zIndex:2}}>
           {slides[slide].type==="video"?"▶ Video":`📷 ${slide+1}/${slides.length}`}
         </span>}
       </div>
