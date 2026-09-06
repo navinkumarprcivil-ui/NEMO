@@ -85,6 +85,7 @@ requirement for personal developer accounts: at least 12 testers opted in contin
 |---|---|---|---|---|
 | 11 | `2.0.0` | Aug 2026 | Closed testing | no |
 | 12 | `2.0.1` | Sep 2026 | Closed testing | yes — **verified at checkout on a Play-signed install** |
+| 13 | `2.0.2` | Sep 2026 | Closed testing | yes, plus push notifications and the sign-in retry |
 
 That gap is the thing to notice: the two fixes below sat in the local working copy for a
 release without ever being built into a bundle, because the version code was never bumped
@@ -147,53 +148,62 @@ is the worst shape for a bug: a debug run looks perfect. Turning R8 on later mea
 keep rules for that bridge and then re-testing sign-in, sharing and a real payment on a
 device. Worth doing once the app is through its qualifying run; not worth doing during it.
 
-## Pending for version code 13
+## What version code 13 added
 
-Three changes agreed but not yet applied. They exist only here: the Android project is not in
-this repository, so nothing else records them.
+Push notifications end to end, and the sign-in retry. All three items that had been pending are
+now shipped and verified on a device.
 
-**1. Firebase Cloud Messaging — the app half of push.** The server half shipped in
-`lib/push.mjs` and `api/cron-push.js` and is live; nothing can reach a phone until the app
-holds an FCM token.
+**Firebase Cloud Messaging.** `firebase-messaging` in `app/build.gradle.kts` (no version — the
+BOM supplies it), `POST_NOTIFICATIONS` and a `.NemoMessagingService` entry in the manifest, and
+the service itself, which draws every notification. Messages are sent data-only precisely so
+that it always runs — see the reasoning in `lib/push.mjs`.
 
-- `app/build.gradle.kts`: add `implementation("com.google.firebase:firebase-messaging")`
-  under the existing auth line. No version — the BOM supplies it.
-- `AndroidManifest.xml`: add `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />`,
-  and inside `<application>` a `<service android:name=".NemoMessagingService" android:exported="false">`
-  with an intent filter for `com.google.firebase.MESSAGING_EVENT`.
-- A `NemoMessagingService` that builds the notification itself. Messages are sent data-only
-  precisely so that it always runs — see the reasoning in `lib/push.mjs`.
-- `MainActivity`: request `POST_NOTIFICATIONS` at runtime on Android 13+, fetch the token, and
-  hand it to the site with `webView.evaluateJavascript("window.__nemoPushToken('…')")`. That
-  global is already deployed (`app.jsx`), and stores the token under the signed-in uid.
+`MainActivity` fetches the token once per launch, asks for the notification permission after the
+first page has loaded (so the dialog appears over the store rather than a blank screen), and
+hands the token to `window.__nemoPushToken`, which stores it under the signed-in uid. Tokens are
+not listened for: a rotated one reaches the site the next time the app opens, and the server
+drops the dead one the first time FCM rejects it.
 
-**2. Google sign-in throws `NoCredentialException` on the first attempt after a fresh
-install.** Confirmed on 2.0.1: first tap failed, second succeeded. The name misleads — it is
-not "no Google account on this phone", it is "Play services has not populated the account list
-yet". A retry finds them:
+### Two things cost far more than the code did
 
-```kotlin
-private suspend fun getGoogleCredential(): GetCredentialResponse {
-    return try {
-        credentialManager.getCredential(this@MainActivity, googleCredentialRequest())
-    } catch (notReady: NoCredentialException) {
-        delay(700)
-        credentialManager.getCredential(this@MainActivity, googleCredentialRequest())
-    }
-}
-```
+**The injection has to wait for the page.** `index.html` runs `fetch("app.js").then(…)`, so the
+bundle is evaluated well after `onPageFinished` fires. Injecting once found no hook and did
+nothing at all. `deliverPushToken()` now polls every 250 ms for fifteen seconds — the same shape
+as the Google sign-in injection directly above it in the file.
 
-A customer who taps *Cancel* on the picker gets `GetCredentialCancellationException`, a
-different type, so this can never re-prompt someone who dismissed it deliberately.
+**`database.rules.json` is not deployed by anything.** The repo copy is a record; the live rules
+only change when someone pastes them into the Firebase Console and presses Publish. The root is
+`".write": false`, so a node with no rule is denied — and `savePushToken()` in `app.jsx` ends in
+`.catch(()=>{})`, so the rejection left no trace anywhere. It looked identical to the token never
+arriving, and cost an hour of looking at the wrong half of the system.
 
-**3. Sign-in errors are shown to customers as Java class names.** `startNativeGoogleSignIn()`
-builds its message as `"${e::class.java.simpleName}: " + e.message`, so a new customer's first
-action in the app can produce "NoCredentialException: No credentials available". Log the
-exception under a `NemoAuth` tag for diagnosis and show plain language instead. Nothing is lost
-from Logcat; the customer stops reading stack-trace vocabulary.
+Two lessons worth keeping. A silent catch on a write is expensive every single time it fires;
+that one is worth replacing with a `console.warn`. And when a chain has five links and no
+output, make the app say what it sees rather than reasoning about which link broke — the
+`nemo-push:` lines in Logcat (token length, injection target, whether the hook answered) are
+kept for that reason, and a temporary probe that wrote the row itself, uncaught, is what finally
+printed `PERMISSION_DENIED`.
 
-Also open, lower priority: `android:usesCleartextTraffic="true"` is in the manifest and is not
-needed — the app only ever loads `https://www.nemoaquastore.in`.
+### Google sign-in
+
+`getGoogleCredential()` retries once after 700 ms on `NoCredentialException`. That exception
+means Play services has not finished populating the account list, not that no account exists,
+which is exactly why the second tap always worked. Cancelling throws
+`GetCredentialCancellationException`, a different type, so the retry can never re-prompt someone
+who dismissed the picker deliberately. Customers no longer see Java class names; the exception
+goes to Logcat under `NemoAuth` instead.
+
+## Still open
+
+- `android:usesCleartextTraffic="true"` is in the manifest and is not needed — the app only ever
+  loads `https://www.nemoaquastore.in`. Left alone during the qualifying run because a
+  third-party subresource loading over http would fail silently, and only in release.
+- `FirebaseMessaging.getInstance().token` compiles with a deprecation warning. It works and is
+  the documented way to fetch a registration token; revisit when the BOM next moves.
+- The notification's small icon is `ic_launcher`, which Android flattens to a white silhouette.
+  A dedicated monochrome drawable would look better.
+- The admin `loadOrders()` reads the whole `orders` node. Fine now; paginate before ~5,000
+  orders.
 
 ## If the app is ever migrated to a TWA
 
