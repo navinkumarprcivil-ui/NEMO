@@ -72,7 +72,7 @@ test('My Tank and the pincode checker carry no example values either', () => {
 /* Instructions are not sample data and must survive: removing these would leave bare boxes. */
 test('instructional placeholders are left alone', () => {
   for (const keep of ['Search fish, plants, accessories…', 'Enter coupon code',
-    'Enter referral code', 'Describe the damage…', 'Enter 6-digit pincode']) {
+    'Enter referral code', 'Describe the damage…']) {
     assert.ok(src.includes(keep), `the instruction "${keep}" was removed with the sample data`);
   }
 });

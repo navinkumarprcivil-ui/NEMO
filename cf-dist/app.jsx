@@ -7919,7 +7919,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.a74acdb3";
+const APP_BUILD = "v90.75b5fa80";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -8150,52 +8150,6 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
 }
 
 /* ═══════════════════ HOME PAGE ═══════════════════ */
-/* Bottom-of-home pincode serviceability checker. */
-function PincodeChecker({settings={}}){
-  const [pin,setPin]=useState("");
-  const [res,setRes]=useState(null);
-  const check=()=>{
-    const clean=(pin||"").replace(/\D/g,"");
-    if(clean.length!==6){ setRes({err:true}); return; }
-    const zone=pincodeToZone(clean);
-    if(!zone){ setRes({err:true}); return; }
-    setRes({zone,live:!liveFishBlockedForZone(zone,settings)});
-  };
-  return(
-    <div style={{margin:"28px 0 0",background:`linear-gradient(135deg,${C.primaryDark},${C.primary})`,borderRadius:20,padding:"22px 20px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-        <span style={{fontSize:22}}>📍</span>
-        <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:"#fff"}}>Check delivery to your area</span>
-      </div>
-      {/* One line. The old sentence wrapped to three on a phone, which made a one-field lookup
-          look like something to read. "6-digit" moves to the placeholder, where it is a rule
-          about what to type rather than a fact to absorb first. */}
-      <div style={{fontSize:12,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>{LIVE_FISH_ENABLED?"Check delivery and live fish for your area.":"See if we deliver to your area."}</div>
-      <div style={{display:"flex",gap:8}}>
-        <input value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,6));setRes(null);}}
-          onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric" placeholder="6-digit pincode"
-          style={{flex:1,borderRadius:12,border:"none",padding:"13px 14px",fontSize:14,outline:"none",letterSpacing:2,fontFamily:PRICE_FONT,minWidth:0}}/>
-        <button className="press" onClick={check} style={{background:"#fff",color:C.primary,border:"none",borderRadius:12,padding:"0 20px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,cursor:"pointer"}}>Check</button>
-      </div>
-      {res&&(
-        <div style={{marginTop:14,background:"rgba(255,255,255,.96)",borderRadius:16,padding:"13px 15px"}}>
-          {res.err?(
-            <div style={{fontSize:13,fontWeight:700,color:C.danger}}>Please enter a valid 6-digit pincode.</div>
-          ):(<>
-            <div style={{fontSize:14,fontWeight:800,color:C.success,marginBottom:6}}>✓ Yes! We deliver to {ZONE_LABELS[res.zone]}.</div>
-            {!LIVE_FISH_ENABLED?(
-              <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>🌿 Plants, tanks, accessories &amp; feed — all available, delivered across India.</div>
-            ):res.live?(
-              <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>🐠 Live fish, plants &amp; accessories — all available, with our Live Arrival Guarantee.</div>
-            ):(
-              <div style={{fontSize:12,color:"#b45309",lineHeight:1.5,fontWeight:600}}>📦 Accessories, food &amp; plants ship here. Live fish aren't delivered to this region yet — for their safety we ship live stock only within Tamil Nadu &amp; South India.</div>
-            )}
-          </>)}
-        </div>
-      )}
-    </div>
-  );
-}
 /* Food re-order reminder banner — shown on home when a consumable is due to run out. */
 function FoodReorderBanner({orders,products,addToCart,nav}){
   const due=useMemo(()=>foodReorderDue(orders,products,30),[orders,products]);
@@ -9476,8 +9430,6 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
         </div>
         {settings.testimonialsEnabled!==false&&<TestimonialsSection testimonials={testimonials} user={user} onSubmit={onTestimonialSubmit} onSignIn={()=>nav("orders")}/>}
 
-        {/* Pincode serviceability checker */}
-        <PincodeChecker settings={settings}/>
 
         {/* ── Site footer (desktop only — on mobile these links live in the side menu) ── */}
         <div className="home-footer" style={{margin:"28px -16px 0",background:C.card,borderTop:`3px solid ${C.primary}`,padding:"26px 18px 22px"}}>
@@ -9743,27 +9695,48 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
 }
 
 /* ═══════════════════ DETAIL PAGE ═══════════════════ */
-/* Pincode → delivery-zone & ETA estimate on the product page */
-function DeliveryEstimate({settings={}}){
+/* Pincode → delivery-zone & ETA estimate on the product page.
+   The only serviceability check in the store. Home carried a second one, which asked the same
+   question a screen-and-a-half below the answer's reason for existing: you want to know whether
+   it reaches you while you are looking at the fish, not after scrolling past the footer.
+   There was also no Check button here — the answer just appeared once six digits were typed,
+   which reads as nothing happening if you type five, or if the field is one you tabbed into.
+   The button also gives "that isn't a pincode" somewhere to be said. */
+function DeliveryEstimate({settings={},category=""}){
   const [pin,setPin]=useState("");
+  const [res,setRes]=useState(null);
   const ETA={TN:"1–2 days",SouthIndia:"2–4 days",CentralIndia:"3–5 days",NorthIndia:"4–6 days"};
-  const zone=/^\d{6}$/.test(pin)?pincodeToZone(pin):null;
+  const check=()=>{
+    const clean=(pin||"").replace(/\D/g,"");
+    const zone=clean.length===6?pincodeToZone(clean):null;
+    setRes(zone?{zone,live:!liveFishBlockedForZone(zone,settings)}:{err:true});
+  };
+  /* Only worth saying on a live-fish page: the zones dry goods reach and fish do not. On a
+     filter or a bag of feed it would be a warning about something you are not buying. */
+  const fishPage=LIVE_FISH_ENABLED&&isLiveFishCategory(category);
   return(
     <div style={{margin:"18px 0 0",padding:"13px 14px",background:C.card,borderRadius:16,border:`1px solid ${C.border}`}}>
       <div style={{fontSize:12,fontWeight:800,color:C.text,marginBottom:8}}>🚚 Check delivery to your area</div>
       <div style={{display:"flex",gap:8}}>
-        <input value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" placeholder="Enter 6-digit pincode"
-          style={{flex:1,boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"monospace"}}/>
+        <input value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,6));setRes(null);}}
+          onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric" placeholder="6-digit pincode"
+          style={{flex:1,minWidth:0,boxSizing:"border-box",borderRadius:12,border:`1.5px solid ${C.border}`,padding:"10px 12px",fontSize:13,outline:"none",background:"white",fontFamily:"monospace"}}/>
+        <button className="press" onClick={check} style={{background:C.primary,color:"#fff",border:"none",borderRadius:12,padding:"0 18px",fontSize:13,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,cursor:"pointer"}}>Check</button>
       </div>
-      {pin.length===6&&(zone?(
-        <div style={{marginTop:9,fontSize:12,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"9px 11px",lineHeight:1.5}}>
-          ✓ Delivers to <b>{ZONE_LABELS[zone]}</b> · Estimated <b>{ETA[zone]||"3–6 days"}</b>. Live fish ship on selected days for safe transit.
-        </div>
-      ):(
+      {res&&(res.err?(
         <div style={{marginTop:9,fontSize:12,color:"#9a3412",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"9px 11px",lineHeight:1.5}}>
-          Pincode not recognised — please message us on WhatsApp to confirm delivery & timing.
+          Pincode not recognised — please message us on WhatsApp to confirm delivery &amp; timing.
         </div>
-      ))}
+      ):(<>
+        <div style={{marginTop:9,fontSize:12,color:"#15803d",background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:12,padding:"9px 11px",lineHeight:1.5}}>
+          ✓ Delivers to <b>{ZONE_LABELS[res.zone]}</b> · Estimated <b>{ETA[res.zone]||"3–6 days"}</b>.{fishPage&&res.live?" Live fish ship on selected days for safe transit.":""}
+        </div>
+        {fishPage&&!res.live&&(
+          <div style={{marginTop:8,fontSize:12,color:"#b45309",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"9px 11px",lineHeight:1.5,fontWeight:600}}>
+            📦 Accessories, food &amp; plants ship here — live fish don't. For their safety we send live stock only within Tamil Nadu &amp; South India.
+          </div>
+        )}
+      </>))}
     </div>
   );
 }
@@ -10051,7 +10024,7 @@ function ProductDescription({text}){
   );
 }
 
-function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,onReviewDeleted,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
+function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},settings={},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,onReviewDeleted,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
   const [selVarId,setSelVarId] = useState(null);
   const [tab,setTab]           = useState("desc");
   const [reviews,setReviews]   = useState([]);
@@ -10500,7 +10473,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
 
         {/* Delivery estimate, then whichever rail is left — never both, and never either one
             when "Goes well with" above already answered the question. */}
-        {!p.comingSoon&&<DeliveryEstimate/>}
+        {!p.comingSoon&&<DeliveryEstimate settings={settings} category={p.category}/>}
         {rail==="fbt"&&<FrequentlyBought base={p} products={products} addToCart={addToCart} mediaCache={mediaCache} nav={nav}/>}
         {rail==="recent"&&<RecentlyViewedRail currentId={p.id} products={products} mediaCache={mediaCache} nav={nav}/>}
         {/* Trust signals — reassurance right at the buy decision */}
@@ -14945,7 +14918,7 @@ function NemoStore(){
         <div key={page} className="page-swap">
         {page==="home"     &&<HomePage nav={nav} products={shopProducts} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} tankPreviousWinners={tankPreviousWinners} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated} openMenuSignal={homeMenuSignal}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={shopProducts} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
-        {page==="detail"   &&<DetailPage product={selProduct} products={shopProducts} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} goBack={goBack} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} onReviewDeleted={unmarkReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
+        {page==="detail"   &&<DetailPage product={selProduct} products={shopProducts} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} settings={settings} addToCart={addToCart} cart={cart} nav={nav} goBack={goBack} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} onReviewDeleted={unmarkReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={shopProducts} mediaCache={mediaCache} orders={orders}/>}
         {page==="checkout" &&(user
           ? <CheckoutPage cart={cart} total={cartTotal} nav={nav} goBack={goBack} onOrderPlaced={placeOrder} onCancelled={cancelUnpaid} onCancelPayment={cancelPaymentAndRestoreCart} updateQty={updateQty} user={user} settings={settings} orders={orders} products={shopProducts} mediaCache={mediaCache} savedAddresses={savedAddresses} onSaveAddress={saveAddressBookEntry} onDeleteAddress={deleteAddressBookEntry}/>

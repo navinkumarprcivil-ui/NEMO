@@ -65,8 +65,8 @@ export function composeReviewDeleteConfirmationSource(source){
   const reviewedHelpers=reviewedHelperEnd+'function removeReviewedLocal(key,pid){ const s=loadReviewedSet(key).filter(x=>x!==pid); try{ localStorage.setItem(reviewedKey(key),JSON.stringify(s)); }catch{} return s; }\n';
   source=replaceRequiredOnce(source,reviewedHelperEnd,reviewedHelpers,"reviewed local helper");
 
-  const detailSig='function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){';
-  const detailSigNext='function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,onReviewDeleted,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){';
+  const detailSig='function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},settings={},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){';
+  const detailSigNext='function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},settings={},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,onReviewDeleted,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){';
   source=replaceRequiredOnce(source,detailSig,detailSigNext,"DetailPage signature");
 
   const reviewHandlerTail='    setSubmitted(true);\n    setTimeout(()=>setSubmitted(false),3000);\n  };\n\n  return(';
