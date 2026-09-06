@@ -39,9 +39,34 @@ test('the gateway and Nemo use a production-safe payment expiry window', () => {
   // outlive the window the shopper is given, or stock releases while payment is still open.
   assert.match(app, /const PAY_WINDOW_MIN = 20;/);
   assert.match(payCreate, /const PAYMENT_WINDOW_MS = 20 \* 60 \* 1000;/);
-  assert.match(payCreate, /const expiresAt = Math\.max\(deadline \|\| 0, Date\.now\(\) \+ PAYMENT_WINDOW_MS\)/);
   // The same deadline is persisted on the Nemo order, not just handed to the gateway.
-  assert.match(payCreate, /paymentDeadline: expiresAt,/);
+  assert.match(payCreate, /paymentDeadline: payBy,/);
+});
+
+test('a retry cannot rewind the payment countdown', () => {
+  /* This read Math.max(deadline, now + PAYMENT_WINDOW_MS), which was meant to keep the
+     original deadline and did the opposite — now + twenty minutes is always later than a
+     deadline set when the order was placed. Every tap of Pay reset the clock to 20:00, and
+     an order could be held unpaid indefinitely, with its stock reserved, by tapping Pay. */
+  // Scoped to the assignment, so the comment recording the old bug can keep quoting it.
+  assert.doesNotMatch(payCreate, /const expiresAt = Math\.max/,
+    'the deadline must never be extended by a retry');
+  assert.match(payCreate, /const payBy = deadline \|\| \(Date\.now\(\) \+ PAYMENT_WINDOW_MS\);/,
+    'an existing deadline is kept; only a first attempt mints one');
+  assert.match(payCreate, /const expiresAt = payBy;/,
+    'the gateway session ends when the order window does, not on a clock of its own');
+});
+
+test('a retry too close to the deadline is refused, not served', () => {
+  /* PhonePe floors a checkout expiry at five minutes. A session opened with less than that
+     left would outlive the order's own deadline and could still take money after the order
+     auto-cancelled — and finalizePayment refuses to settle a cancelled order, so the money
+     would arrive against nothing. */
+  assert.match(payCreate, /const SESSION_MIN_MS = 5 \* 60 \* 1000;/);
+  assert.match(payCreate, /if \(payBy - Date\.now\(\) < SESSION_MIN_MS\) \{/);
+  assert.match(payCreate, /error: 'payment-window-closing'/);
+  assert.match(app, /m==="payment-window-closing"/,
+    'and the shopper is told why, rather than watching the button do nothing');
 });
 
 test('customer checkout has no manual proof or payment-link fallback', () => {

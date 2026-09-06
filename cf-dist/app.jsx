@@ -7906,7 +7906,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.0dce372d";
+const APP_BUILD = "v90.0897f64c";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -10801,6 +10801,10 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
       } else if(m==="dismissed") setPayNote("");
       else if(m==="order-not-payable") setPayNote("⚠ This order has already been paid or cancelled.");
       else if(m==="payment-window-closed") setPayNote("⚠ This payment window has expired. Please place the order again.");
+      /* Not enough of the window left to open a checkout that would close before the order
+         auto-cancels. Refused here rather than charging for an order that can no longer be
+         settled. */
+      else if(m==="payment-window-closing") setPayNote("⚠ Too little time left in this payment window to start a payment safely. Please place the order again.");
       else if(m==="valid-phone-required") setPayNote("⚠ Add a valid 10-digit Indian mobile number to the delivery address.");
       else if(m==="sign-in-required"||m==="order-owner-mismatch") setPayNote("⚠ Your secure sign-in session has expired. Sign out, sign in with Google again, then retry payment.");
       else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote("⚠ Secure payment is temporarily unavailable. Please retry shortly."); }

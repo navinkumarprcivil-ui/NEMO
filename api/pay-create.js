@@ -18,6 +18,12 @@ import {
 const bearer = req => String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
 const PAYMENT_HOSTS = new Set(['www.nemoaquastore.in', 'nemoaquastore.in']);
 const PAYMENT_WINDOW_MS = 20 * 60 * 1000;
+/* PhonePe will not open a checkout that expires in under five minutes — it floors the value
+   silently. That floor is why a retry near the end of the window is refused outright rather
+   than served: a session outliving the order's own deadline would still be able to take money
+   after the order had auto-cancelled, and a cancelled order cannot be settled (see
+   finalizePayment). Better to say "start again" than to charge for an order nobody can fulfil. */
+const SESSION_MIN_MS = 5 * 60 * 1000;
 
 const publicSite = req => {
   const configured = String(process.env.PUBLIC_SITE_URL || 'https://www.nemoaquastore.in').replace(/\/$/, '');
@@ -78,9 +84,21 @@ export default async function handler(req, res) {
       res.status(409).json({ error: 'order-not-payable' });
       return;
     }
+    /* The deadline is set once, when the order is placed, and never moves again.
+       This used to read Math.max(deadline, now + PAYMENT_WINDOW_MS), which was meant to keep
+       the original and did the exact opposite: now + twenty minutes is always later than a
+       deadline set earlier, so every tap of Pay pushed it out. The customer watched the clock
+       jump back to 20:00, and an order could be held unpaid indefinitely — with its stock
+       reserved — by tapping Pay every so often. A countdown that a retry can rewind is not a
+       deadline, it is a decoration. */
     const deadline = Number(order.paymentDeadline || 0);
-    if (deadline && Date.now() >= deadline) {
+    const payBy = deadline || (Date.now() + PAYMENT_WINDOW_MS);
+    if (Date.now() >= payBy) {
       res.status(409).json({ error: 'payment-window-closed' });
+      return;
+    }
+    if (payBy - Date.now() < SESSION_MIN_MS) {
+      res.status(409).json({ error: 'payment-window-closing' });
       return;
     }
     const amount = money(order.amountDue ?? ((Number(order.total) || 0) + (Number(order.fee) || 0)));
@@ -94,7 +112,8 @@ export default async function handler(req, res) {
     const stuck = order.gateway && order.gatewayOrderId ? [String(order.gateway)] : await availableProviders();
     if (!stuck.length) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
 
-    const expiresAt = Math.max(deadline || 0, Date.now() + PAYMENT_WINDOW_MS);
+    // The gateway session ends when the order's window does — it does not get its own clock.
+    const expiresAt = payBy;
     const site = publicSite(req);
     const returnUrl = `${site}/?payment_return=1&order_id=${encodeURIComponent(orderId)}`;
 
@@ -133,7 +152,8 @@ export default async function handler(req, res) {
         gateway: session.providerId,
         gatewayMode: session.mode,
         gatewayOrderId: session.gatewayOrderId,
-        paymentDeadline: expiresAt,
+        // Written so a first attempt records the window; a retry writes back what was there.
+        paymentDeadline: payBy,
         gatewayCreatedAt: order.gatewayCreatedAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }),

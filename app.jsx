@@ -10784,6 +10784,10 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
       } else if(m==="dismissed") setPayNote("");
       else if(m==="order-not-payable") setPayNote("⚠ This order has already been paid or cancelled.");
       else if(m==="payment-window-closed") setPayNote("⚠ This payment window has expired. Please place the order again.");
+      /* Not enough of the window left to open a checkout that would close before the order
+         auto-cancels. Refused here rather than charging for an order that can no longer be
+         settled. */
+      else if(m==="payment-window-closing") setPayNote("⚠ Too little time left in this payment window to start a payment safely. Please place the order again.");
       else if(m==="valid-phone-required") setPayNote("⚠ Add a valid 10-digit Indian mobile number to the delivery address.");
       else if(m==="sign-in-required"||m==="order-owner-mismatch") setPayNote("⚠ Your secure sign-in session has expired. Sign out, sign in with Google again, then retry payment.");
       else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote("⚠ Secure payment is temporarily unavailable. Please retry shortly."); }
