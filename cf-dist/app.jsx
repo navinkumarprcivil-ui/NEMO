@@ -2029,6 +2029,19 @@ function lineProduct(item, products){
   if(!item||!item.id) return null;
   return (products||[]).find(p=>p.id===item.id)||null;
 }
+/* What this cart line can be bought as RIGHT NOW, as opposed to when it was added.
+   A line is a snapshot — name, price and stockCount as they were at the time — which is what
+   keeps a cart stable while the shop changes underneath it. That is right for the price and
+   wrong for availability: a payment window that runs out, or a busy hour, can sell the last
+   one while the line sits in the basket. Returns -1 for a product that has left the catalogue
+   entirely, which is a different thing to say than "none left". */
+function lineLiveStock(item, products){
+  const p=lineProduct(item,products);
+  if(!p) return -1;
+  if(p.comingSoon) return 0;
+  const v=(productVariants(p)||[]).find(x=>x&&(x.id===item.variantId||x.label===item.variantLabel));
+  return v?variantStockOf(p,v):(p.stockCount??DEFAULT_STOCK);
+}
 /* Resolve a product's gallery from the media cache (with backward-compat) */
 function getProductMedia(p, cache={}){
   const images=[]; let video=null;
@@ -7906,7 +7919,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.908eed1c";
+const APP_BUILD = "v90.40e1bc21";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -10630,7 +10643,15 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
         })()}
         {cart.map(item=>{
           const m=CAT_META[item.category]||CAT_META["Live Fish"];
-          const maxAllowed=Math.min(item.stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+          /* Availability is read live, not from the line. The line is a snapshot — which is
+             what keeps a basket steady while the shop changes around it — but a payment window
+             that ran out, or simply a busy hour, can sell the last one while these sit here.
+             Finding that out at checkout, after filling in an address, is the worst possible
+             moment to be told. -1 means the product has left the catalogue, which is a
+             different sentence to "none left". */
+          const live=lineLiveStock(item,products);
+          const gone=live===-1, soldOut=live===0, short=live>0&&live<item.qty;
+          const maxAllowed=Math.min(live>0?live:(item.stockCount??DEFAULT_STOCK),MAX_PER_ORDER);
           // The line item is a snapshot and carries no picture (storing one would bloat the
           // saved cart), so look the photo up from the catalog by id. Falls back to the
           // category tile for a product that has since been removed.
@@ -10652,6 +10673,13 @@ function CartPage({cart,updateQty,total,nav,settings={},products=[],mediaCache={
                   <div style={{fontSize:13,fontWeight:700,color:open?C.primaryDark:C.text,marginBottom:2}}>{item.name}</div>
                   <div style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>{item.variantLabel||item.category}</div>
                   <div style={{fontFamily:PRICE_FONT,fontSize:14,fontWeight:800,color:C.primary,marginTop:5}}>₹{item.price*item.qty}</div>
+                  {(gone||soldOut||short)&&(
+                    <div style={{fontSize:11,fontWeight:700,marginTop:4,lineHeight:1.4,color:short?"#b45309":C.danger}}>
+                      {gone?"No longer sold — remove to check out"
+                       :soldOut?"Sold out while you were away — remove to check out"
+                       :`Only ${live} left — reduce to ${live} to check out`}
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:12,background:C.bg,borderRadius:12,padding:"7px 12px",border:`1.5px solid ${C.border}`}}>
@@ -10767,6 +10795,10 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
   const [gatewayChecking,setGatewayChecking]=useState(!PAY_GATEWAY.checked);
   const [payBusy,setPayBusy]=useState(false);
   const [payNote,setPayNote]=useState("");
+  /* Set when the gateway has refused to reopen this order's checkout. Nothing the customer
+     does will change that answer, so the button stops pretending otherwise — a button that
+     looks live and fails every time reads as a broken shop rather than a spent session. */
+  const [reopenBlocked,setReopenBlocked]=useState(false);
   useEffect(()=>{
     let live=true;
     setGatewayChecking(true);
@@ -10809,12 +10841,14 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
          settled. */
       else if(m==="payment-window-closing") setPayNote("⚠ Too little time left in this payment window to start a payment safely. Please place the order again.");
       /* The gateway will not reopen this one — PhonePe spends its order id on the first
-         checkout — so tapping Pay again can only fail again. Rather than leave a dead button
-         on the screen, end the attempt and put the items back in the cart, which is the state
-         the customer was in before they started and the one thing they can act on. */
+         checkout — so tapping Pay again can only fail again. The order is left to run out its
+         window rather than cancelled on the spot: the customer may still be paying in the
+         gateway's own tab, and cancelling underneath a payment in flight is the one mistake
+         here that costs real money. When the timer ends, the sweep releases the stock and
+         hands the items back to the cart. */
       else if(m==="payment-retry-unavailable"){
-        setPayNote("This payment couldn't be reopened. Your items are back in your cart.");
-        if(onCheckoutCancelled) await onCheckoutCancelled(order);
+        setReopenBlocked(true);
+        setPayNote("⚠ This payment can't be reopened. Nothing has been charged — when the timer above runs out your items go back to your cart, ready to order again.");
       }
       else if(m==="valid-phone-required") setPayNote("⚠ Add a valid 10-digit Indian mobile number to the delivery address.");
       else if(m==="sign-in-required"||m==="order-owner-mismatch") setPayNote("⚠ Your secure sign-in session has expired. Sign out, sign in with Google again, then retry payment.");
@@ -10885,16 +10919,18 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
                 <div style={{fontSize:10,color:"#c2410c",marginTop:3,lineHeight:1.45}}>Owner testing only. No real money is charged and the order will not enter fulfilment.</div>
               </div>
             )}
-            <button className="press" onClick={payNow} disabled={payBusy||expired}
-              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:(payBusy||expired)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            <button className="press" onClick={payNow} disabled={payBusy||expired||reopenBlocked}
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:(payBusy||expired||reopenBlocked)?"#9ca3af":C.primary,color:"white",border:"none",borderRadius:16,padding:"16px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
               <span style={{fontSize:18}}>💳</span>
-              {payBusy?"Opening secure payment…":expired?"Payment window closed":gatewayMode==="sandbox"?`Try Test Payment ₹${grand}`:`Pay ₹${grand} securely`}
+              {payBusy?"Opening secure payment…":expired?"Payment window closed":reopenBlocked?"Payment can't be reopened":gatewayMode==="sandbox"?`Try Test Payment ₹${grand}`:`Pay ₹${grand} securely`}
             </button>
-            <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:9,lineHeight:1.5}}>
-              {gatewayMode==="sandbox"
-                ?"Uses the gateway's sandbox payment details. Cancel this test order afterwards to release its reserved stock."
-                :"UPI · Cards · Netbanking · Wallets · Auto-verified"}
-            </div>
+            {!reopenBlocked&&(
+              <div style={{fontSize:11,color:C.textSub,textAlign:"center",marginTop:9,lineHeight:1.5}}>
+                {gatewayMode==="sandbox"
+                  ?"Uses the gateway's sandbox payment details. Cancel this test order afterwards to release its reserved stock."
+                  :"UPI · Cards · Netbanking · Wallets · Auto-verified"}
+              </div>
+            )}
             {payNote&&<div style={{fontSize:12,fontWeight:700,marginTop:10,textAlign:"center",lineHeight:1.5,color:payNote[0]==="⚠"?C.danger:C.success}}>{payNote}</div>}
           </>
         ):(
@@ -14416,31 +14452,55 @@ function NemoStore(){
      cancelled and its stock released exactly as before, but the lines it was built from go
      straight back into the cart and we land them there — rebuilding a whole order by hand
      is where an abandoned payment turns into an abandoned customer.
-     Only this deliberate press restores the cart. The auto-cancel that fires when a payment
-     window expires runs from a background sweep over every order, on any device, and must
-     not reach in and rewrite whatever is in the cart at the time. */
+     A window that runs out gets the same treatment: an unpaid order is not a decision to stop
+     shopping, and leaving the shopper with a cancelled order and an empty basket is how an
+     abandoned payment turns into an abandoned customer. */
+  const restoreLinesToCart=(lines)=>{
+    if(!lines||!lines.length) return;
+    setCart(prev=>{
+      const next=[...prev];
+      lines.forEach(line=>{
+        const at=next.findIndex(i=>i.key===line.key);
+        if(at<0){ next.push({...line}); return; }
+        // Same line already back in the cart (added again while payment was open): keep
+        // one line, and never let the merge push it past what may actually be bought.
+        const max=Math.min(next[at].stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
+        next[at]={...next[at],qty:Math.min(max,next[at].qty+line.qty)};
+      });
+      return next;
+    });
+  };
   const cancelPaymentAndRestoreCart=async(order)=>{
     // A second press (or a press on an order that has moved on) must not stack the same
     // lines into the cart twice — cancelUnpaid is idempotent and so is this.
     if(!order||order.status!=="Awaiting Payment"){ navRewind("cart"); return; }
     const lines=order.items||[];
     await cancelUnpaid(order);
-    if(lines.length){
-      setCart(prev=>{
-        const next=[...prev];
-        lines.forEach(line=>{
-          const at=next.findIndex(i=>i.key===line.key);
-          if(at<0){ next.push({...line}); return; }
-          // Same line already back in the cart (added again while payment was open): keep
-          // one line, and never let the merge push it past what may actually be bought.
-          const max=Math.min(next[at].stockCount??DEFAULT_STOCK,MAX_PER_ORDER);
-          next[at]={...next[at],qty:Math.min(max,next[at].qty+line.qty)};
-        });
-        return next;
-      });
-    }
+    restoreLinesToCart(lines);
     navRewind("cart");
     showToast("Payment Cancelled");
+  };
+
+  /* The payment window ran out. Same outcome as backing out on purpose — the order is
+     cancelled, its stock released and its lines handed back — with three differences that
+     matter because this runs unattended, from a sweep, on whatever device happens to be open:
+
+     · it never navigates. Yanking someone into the cart mid-sentence because a timer they had
+       forgotten about elapsed is worse than the empty basket it is fixing.
+     · `cartReturned` is written on the order first, so the same expiry cannot hand the same
+       lines back twice — on a second sweep, on a second tab, or on a second device.
+     · the toast says what happened to the items, because nobody watched it happen. */
+  const expireUnpaid=async(order)=>{
+    if(!order||order.status!=="Awaiting Payment") return;
+    if(order.cartReturned){ await cancelUnpaid(order); return; }
+    const lines=order.items||[];
+    // Claimed before the await: two sweeps can otherwise both read "not yet returned".
+    setOrders(prev=>prev.map(o=>o.id===order.id?{...o,cartReturned:true}:o));
+    await cancelUnpaid({...order,cartReturned:true});
+    if(lines.length){
+      restoreLinesToCart(lines);
+      showToast("Payment time ran out — your items are back in the cart");
+    }
   };
 
   // Auto-close a delivered order once its return window has passed (idempotent).
@@ -14463,7 +14523,7 @@ function NemoStore(){
     const sweep=()=>{
       const now=Date.now();
       orders.forEach(o=>{
-        if(o.status==="Awaiting Payment" && o.paymentDeadline && now>o.paymentDeadline){ cancelUnpaid(o); return; }
+        if(o.status==="Awaiting Payment" && o.paymentDeadline && now>o.paymentDeadline){ expireUnpaid(o); return; }
         // Auto-close: delivered, not closed, no open DOA / return, past its close date.
         if(o.status==="Delivered" && !o.closed && !o.demo){
           const doaOpen = o.doa && !((o.doa.status||"").startsWith("Approved") || o.doa.status==="Declined");

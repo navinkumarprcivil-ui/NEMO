@@ -102,7 +102,7 @@ test('verified production payments confirm orders automatically', () => {
   assert.match(app, /your order is confirmed automatically/);
 });
 
-test('a payment that cannot be reopened cancels and returns the items to the cart', () => {
+test('a retry the gateway will not reopen is named, not left as a generic failure', () => {
   /* PhonePe derives its merchantOrderId from the Nemo order id, so the id is spent by the
      first checkout: a customer who opens the gateway, comes back without paying and taps Pay
      gets a duplicate refusal for as long as the order exists. That reached them as a generic
@@ -113,6 +113,36 @@ test('a payment that cannot be reopened cancels and returns the items to the car
   assert.match(payCreate, /if \(!session && retry\) \{/);
   assert.match(payCreate, /error: 'payment-retry-unavailable'/);
   assert.match(app, /m==="payment-retry-unavailable"/);
-  assert.match(app, /if\(onCheckoutCancelled\) await onCheckoutCancelled\(order\);/,
-    'the items go back to the cart rather than the customer being left with a dead button');
+});
+
+test('an expired payment window hands the items back to the cart', () => {
+  /* An unpaid order is not a decision to stop shopping. Leaving a shopper with a cancelled
+     order and an empty basket is how an abandoned payment becomes an abandoned customer. */
+  assert.match(app, /const expireUnpaid=async\(order\)=>\{/);
+  assert.match(app, /if\(o\.status==="Awaiting Payment" && o\.paymentDeadline && now>o\.paymentDeadline\)\{ expireUnpaid\(o\); return; \}/);
+  assert.match(app, /restoreLinesToCart\(lines\);/);
+  // Claimed before the await, or two sweeps both read "not yet returned" and double the lines.
+  assert.match(app, /if\(order\.cartReturned\)\{ await cancelUnpaid\(order\); return; \}/);
+  assert.match(app, /setOrders\(prev=>prev\.map\(o=>o\.id===order\.id\?\{\.\.\.o,cartReturned:true\}:o\)\);/);
+  assert.doesNotMatch(app, /expireUnpaid[\s\S]{0,900}navRewind/,
+    'a sweep must never yank someone into the cart because a forgotten timer elapsed');
+});
+
+test('a payment that cannot be reopened waits out its window rather than cancelling', () => {
+  /* The customer may still be paying in the gateway's own tab. Cancelling underneath a
+     payment in flight is the one mistake here that costs real money. */
+  assert.match(app, /setReopenBlocked\(true\);/);
+  assert.match(app, /disabled=\{payBusy\|\|expired\|\|reopenBlocked\}/,
+    'a button that fails every time reads as a broken shop, not a spent session');
+  assert.match(app, /reopenBlocked\?"Payment can't be reopened"/);
+});
+
+test('the cart reads availability live, not from the line it stored', () => {
+  /* Finding out at checkout, after filling in an address, is the worst moment to be told
+     that something sold out while it sat in the basket. */
+  assert.match(app, /function lineLiveStock\(item, products\)\{/);
+  assert.match(app, /const live=lineLiveStock\(item,products\);/);
+  assert.match(app, /const gone=live===-1, soldOut=live===0, short=live>0&&live<item\.qty;/);
+  assert.match(app, /Sold out while you were away/);
+  assert.match(app, /No longer sold/, 'a delisted product is a different sentence to a sold-out one');
 });
