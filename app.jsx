@@ -5174,7 +5174,12 @@ async function shareProduct(p, showToast){
   // Version the preview URL so messaging apps do not reuse the old store-banner cache.
   const url=origin?`${origin}/s/${encodeURIComponent(p.id)}?v=product-photo-2`:"";
   const price=effectivePrice(p);
-  const text=`🐠 ${p.name} — ₹${price}\n${STORE_NAME} Aqua Store`;
+  /* No emoji in front of the name. A fish before every product read as decoration on a
+     listing rather than one person handing another a recommendation, and the preview card
+     underneath already carries the picture. The single asterisks are WhatsApp and Telegram
+     bold, which is where these links actually go; anywhere else they show as themselves,
+     which is the price of the name standing out in the one place that matters. */
+  const text=`*${p.name}* — ₹${price}\n${STORE_NAME} Aqua Store`;
   try{
     // `text` deliberately carries no URL: the share sheet appends `url` itself,
     // and a link in both is why the message used to arrive with it twice.
@@ -7796,7 +7801,12 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   const ShareBtn = (
     <button className="press" onClick={e=>{e.stopPropagation();shareProduct(p);}} aria-label="Share"
       style={{position:"absolute",top:8,right:onFav?44:8,width:30,height:30,borderRadius:"50%",border:"none",background:"rgba(255,255,255,.9)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,.18)"}}>
-      <span style={{fontSize:14,lineHeight:1}}>🔗</span>
+      {/* An arrow leaving a tray, not a chain link. A chain reads as "copy link" — or as
+          nothing at all — where this is the icon every phone already draws for Share. */}
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{display:"block"}}>
+        <path d="M12 15.5V3.5M8.4 7L12 3.4L15.6 7" stroke="#334155" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M5.5 12.5V18.5a2 2 0 002 2h9a2 2 0 002-2V12.5" stroke="#334155" strokeWidth="2" strokeLinecap="round"/>
+      </svg>
     </button>
   );
   return(
@@ -9180,7 +9190,15 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
     const t=e.touches[0], w=window.innerWidth||0;
     if(t.clientX<SWIPE_EDGE||t.clientX>w-SWIPE_EDGE) return;
     for(let el=e.target; el&&el!==e.currentTarget; el=el.parentElement){
-      if(el.scrollWidth>el.clientWidth+4) return;
+      /* Overflowing is not the same as scrollable, and testing only the width is what kept
+         this from firing anywhere near the top of Home: the hero clips two decorative circles
+         that sit off its right edge, so it overflows by forty pixels while scrolling nothing,
+         and every swipe starting in it was handed to a row that does not exist. Only a strip
+         the finger could actually drag gets to claim the gesture. */
+      if(el.scrollWidth>el.clientWidth+4){
+        let ox=""; try{ ox=getComputedStyle(el).overflowX||""; }catch(err){}
+        if(ox==="auto"||ox==="scroll") return;
+      }
     }
     swipeFrom.current={x:t.clientX,y:t.clientY};
   };
@@ -10169,7 +10187,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,lineHeight:1.2}}>{p.name}</div>
             <button className="press" onClick={()=>shareProduct(p)}
               style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:C.accentLight,border:`1px solid ${C.border}`,color:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zM18 22a3 3 0 100-6 3 3 0 000 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 15.5V3.5M8.4 7L12 3.4L15.6 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.5 12.5V18.5a2 2 0 002 2h9a2 2 0 002-2V12.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               Share
             </button>
             <button className="press" onClick={()=>onFav&&onFav(p)}
@@ -17292,6 +17310,14 @@ const POLICY_META_ALL = {
    policy falls through to Terms below rather than rendering an empty page. */
 const policyMeta = () => LIVE_FISH_ENABLED ? POLICY_META_ALL : Object.fromEntries(
   Object.entries(POLICY_META_ALL).filter(([k]) => k!=="guarantee" && k!=="acclimatize"));
+/* Two headings carry no icon. A padlock beside "Privacy Policy", or a return arrow beside
+   "Cancellations, Returns & Refunds", is decoration on the two pages a customer opens when
+   something has gone wrong or while deciding whether to trust the shop with their address —
+   and decoration there reads as a shop being playful about a document that binds it. Keyed off
+   meta.key rather than `which` so an old bookmark that falls through to Terms is judged by the
+   page it actually lands on. The chips under "More policies" keep their icons: there they are
+   how six similar buttons are told apart at a glance. */
+const POLICY_TITLE_BARE = { privacyPolicy:true, returnPolicy:true };
 function PolicyPage({nav,goBack,settings={},which}){
   const POLICY_META=policyMeta();
   const s={...DEFAULT_SETTINGS,...settings};
@@ -17299,7 +17325,7 @@ function PolicyPage({nav,goBack,settings={},which}){
   const others=Object.keys(POLICY_META).filter(k=>k!==which);
   return(
     <div className="slide-up">
-      <HeroHeader onBack={goBack} title={<>{meta.icon} {meta.title}</>}
+      <HeroHeader onBack={goBack} title={POLICY_TITLE_BARE[meta.key]?meta.title:<>{meta.icon} {meta.title}</>}
         subtitle={meta.sub}/>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
         <div style={{background:C.card,borderRadius:20,padding:"20px",border:`1px solid ${C.border}`,fontSize:13,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{policyText(meta.key, s)}</div>

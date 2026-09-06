@@ -44,8 +44,16 @@ test('the swipe yields the screen edges to Android', () => {
 test('the swipe yields to any horizontal scroller under the finger', () => {
   // Home is built from rows that scroll sideways. Measuring beats naming them: a list of
   // class names would rot the first time a new row is added.
-  assert.match(app, /if\(el\.scrollWidth>el\.clientWidth\+4\) return;/);
+  assert.match(app, /if\(el\.scrollWidth>el\.clientWidth\+4\)\{/);
   assert.match(app, /for\(let el=e\.target; el&&el!==e\.currentTarget; el=el\.parentElement\)/);
+});
+
+test('an element that merely overflows does not claim the swipe', () => {
+  // The hero clips two decorative circles off its right edge, so it overflows while
+  // scrolling nothing. Width alone rejected every swipe starting in the top of the page,
+  // which is where people swipe. Only auto/scroll is a row the finger could drag.
+  assert.match(app, /getComputedStyle\(el\)\.overflowX/);
+  assert.match(app, /if\(ox==="auto"\|\|ox==="scroll"\) return;/);
 });
 
 test('only a deliberate sideways gesture navigates', () => {
