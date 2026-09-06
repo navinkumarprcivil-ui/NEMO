@@ -170,11 +170,17 @@
      with a mask was the obvious move and the wrong one — the wordmark runs the full width, so
      any radial fade eats the letters at both ends. The glow is a drop-shadow, which follows the
      alpha and so hugs the badge's real shape rather than its bounding box. */
-  #splash .logo{width:min(300px,74vw);position:relative;animation:logoIn 2.1s cubic-bezier(.2,.75,.25,1) both;
-    filter:drop-shadow(0 0 22px rgba(125,211,252,.45)) drop-shadow(0 12px 34px rgba(3,25,48,.55));}
-  #splash .logo img{width:100%;height:auto;object-fit:contain;display:block;position:relative;z-index:1;}
+  /* The filters sit on the image and the ghost, never on the element being animated. A
+     transform animation on a filtered element makes the browser re-rasterise the whole filter
+     every frame, and on a phone GPU that is exactly the kind of thing that flashes white for
+     a frame or two mid-animation. The wrapper animates; the things that cost something to
+     draw hold still and are promoted to their own layers. */
+  #splash .logo{width:min(300px,74vw);position:relative;animation:logoIn 2.1s cubic-bezier(.2,.75,.25,1) both;}
+  #splash .logo img{width:100%;height:auto;object-fit:contain;display:block;position:relative;z-index:1;
+    filter:drop-shadow(0 0 22px rgba(125,211,252,.45)) drop-shadow(0 12px 34px rgba(3,25,48,.55));
+    transform:translateZ(0);}
   #splash .logo::before{content:"";position:absolute;inset:-7%;background:url(assets/nemo-logo.png) center/contain no-repeat;
-    filter:blur(15px) saturate(1.5);opacity:.62;pointer-events:none;}
+    filter:blur(15px) saturate(1.5);opacity:.62;pointer-events:none;transform:translateZ(0);}
   #splash .logo::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.35) 50%,transparent 62%);
     transform:translateX(-130%);animation:sweep 1.9s ease 1s both;pointer-events:none;z-index:2;}
   @keyframes logoIn{0%{opacity:0;transform:scale(.84) translateY(16px)}100%{opacity:1;transform:scale(1) translateY(0)}}
