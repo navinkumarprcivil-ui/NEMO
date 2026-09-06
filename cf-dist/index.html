@@ -163,10 +163,20 @@
   #splash .b5{left:76%;width:15px;height:15px;animation-duration:5.8s;animation-delay:.6s;}
   #splash .b6{left:88%;width:7px;height:7px;animation-duration:4s;animation-delay:1.9s;}
   @keyframes rise{0%{transform:translateY(0) translateX(0);opacity:0}12%{opacity:1}100%{transform:translateY(-105vh) translateX(14px);opacity:0}}
-  #splash .logo{width:min(300px,74vw);position:relative;animation:logoIn 2.1s cubic-bezier(.2,.75,.25,1) both;filter:drop-shadow(0 12px 34px rgba(3,25,48,.55));}
-  #splash .logo img{width:100%;height:auto;object-fit:contain;display:block;}
+  /* The badge has a hard white outline, which against the deep water read as a sticker laid on
+     top of the scene rather than something lit from within it. The fog is a blurred copy of the
+     mark sitting behind the sharp one: it bleeds the logo's own navy and orange a little way
+     past the silhouette, so the edge dissolves instead of stopping. Feathering the image itself
+     with a mask was the obvious move and the wrong one — the wordmark runs the full width, so
+     any radial fade eats the letters at both ends. The glow is a drop-shadow, which follows the
+     alpha and so hugs the badge's real shape rather than its bounding box. */
+  #splash .logo{width:min(300px,74vw);position:relative;animation:logoIn 2.1s cubic-bezier(.2,.75,.25,1) both;
+    filter:drop-shadow(0 0 22px rgba(125,211,252,.45)) drop-shadow(0 12px 34px rgba(3,25,48,.55));}
+  #splash .logo img{width:100%;height:auto;object-fit:contain;display:block;position:relative;z-index:1;}
+  #splash .logo::before{content:"";position:absolute;inset:-7%;background:url(assets/nemo-logo.png) center/contain no-repeat;
+    filter:blur(15px) saturate(1.5);opacity:.62;pointer-events:none;}
   #splash .logo::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.35) 50%,transparent 62%);
-    transform:translateX(-130%);animation:sweep 1.9s ease 1s both;pointer-events:none;}
+    transform:translateX(-130%);animation:sweep 1.9s ease 1s both;pointer-events:none;z-index:2;}
   @keyframes logoIn{0%{opacity:0;transform:scale(.84) translateY(16px)}100%{opacity:1;transform:scale(1) translateY(0)}}
   @keyframes sweep{to{transform:translateX(130%)}}
   #splash .logo .emoji-fallback{font-size:56px;display:none;text-align:center;}
