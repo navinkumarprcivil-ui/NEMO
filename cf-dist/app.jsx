@@ -7906,7 +7906,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.37f1548c";
+const APP_BUILD = "v90.908eed1c";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -8154,10 +8154,13 @@ function PincodeChecker({settings={}}){
         <span style={{fontSize:22}}>📍</span>
         <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:16,fontWeight:800,color:"#fff"}}>Check delivery to your area</span>
       </div>
-      <div style={{fontSize:12,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>{LIVE_FISH_ENABLED?"Enter your 6-digit pincode to see if we deliver — and whether live fish reach your area.":"Enter your 6-digit pincode to see if we deliver to your area."}</div>
+      {/* One line. The old sentence wrapped to three on a phone, which made a one-field lookup
+          look like something to read. "6-digit" moves to the placeholder, where it is a rule
+          about what to type rather than a fact to absorb first. */}
+      <div style={{fontSize:12,color:"rgba(255,255,255,.85)",lineHeight:1.5,marginBottom:14}}>{LIVE_FISH_ENABLED?"Check delivery and live fish for your area.":"See if we deliver to your area."}</div>
       <div style={{display:"flex",gap:8}}>
         <input value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,6));setRes(null);}}
-          onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric"
+          onKeyDown={e=>{if(e.key==="Enter")check();}} inputMode="numeric" placeholder="6-digit pincode"
           style={{flex:1,borderRadius:12,border:"none",padding:"13px 14px",fontSize:14,outline:"none",letterSpacing:2,fontFamily:PRICE_FONT,minWidth:0}}/>
         <button className="press" onClick={check} style={{background:"#fff",color:C.primary,border:"none",borderRadius:12,padding:"0 20px",fontSize:14,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",flexShrink:0,cursor:"pointer"}}>Check</button>
       </div>
@@ -14871,7 +14874,14 @@ function NemoStore(){
       {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap} walletPts={walletPts} ordersCount={priorityOrderCount}/>} 
       {/* overscrollBehavior:contain stops a flick that reaches the end of this list from
           chaining out to the document and dragging the pinned bottom nav with it. */}
-      <div ref={scrollRef} className="nemo-main-scroll" onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd} style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
+      {/* The bottom nav is absolutely positioned over this container and grows by the phone's
+          own gesture-bar inset, but every page's bottom padding was written as a flat 100px —
+          measured against a nav without one. On a phone with a 34px inset the last thing on
+          the page ends exactly level with the top of the nav, which is why the pincode checker
+          had nothing below it, and why the space appeared the moment a keyboard shrank the
+          viewport. Added here rather than to twenty page paddings: it is one fact about the
+          device, and the pages should not each have to remember it. */}
+      <div ref={scrollRef} className="nemo-main-scroll" onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd} style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain",paddingBottom:"env(safe-area-inset-bottom, 0px)"}}>
         <div key={page} className="page-swap">
         {page==="home"     &&<HomePage nav={nav} products={shopProducts} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} tankPreviousWinners={tankPreviousWinners} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated} openMenuSignal={homeMenuSignal}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={shopProducts} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}

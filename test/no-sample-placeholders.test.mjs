@@ -63,8 +63,10 @@ test('My Tank and the pincode checker carry no example values either', () => {
     'placeholder="100 W"', 'placeholder="e.g. 600001"']) {
     assert.ok(!src.includes(gone), `${gone} is back`);
   }
-  // The instruction above the pincode box is what tells someone it wants six digits.
-  assert.match(src, /Enter your 6-digit pincode/);
+  /* Six digits still has to be said somewhere, and it is now the placeholder rather than a
+     sentence above the box. That is an instruction, not an example value: it tells you what
+     to type without pretending to be somebody's pincode. */
+  assert.match(src, /placeholder="6-digit pincode"/);
 });
 
 /* Instructions are not sample data and must survive: removing these would leave bare boxes. */
