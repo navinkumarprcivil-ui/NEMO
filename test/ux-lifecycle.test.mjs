@@ -67,9 +67,13 @@ test('performance safeguards avoid rendering distant product rows and disable to
 });
 
 test('reveal observers are disconnected when navigating between pages', () => {
-  assert.match(app, /const staggerObservers=\[\]/);
-  assert.match(app, /staggerObservers\.push\(so\)/);
-  assert.match(app, /staggerObservers\.forEach\(so=>so\.disconnect\(\)\)/);
+  /* The per-card stagger observers this used to also check are gone with their last caller —
+     the Shop grid, which they hid a frame after it had already been painted. What is left is
+     the scroll reveal, and it still has to be torn down on a page change or every navigation
+     leaks an observer holding a detached subtree. */
+  assert.match(app, /io=new IntersectionObserver\(/);
+  assert.match(app, /return \(\)=>\{ cancelAnimationFrame\(raf\); if\(io\) io\.disconnect\(\); \};/);
+  assert.doesNotMatch(app, /staggerObservers/);
 });
 
 test('month-end rewards create an in-admin notification and settings badge', () => {

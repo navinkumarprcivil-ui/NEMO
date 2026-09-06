@@ -7919,7 +7919,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.75b5fa80";
+const APP_BUILD = "v90.64906c85";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -8053,6 +8053,19 @@ function ReferralDrawerCard({open,user,settings={},orders=[],nav,onClose}){
 
 function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,settings={},orders=[]}){
   const go=(to)=>{ onClose&&onClose(); nav&&nav(to); };
+  /* A drawer opened with a swipe has to close with one. It lives in a Portal under <body>, so
+     the shell's tab-swipe handler never sees a touch on it — this is the drawer's own. The
+     vertical guard is what keeps a flick down the category list from closing it. */
+  const closeFrom=useRef(null);
+  const onDrawerTouchStart=(e)=>{
+    closeFrom.current=(e.touches&&e.touches.length===1)?{x:e.touches[0].clientX,y:e.touches[0].clientY}:null;
+  };
+  const onDrawerTouchEnd=(e)=>{
+    const from=closeFrom.current; closeFrom.current=null;
+    if(!from||!e.changedTouches||!e.changedTouches.length) return;
+    const t=e.changedTouches[0], dx=t.clientX-from.x, dy=t.clientY-from.y;
+    if(dx<-70&&Math.abs(dx)>Math.abs(dy)*2) onClose&&onClose();
+  };
   const [refreshing,setRefreshing]=useState(false);
   const COMPANY=[{label:"About Us",to:"about"},{label:"Care Guides",to:"guides"},{label:"Request a Product",to:"request"},{label:"Track My Orders",to:"orders"}];
   const POLICIES=policyLinks([{label:"Live Guarantee",to:"policy-guarantee"},{label:"Cancellations, Returns & Refunds",to:"policy-returns",href:"/cancellations-returns-refunds"},{label:"Terms & Conditions",to:"policy-terms"},{label:"Privacy Policy",to:"policy-privacy"},{label:"Contact Us",to:"contact",href:"/contact-us"}]);
@@ -8063,7 +8076,8 @@ function CategoryDrawer({open,onClose,onSelect,recent=[],onRecent,nav,user,setti
        repaint on open/close. Rendering under <body> makes it truly viewport-fixed.
        `visibility` then keeps the closed drawer out of the paint tree entirely. */
     <Portal>
-    <div aria-hidden={!open} style={{position:"fixed",inset:0,zIndex:300,pointerEvents:open?"auto":"none",
+    <div aria-hidden={!open} onTouchStart={onDrawerTouchStart} onTouchEnd={onDrawerTouchEnd}
+      style={{position:"fixed",inset:0,zIndex:300,pointerEvents:open?"auto":"none",
       visibility:open?"visible":"hidden",transition:open?"visibility 0s":"visibility 0s linear .3s"}}>
       {/* Scrim — plain opacity fade. A toggled backdrop-filter forces the browser to build a
           blur layer mid-animation, which is what "crashed" the background on the first open. */}
@@ -9128,7 +9142,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   );
 }
 
-function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,onShowcaseVote,totmVotes={},tankPreviousWinners=null,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true,openMenuSignal=0}){
+function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,onShowcaseVote,totmVotes={},tankPreviousWinners=null,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true,openMenuSignal=0,onMenuOpened}){
   const featured=[...products].sort(byAvailabilityThen()).slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
   const [walletOpen,setWalletOpen]=useState(false);
@@ -9152,7 +9166,10 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
      and lives in the shell (see NAV_TABS). Home is only the one end of it: there is no tab to
      the left of Home, so a rightward swipe there opens Browse instead of going nowhere. The
      shell cannot set that state from outside, so it bumps a counter and Home reads the bump. */
-  useEffect(()=>{ if(openMenuSignal) setMenuOpen(true); },[openMenuSignal]);
+  /* Spend the signal the moment it is acted on. menuOpen is Home's own state and Home unmounts
+     when you leave it, so a signal left standing at 1 re-opened the drawer on every remount —
+     which is why a swipe from Shop back to Home arrived with Browse open. */
+  useEffect(()=>{ if(!openMenuSignal) return; setMenuOpen(true); onMenuOpened&&onMenuOpened(); },[openMenuSignal]);
   const offer = products.find(p=>activeDiscount(p)>0 && p.offerEndsAt);
   const offerStock = offer ? (offer.stockCount ?? DEFAULT_STOCK) : 0;
   // Offer Zone — every product currently on offer (discount set, in stock, offer not expired).
@@ -9638,7 +9655,12 @@ function ShopPage({nav,products,mediaCache,query,setQuery,category,setCategory,a
           </div>
         ):(
           <>
-          <div className="prod-grid js-stagger" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          {/* No js-stagger here. The observer applies .reveal AFTER first paint, so every card
+              was drawn, yanked to opacity 0 and 26px down, then eased back — with up to 520ms of
+              per-card delay stacked on the page transition. On Home that reads as a scroll
+              reveal because those rows start below the fold. On Shop the grid IS the page and
+              it is already on screen, so it read as the products refusing to settle. */}
+          <div className="prod-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
             {list.slice(0,shown).map(p=>(
               <div key={p.id}>
                 <ProductCard product={p} imgSrc={getCardImg(p,mediaCache)}
@@ -14597,24 +14619,17 @@ function NemoStore(){
   useEffect(()=>{
     if(typeof IntersectionObserver==="undefined") return;
     let io;
-    const staggerObservers=[];
+    /* The per-card stagger that used to live here is gone with its last caller. It hid children
+       AFTER they had been painted, which is only invisible when the container starts below the
+       fold — and the one grid using it was the Shop grid, filling the screen on arrival. */
     const raf=requestAnimationFrame(()=>{
-      // Staggered child reveals (product grids — each card springs in +55ms after the last)
-      document.querySelectorAll(".js-stagger").forEach(cont=>{
-        const kids=Array.from(cont.children).filter(k=>!k.classList.contains("reveal-in"));
-        if(!kids.length) return;
-        kids.forEach((k,i)=>{ k.classList.add("reveal"); k.style.transitionDelay=Math.min(i*55,520)+"ms"; });
-        const so=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ Array.from(en.target.children).forEach(k=>k.classList.add("reveal-in")); so.unobserve(en.target); } }); },{threshold:0.04});
-        staggerObservers.push(so);
-        so.observe(cont);
-      });
       const els=document.querySelectorAll(".js-reveal:not(.reveal-in)");
       if(!els.length) return;
       els.forEach(el=>el.classList.add("reveal"));
       io=new IntersectionObserver((ents)=>{ ents.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("reveal-in"); io.unobserve(en.target); } }); },{threshold:0.06,rootMargin:"0px 0px -40px 0px"});
       els.forEach(el=>io.observe(el));
     });
-    return ()=>{ cancelAnimationFrame(raf); if(io) io.disconnect(); staggerObservers.forEach(so=>so.disconnect()); };
+    return ()=>{ cancelAnimationFrame(raf); if(io) io.disconnect(); };
   },[page]);
   // When in admin mode, a page refresh/close prompts for confirmation so you don't exit admin by accident.
   useEffect(()=>{
@@ -14916,7 +14931,7 @@ function NemoStore(){
           device, and the pages should not each have to remember it. */}
       <div ref={scrollRef} className="nemo-main-scroll" onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd} style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain",paddingBottom:"env(safe-area-inset-bottom, 0px)"}}>
         <div key={page} className="page-swap">
-        {page==="home"     &&<HomePage nav={nav} products={shopProducts} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} tankPreviousWinners={tankPreviousWinners} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated} openMenuSignal={homeMenuSignal}/>}
+        {page==="home"     &&<HomePage nav={nav} products={shopProducts} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} tankPreviousWinners={tankPreviousWinners} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated} openMenuSignal={homeMenuSignal} onMenuOpened={()=>setHomeMenuSignal(0)}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={shopProducts} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
         {page==="detail"   &&<DetailPage product={selProduct} products={shopProducts} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} settings={settings} addToCart={addToCart} cart={cart} nav={nav} goBack={goBack} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} onReviewDeleted={unmarkReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={shopProducts} mediaCache={mediaCache} orders={orders}/>}

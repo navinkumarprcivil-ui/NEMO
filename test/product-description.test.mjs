@@ -70,8 +70,9 @@ test('the ends of the strip do something sensible', () => {
     'there is no tab left of Home, so a rightward swipe opens Browse');
   assert.match(app, /if\(j>=NAV_TABS\.length\) return;/,
     'past Cart there is nothing, and wrapping round to Home would be a surprise');
-  assert.match(app, /useEffect\(\(\)=>\{ if\(openMenuSignal\) setMenuOpen\(true\); \},\[openMenuSignal\]\);/,
-    'the drawer is Home state, so the shell bumps a counter rather than reaching in');
+  assert.match(app, /if\(!openMenuSignal\) return; setMenuOpen\(true\); onMenuOpened&&onMenuOpened\(\);/,
+    'the drawer is Home state, so the shell bumps a counter rather than reaching in — and Home '
+    + 'spends it, or the bump re-opens Browse on every later remount of Home');
 });
 
 test('only a deliberate sideways gesture navigates', () => {
