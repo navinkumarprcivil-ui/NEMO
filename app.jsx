@@ -9230,17 +9230,12 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
             double-tap zoom on the logo so every tap counts. */}
         <div onPointerDown={onSecretTap} className="home-hero-logo"
           style={{display:"flex",flexDirection:"column",alignItems:"center",cursor:"default",userSelect:"none",touchAction:"manipulation",WebkitTapHighlightColor:"transparent",marginBottom:9,marginTop:39}}>
-          {/* The same fog as the opening splash, so the mark arrives looking like the one that
-              just left. It is a blurred copy of the logo sitting behind the sharp one, bleeding
-              its own navy and orange a little past the badge's white outline so the edge
-              dissolves rather than stopping. A mask would have been the obvious way to feather
-              it and the wrong one: the wordmark runs the full width, so any radial fade eats the
-              letters at both ends. The glow is a drop-shadow, which follows the alpha and hugs
-              the badge's real shape instead of its bounding box. */}
-          <div style={{position:"relative",width:"min(205px,62%)",aspectRatio:"600 / 311",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <img src={STORE_LOGO} alt="" aria-hidden="true" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}}
-              style={{position:"absolute",left:"-7%",top:"-7%",width:"114%",height:"114%",objectFit:"contain",filter:"blur(11px) saturate(1.5)",opacity:.5,pointerEvents:"none"}}/>
-            <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{position:"relative",width:"100%",height:"100%",objectFit:"contain",filter:"drop-shadow(0 0 16px rgba(14,165,233,.42)) drop-shadow(0 6px 14px rgba(0,0,0,.28))"}}/>
+          {/* Plain and sharp here. The fog belongs to the opening, where it has deep water to
+              bleed into and two seconds of nobody's attention; on Home the logo sits above the
+              search bar and is looked at every visit, and a permanent halo on something seen
+              that often stops reading as atmosphere and starts reading as a smudge. */}
+          <div style={{width:"min(205px,62%)",aspectRatio:"600 / 311",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <img src={STORE_LOGO} alt="Nemo Aqua Store" onError={e=>{if(!e.target.dataset.fb){e.target.dataset.fb='1';e.target.src=NEMO_FALLBACK;}}} style={{width:"100%",height:"100%",objectFit:"contain",filter:"drop-shadow(0 6px 14px rgba(0,0,0,.28))"}}/>
           </div>
         </div>
 
