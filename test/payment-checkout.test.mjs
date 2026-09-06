@@ -101,3 +101,18 @@ test('verified production payments confirm orders automatically', () => {
   assert.match(app, /const ORDER_STATUSES = \["Confirmed","Shipped","Delivered"\]/);
   assert.match(app, /your order is confirmed automatically/);
 });
+
+test('a payment that cannot be reopened cancels and returns the items to the cart', () => {
+  /* PhonePe derives its merchantOrderId from the Nemo order id, so the id is spent by the
+     first checkout: a customer who opens the gateway, comes back without paying and taps Pay
+     gets a duplicate refusal for as long as the order exists. That reached them as a generic
+     "we couldn't open a payment session", leaving a button on screen that could never work.
+     Razorpay re-uses its order and retries cleanly, which is why this turns on whether a
+     session was already opened rather than on which gateway it was. */
+  assert.match(payCreate, /const retry = !!\(order\.gateway && order\.gatewayOrderId\);/);
+  assert.match(payCreate, /if \(!session && retry\) \{/);
+  assert.match(payCreate, /error: 'payment-retry-unavailable'/);
+  assert.match(app, /m==="payment-retry-unavailable"/);
+  assert.match(app, /if\(onCheckoutCancelled\) await onCheckoutCancelled\(order\);/,
+    'the items go back to the cart rather than the customer being left with a dead button');
+});

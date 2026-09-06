@@ -109,7 +109,8 @@ export default async function handler(req, res) {
     /* Which gateway. An order that already has one keeps it: switching mid-order would
        strand the session already open at the first gateway, and a customer who paid it
        would have paid an order we had stopped watching. Only a fresh order gets a choice. */
-    const stuck = order.gateway && order.gatewayOrderId ? [String(order.gateway)] : await availableProviders();
+    const retry = !!(order.gateway && order.gatewayOrderId);
+    const stuck = retry ? [String(order.gateway)] : await availableProviders();
     if (!stuck.length) { res.status(503).json({ error: 'gateway-not-configured' }); return; }
 
     // The gateway session ends when the order's window does — it does not get its own clock.
@@ -144,6 +145,23 @@ export default async function handler(req, res) {
           message: String(error?.message || error).slice(0, 240),
         }));
       }
+    }
+    /* A retry that could not be reopened is not something tapping Pay again will fix.
+       PhonePe derives its merchantOrderId from the Nemo order id, so the id is spent the
+       moment the first checkout is created: come back without paying, tap Pay, and PhonePe
+       refuses the duplicate for as long as the order exists. (Razorpay re-uses its order and
+       retries cleanly — this is why the code asks whether a session was already opened rather
+       than which gateway it was.) Answering with a generic "couldn't open a payment session"
+       left the customer holding a button that could never work. Say instead that this attempt
+       is over, and let the app put the items back in the cart so they can order again. */
+    if (!session && retry) {
+      console.error(JSON.stringify({
+        event: 'pay_create_retry_unavailable',
+        provider: String(order.gateway || ''),
+        message: String(lastError?.message || lastError || '').slice(0, 240),
+      }));
+      res.status(409).json({ error: 'payment-retry-unavailable' });
+      return;
     }
     if (!session) throw lastError || new Error('no-gateway-available');
 

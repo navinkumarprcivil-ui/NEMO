@@ -7906,7 +7906,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.0897f64c";
+const APP_BUILD = "v90.37f1548c";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -10805,6 +10805,14 @@ function PaymentPanel({order, onCancelled, onCheckoutCancelled, onVerified, comp
          auto-cancels. Refused here rather than charging for an order that can no longer be
          settled. */
       else if(m==="payment-window-closing") setPayNote("⚠ Too little time left in this payment window to start a payment safely. Please place the order again.");
+      /* The gateway will not reopen this one — PhonePe spends its order id on the first
+         checkout — so tapping Pay again can only fail again. Rather than leave a dead button
+         on the screen, end the attempt and put the items back in the cart, which is the state
+         the customer was in before they started and the one thing they can act on. */
+      else if(m==="payment-retry-unavailable"){
+        setPayNote("This payment couldn't be reopened. Your items are back in your cart.");
+        if(onCheckoutCancelled) await onCheckoutCancelled(order);
+      }
       else if(m==="valid-phone-required") setPayNote("⚠ Add a valid 10-digit Indian mobile number to the delivery address.");
       else if(m==="sign-in-required"||m==="order-owner-mismatch") setPayNote("⚠ Your secure sign-in session has expired. Sign out, sign in with Google again, then retry payment.");
       else if(m==="gateway-not-configured"){ setGatewayOn(false); setPayNote("⚠ Secure payment is temporarily unavailable. Please retry shortly."); }
