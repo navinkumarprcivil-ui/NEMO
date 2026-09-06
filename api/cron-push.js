@@ -1,19 +1,24 @@
 /**
- * Send the notifications that have come due — shipped orders, and the weekly tank care
- * reminder. Runs on the Worker's existing fifteen-minute cron.
+ * Send the notifications that have come due — orders shipped and delivered, products back in
+ * stock, and the weekly tank care reminder. Runs on the Worker's existing fifteen-minute cron.
  *
- * ── Why a queue rather than a scan ─────────────────────────────────────────
+ * ── Why orders use a queue and restock does not ────────────────────────────
  * Orders live at orders/<uid>/<orderId>, so finding the ones that just shipped would mean
  * reading every order in the store, every fifteen minutes, forever — ninety-six full reads
  * a day against a node that only grows. The admin writes one small row instead when the
- * status crosses into Shipped, and this drains it: the work is proportional to what
- * happened, not to how long the shop has been trading.
+ * status crosses, and this drains it: the work is proportional to what happened, not to how
+ * long the shop has been trading.
  *
- * That row carries only WHO and WHICH ORDER. The message is composed here, after re-reading
- * the order and confirming it really is Shipped, so a queue row can never become a way to
- * put chosen text on a customer's phone. Rows are deleted whether or not the send worked:
- * a shipping notice that is hours late is worse than none, and the order page shows the
- * truth regardless.
+ * The waiting lists are the opposite shape. restock/<pid> holds only products that went out
+ * of stock with someone waiting, so it is small by construction and can simply be asked "is
+ * this back yet?" on every tick — which also catches stock returning by any route, where
+ * watching for the moment of change would catch only one.
+ *
+ * A queue row carries only WHO and WHICH ORDER. The message is composed here, after re-reading
+ * the order and confirming it really is in the state the row claims, so a queue row can never
+ * become a way to put chosen text on a customer's phone. Rows are deleted whether or not the
+ * send worked: a shipping notice that is hours late is worse than none, and the order page
+ * shows the truth regardless.
  *
  * ── Why care reminders carry a date and not a tank ─────────────────────────
  * The tank profile has always lived in localStorage and still does. Only customers who
@@ -29,8 +34,30 @@ const BATCH = 40;
 /* A queue row this old refers to a shipment the customer has long since seen the state of.
    Drop it rather than delivering a stale surprise. */
 const STALE = 24 * 60 * 60 * 1000;
+/* How long a "notify me when it's back" request stays worth acting on. */
+const SUB_MAX_AGE = 60 * 24 * 60 * 60 * 1000;
 
-async function sendShipped(now) {
+/* What each queued kind means, and the status the order must actually be in for it to go out.
+   Keeping the expected status here rather than in the row is the point: the row asks for a
+   send, this decides whether the order still deserves one. */
+const ORDER_PUSH = {
+  shipped: {
+    status: 'Shipped',
+    title: 'Your order is on the way',
+    body: (label, order) => {
+      const courier = String(order.courier || '').trim();
+      return courier ? `${label} has shipped with ${courier}.` : `${label} has shipped.`;
+    },
+  },
+  delivered: {
+    status: 'Delivered',
+    title: 'Your order has arrived',
+    body: (label) => `${label} was marked delivered. Tell us how everything arrived — it helps `
+      + `the next customer, and it is how the live arrival guarantee is claimed.`,
+  },
+};
+
+async function sendOrderNotices(now) {
   let queue;
   try { queue = await dbGet('pushQueue') || {}; } catch { return 0; }
   const rows = Object.entries(queue).slice(0, BATCH);
@@ -40,22 +67,70 @@ async function sendShipped(now) {
     const uid = String((row && row.uid) || '');
     const orderId = String((row && row.orderId) || '');
     const at = Number((row && row.at) || 0);
+    const spec = ORDER_PUSH[String((row && row.kind) || '')];
 
-    if (uid && orderId && (!at || now - at < STALE)) {
+    if (spec && uid && orderId && (!at || now - at < STALE)) {
       const order = await readOrder(uid, orderId);
       // Re-read rather than trust the row: the order may have moved on, or been corrected.
-      if (order && order.status === 'Shipped') {
+      if (order && order.status === spec.status) {
         const label = order.orderNo ? `Order ${order.orderNo}` : 'Your order';
-        const courier = String(order.courier || '').trim();
         sent += await notifyUser(uid, {
-          title: 'Your order is on the way',
-          body: courier ? `${label} has shipped with ${courier}.` : `${label} has shipped.`,
+          title: spec.title,
+          body: spec.body(label, order),
           url: '/',
+          /* One tag per order, so "arrived" replaces "on the way" instead of stacking under it.
+             The shade should show where an order is, not its history. */
           tag: `order-${orderId}`,
         });
       }
     }
     await dbDelete(`pushQueue/${encodeURIComponent(key)}`).catch(() => {});
+  }
+  return sent;
+}
+
+/* Back-in-stock alerts.
+   No queue and no crossing detection here, unlike shipping. restock/<pid> only ever holds
+   products that went out of stock with somebody waiting, so the node is naturally small and
+   asking "is this one back yet?" on every tick costs almost nothing. It is also the more robust
+   shape: stock returns by several routes — an admin save, a corrected count, a bulk edit — and
+   this notices all of them, where watching for the moment of change would only notice one. */
+async function sendRestock(now) {
+  let waiting;
+  try { waiting = await dbGet('restock') || {}; } catch { return 0; }
+  let sent = 0;
+
+  for (const [pid, subs] of Object.entries(waiting).slice(0, BATCH)) {
+    const path = `restock/${encodeURIComponent(pid)}`;
+    if (!subs || typeof subs !== 'object') { await dbDelete(path).catch(() => {}); continue; }
+
+    let product = null;
+    try { product = await dbGet(`products/${encodeURIComponent(pid)}`); } catch { continue; }
+    // Delisted since somebody asked. Nothing to announce and nothing to keep.
+    if (!product) { await dbDelete(path).catch(() => {}); continue; }
+
+    const stock = Number(product.stockCount);
+    if (!Number.isFinite(stock) || stock <= 0) continue;
+
+    const name = String(product.name || '').trim() || 'Something you wanted';
+    for (const [uid, row] of Object.entries(subs).slice(0, BATCH)) {
+      /* A request made months ago is not worth acting on — the customer has almost certainly
+         bought elsewhere, and "back in stock" for a thing they have forgotten reads as spam.
+         Dropped silently rather than sent. */
+      const asked = Date.parse(String((row && row.at) || '')) || 0;
+      if (asked && now - asked > SUB_MAX_AGE) continue;
+
+      sent += await notifyUser(uid, {
+        title: 'Back in stock',
+        body: `${name} is available again.`,
+        url: '/',
+        tag: `restock-${pid}`,
+      });
+    }
+
+    /* Cleared whether or not anything was delivered. The list is a one-shot request: leaving it
+       would tell the same people again on every tick for as long as the product stays stocked. */
+    await dbDelete(path).catch(() => {});
   }
   return sent;
 }
@@ -100,9 +175,10 @@ export default async function handler(req, res) {
   try {
     /* Sequential on purpose: both share one cached OAuth token, and running them together
        on a cold cache mints two. */
-    const shipped = await sendShipped(now);
+    const orders = await sendOrderNotices(now);
     const care = await sendCareReminders(now);
-    res.status(200).json({ ok: true, shipped, care });
+    const restock = await sendRestock(now);
+    res.status(200).json({ ok: true, orders, care, restock });
   } catch (error) {
     console.error('cron-push', error?.message || error);
     res.status(500).json({ error: 'push-failed' });

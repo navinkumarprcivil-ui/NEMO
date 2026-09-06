@@ -256,7 +256,7 @@
         ".validate": "!newData.exists() || newData.hasChildren(['uid', 'orderId', 'kind'])",
         "uid": { ".validate": "newData.isString() && newData.val().length <= 128" },
         "orderId": { ".validate": "newData.isString() && newData.val().length <= 128" },
-        "kind": { ".validate": "newData.val() === 'shipped'" },
+        "kind": { ".validate": "newData.val() === 'shipped' || newData.val() === 'delivered'" },
         "at": { ".validate": "newData.isNumber()" },
         "$other": { ".validate": false }
       }

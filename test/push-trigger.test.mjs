@@ -36,13 +36,35 @@ test('the queue says who and which order, never what to say', () => {
     'a row carrying title/body would let anyone who can write it choose the words');
   assert.match(cron, /const order = await readOrder\(uid, orderId\);/,
     'the message must be composed from the order, not from the row');
-  assert.match(cron, /order\.status === 'Shipped'/,
+  assert.match(cron, /order\.status === spec\.status/,
     're-confirm the state rather than trusting the row that asked for the send');
 });
 
-test('shipping notices fire on the crossing only', () => {
-  assert.match(app, /updated\.status==="Shipped" && prevStatus!=="Shipped" && updated\.userUid/,
+test('order notices fire on the crossing only', () => {
+  assert.match(app, /updated\.status!==prevStatus && PUSH_ON\[updated\.status\] && updated\.userUid/,
     're-saving a shipped order to fix a courier number must not notify again');
+  assert.match(app, /const PUSH_ON=\{Shipped:"shipped",Delivered:"delivered"\}/,
+    'Confirmed is deliberately absent — it happens while the customer is watching the screen');
+});
+
+test('each kind names the status the order must actually be in', () => {
+  // The row asks for a send; ORDER_PUSH decides whether the order still deserves one, so a
+  // stale or reverted order cannot be announced.
+  assert.match(cron, /shipped: \{\s*status: 'Shipped'/);
+  assert.match(cron, /delivered: \{\s*status: 'Delivered'/);
+  assert.match(cron, /tag: `order-\$\{orderId\}`/,
+    'one tag per order, so "arrived" replaces "on the way" rather than stacking');
+});
+
+test('back-in-stock alerts read the waiting list instead of watching stock', () => {
+  // restock/<pid> only holds products that ran out with someone waiting, so it is small by
+  // construction. Asking "is this back yet?" also catches stock returning by any route.
+  assert.match(cron, /const waiting = await dbGet\('restock'\)|await dbGet\('restock'\)/);
+  assert.match(cron, /if \(!Number\.isFinite\(stock\) \|\| stock <= 0\) continue;/);
+  assert.match(cron, /await dbDelete\(path\)\.catch\(\(\) => \{\}\);/,
+    'the list is a one-shot request — leaving it would re-notify on every tick');
+  assert.match(cron, /const SUB_MAX_AGE = 60 \* 24 \* 60 \* 60 \* 1000;/,
+    'a months-old request reads as spam when it finally fires');
 });
 
 test('a queue row is always removed, sent or not', () => {
@@ -79,6 +101,7 @@ test('the two new nodes are locked to the right writer', () => {
   assert.ok(!('.read' in rules.pushQueue), 'nobody reads the queue but the service account');
   assert.match(queue['.write'], /adminAccess\/permissions\/orders/,
     'a customer who could write here could aim a notification at another customer');
-  assert.equal(queue.kind['.validate'], "newData.val() === 'shipped'");
+  assert.equal(queue.kind['.validate'],
+    "newData.val() === 'shipped' || newData.val() === 'delivered'");
   assert.equal(queue.$other['.validate'], false);
 });

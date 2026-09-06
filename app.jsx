@@ -18548,10 +18548,13 @@ function NemoStore(){
     const old=orders.find(o=>o.id===updated.id);
     const prevStatus=old?old.status:"";
     const becamePaid=paymentSucceeded(updated)&&!paymentSucceeded(old);
-    /* Only on the crossing, not on every save of an already-shipped order — re-saving one to
-       correct a courier number must not tell the customer it shipped again. */
-    if(updated.status==="Shipped" && prevStatus!=="Shipped" && updated.userUid){
-      queueOrderPush(updated.userUid, updated.id, "shipped");
+    /* Only on the crossing, not on every save of an order already in that state — re-saving a
+       shipped one to correct a courier number must not tell the customer it shipped again.
+       Confirmed is deliberately absent: it happens at payment, while the customer is looking
+       at the screen that says so. */
+    const PUSH_ON={Shipped:"shipped",Delivered:"delivered"};
+    if(updated.status!==prevStatus && PUSH_ON[updated.status] && updated.userUid){
+      queueOrderPush(updated.userUid, updated.id, PUSH_ON[updated.status]);
     }
     if(becamePaid){
       if(updated.referralCode){
