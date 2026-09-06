@@ -5175,7 +5175,12 @@ async function shareProduct(p, showToast){
   // Version the preview URL so messaging apps do not reuse the old store-banner cache.
   const url=origin?`${origin}/s/${encodeURIComponent(p.id)}?v=product-photo-2`:"";
   const price=effectivePrice(p);
-  const text=`🐠 ${p.name} — ₹${price}\n${STORE_NAME} Aqua Store`;
+  /* No emoji in front of the name. A fish before every product read as decoration on a
+     listing rather than one person handing another a recommendation, and the preview card
+     underneath already carries the picture. The single asterisks are WhatsApp and Telegram
+     bold, which is where these links actually go; anywhere else they show as themselves,
+     which is the price of the name standing out in the one place that matters. */
+  const text=`*${p.name}* — ₹${price}\n${STORE_NAME} Aqua Store`;
   try{
     // `text` deliberately carries no URL: the share sheet appends `url` itself,
     // and a link in both is why the message used to arrive with it twice.
@@ -7800,7 +7805,12 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
   const ShareBtn = (
     <button className="press" onClick={e=>{e.stopPropagation();shareProduct(p);}} aria-label="Share"
       style={{position:"absolute",top:8,right:onFav?44:8,width:30,height:30,borderRadius:"50%",border:"none",background:"rgba(255,255,255,.9)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,.18)"}}>
-      <span style={{fontSize:14,lineHeight:1}}>🔗</span>
+      {/* An arrow leaving a tray, not a chain link. A chain reads as "copy link" — or as
+          nothing at all — where this is the icon every phone already draws for Share. */}
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{display:"block"}}>
+        <path d="M12 15.5V3.5M8.4 7L12 3.4L15.6 7" stroke="#334155" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M5.5 12.5V18.5a2 2 0 002 2h9a2 2 0 002-2V12.5" stroke="#334155" strokeWidth="2" strokeLinecap="round"/>
+      </svg>
     </button>
   );
   return(
@@ -7896,7 +7906,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.8546d4b0";
+const APP_BUILD = "v90.25aa4b51";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -9168,12 +9178,49 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
     if(r===null){ clearRecentSearches(); setRecent([]); return; }
     setMenuOpen(false); setQuery(r); nav("shop");
   };
+  /* Swipe across Home: right opens Browse, left goes to Shop.
+     Two things this must not fight. Android 10+ reserves a strip at BOTH screen edges for its
+     own Back gesture, so a touch starting there belongs to the system and we leave it alone —
+     which is why this is not the usual drawer edge-swipe. And Home is built out of horizontal
+     scrollers (category chips, new arrivals, offers, recently viewed), where a sideways drag
+     belongs to the row under the finger; walking up from the touch target excludes those by
+     measurement rather than by a list of class names that would rot. */
+  const swipeFrom=useRef(null);
+  const SWIPE_EDGE=32, SWIPE_MIN=70;
+  const onHomeTouchStart=(e)=>{
+    swipeFrom.current=null;
+    if(menuOpen||walletOpen||suggOpen) return;
+    if(!e.touches||e.touches.length!==1) return;
+    const t=e.touches[0], w=window.innerWidth||0;
+    if(t.clientX<SWIPE_EDGE||t.clientX>w-SWIPE_EDGE) return;
+    for(let el=e.target; el&&el!==e.currentTarget; el=el.parentElement){
+      /* Overflowing is not the same as scrollable, and testing only the width is what kept
+         this from firing anywhere near the top of Home: the hero clips two decorative circles
+         that sit off its right edge, so it overflows by forty pixels while scrolling nothing,
+         and every swipe starting in it was handed to a row that does not exist. Only a strip
+         the finger could actually drag gets to claim the gesture. */
+      if(el.scrollWidth>el.clientWidth+4){
+        let ox=""; try{ ox=getComputedStyle(el).overflowX||""; }catch(err){}
+        if(ox==="auto"||ox==="scroll") return;
+      }
+    }
+    swipeFrom.current={x:t.clientX,y:t.clientY};
+  };
+  const onHomeTouchEnd=(e)=>{
+    const from=swipeFrom.current; swipeFrom.current=null;
+    if(!from||!e.changedTouches||!e.changedTouches.length) return;
+    const t=e.changedTouches[0], dx=t.clientX-from.x, dy=t.clientY-from.y;
+    /* Mostly sideways, and far enough to be deliberate — a diagonal flick while scrolling the
+       page must not navigate. */
+    if(Math.abs(dx)<SWIPE_MIN||Math.abs(dx)<Math.abs(dy)*2) return;
+    if(dx>0) setMenuOpen(true); else nav("shop");
+  };
   const offer = products.find(p=>activeDiscount(p)>0 && p.offerEndsAt);
   const offerStock = offer ? (offer.stockCount ?? DEFAULT_STOCK) : 0;
   // Offer Zone — every product currently on offer (discount set, in stock, offer not expired).
   const offerProducts = products.filter(p=>!p.comingSoon && activeDiscount(p)>0 && (p.stockCount??DEFAULT_STOCK)>0);
   return(
-    <div className="slide-up">
+    <div className="slide-up" onTouchStart={onHomeTouchStart} onTouchEnd={onHomeTouchEnd}>
       <CategoryDrawer open={menuOpen} onClose={()=>setMenuOpen(false)} recent={recent} nav={nav} user={user} settings={settings} orders={orders}
         onSelect={(cat)=>{ setMenuOpen(false); setCategory(cat); nav("shop"); }}
         onRecent={handleRecent}/>
@@ -9948,6 +9995,55 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
   );
 }
 
+/* A deliberately tiny markdown subset: **bold**, nothing else. The description is written by an
+   admin, but rendering it as HTML would hand a co-admin a <script> tag on every product page for
+   the price of one styling option. Splitting on ** and emitting <strong> leaves every other
+   character as text, which React escapes on the way out. */
+function boldParts(text){
+  const s=String(text||""), out=[], re=/\*\*([^*\n]+)\*\*/g;
+  let last=0,m;
+  while((m=re.exec(s))){
+    if(m.index>last) out.push(s.slice(last,m.index));
+    out.push(<strong key={m.index} style={{color:C.text,fontWeight:800}}>{m[1]}</strong>);
+    last=re.lastIndex;
+  }
+  if(last<s.length) out.push(s.slice(last));
+  return out.length?out:s;
+}
+
+/* Clamped to three lines so the price, stock and Add to Cart sit above the fold on a phone.
+   The toggle appears only when the text really is taller than the clamp — measured rather than
+   guessed from a character count, which is wrong on every screen but the one it was tuned on.
+   pre-wrap is kept inside the clamp so an admin's own paragraph breaks still survive. */
+function ProductDescription({text}){
+  const ref=useRef(null);
+  const [expanded,setExpanded]=useState(false);
+  const [clipped,setClipped]=useState(false);
+  useEffect(()=>{
+    const el=ref.current; if(!el) return;
+    const check=()=>{ try{ setClipped(el.scrollHeight>el.clientHeight+2); }catch(e){} };
+    check();
+    /* Webfonts land after the first paint and change the height, so a description that fits
+       during layout can overflow a moment later. Measure again once they are in. */
+    try{ if(document.fonts&&document.fonts.ready) document.fonts.ready.then(check).catch(()=>{}); }catch(e){}
+    window.addEventListener("resize",check);
+    return()=>window.removeEventListener("resize",check);
+  },[text]);
+  if(!String(text||"").trim()) return null;
+  const clamp=expanded?{}:{display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"};
+  return(
+    <div>
+      <div ref={ref} style={{fontSize:13,color:C.textSub,lineHeight:1.75,whiteSpace:"pre-wrap",...clamp}}>{boldParts(text)}</div>
+      {(clipped||expanded)&&(
+        <button className="press" onClick={()=>setExpanded(v=>!v)}
+          style={{marginTop:7,background:"none",border:"none",padding:0,color:C.primary,fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+          {expanded?"Show less":"Read more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,onReviewDeleted,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
   const [selVarId,setSelVarId] = useState(null);
   const [tab,setTab]           = useState("desc");
@@ -10105,7 +10201,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
             <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,color:C.text,lineHeight:1.2}}>{p.name}</div>
             <button className="press" onClick={()=>shareProduct(p)}
               style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:C.accentLight,border:`1px solid ${C.border}`,color:C.primary,borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zM18 22a3 3 0 100-6 3 3 0 000 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 15.5V3.5M8.4 7L12 3.4L15.6 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.5 12.5V18.5a2 2 0 002 2h9a2 2 0 002-2V12.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               Share
             </button>
             <button className="press" onClick={()=>onFav&&onFav(p)}
@@ -10178,7 +10274,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <div className="fade-in">
             {/* pre-wrap keeps the admin's own line breaks and blank lines — typing the description
                 as paragraphs or a bulleted list used to collapse into one run-on block. */}
-            <div style={{fontSize:13,color:C.textSub,lineHeight:1.75,whiteSpace:"pre-wrap"}}>{p.desc}</div>
+            <ProductDescription text={p.desc}/>
             {(()=>{
               const care=p.care||{};
               const rows=[
@@ -12674,6 +12770,14 @@ const POLICY_META_ALL = {
    policy falls through to Terms below rather than rendering an empty page. */
 const policyMeta = () => LIVE_FISH_ENABLED ? POLICY_META_ALL : Object.fromEntries(
   Object.entries(POLICY_META_ALL).filter(([k]) => k!=="guarantee" && k!=="acclimatize"));
+/* Two headings carry no icon. A padlock beside "Privacy Policy", or a return arrow beside
+   "Cancellations, Returns & Refunds", is decoration on the two pages a customer opens when
+   something has gone wrong or while deciding whether to trust the shop with their address —
+   and decoration there reads as a shop being playful about a document that binds it. Keyed off
+   meta.key rather than `which` so an old bookmark that falls through to Terms is judged by the
+   page it actually lands on. The chips under "More policies" keep their icons: there they are
+   how six similar buttons are told apart at a glance. */
+const POLICY_TITLE_BARE = { privacyPolicy:true, returnPolicy:true };
 function PolicyPage({nav,goBack,settings={},which}){
   const POLICY_META=policyMeta();
   const s={...DEFAULT_SETTINGS,...settings};
@@ -12681,7 +12785,7 @@ function PolicyPage({nav,goBack,settings={},which}){
   const others=Object.keys(POLICY_META).filter(k=>k!==which);
   return(
     <div className="slide-up">
-      <HeroHeader onBack={goBack} title={<>{meta.icon} {meta.title}</>}
+      <HeroHeader onBack={goBack} title={POLICY_TITLE_BARE[meta.key]?meta.title:<>{meta.icon} {meta.title}</>}
         subtitle={meta.sub}/>
       <div className="dt-read" style={{padding:"18px 16px 100px"}}>
         <div style={{background:C.card,borderRadius:20,padding:"20px",border:`1px solid ${C.border}`,fontSize:13,color:C.textSub,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{policyText(meta.key, s)}</div>
@@ -13932,10 +14036,13 @@ function NemoStore(){
     const old=orders.find(o=>o.id===updated.id);
     const prevStatus=old?old.status:"";
     const becamePaid=paymentSucceeded(updated)&&!paymentSucceeded(old);
-    /* Only on the crossing, not on every save of an already-shipped order — re-saving one to
-       correct a courier number must not tell the customer it shipped again. */
-    if(updated.status==="Shipped" && prevStatus!=="Shipped" && updated.userUid){
-      queueOrderPush(updated.userUid, updated.id, "shipped");
+    /* Only on the crossing, not on every save of an order already in that state — re-saving a
+       shipped one to correct a courier number must not tell the customer it shipped again.
+       Confirmed is deliberately absent: it happens at payment, while the customer is looking
+       at the screen that says so. */
+    const PUSH_ON={Shipped:"shipped",Delivered:"delivered"};
+    if(updated.status!==prevStatus && PUSH_ON[updated.status] && updated.userUid){
+      queueOrderPush(updated.userUid, updated.id, PUSH_ON[updated.status]);
     }
     if(becamePaid){
       if(updated.referralCode){
