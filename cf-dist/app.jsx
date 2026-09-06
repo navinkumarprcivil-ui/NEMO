@@ -1519,9 +1519,16 @@ function savePushToken(){
   try{
     FB_DB.ref("pushTokens/"+uid+"/"+dev)
       .set({token:pendingPushToken,platform:"android",at:Date.now()})
-      .catch(()=>{});
+      /* Not silent. A rule change that denies this write is indistinguishable from the token
+         never arriving, and looking at the wrong half of that once cost an hour. */
+      .catch(e=>console.warn("nemo-push: token write rejected",e&&e.message));
   }catch(e){}
 }
+/* True once MainActivity has handed us an FCM token: this is the installed app, on a build
+   that carries push. It is the only honest way for the page to ask "can this device actually
+   be reached?" — the WebView has no Notification API to interrogate, and an older build of
+   the app never calls __nemoPushToken at all. */
+function pushCapable(){ return !!pendingPushToken; }
 if(typeof window!=="undefined"){
   /* Called by MainActivity once FirebaseMessaging hands it a token, and again on refresh. */
   window.__nemoPushToken=function(token){
@@ -1562,7 +1569,27 @@ function syncCareReminder(tank){
   try{ ref.set({nextAt,at:Date.now()}).catch(()=>{}); }catch(e){}
 }
 
+/* Who wants telling when a new care guide is published. One row per customer holding one
+   number, for the same reason careReminders is shaped that way: the server needs to know WHO
+   and nothing whatever about what they read. Switching off removes the row rather than
+   flagging it, so there is no server-side record of someone who opted out.
+
+   Keyed on the account rather than the device, so turning it on signed out records the
+   preference and nothing else — there is nobody to deliver to yet. It is written again on
+   nemo-fb-ready, which is when a sign-in finally gives it an owner. */
+function syncGuideSub(on){
+  if(!FB_OK||!FB_DB||!FB_AUTH) return;
+  let uid="";
+  try{ uid=(FB_AUTH.currentUser&&FB_AUTH.currentUser.uid)||""; }catch(e){}
+  if(!uid) return;
+  let ref;
+  try{ ref=FB_DB.ref("guideSubs/"+uid); }catch(e){ return; }
+  if(!on){ try{ ref.remove().catch(()=>{}); }catch(e){} return; }
+  try{ ref.set({at:Date.now()}).catch(e=>console.warn("nemo-push: guideSubs write rejected",e&&e.message)); }catch(e){}
+}
+
 /* Queued when the admin marks an order Shipped; the Worker sends on its next tick.
+
    The row carries only WHO and WHICH ORDER — never the words. The server re-reads the order,
    confirms it really is Shipped, and composes the message itself, so a queue row can never
    become a way to put arbitrary text on a customer's phone. */
@@ -3627,12 +3654,14 @@ function notifPermNow(){
   try{ return ("Notification"in window) ? Notification.permission : "unsupported"; }
   catch(e){ return "unsupported"; }
 }
-/* `channel` lets a caller respect the customer's own switch for that kind of alert, not just
-   the browser permission — "guides" is the care-guide toggle in GuideNotifBtn. Left empty,
-   this behaves exactly as before. */
-function sendLocalNotif(title, body, icon="assets/nemo-logo.png", channel=""){
+/* There used to be a `channel` argument here that consulted the care-guide switch when it was
+   passed the string "guides". Nothing ever passed it — the one caller that passed anything
+   passed "care" — so the switch gated nothing and was dead in every browser. New guides go out
+   as a real push now (see syncGuideSub and sendNewGuide in api/cron-push.js), and each caller
+   below already checks its own preference, so the argument is gone rather than left as a trap
+   for the next person to wire something to it. */
+function sendLocalNotif(title, body, icon="assets/nemo-logo.png"){
   if(!("Notification"in window)||Notification.permission!=="granted")return;
-  if(channel==="guides"&&!guideNotifOn())return;
   try{ new Notification(title,{body,icon}); }catch(e){}
 }
 /* ── Weekly tank care ──────────────────────────────────────────────────────────
@@ -6505,7 +6534,20 @@ function GuideNotifBtn(){
      direction with no explanation. The preference is ours and always settable; whether it can
      be delivered right now is a separate line of text underneath. */
   const active = on;
-  const apply=(v)=>{ setOn(v); setGuideNotifPref(v); };
+  /* The preference is local so it survives being signed out; the subscription is the server's
+     copy of it, and only that can actually reach a phone. Both move together. */
+  const apply=(v)=>{ setOn(v); setGuideNotifPref(v); syncGuideSub(v); };
+  const signedIn=()=>{ try{ return !!(FB_AUTH&&FB_AUTH.currentUser); }catch(e){ return false; } };
+
+  /* A preference set before signing in has no owner to file it under. Firebase resolving auth
+     is the moment it gets one, so re-file it then — otherwise switching this on and signing in
+     afterwards leaves a switch that reads ON and a server that has never heard of you. */
+  useEffect(()=>{
+    const push=()=>{ if(guideNotifOn()) syncGuideSub(true); };
+    push();
+    window.addEventListener("nemo-fb-ready",push);
+    return()=>window.removeEventListener("nemo-fb-ready",push);
+  },[]);
 
   /* Permission can change outside the page — in browser site settings, or in Android's app
      settings for the installed app. Re-read it when the tab comes back and, where the
@@ -6529,9 +6571,14 @@ function GuideNotifBtn(){
      preference is already saved by the time any of them appears — all they have to say is
      what is standing between it and an actual notification. */
   const BLOCKED="Saved. Turn on notifications in settings.";
+  /* Inside the app this used to read "the app can't show notifications yet", which is no longer
+     true: the installed app receives these through FCM and draws them natively, with no
+     Notification API involved. It is only untrue of a build older than the one that added push,
+     and for those the useful thing to say is how to fix it. */
   const UNSUPPORTED=(typeof window!=="undefined"&&window.nemoInApp)
-    ? "Saved. The app can't show notifications yet."
+    ? "Saved. Update the app to get these."
     : "Saved. This browser can't show notifications.";
+  const SIGNED_OUT="Saved. Sign in to get these.";
   const noteFor=(p)=> p==="granted"?"" : p==="denied"?BLOCKED : p==="unsupported"?UNSUPPORTED
     : "Saved. Allow it when your browser asks.";
   const toggle=()=>{
@@ -6542,6 +6589,12 @@ function GuideNotifBtn(){
        ask, and refusing to store the preference just left the customer tapping a switch that
        never moved. The note says what will actually happen. */
     apply(true);
+    /* Signed out there is nobody to send to: the subscription is keyed on the account, not on
+       this device, so the preference is kept and nothing else can happen yet. */
+    if(!signedIn()){ setNote(SIGNED_OUT); return; }
+    /* The installed app is reached through FCM. Its missing Notification API has nothing to do
+       with whether this works, so do not ask the browser and do not apologise for it. */
+    if(pushCapable()){ setNote(""); return; }
     if(perm==="granted"){ setNote(""); return; }
     if(perm==="denied"||perm==="unsupported"){ setNote(noteFor(perm)); return; }
     setNote("");
@@ -7919,7 +7972,7 @@ function ProductCard({product:p,imgSrc,onPress,onAdd,inCart=0,isFav=false,onFav,
    orders and favourites are deliberately left alone; only cached copies of data
    that lives on the server are removed, and those come straight back on boot. */
 /* Written by scripts/build.mjs into version.json and sw.js — bump it here only. */
-const APP_BUILD = "v90.64906c85";
+const APP_BUILD = "v90.9b1fb726";
 async function forceRefresh(){
   /* The cached copies of products, guides and settings are deliberately NOT deleted here.
      They used to be, on the reasoning that "those come straight back on boot" — which is true
@@ -13609,8 +13662,7 @@ function NemoStore(){
     }catch(e){}
     const litres=careChangeLitres(t,false);
     sendLocalNotif(`${t.name||"Your tank"} — weekly care due`,
-      litres>0?`Time for a ~${litres} L water change, and a look at the filter and heater.`:"Time for this week's water change.",
-      undefined,"care");
+      litres>0?`Time for a ~${litres} L water change, and a look at the filter and heater.`:"Time for this week's water change.");
   },[user]);
 
   // Secret admin tap handler

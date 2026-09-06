@@ -135,6 +135,61 @@ async function sendRestock(now) {
   return sent;
 }
 
+/* New care guides.
+
+   Polled like restock rather than queued like orders: `guides` holds a handful of articles, so
+   asking "is there one newer than last time?" costs a single read, and it catches a guide added
+   by any route — an admin save, a restored backup, a corrected date — where watching for the
+   moment of publication would catch only one of them.
+
+   The marker is SEEDED on the first tick that finds none, and nothing is sent then. Without
+   that, switching this on would announce every guide the shop has ever written, all at once,
+   to everyone who subscribed.
+
+   Several guides added between two ticks produce ONE notification naming the newest, not one
+   per guide. The customer wants to know there is something new to read, not to have their
+   notification shade filled by a bulk edit.
+*/
+async function sendNewGuide(now) {
+  let guides;
+  try { guides = await dbGet('guides') || {}; } catch { return 0; }
+  const list = (Array.isArray(guides) ? guides : Object.values(guides)).filter(Boolean);
+  if (!list.length) return 0;
+
+  let newest = null;
+  for (const g of list) {
+    const at = Date.parse(String((g && g.createdAt) || '')) || 0;
+    // A guide dated in the future would park the marker there and mute every real one after it.
+    if (!at || at > now) continue;
+    if (!newest || at > newest.at) newest = { at, title: String((g && g.title) || '').trim() };
+  }
+  if (!newest) return 0;
+
+  let seen = 0;
+  try { seen = Number(await dbGet('pushState/guides/lastAt')) || 0; } catch { return 0; }
+  if (!seen) { await dbPatch('pushState/guides', { lastAt: newest.at }).catch(() => {}); return 0; }
+  if (newest.at <= seen) return 0;
+
+  let subs;
+  try { subs = await dbGet('guideSubs') || {}; } catch { return 0; }
+  let sent = 0;
+  for (const uid of Object.keys(subs).slice(0, BATCH)) {
+    sent += await notifyUser(uid, {
+      title: 'New care guide',
+      body: newest.title ? `${newest.title} — just published.` : 'A new care guide is up.',
+      url: '/',
+      /* One tag for the channel, so an unread announcement is replaced rather than stacked
+         under a newer one. Somebody who has not opened the app in a month should find the
+         latest guide waiting, not four. */
+      tag: 'care-guide',
+    });
+  }
+  /* Advance whether or not anything was delivered, exactly as careReminders does: a guide must
+     never be announced twice because nobody happened to be subscribed the first time round. */
+  await dbPatch('pushState/guides', { lastAt: newest.at }).catch(() => {});
+  return sent;
+}
+
 async function sendCareReminders(now) {
   let due;
   try { due = await dbGet('careReminders') || {}; } catch { return 0; }
@@ -178,7 +233,8 @@ export default async function handler(req, res) {
     const orders = await sendOrderNotices(now);
     const care = await sendCareReminders(now);
     const restock = await sendRestock(now);
-    res.status(200).json({ ok: true, orders, care, restock });
+    const guides = await sendNewGuide(now);
+    res.status(200).json({ ok: true, orders, care, restock, guides });
   } catch (error) {
     console.error('cron-push', error?.message || error);
     res.status(500).json({ error: 'push-failed' });

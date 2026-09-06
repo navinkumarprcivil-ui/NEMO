@@ -177,6 +177,19 @@ only change when someone pastes them into the Firebase Console and presses Publi
 `.catch(()=>{})`, so the rejection left no trace anywhere. It looked identical to the token never
 arriving, and cost an hour of looking at the wrong half of the system.
 
+### The care-guide switch needed a rule too
+
+The bell on the Care Guides page promised "tell me when there's a new guide" and nothing ever
+sent one: the preference lived in `localStorage` and was read by a single guard in
+`sendLocalNotif` that no caller ever triggered. It now writes `guideSubs/<uid>`, and the cron
+sends through FCM like every other notification.
+
+**That means another manual Console publish.** `database.rules.json` gained a `guideSubs` node;
+until it is pasted into the Firebase Console and published, the root `".write": false` denies
+the subscription write and the switch is dead again — with the same silent failure mode that
+cost an hour last time. The write's `.catch` now logs `nemo-push: guideSubs write rejected`
+rather than swallowing it, so Logcat says so.
+
 Two lessons worth keeping. A silent catch on a write is expensive every single time it fires;
 that one is worth replacing with a `console.warn`. And when a chain has five links and no
 output, make the app say what it sees rather than reasoning about which link broke — the

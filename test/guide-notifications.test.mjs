@@ -65,7 +65,44 @@ for (const file of ['app.jsx']) {
     // "This browser" is wrong wording inside the installed app, where there is no browser UI
     // for the customer to go and change.
     assert.match(block, /window\.nemoInApp/);
-    assert.match(block, /The app can't show notifications yet/);
+    /* And "the app can't show notifications yet" is no longer true of the app: it receives
+       these through FCM and draws them natively, with no Notification API involved. It is only
+       untrue of a build older than the one that added push, and for those the useful thing to
+       say is how to fix it. */
+    assert.doesNotMatch(block, /The app can't show notifications yet/);
+    assert.match(block, /Saved\. Update the app to get these\./);
+  });
+
+  test(file + ': the switch subscribes on the server, not just on the device', () => {
+    /* This was the whole bug. The preference was stored in localStorage and read by exactly one
+       guard — sendLocalNotif's channel==="guides" — which no caller ever triggered. The switch
+       moved, saved, and did nothing, in every browser and in the app. */
+    assert.match(block, /const apply=\(v\)=>\{ setOn\(v\); setGuideNotifPref\(v\); syncGuideSub\(v\); \};/);
+    assert.match(src, /function syncGuideSub\(on\)\{/);
+    assert.match(src, /FB_DB\.ref\("guideSubs\/"\+uid\)/);
+    // Opting out leaves no row, rather than a row saying no.
+    assert.match(src, /if\(!on\)\{ try\{ ref\.remove\(\)/);
+  });
+
+  test(file + ': a preference set before signing in is filed once there is an owner', () => {
+    // guideSubs is keyed on the account. Without this the switch reads ON while the server has
+    // never heard of the customer.
+    assert.match(block, /window\.addEventListener\("nemo-fb-ready",push\)/);
+    assert.match(block, /const push=\(\)=>\{ if\(guideNotifOn\(\)\) syncGuideSub\(true\); \};/);
+    assert.match(block, /const SIGNED_OUT="Saved\. Sign in to get these\.";/);
+  });
+
+  test(file + ': the installed app is not asked about a permission it does not use', () => {
+    // FCM delivery has nothing to do with the WebView's missing Notification API, so a device
+    // that has handed us a token must not be apologised to.
+    assert.match(src, /function pushCapable\(\)\{ return !!pendingPushToken; \}/);
+    assert.match(block, /if\(pushCapable\(\)\)\{ setNote\(""\); return; \}/);
+  });
+
+  test(file + ': the dead notification channel is gone rather than left as a trap', () => {
+    assert.doesNotMatch(src, /channel==="guides"/);
+    assert.doesNotMatch(src, /undefined,"care"\)/);
+    assert.match(src, /function sendLocalNotif\(title, body, icon="assets\/nemo-logo\.png"\)\{/);
   });
 
   test(file + ': the notes stay to one line and are legible on the header', () => {
