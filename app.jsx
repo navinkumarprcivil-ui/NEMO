@@ -9154,7 +9154,7 @@ function AquaToolsPage({nav,goBack,user,settings={}}){
   );
 }
 
-function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,onShowcaseVote,totmVotes={},tankPreviousWinners=null,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true}){
+function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecretTap,setQuery,query,user,settings={},settingsReady=true,favorites=[],onFav,interestedSet=[],onInterest,orders=[],showcase=[],onShowcaseSubmit,onShowcaseVote,totmVotes={},tankPreviousWinners=null,restockSet=[],onRestock,walletPts=0,testimonials=[],onTestimonialSubmit,hydrated=true,openMenuSignal=0}){
   const featured=[...products].sort(byAvailabilityThen()).slice(0,6);
   const [menuOpen,setMenuOpen]=useState(false);
   const [walletOpen,setWalletOpen]=useState(false);
@@ -9174,49 +9174,17 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
     if(r===null){ clearRecentSearches(); setRecent([]); return; }
     setMenuOpen(false); setQuery(r); nav("shop");
   };
-  /* Swipe across Home: right opens Browse, left goes to Shop.
-     Two things this must not fight. Android 10+ reserves a strip at BOTH screen edges for its
-     own Back gesture, so a touch starting there belongs to the system and we leave it alone —
-     which is why this is not the usual drawer edge-swipe. And Home is built out of horizontal
-     scrollers (category chips, new arrivals, offers, recently viewed), where a sideways drag
-     belongs to the row under the finger; walking up from the touch target excludes those by
-     measurement rather than by a list of class names that would rot. */
-  const swipeFrom=useRef(null);
-  const SWIPE_EDGE=32, SWIPE_MIN=70;
-  const onHomeTouchStart=(e)=>{
-    swipeFrom.current=null;
-    if(menuOpen||walletOpen||suggOpen) return;
-    if(!e.touches||e.touches.length!==1) return;
-    const t=e.touches[0], w=window.innerWidth||0;
-    if(t.clientX<SWIPE_EDGE||t.clientX>w-SWIPE_EDGE) return;
-    for(let el=e.target; el&&el!==e.currentTarget; el=el.parentElement){
-      /* Overflowing is not the same as scrollable, and testing only the width is what kept
-         this from firing anywhere near the top of Home: the hero clips two decorative circles
-         that sit off its right edge, so it overflows by forty pixels while scrolling nothing,
-         and every swipe starting in it was handed to a row that does not exist. Only a strip
-         the finger could actually drag gets to claim the gesture. */
-      if(el.scrollWidth>el.clientWidth+4){
-        let ox=""; try{ ox=getComputedStyle(el).overflowX||""; }catch(err){}
-        if(ox==="auto"||ox==="scroll") return;
-      }
-    }
-    swipeFrom.current={x:t.clientX,y:t.clientY};
-  };
-  const onHomeTouchEnd=(e)=>{
-    const from=swipeFrom.current; swipeFrom.current=null;
-    if(!from||!e.changedTouches||!e.changedTouches.length) return;
-    const t=e.changedTouches[0], dx=t.clientX-from.x, dy=t.clientY-from.y;
-    /* Mostly sideways, and far enough to be deliberate — a diagonal flick while scrolling the
-       page must not navigate. */
-    if(Math.abs(dx)<SWIPE_MIN||Math.abs(dx)<Math.abs(dy)*2) return;
-    if(dx>0) setMenuOpen(true); else nav("shop");
-  };
+  /* Home has no swipe handler of its own any more — the gesture belongs to the whole tab strip
+     and lives in the shell (see NAV_TABS). Home is only the one end of it: there is no tab to
+     the left of Home, so a rightward swipe there opens Browse instead of going nowhere. The
+     shell cannot set that state from outside, so it bumps a counter and Home reads the bump. */
+  useEffect(()=>{ if(openMenuSignal) setMenuOpen(true); },[openMenuSignal]);
   const offer = products.find(p=>activeDiscount(p)>0 && p.offerEndsAt);
   const offerStock = offer ? (offer.stockCount ?? DEFAULT_STOCK) : 0;
   // Offer Zone — every product currently on offer (discount set, in stock, offer not expired).
   const offerProducts = products.filter(p=>!p.comingSoon && activeDiscount(p)>0 && (p.stockCount??DEFAULT_STOCK)>0);
   return(
-    <div className="slide-up" onTouchStart={onHomeTouchStart} onTouchEnd={onHomeTouchEnd}>
+    <div className="slide-up">
       <CategoryDrawer open={menuOpen} onClose={()=>setMenuOpen(false)} recent={recent} nav={nav} user={user} settings={settings} orders={orders}
         onSelect={(cat)=>{ setMenuOpen(false); setCategory(cat); nav("shop"); }}
         onRecent={handleRecent}/>
@@ -10001,9 +9969,10 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
             <button className="press" onClick={()=>zoomBy(1/1.5)} disabled={scale<=1.02} aria-label="Zoom out" style={{...iconBtn,width:42,height:42,borderRadius:12,fontSize:24,opacity:scale<=1.02?0.4:1}}>−</button>
           </div>
         )}
-        <div style={{position:"absolute",bottom:"calc(env(safe-area-inset-bottom,0px) + 6px)",left:0,right:0,textAlign:"center",color:"rgba(255,255,255,.5)",fontSize:10,fontWeight:600,letterSpacing:.3,pointerEvents:"none",zIndex:3}}>
-          {isVideo?"":"Use + / −, double-tap or pinch to zoom · swipe to browse"}
-        </div>
+        {/* No instructions along the bottom. Pinch, double-tap and swipe are how a phone works,
+            and the + / − buttons are right there in the corner saying what they do; a caption
+            spelling all of it out was a strip of text sitting on top of the photograph the
+            customer opened this viewer to look at. */}
       </div>
     </Portal>
   );
@@ -19022,6 +18991,57 @@ function NemoStore(){
   },[orders,user]);
   const isAdminPage=["admin-login","admin"].includes(page);
   const [miniOpen,setMiniOpen]=useState(false);
+
+  /* ── Swipe between the bottom-nav tabs ──────────────────────────────────────
+     The same four tabs, in the same order, that the bar at the bottom shows: a sideways swipe
+     is that bar under your thumb instead of at the edge of your reach. It sits on the scroll
+     container rather than on any one page, because a gesture that works on Home and nowhere
+     else is worse than no gesture — people stop trusting it.
+
+     Three things it must not fight:
+       · Android 10+ reserves a strip at BOTH screen edges for its own Back gesture, so a touch
+         starting there belongs to the system. This is why it is not an edge-swipe drawer.
+       · The store is built out of rows that scroll sideways — category chips, new arrivals,
+         offers, "goes well with". A drag that starts on one of those belongs to the row.
+       · Anything laid OVER the page — the Browse drawer, the wallet sheet, a lightbox — is not
+         the page, and a swipe across it is not a swipe between tabs. Every one of them is
+         position:fixed, which is a truer test than a list of names that would rot. */
+  const NAV_TABS=["home","shop","orders","cart"];
+  const SWIPE_EDGE=32, SWIPE_MIN=70;
+  const swipeFrom=useRef(null);
+  const [homeMenuSignal,setHomeMenuSignal]=useState(0);
+  const onTabTouchStart=(e)=>{
+    swipeFrom.current=null;
+    if(NAV_TABS.indexOf(page)<0) return;
+    if(!e.touches||e.touches.length!==1) return;
+    const t=e.touches[0], w=window.innerWidth||0;
+    if(t.clientX<SWIPE_EDGE||t.clientX>w-SWIPE_EDGE) return;
+    for(let el=e.target; el&&el!==e.currentTarget; el=el.parentElement){
+      let cs=null; try{ cs=getComputedStyle(el); }catch(err){}
+      if(!cs) continue;
+      if(cs.position==="fixed") return;
+      /* Overflowing is not the same as scrollable, and testing the width alone is what kept
+         this from firing near the top of Home: the hero clips two decorative circles off its
+         right edge, so it overflows by forty pixels while scrolling nothing. */
+      if(el.scrollWidth>el.clientWidth+4&&(cs.overflowX==="auto"||cs.overflowX==="scroll")) return;
+    }
+    swipeFrom.current={x:t.clientX,y:t.clientY};
+  };
+  const onTabTouchEnd=(e)=>{
+    const from=swipeFrom.current; swipeFrom.current=null;
+    if(!from||!e.changedTouches||!e.changedTouches.length) return;
+    const t=e.changedTouches[0], dx=t.clientX-from.x, dy=t.clientY-from.y;
+    /* Mostly sideways, and far enough to be deliberate — a diagonal flick while scrolling the
+       page must not change tab. */
+    if(Math.abs(dx)<SWIPE_MIN||Math.abs(dx)<Math.abs(dy)*2) return;
+    const i=NAV_TABS.indexOf(page); if(i<0) return;
+    const j=i+(dx>0?-1:1);
+    // Past the left end of the strip is Browse, which is what a customer on Home wants next.
+    if(j<0){ setHomeMenuSignal(n=>n+1); return; }
+    // Past the right end there is nothing, and a bounce back to Home would be a surprise.
+    if(j>=NAV_TABS.length) return;
+    nav(NAV_TABS[j]);
+  };
   useEffect(()=>{ if(cart.length===0) setMiniOpen(false); },[cart.length]); // auto-close when cart empties
 
   // ── "Why Nemo" welcome popup — first visit of the day, once per day ──
@@ -19352,9 +19372,9 @@ function NemoStore(){
       {!isAdminPage&&<DesktopNav page={page} nav={nav} cartCount={cartCount} user={user} settings={settings} onSecretTap={handleSecretTap} walletPts={walletPts} ordersCount={priorityOrderCount}/>} 
       {/* overscrollBehavior:contain stops a flick that reaches the end of this list from
           chaining out to the document and dragging the pinned bottom nav with it. */}
-      <div ref={scrollRef} className="nemo-main-scroll" style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
+      <div ref={scrollRef} className="nemo-main-scroll" onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd} style={{flex:1,overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
         <div key={page} className="page-swap">
-        {page==="home"     &&<HomePage nav={nav} products={shopProducts} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} tankPreviousWinners={tankPreviousWinners} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated}/>}
+        {page==="home"     &&<HomePage nav={nav} products={shopProducts} mediaCache={mediaCache} addToCart={addToCart} cartMap={cartMap} setCategory={setCategory} onSecretTap={handleSecretTap} setQuery={setQuery} query={query} user={user} settings={settings} settingsReady={settingsReady} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} orders={orders} showcase={showcase} onShowcaseSubmit={handleShowcaseSubmit} onShowcaseVote={handleShowcaseVote} totmVotes={totmVotes} tankPreviousWinners={tankPreviousWinners} restockSet={restockSet} onRestock={handleRestock} walletPts={walletPts} testimonials={testimonials} onTestimonialSubmit={handleTestimonialSubmit} hydrated={hydrated} openMenuSignal={homeMenuSignal}/>}
         {page==="shop"     &&<ShopPage nav={nav} products={shopProducts} mediaCache={mediaCache} query={query} setQuery={setQuery} category={category} setCategory={setCategory} addToCart={addToCart} cartMap={cartMap} favorites={favorites} onFav={toggleFav} interestedSet={interestedSet} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock} hydrated={hydrated}/>}
         {page==="detail"   &&<DetailPage product={selProduct} products={shopProducts} mediaCache={mediaCache} media={selProduct?getProductMedia(selProduct,mediaCache):{images:[],video:null}} addToCart={addToCart} cart={cart} nav={nav} goBack={goBack} user={user} orders={orders} goAuth={()=>goAuth("detail")} onReviewsChanged={recomputeProductRating} onReviewed={markReviewed} autoReview={reviewIntent===selProduct?.id} reviewPreset={reviewPreset} isFav={selProduct?favorites.includes(selProduct.id):false} onFav={toggleFav} isInterested={selProduct?interestedSet.includes(selProduct.id):false} onInterest={markInterested} restockSet={restockSet} onRestock={handleRestock}/>}
         {page==="cart"     &&<CartPage cart={cart} updateQty={updateQty} total={cartTotal} nav={nav} settings={settings} products={shopProducts} mediaCache={mediaCache} orders={orders}/>}
