@@ -9164,12 +9164,41 @@ function HomePage({nav,products,mediaCache,addToCart,cartMap,setCategory,onSecre
     if(r===null){ clearRecentSearches(); setRecent([]); return; }
     setMenuOpen(false); setQuery(r); nav("shop");
   };
+  /* Swipe across Home: right opens Browse, left goes to Shop.
+     Two things this must not fight. Android 10+ reserves a strip at BOTH screen edges for its
+     own Back gesture, so a touch starting there belongs to the system and we leave it alone —
+     which is why this is not the usual drawer edge-swipe. And Home is built out of horizontal
+     scrollers (category chips, new arrivals, offers, recently viewed), where a sideways drag
+     belongs to the row under the finger; walking up from the touch target excludes those by
+     measurement rather than by a list of class names that would rot. */
+  const swipeFrom=useRef(null);
+  const SWIPE_EDGE=32, SWIPE_MIN=70;
+  const onHomeTouchStart=(e)=>{
+    swipeFrom.current=null;
+    if(menuOpen||walletOpen||suggOpen) return;
+    if(!e.touches||e.touches.length!==1) return;
+    const t=e.touches[0], w=window.innerWidth||0;
+    if(t.clientX<SWIPE_EDGE||t.clientX>w-SWIPE_EDGE) return;
+    for(let el=e.target; el&&el!==e.currentTarget; el=el.parentElement){
+      if(el.scrollWidth>el.clientWidth+4) return;
+    }
+    swipeFrom.current={x:t.clientX,y:t.clientY};
+  };
+  const onHomeTouchEnd=(e)=>{
+    const from=swipeFrom.current; swipeFrom.current=null;
+    if(!from||!e.changedTouches||!e.changedTouches.length) return;
+    const t=e.changedTouches[0], dx=t.clientX-from.x, dy=t.clientY-from.y;
+    /* Mostly sideways, and far enough to be deliberate — a diagonal flick while scrolling the
+       page must not navigate. */
+    if(Math.abs(dx)<SWIPE_MIN||Math.abs(dx)<Math.abs(dy)*2) return;
+    if(dx>0) setMenuOpen(true); else nav("shop");
+  };
   const offer = products.find(p=>activeDiscount(p)>0 && p.offerEndsAt);
   const offerStock = offer ? (offer.stockCount ?? DEFAULT_STOCK) : 0;
   // Offer Zone — every product currently on offer (discount set, in stock, offer not expired).
   const offerProducts = products.filter(p=>!p.comingSoon && activeDiscount(p)>0 && (p.stockCount??DEFAULT_STOCK)>0);
   return(
-    <div className="slide-up">
+    <div className="slide-up" onTouchStart={onHomeTouchStart} onTouchEnd={onHomeTouchEnd}>
       <CategoryDrawer open={menuOpen} onClose={()=>setMenuOpen(false)} recent={recent} nav={nav} user={user} settings={settings} orders={orders}
         onSelect={(cat)=>{ setMenuOpen(false); setCategory(cat); nav("shop"); }}
         onRecent={handleRecent}/>
@@ -9944,6 +9973,55 @@ function MediaLightbox({slides=[],index=0,setIndex,onClose,name=""}){
   );
 }
 
+/* A deliberately tiny markdown subset: **bold**, nothing else. The description is written by an
+   admin, but rendering it as HTML would hand a co-admin a <script> tag on every product page for
+   the price of one styling option. Splitting on ** and emitting <strong> leaves every other
+   character as text, which React escapes on the way out. */
+function boldParts(text){
+  const s=String(text||""), out=[], re=/\*\*([^*\n]+)\*\*/g;
+  let last=0,m;
+  while((m=re.exec(s))){
+    if(m.index>last) out.push(s.slice(last,m.index));
+    out.push(<strong key={m.index} style={{color:C.text,fontWeight:800}}>{m[1]}</strong>);
+    last=re.lastIndex;
+  }
+  if(last<s.length) out.push(s.slice(last));
+  return out.length?out:s;
+}
+
+/* Clamped to three lines so the price, stock and Add to Cart sit above the fold on a phone.
+   The toggle appears only when the text really is taller than the clamp — measured rather than
+   guessed from a character count, which is wrong on every screen but the one it was tuned on.
+   pre-wrap is kept inside the clamp so an admin's own paragraph breaks still survive. */
+function ProductDescription({text}){
+  const ref=useRef(null);
+  const [expanded,setExpanded]=useState(false);
+  const [clipped,setClipped]=useState(false);
+  useEffect(()=>{
+    const el=ref.current; if(!el) return;
+    const check=()=>{ try{ setClipped(el.scrollHeight>el.clientHeight+2); }catch(e){} };
+    check();
+    /* Webfonts land after the first paint and change the height, so a description that fits
+       during layout can overflow a moment later. Measure again once they are in. */
+    try{ if(document.fonts&&document.fonts.ready) document.fonts.ready.then(check).catch(()=>{}); }catch(e){}
+    window.addEventListener("resize",check);
+    return()=>window.removeEventListener("resize",check);
+  },[text]);
+  if(!String(text||"").trim()) return null;
+  const clamp=expanded?{}:{display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"};
+  return(
+    <div>
+      <div ref={ref} style={{fontSize:13,color:C.textSub,lineHeight:1.75,whiteSpace:"pre-wrap",...clamp}}>{boldParts(text)}</div>
+      {(clipped||expanded)&&(
+        <button className="press" onClick={()=>setExpanded(v=>!v)}
+          style={{marginTop:7,background:"none",border:"none",padding:0,color:C.primary,fontSize:12,fontWeight:800,fontFamily:"'Plus Jakarta Sans',sans-serif",cursor:"pointer"}}>
+          {expanded?"Show less":"Read more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:null},addToCart,cart=[],nav,goBack,user,orders,goAuth,onReviewsChanged,onReviewed,autoReview,reviewPreset=0,isFav=false,onFav,isInterested=false,onInterest,restockSet=[],onRestock}){
   const [selVarId,setSelVarId] = useState(null);
   const [tab,setTab]           = useState("desc");
@@ -10164,7 +10242,7 @@ function DetailPage({product:p,products=[],mediaCache={},media={images:[],video:
           <div className="fade-in">
             {/* pre-wrap keeps the admin's own line breaks and blank lines — typing the description
                 as paragraphs or a bulleted list used to collapse into one run-on block. */}
-            <div style={{fontSize:13,color:C.textSub,lineHeight:1.75,whiteSpace:"pre-wrap"}}>{p.desc}</div>
+            <ProductDescription text={p.desc}/>
             {(()=>{
               const care=p.care||{};
               const rows=[
@@ -13015,7 +13093,7 @@ function ProductForm({product,onSave,onDelete,onBack,showToast,settings={},produ
           );
         })()}
 
-        {fld("Description","desc","text","Describe the product…",{textarea:true})}
+        {fld("Description","desc","text","Describe the product… wrap words in **double asterisks** to make them bold",{textarea:true})}
 
         {/* Care info — shown on the product page (Live Fish & Plants) */}
         {(form.category==="Live Fish"||form.category==="Plants")&&(()=>{
